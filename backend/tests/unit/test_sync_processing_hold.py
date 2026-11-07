@@ -626,3 +626,33 @@ def test_pipeline_intentionally_blocked_minimum_is_not_empty_output(monkeypatch,
         assert callback.enrich_conversation('user-1', 'parent', 'en') is minimum
     finally:
         PROCESS_CONTEXT.reset(token)
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monkeypatch, driver):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setattr(
+        outbox, 'pipeline_snapshot', lambda *_: {'recorded_end': 100, 'record_lane_owner': 'batch_sync_v1'}
+    )
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=1600, sync_hold=True)
+    key = outbox.key('u', 'c')
+
+    def blocked(*_):
+        context = PROCESS_CONTEXT.get()
+        assert context['pipeline_dispatch_at'] == 1780
+        context.update(defer_reason='pipeline_seal_pending', defer_until=1840)
+
+    if driver == 'legacy':
+        assert outbox.run(key, tasks[-1]['task_token'], blocked, now=1780) == 'deferred'
+    else:
+        result = run_push(
+            EnrichmentConsumer(ENRICHMENT_OUTBOX, process=blocked),
+            ENRICHMENT_OUTBOX,
+            key,
+            tasks[-1]['task_token'],
+            now=1780,
+        )
+        assert result.outcome == 'deferred'
+    assert rows[key]['pipeline_dispatch_at'] == 1780
+    assert rows[key]['due_at'] == 1840 and rows[key]['lease_until'] == 0

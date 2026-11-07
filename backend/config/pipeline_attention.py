@@ -96,5 +96,5 @@ def dispatch_at(row: Mapping, obligation: Mapping) -> float | None:
     return min(values) if values else None
 
 
-def snapshot_matches(row: Mapping, expected: Mapping) -> bool:
+def snapshot_matches(row: Mapping, expected: object) -> bool:
     return isinstance(expected, Mapping) and bool(expected) and seal_snapshot(row) == expected

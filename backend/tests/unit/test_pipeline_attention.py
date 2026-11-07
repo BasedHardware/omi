@@ -256,3 +256,21 @@ def test_episode_deadline_conflict_keeps_existing_hold_path(serving, monkeypatch
 
     monkeypatch.setattr(pipeline_settlement.episodes, 'update_episode', conflict)
     assert not pipeline_settlement.settle('u', 'c', sealed(), 1770, now=1000)
+
+
+def test_accepted_patient_policy_survives_expired_presence(serving, monkeypatch):
+    monkeypatch.setattr(runtime, 'attention', lambda *_a, **_k: 'unknown')
+    monkeypatch.setattr(runtime, 'promoted', lambda *_a, **_k: False)
+    assert runtime.hold_decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1000) == (
+        False,
+        1060,
+        policy.seal_snapshot(sealed()),
+    )
+
+
+def test_deadline_never_authorizes_an_unresolved_producer(serving):
+    assert runtime.hold_decision('u', sealed(record_audio_closed=False), {'pipeline_dispatch_at': 1770}, now=1770) == (
+        False,
+        1830,
+        None,
+    )

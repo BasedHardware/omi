@@ -911,8 +911,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             pending['summary_repair'] = False
             pending['summary_expected_revision'] = None
             pending['due_at'] = max(current, pending['first_pending_at']) + settle_seconds()
-        if pending.get('pipeline_dispatch_at'):
-            pending['due_at'] = min(pending['due_at'], max(current, pending['pipeline_dispatch_at']))
+        deadline = pipeline_policy.seconds(pending.get('pipeline_dispatch_at'))
+        if deadline is not None and current < deadline:
+            pending['due_at'] = min(pending['due_at'], deadline)
         pending.update(
             lease_until=0,
             task_token=uuid.uuid4().hex,

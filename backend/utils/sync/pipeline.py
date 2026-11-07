@@ -1135,7 +1135,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             uid, conversation_data, context, settled=settled
         )
         if pipeline_due is not None:
-            context.update(defer_reason='quiet_wait', defer_until=pipeline_due)
+            context.update(
+                defer_reason='pipeline_seal_pending' if proof is None else 'quiet_wait', defer_until=pipeline_due
+            )
             return sync_result('deferred')
         if proof is not None:
             digest = pipeline_attention.notes_fingerprint(conversation_data)

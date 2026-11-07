@@ -21,6 +21,7 @@ import json
 import re
 import uuid
 from typing import Any, Callable, Literal, Mapping
+from config import pipeline_attention as pipeline_policy
 
 import dataclasses
 import functools
@@ -382,8 +383,9 @@ class FirestoreEnrichmentOutbox:
                     due_at=now + outbox.settle_seconds(),
                 )
             pending.update(lease_until=0, owner=None, task_token=uuid.uuid4().hex, task_due_at=pending['due_at'])
-            if pending.get('pipeline_dispatch_at'):
-                pending['due_at'] = min(pending['due_at'], max(now, pending['pipeline_dispatch_at']))
+            deadline = pipeline_policy.seconds(pending.get('pipeline_dispatch_at'))
+            if deadline is not None and now < deadline:
+                pending['due_at'] = min(pending['due_at'], deadline)
                 pending['task_due_at'] = pending['due_at']
             return pending, (True, pending)
 

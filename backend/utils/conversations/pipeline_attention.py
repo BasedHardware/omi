@@ -113,7 +113,7 @@ def hold_decision(uid, row, obligation, *, settled=False, now=None):
     proof = policy.seal_snapshot(row)
     if proof is None:
         metrics.event('seal_denied')
-        return False, None, None
+        return False, now + 60 if accepted else None, None
     if policy.mode() == 'shadow' and not accepted:
         metrics.event('shadow')
         return False, None, None
@@ -123,7 +123,7 @@ def hold_decision(uid, row, obligation, *, settled=False, now=None):
         return False, accepted, proof
     state = attention(uid, now=now)
     fast = state == 'watched' or promoted(uid)
-    if state == 'unknown' and not fast:
+    if state == 'unknown' and not fast and not accepted:
         return False, None, None
     deadline = policy.dispatch_at(row, obligation)
     if not fast and not settled and deadline is not None and now < deadline:
