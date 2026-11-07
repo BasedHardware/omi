@@ -53,6 +53,7 @@ class WalSyncs implements IWalSync {
             ? device
             : device?.copyWith(firmwareRevision: _resolvedFirmware))
         : null);
+    _sdcardSync.setFirmwareVersion(device == null ? null : _resolvedFirmware);
   }
 
   /// Re-route an already attached device after a device-info retry resolves it.
@@ -179,6 +180,7 @@ class WalSyncs implements IWalSync {
     final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
         ? firmwareVersion
         : _resolvedFirmware;
+    _sdcardSync.setFirmwareVersion(fw);
     if (isRingBufferFirmware(fw)) {
       await _ringSync.refreshWalsFromDevice();
     } else {

@@ -19,6 +19,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTi
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = [];
   BtDevice? _device;
+  String? _firmwareVersion;
 
   StreamSubscription? _storageStream;
 
@@ -28,7 +29,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   // A device rejection is terminal for this connection, including later auto-sync wakes.
   int? _readRejectedStatus;
   // WalSyncs keeps unknown firmware detached; this layer only refuses confirmed ring firmware.
-  bool get _usesLegacySdcard => !RingProtocol.isRingBufferFirmware(_device?.firmwareRevision);
+  bool get _usesLegacySdcard =>
+      !RingProtocol.isRingBufferFirmware(_firmwareVersion) &&
+      !RingProtocol.isRingBufferFirmware(_device?.firmwareRevision);
 
   String get _readRejection =>
       'SD read rejected by device: status=0x${_readRejectedStatus!.toRadixString(16).padLeft(2, '0')}';
@@ -114,10 +117,20 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @visibleForTesting
   set testConnection(DeviceConnection? connection) => _testConnection = connection;
 
+  void setFirmwareVersion(String? firmwareVersion) {
+    _firmwareVersion = firmwareVersion;
+    if (!_usesLegacySdcard && _wals.isNotEmpty) {
+      _wals.removeWhere((w) => !w.isSyncing);
+    }
+  }
+
   bool _supportsTimestampMarkers() {
     if (_device == null) return false;
+    final fw = (_firmwareVersion != null && _firmwareVersion!.isNotEmpty && _firmwareVersion != 'Unknown')
+        ? _firmwareVersion!
+        : _device!.firmwareRevision;
     try {
-      return Version.parse(_device!.firmwareRevision) >= _timestampMarkerMinVersion;
+      return Version.parse(fw) >= _timestampMarkerMinVersion;
     } catch (e) {
       return false;
     }
@@ -155,7 +168,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
@@ -178,6 +191,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
+
+    if (!_usesLegacySdcard) {
+      _wals.removeWhere((w) => w.id == wal.id);
+      listener.onWalUpdated();
+      return;
+    }
 
     if (_device == null || wal.device != _device!.id) {
       Logger.debug("SDCardWalSync.deleteWal: owning device of ${wal.id} not connected, keeping WAL");
@@ -254,12 +273,17 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         'SDCardWalSync: totalBytes=$totalBytes storageOffset=$storageOffset frameLengthInBytes=${codec.getFramesLengthInBytes()} fps=${codec.getFramesPerSecond()} calculatedSeconds=$seconds timerStart=$timerStart now=${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
       );
 
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
         Logger.debug("SDCard: Failed to establish connection for device info");
         return wals;
       }
       var pd = await _device!.getDeviceInfo(connection);
+      if (connection.lastRingInfo != null || RingProtocol.isRingBufferFirmware(pd.firmwareRevision)) {
+        _firmwareVersion = pd.firmwareRevision;
+        Logger.debug("SDCardWalSync: skipping legacy SD card listing for ring-buffer firmware (${pd.firmwareRevision})");
+        return [];
+      }
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
       wals.add(
@@ -834,6 +858,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    if (!_usesLegacySdcard) {
+      _wals = [];
+      Logger.debug("SDCardWalSync: Skipping legacy SD card sync on ring-buffer firmware");
+      return null;
+    }
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
     if (wals.isEmpty) {
       Logger.debug("SDCardWalSync: All synced!");
@@ -917,6 +946,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    if (!_usesLegacySdcard) {
+      _wals = [];
+      listener.onWalUpdated();
+      throw StateError('Legacy SD read unavailable on ring-buffer firmware');
+    }
     // setDevice() and start() rebuild _wals with new Wal objects on every
     // connection, so a recording page opened before a reconnect holds an object
     // that is no longer listed. Match by id, as deleteWal does, and by storage,
@@ -996,6 +1030,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   void setDevice(BtDevice? device) async {
     _device = device;
+    if (device == null) {
+      _firmwareVersion = null;
+    }
     _readRejectedStatus = null;
     if (!_usesLegacySdcard) {
       _wals = [];
