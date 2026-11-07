@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Literal, Any, Optional
 
 from config.account_cutover import is_account_cutover_cohort_member
 from database import account_cutover as account_cutover_db
@@ -104,6 +104,10 @@ _CHECKPOINT_FORWARD: dict[AccountCutoverCheckpointPhase, frozenset[AccountCutove
 
 _MAX_CHECKPOINT_TOKEN_LEN = 128
 
+# W6 must wait this long after begin(cell) before backfill/flip, in addition to
+# draining admitted writers. It exceeds the idle TTL even for pre-epoch builds.
+CELL_CUTOVER_QUIESCE_SECONDS = account_cutover_db.CUTOVER_IDLE_TTL_SECONDS + 5
+
 
 @dataclass(frozen=True)
 class CoordinatorResult:
@@ -188,8 +192,10 @@ class AccountCutoverCoordinator:
             require_existing=False,
         )
 
-    def begin(self, uid: str, *, reason: str = 'begin_forward_migration') -> CoordinatorResult:
-        if not is_account_cutover_cohort_member(uid):
+    def begin(
+        self, uid: str, *, data_plane: Literal['legacy', 'cell'] = 'cell', reason: str = 'begin_forward_migration'
+    ) -> CoordinatorResult:
+        if data_plane != 'cell' and not is_account_cutover_cohort_member(uid):
             raise AccountCutoverTransitionError(
                 'uid is not explicitly enrolled in ACCOUNT_CUTOVER_COHORT',
                 code='cutover_not_enrolled',
@@ -207,6 +213,7 @@ class AccountCutoverCoordinator:
         manifest_id = f'cutover-{uid[:8]}-{secrets.token_hex(4)}'
         token = _mint_checkpoint_token()
         request = AccountCutoverTransitionRequest(
+            data_plane=data_plane,
             target_state=AccountCutoverState.migrating,
             expected_account_generation=current.account_generation,
             # Quarantine at the fence: drain was only legal before begin.
@@ -380,6 +387,54 @@ class AccountCutoverCoordinator:
         )
         return persisted
 
+    def complete_to_migrated(self, uid: str, *, expected_account_generation: int) -> AccountCutoverRecord:
+        current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
+        if current.data_plane != 'cell':
+            raise AccountCutoverTransitionError('migrated completion requires cell kind')
+        # Retry-safe: a lost response after success must not look like failure.
+        if (
+            current.state == AccountCutoverState.migrated
+            and current.checkpoint_phase == AccountCutoverCheckpointPhase.completed
+        ):
+            if current.account_generation != expected_account_generation:
+                raise AccountCutoverTransitionError(
+                    'account generation fence mismatch',
+                    code='account_generation_mismatch',
+                )
+            return current
+        if current.checkpoint_phase != AccountCutoverCheckpointPhase.cutover_ready:
+            raise AccountCutoverTransitionError(
+                'complete requires cutover_ready checkpoint',
+                code='checkpoint_not_ready',
+            )
+        if current.destination_backend_bound is not True:
+            raise AccountCutoverTransitionError(
+                'destination backend binding required before complete',
+                code='destination_backend_unbound',
+            )
+        request = AccountCutoverTransitionRequest(
+            target_state=AccountCutoverState.migrated,
+            expected_account_generation=expected_account_generation,
+            offline_queue_instruction=OfflineQueueInstruction.none,
+            checkpoint_phase=AccountCutoverCheckpointPhase.completed,
+            checkpoint_token=_mint_checkpoint_token(),
+            reason='complete_forward_migration',
+        )
+        next_record = apply_cutover_transition(current, request)
+        persisted = self._persist_cas(
+            uid,
+            next_record,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=True,
+        )
+        record_cutover_transition(
+            from_state=current.state.value,
+            to_state=persisted.state.value,
+            reason='complete_forward_migration',
+        )
+        return persisted
+
     def rollback_lossy(
         self,
         uid: str,
@@ -413,7 +468,7 @@ class AccountCutoverCoordinator:
 
 
 def begin_forward_migration(uid: str, *, firestore_client: Any = None) -> CoordinatorResult:
-    return AccountCutoverCoordinator(firestore_client=firestore_client).begin(uid)
+    return AccountCutoverCoordinator(firestore_client=firestore_client).begin(uid, data_plane='legacy')
 
 
 def apply_forward_checkpoint(

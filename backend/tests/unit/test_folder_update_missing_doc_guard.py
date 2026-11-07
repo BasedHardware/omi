@@ -1,5 +1,7 @@
 """Unit tests for TOCTOU NotFound guard in folder update and conversation move operations."""
 
+from database.ports.folders import FolderUpdate
+
 import os
 import sys
 from pathlib import Path
@@ -46,9 +48,9 @@ def test_update_folder_deleted_before_update_returns_false():
     db_mock = MagicMock()
     db_mock.collection.return_value = users_col
 
-    with patch.object(folders_db, "db", db_mock):
-        result = folders_db.update_folder("user-1", "folder-1", {"name": "Renamed"})
-        assert result is False
+    with patch.object(folders_db, 'get_firestore_client', return_value=db_mock):
+        result = folders_db.update_folder("user-1", "folder-1", FolderUpdate(name="Renamed"))
+        assert result is None
 
 
 def test_move_conversation_deleted_before_update_returns_false():
@@ -86,6 +88,6 @@ def test_move_conversation_deleted_before_update_returns_false():
     db_mock = MagicMock()
     db_mock.collection.return_value = users_col
 
-    with patch.object(folders_db, "db", db_mock):
+    with patch.object(folders_db, 'get_firestore_client', return_value=db_mock):
         result = folders_db.move_conversation_to_folder("user-1", "conv-1", "folder-1")
         assert result is False

@@ -72,7 +72,6 @@ void main() {
         fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [episode(live)])),
       );
       addTearDown(provider.dispose);
-      addTearDown(episodes.dispose);
       final screen = await buildTypedConversationScreen(provider, episodes: episodes);
       episodes
         ..debugSetLive(null)
@@ -96,6 +95,8 @@ void main() {
       expect(find.text('Dinner and plans'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      // Dispose before the test ends: a processing hold re-reads on a timer that must not outlive the page.
+      episodes.dispose();
     });
   }
 
