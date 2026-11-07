@@ -610,7 +610,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
     if state == 'waiting':
         return 'waiting'
     if pipeline_seconds(episode.get('pipeline_dispatch_at')) is not None and any(
-        record_attention.projection_state(uid, str(row['id']), row, firestore_client=c.firestore_client) is False
+        record_attention.receipt(uid, str(row['id']), row, firestore_client=c.firestore_client).projected is False
         for row in members
     ):
         return 'waiting'

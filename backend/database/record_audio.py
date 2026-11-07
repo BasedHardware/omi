@@ -71,8 +71,10 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     if result is None and committed_row.get('_new_seal') and observed is not None:
         captured = pipeline_policy.capture_end(committed_row)
         closed = pipeline_policy.seconds(committed_row.get('finished_at'))
-        pipeline_attention.metrics.stage('capture_to_seal', time.time() - captured if captured else None, observed)
-        pipeline_attention.metrics.stage('speech_to_seal', time.time() - closed if closed else None, observed)
+        pipeline_attention.metrics.stage(
+            'recorded_span_to_seal', time.time() - captured if captured else None, observed
+        )
+        pipeline_attention.metrics.stage('finished_to_seal', time.time() - closed if closed else None, observed)
         finished = pipeline_policy.seconds((committed_row.get(pipeline_policy.FIELD) or {}).get('producer_finished_at'))
         pipeline_attention.metrics.stage(
             'producer_finish_to_seal', time.time() - finished if finished else None, observed

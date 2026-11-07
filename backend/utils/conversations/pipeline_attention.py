@@ -108,20 +108,23 @@ def hold_decision(uid, row, obligation, *, projected: bool | None, settled=False
     """Return (bypass, due, proof); refused proof preserves legacy admission."""
     now = time.time() if now is None else now
     accepted = policy.seconds(obligation.get('pipeline_dispatch_at'))
-    if not admitted(uid) and not accepted:
+    record = bool(obligation.get('pipeline_record'))
+    if not admitted(uid) and not accepted and not record:
         return False, None, None
     proof = policy.seal_snapshot(row)
     if proof is None:
         metrics.event('seal_denied')
-        return False, now + 60 if accepted else None, None
-    if policy.mode() == 'shadow' and not accepted:
+        return False, now + 60 if accepted or record else None, None
+    if policy.mode() == 'shadow' and not accepted and not record:
         metrics.event('shadow')
         return False, None, None
     if projected is not True:
-        if projected is None and not accepted:
+        if projected is None and not accepted and not record:
             return False, None, None  # Untagged old intakes retain their legacy policy.
         metrics.event('projection_pending')
         return False, now + 60, None
+    if record and not accepted and not serving(uid):
+        return False, None, proof  # Accepted projection debt drains under legacy timing.
     if accepted and now >= accepted:
         return True, None, proof  # Durable accepted work must survive Redis loss/kill.
     if accepted and (policy.mode() != 'serve' or not policy.seal_fast_enabled() or not admitted(uid)):
@@ -129,15 +132,15 @@ def hold_decision(uid, row, obligation, *, projected: bool | None, settled=False
     state = attention(uid, now=now)
     fast = state == 'watched' or promoted(uid)
     if state == 'unknown' and not fast and not accepted:
-        return False, None, None
-    deadline = policy.dispatch_at(row, obligation)
+        return False, None, proof if record else None
+    deadline = accepted
     if not fast and not settled and deadline is not None and now < deadline:
         metrics.event('patient_wait')
         return False, min(now + 60, deadline), proof
     bypass = policy.seal_fast_enabled() and (fast or settled or deadline is not None and now >= deadline)
     if bypass:
         metrics.event('fast' if fast else 'deadline')
-    return bypass, None, proof if bypass else None
+    return bypass, None, proof if bypass or record else None
 
 
 def fast_members(uid, members):
@@ -177,7 +180,7 @@ def prepare_notes_receipt(existing, write, uid, *, now, context=None):
         return None
     count = int(old.get('notes_versions', 0)) + 1
     state = old.get('attention', context.get('pipeline_attention', 'unknown'))
-    captured = policy.capture_end(existing)
+    captured = policy.seconds(context.get('pipeline_capture_end'))
     closed = policy.seconds(old.get('sealed_at'))
     write[policy.FIELD] = {
         **old,
@@ -185,6 +188,7 @@ def prepare_notes_receipt(existing, write, uid, *, now, context=None):
         'notes_versions': count,
         'attention': state,
         'first_notes_at': old.get('first_notes_at', now),
+        **({'capture_end': captured} if captured is not None else {}),
     }
     return {
         'first': count == 1,
@@ -192,6 +196,9 @@ def prepare_notes_receipt(existing, write, uid, *, now, context=None):
         'lane': 'batch',
         'capture_latency': now - captured if captured is not None and captured <= now else None,
         'close_latency': now - closed if closed is not None and closed <= now else None,
+        'capture_seal_latency': (
+            closed - captured if captured is not None and closed is not None and captured <= closed else None
+        ),
         'rewrites': count - 1,
         'reason': 'initial' if count == 1 else 'changed_revision',
     }

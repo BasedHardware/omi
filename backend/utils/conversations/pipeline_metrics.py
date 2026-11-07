@@ -79,6 +79,10 @@ def committed(receipt):
             event('unknown_capture_clock')
         else:
             c['notes'].labels(attention, receipt['lane']).observe(receipt['capture_latency'])
+        if receipt.get('capture_seal_latency') is not None:
+            c['stage'].labels('capture_to_seal', attention).observe(receipt['capture_seal_latency'])
+        elif receipt['capture_latency'] is not None:
+            event('unknown_capture_clock')
         if receipt['close_latency'] is not None:
             c['closed'].labels(attention, receipt['lane']).observe(receipt['close_latency'])
     c['rewrites'].labels(receipt['reason']).observe(receipt['rewrites'])
@@ -95,7 +99,8 @@ def open_ready(seconds, *, trigger, initial_state):
 def stage(name, seconds, attention='unknown'):
     if name not in {
         'capture_to_seal',
-        'speech_to_seal',
+        'recorded_span_to_seal',
+        'finished_to_seal',
         'producer_finish_to_seal',
         'record_queue',
         'record_admission',

@@ -4,6 +4,8 @@ import json
 import time
 import asyncio
 from typing import Any
+from dataclasses import dataclass
+from collections.abc import Mapping
 
 from config import pipeline_attention as policy
 from config.record_audio import record_identity
@@ -17,11 +19,42 @@ from utils.sync.stage import current_stage
 TTL = 2 * 86400
 
 
-def projection_state(uid, conversation_id, row, *, completed=True, required=False, store=None, firestore_client=None):
-    """True: pinned full projection, False: pending, None: pre-policy intake.
+@dataclass(frozen=True)
+class RecordReceipt:
+    admitted: bool | None = None
+    projected: bool | None = None
+    capture_end: float | None = None
 
-    Existing intake and content-ledger receipts are authority. A per-unit text
-    revision is insufficient while other siblings still owe projection.
+
+def _capture_end(intake):
+    """Complete admitted audio extent, never a per-unit/preview speech clock."""
+    ranges = intake.get('record_ranges')
+    ids = intake.get('segment_ids')
+    if (
+        not isinstance(ranges, list)
+        or not ranges
+        or not isinstance(ids, list)
+        or len(ids) != len(ranges)
+        or not all(isinstance(sid, str) and sid for sid in ids)
+        or len(set(ids)) != len(ids)
+    ):
+        return None
+    ends = []
+    for span in ranges:
+        if not isinstance(span, Mapping):
+            return None
+        start, end = policy.seconds(span.get('start')), policy.seconds(span.get('end'))
+        if start is None or end is None or end <= start:
+            return None
+        ends.append(end)
+    return max(ends)
+
+
+def receipt(uid, conversation_id, row, *, require_projection=True, store=None, firestore_client=None):
+    """Read the pinned native intake and its all-sibling completion receipt.
+
+    None admission denotes pre-policy debt. The intake's immutable record ranges
+    own the physical clock even before all text units have projected.
     """
     content, _ = record_identity(uid, conversation_id)
     job_id = 'bp_' + content
@@ -32,7 +65,7 @@ def projection_state(uid, conversation_id, row, *, completed=True, required=Fals
             intake = tx.get('intakes', job_id) or {}
             barrier = intake.get('pipeline_record_barrier')
             if not barrier:
-                return False if required else None
+                return RecordReceipt()
             proof = policy.seal_snapshot(row, require_content_revision=False)
             if (
                 proof is None
@@ -45,23 +78,31 @@ def projection_state(uid, conversation_id, row, *, completed=True, required=Fals
                 or barrier.get('status') != 'completed'
                 or barrier.get('record_audio_partial')
             ):
-                return False
-            if not completed:
-                return True
+                return RecordReceipt(False, False)
+            captured = _capture_end(intake)
+            if not require_projection:
+                return RecordReceipt(True, None, captured)
             revision = row.get('record_projection_revision')
             if type(revision) is not int or revision < 1:
-                return False
+                return RecordReceipt(True, False, captured)
             ledger = tx.get('content', f'{uid}/{content}') or {}
-            return (
-                ledger.get('status') == 'completed'
+            binding = ledger.get('batch_pipeline') or {}
+            ids = intake.get('segment_ids')
+            completed = (
+                isinstance(ids, list)
+                and bool(ids)
+                and binding.get('namespace') == store.namespace
+                and binding.get('segment_ids') == ids
+                and ledger.get('status') == 'completed'
                 and ledger.get('job_id') == job_id
                 and ledger.get('dispatch_protocol') == 'batch_v1'
             )
+            return RecordReceipt(True, completed, captured)
 
         return store.run(read)
     except Exception:
         attention.unavailable()
-        return False
+        return RecordReceipt(False, False)
 
 
 def base():

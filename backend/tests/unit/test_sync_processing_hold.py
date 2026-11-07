@@ -96,7 +96,14 @@ def test_full_seal_fast_path_still_consumes_unchanged_obligation_once():
 
 def test_patient_dispatch_deadline_clamps_the_existing_durable_outbox(state, monkeypatch):
     monkeypatch.setattr(
-        outbox, 'pipeline_snapshot', lambda *_: {'recorded_end': 100, 'record_lane_owner': 'batch_sync_v1'}
+        outbox,
+        'pipeline_snapshot',
+        lambda *_: {
+            'recorded_end': 100,
+            'pipeline_capture_end': 100,
+            'pipeline_patient_admitted': True,
+            'record_lane_owner': 'batch_sync_v1',
+        },
     )
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=1600, sync_hold=True)
@@ -575,6 +582,7 @@ def test_seal_fast_skips_quiet_only_and_preserves_watermark_proof():
 
 def test_optional_pipeline_snapshot_failure_does_not_drop_obligation(state, monkeypatch):
     monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
     monkeypatch.setattr(
         outbox.conversations_db, 'get_conversation_raw_snapshot', Mock(side_effect=RuntimeError('optional'))
     )
@@ -602,7 +610,9 @@ def test_promotion_does_not_persist_a_permanent_immediate_tier(state, monkeypatc
         }
     )
     monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', read)
-    monkeypatch.setattr(outbox.record_attention, 'projection_state', lambda *a, **k: True)
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, True, 100)
+    )
     promoted = outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101)
     assert promoted and 'immediate' not in promoted
     assert 'transcript_segments' not in read.call_args.kwargs['field_paths']
@@ -634,7 +644,14 @@ def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monk
     monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setattr(
-        outbox, 'pipeline_snapshot', lambda *_: {'recorded_end': 100, 'record_lane_owner': 'batch_sync_v1'}
+        outbox,
+        'pipeline_snapshot',
+        lambda *_: {
+            'recorded_end': 100,
+            'pipeline_capture_end': 100,
+            'pipeline_patient_admitted': True,
+            'record_lane_owner': 'batch_sync_v1',
+        },
     )
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=1600, sync_hold=True)
@@ -643,6 +660,7 @@ def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monk
     def blocked(*_):
         context = PROCESS_CONTEXT.get()
         assert context['pipeline_dispatch_at'] == 1780
+        assert context['pipeline_capture_end'] == 100 and context['pipeline_record']
         context.update(defer_reason='pipeline_seal_pending', defer_until=1840)
 
     if driver == 'legacy':
@@ -669,6 +687,76 @@ def test_promotion_keeps_due_time_while_projection_siblings_are_pending(state, m
     monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
     monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed())
-    monkeypatch.setattr(outbox.record_attention, 'projection_state', lambda *a, **k: False)
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, False, 100)
+    )
     assert outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101) is None
     assert rows[outbox.key('u', 'c')] == before
+
+
+def test_full_intake_clock_is_pinned_before_projection_and_survives_worker_envelope(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, tasks = state
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
+    monkeypatch.setattr(
+        outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed(recorded_end=100)
+    )
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, 1000)
+    )
+    outbox.mark('u', 'c', 'en', now=1100, sync_hold=True)
+    key = outbox.key('u', 'c')
+    assert rows[key]['pipeline_capture_end'] == 1000
+    assert rows[key]['pipeline_dispatch_at'] == 2680
+    outbox.mark('u', 'c', 'en', now=1200, sync_hold=True)
+    assert rows[key]['pipeline_dispatch_at'] == 2680
+
+    def deferred(*_):
+        context = PROCESS_CONTEXT.get()
+        assert context['pipeline_capture_end'] == 1000 and context['pipeline_dispatch_at'] == 2680
+        assert context['pipeline_record']
+        context.update(defer_reason='pipeline_projection_pending', defer_until=2740)
+
+    result = run_push(
+        EnrichmentConsumer(ENRICHMENT_OUTBOX, process=deferred),
+        ENRICHMENT_OUTBOX,
+        key,
+        tasks[-1]['task_token'],
+        now=2680,
+    )
+    assert result.outcome == 'deferred'
+
+
+def test_missing_intake_clock_never_uses_preview_as_capture_end(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
+    monkeypatch.setattr(
+        outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed(recorded_end=100)
+    )
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, None)
+    )
+    outbox.mark('u', 'c', 'en', now=1100)
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+    assert rows[outbox.key('u', 'c')]['pipeline_record']
+
+
+def test_unknown_presence_cannot_silently_admit_a_patient_window(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unknown')
+    monkeypatch.setattr(outbox.pipeline_attention, 'promoted', lambda *_: False)
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed())
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, 1000)
+    )
+    outbox.mark('u', 'c', 'en', now=1100)
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+    assert rows[outbox.key('u', 'c')]['pipeline_record']

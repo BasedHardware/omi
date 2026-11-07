@@ -1125,11 +1125,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
     pipeline_fast = False
     accepted_deadline = pipeline_policy.seconds(context.get('pipeline_dispatch_at')) if context is not None else None
-    if context is not None and (pipeline_attention.admitted(uid) or accepted_deadline):
-        deadline = pipeline_policy.dispatch_at(conversation_data, context)
-        projected = record_attention.projection_state(
-            uid, conversation_id, conversation_data, required=accepted_deadline is not None
-        )
+    if context is not None and (
+        pipeline_attention.admitted(uid) or accepted_deadline or context.get('pipeline_record')
+    ):
+        deadline = accepted_deadline
+        record = record_attention.receipt(uid, conversation_id, conversation_data)
+        projected = record.projected
+        if record.capture_end is not None:
+            context['pipeline_capture_end'] = record.capture_end
         settled = (
             pipeline_settlement.settle(uid, conversation_id, conversation_data, deadline)
             if projected is True and (pipeline_attention.serving(uid) or accepted_deadline)
@@ -1143,7 +1146,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
                 defer_reason=(
                     'pipeline_seal_pending'
                     if pipeline_policy.seal_snapshot(conversation_data) is None
-                    else 'pipeline_projection_pending' if projected is False else 'quiet_wait'
+                    else 'pipeline_projection_pending' if projected is not True else 'quiet_wait'
                 ),
                 defer_until=pipeline_due,
             )

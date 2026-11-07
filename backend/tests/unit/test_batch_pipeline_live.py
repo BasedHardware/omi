@@ -805,6 +805,13 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     intake = store.rows['intakes', 'bp_' + content]
     if pipeline_mode == 'serve':
         assert intake['pipeline_record_barrier']['record_upload_revision'] == current['record_upload_revision']
+        assert len(intake['record_ranges']) == len(intake['segment_ids'])
+        assert (
+            live.record_attention.receipt(
+                'synthetic', 'record', current, store=store, require_projection=False
+            ).capture_end
+            == 101
+        )
     else:
         assert 'pipeline_record_barrier' not in intake
     job = store.rows['jobs', segment]

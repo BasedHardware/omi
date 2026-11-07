@@ -149,6 +149,7 @@ def test_note_version_receipt_is_replay_idempotent_and_durable(serving):
         'pipeline_seal': policy.seal_snapshot(row),
         'pipeline_fingerprint': runtime.notes_fingerprint(row),
         'pipeline_attention': 'unwatched',
+        'pipeline_capture_end': 90,
     }
     write = {'summary_output_present': True}
     receipt = runtime.prepare_notes_receipt(row, write, 'u', now=2000, context=context)
@@ -299,15 +300,16 @@ def test_all_sibling_projection_ledger_and_pinned_upload_are_required():
     from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
     store = MemoryStore()
+    store.namespace = 'batch_pipeline_prod'
     content, _ = record_identity('u', 'c')
     job = 'bp_' + content
     row = sealed()
-    assert record_attention.projection_state('u', 'c', row, store=store) is None
-    assert record_attention.projection_state('u', 'c', row, store=store, required=True) is False
+    assert record_attention.receipt('u', 'c', row, store=store).admitted is None
     intake = {
         'owner_id': 'u',
         'conversation_id': 'c',
         'content_id': content,
+        'segment_ids': ['first', 'second'],
         'pipeline_record_barrier': {
             'record_lane_owner': 'batch_live_v1',
             'status': 'completed',
@@ -316,20 +318,31 @@ def test_all_sibling_projection_ledger_and_pinned_upload_are_required():
         },
     }
     store.rows[('intakes', job)] = intake
-    assert record_attention.projection_state('u', 'c', row, store=store, completed=False) is True
-    ledger = {'status': 'processing', 'job_id': job, 'dispatch_protocol': 'batch_v1'}
+    assert record_attention.receipt('u', 'c', row, store=store, require_projection=False).admitted is True
+    ledger = {
+        'status': 'processing',
+        'job_id': job,
+        'dispatch_protocol': 'batch_v1',
+        'batch_pipeline': {'namespace': store.namespace, 'segment_ids': ['first', 'second']},
+    }
     store.rows[('content', 'u/' + content)] = ledger
-    assert record_attention.projection_state('u', 'c', row, store=store) is False
+    assert record_attention.receipt('u', 'c', row, store=store).projected is False
     store.rows[('content', 'u/' + content)]['status'] = 'completed'
-    assert record_attention.projection_state('u', 'c', row, store=store) is True
+    assert record_attention.receipt('u', 'c', row, store=store).projected is True
     # Projection may extend finished_at; original upload revision stays immutable.
-    assert record_attention.projection_state('u', 'c', sealed(finished_at=110), store=store) is True
+    assert record_attention.receipt('u', 'c', sealed(finished_at=110), store=store).projected is True
     for changes in ({'record_upload_revision': 4}, {'record_projection_revision': 0}, {'record_audio_closed': False}):
-        assert record_attention.projection_state('u', 'c', sealed(**changes), store=store) is False
+        assert record_attention.receipt('u', 'c', sealed(**changes), store=store).projected is False
+    store.rows[('content', 'u/' + content)]['batch_pipeline']['segment_ids'] = ['first']
+    assert record_attention.receipt('u', 'c', row, store=store).projected is False
+    store.rows[('content', 'u/' + content)]['batch_pipeline']['segment_ids'] = ['first', 'second']
+    store.rows[('content', 'u/' + content)]['batch_pipeline']['namespace'] = 'batch_pipeline_dev'
+    assert record_attention.receipt('u', 'c', row, store=store).projected is False
+    store.rows[('content', 'u/' + content)]['batch_pipeline']['namespace'] = store.namespace
     store.rows[('content', 'u/' + content)]['job_id'] = 'other'
-    assert record_attention.projection_state('u', 'c', row, store=store) is False
+    assert record_attention.receipt('u', 'c', row, store=store).projected is False
     store.rows[('intakes', job)]['owner_id'] = 'other'
-    assert record_attention.projection_state('u', 'c', row, store=store, completed=False) is False
+    assert record_attention.receipt('u', 'c', row, store=store, require_projection=False).admitted is False
 
 
 def test_deadline_preserves_unresolved_f_join_boundary(serving, monkeypatch):
@@ -350,3 +363,90 @@ def test_fast_compose_requires_current_notes_receipt(serving):
     assert runtime.fast_members('u', [row])
     row['sync_content_revision'] += 1
     assert not runtime.fast_members('u', [row])
+
+
+def test_deadline_uses_whole_intake_extent_not_the_first_projected_unit():
+    row = sealed(recorded_end=100)
+    assert policy.dispatch_at(row, {'pipeline_capture_end': 1000}) == 2680
+    assert (
+        policy.dispatch_at(sealed(recorded_end=200), {'pipeline_capture_end': 1000, 'pipeline_dispatch_at': 2680})
+        == 2680
+    )
+    assert policy.dispatch_at(row, {'pipeline_capture_end': 1000, 'pipeline_dispatch_at': 2500}) == 2500
+
+
+def test_callback_does_not_invent_patient_admission_from_a_speech_span(serving):
+    runtime.observe_surface('u', 'background', {'foreground': False}, now=100)
+    assert decision('u', sealed(), {}, now=100) == (False, None, None)
+
+
+def test_native_intake_clock_includes_unprojected_units_and_silent_tails():
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_attention
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_prod'
+    content, _ = record_identity('u', 'c')
+    job = 'bp_' + content
+    store.rows[('intakes', job)] = {
+        'segment_ids': ['first', 'second'],
+        'owner_id': 'u',
+        'conversation_id': 'c',
+        'content_id': content,
+        'pipeline_record_barrier': {
+            'record_lane_owner': 'batch_live_v1',
+            'status': 'completed',
+            'record_upload_revision': 3,
+        },
+        'record_ranges': [{'start': 10, 'end': 100}, {'start': 100, 'end': 1000}],
+    }
+    row = sealed(recorded_end=90, finished_at=1100)
+    first = record_attention.receipt('u', 'c', row, store=store)
+    assert first.admitted is True and first.projected is False and first.capture_end == 1000
+    store.rows[('content', 'u/' + content)] = {
+        'status': 'completed',
+        'job_id': job,
+        'dispatch_protocol': 'batch_v1',
+        'batch_pipeline': {'namespace': store.namespace, 'segment_ids': ['first', 'second']},
+    }
+    final = record_attention.receipt('u', 'c', row, store=store)
+    assert final.projected is True and final.capture_end == 1000
+    for ranges in (
+        [],
+        [{'start': 10, 'end': 100}],
+        [{'start': 10, 'end': 100}, {'start': 100, 'end': None}],
+        [{'start': 10, 'end': 100}, {'start': 100, 'end': 90}],
+        [{'start': 10, 'end': 100}, {'start': 100, 'end': True}],
+    ):
+        store.rows[('intakes', job)]['record_ranges'] = ranges
+        assert record_attention.receipt('u', 'c', row, store=store).capture_end is None
+
+
+def test_note_clocks_use_admitted_audio_extent_and_unknown_stays_unknown(serving):
+    row = sealed(recorded_end=90, pipeline_attention={'sealed_at': 1100})
+    context = {'pipeline_seal': policy.seal_snapshot(row), 'pipeline_fingerprint': runtime.notes_fingerprint(row)}
+    assert (
+        runtime.prepare_notes_receipt(row, {'summary_output_present': True}, 'u', now=2000, context=context)[
+            'capture_latency'
+        ]
+        is None
+    )
+    context['pipeline_capture_end'] = 1000
+    write = {'summary_output_present': True}
+    receipt = runtime.prepare_notes_receipt(row, write, 'u', now=2000, context=context)
+    assert receipt['capture_latency'] == 1000 and receipt['capture_seal_latency'] == 100
+    assert write[policy.FIELD]['capture_end'] == 1000
+
+
+def test_accepted_projection_gate_survives_kill_without_minting_a_deadline(serving, monkeypatch):
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+    monkeypatch.setattr(runtime, 'attention', lambda *a, **k: pytest.fail('rollback needs no presence'))
+    context = {'pipeline_record': True}
+    assert decision('u', sealed(), context, projected=False, now=100) == (False, 160, None)
+    assert decision('u', sealed(), context, projected=True, now=100) == (False, None, policy.seal_snapshot(sealed()))
+
+
+def test_unknown_clock_retains_legacy_hold_after_full_projection(serving):
+    runtime.observe_surface('u', 'background', {'foreground': False}, now=100)
+    assert decision('u', sealed(), {'pipeline_record': True}, now=100) == (False, None, policy.seal_snapshot(sealed()))

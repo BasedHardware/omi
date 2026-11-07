@@ -503,10 +503,16 @@ def mark_update(
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
             )
 
-        deadline = pipeline_policy.dispatch_at(pipeline_snapshot or {}, row)
+        deadline = pipeline_policy.seconds(row.get('pipeline_dispatch_at'))
         if pipeline_snapshot is not None:
-            row['sync_hold'] = True  # Independent of the older summary-delivery rollout.
-        if deadline is not None and (pipeline_snapshot or row.get('pipeline_dispatch_at')):
+            row['pipeline_record'] = True
+            row['sync_hold'] = True  # Projection gating does not depend on a usable clock.
+            captured = pipeline_policy.seconds(pipeline_snapshot.get('pipeline_capture_end'))
+            if captured is not None:
+                row['pipeline_capture_end'] = captured
+                if pipeline_snapshot.get('pipeline_patient_admitted'):
+                    deadline = pipeline_policy.dispatch_at({}, row)
+        if deadline is not None:
             row['pipeline_dispatch_at'] = deadline
             row['due_at'] = min(row['due_at'], max(current, deadline))
             row['sync_hold'] = True
@@ -545,7 +551,6 @@ def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
             conversation_id,
             firestore_client=firestore_client,
             field_paths=[
-                'recorded_end',
                 'record_lane_owner',
                 'status',
                 'finished_at',
@@ -558,15 +563,17 @@ def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
                 'record_upload_revision',
             ],
         )
-        # Pin new policy debt only to the original native intake receipt.
-        if (
-            row
-            and record_attention.projection_state(
-                uid, conversation_id, row, completed=False, firestore_client=firestore_client
+        if row:
+            record = record_attention.receipt(
+                uid, conversation_id, row, require_projection=False, firestore_client=firestore_client
             )
-            is True
-        ):
-            return row
+            if record.admitted is True:
+                patient = pipeline_attention.attention(uid) != 'unknown' or pipeline_attention.promoted(uid)
+                if not patient:
+                    pipeline_attention.metrics.event('unknown_attention')
+                if record.capture_end is None:
+                    pipeline_attention.metrics.event('unknown_capture_clock')
+                return {'pipeline_capture_end': record.capture_end, 'pipeline_patient_admitted': patient}
     except Exception:
         pipeline_attention.unavailable()
     return None  # Retain the original durable obligation with legacy timing.
@@ -608,7 +615,7 @@ def promote_pipeline(uid, document_id, *, now):
         if (
             not source
             or pipeline_policy.seal_snapshot(source) is None
-            or record_attention.projection_state(uid, old['conversation_id'], source) is not True
+            or record_attention.receipt(uid, old['conversation_id'], source).projected is not True
         ):
             return old, None
         row = dict(old, due_at=now, task_due_at=now, task_token=uuid.uuid4().hex)
@@ -771,6 +778,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 sync_hold_requested=bool(row.get('sync_hold_requested')),
                 first_pending_at=row['first_pending_at'],
                 pipeline_dispatch_at=row.get('pipeline_dispatch_at'),
+                pipeline_capture_end=row.get('pipeline_capture_end'),
+                pipeline_record=bool(row.get('pipeline_record')),
             )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))

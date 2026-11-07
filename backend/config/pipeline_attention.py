@@ -55,9 +55,9 @@ def seconds(value) -> float | None:
 
 
 def capture_end(row: Mapping) -> float | None:
-    # recorded_end is the captured span; finished_at is kept separately as the
-    # close-trigger clock. Never silently substitute acceptance for capture.
-    return seconds(row.get('recorded_end'))
+    # Native obligations pin the complete intake extent. Generic recorded-span
+    # callers retain their explicit recorded_end; finished_at is never a fallback.
+    return seconds(row.get('pipeline_capture_end')) or seconds(row.get('recorded_end'))
 
 
 def seal_snapshot(row: Mapping, *, require_content_revision: bool = True) -> dict | None:
@@ -90,7 +90,7 @@ def seal_snapshot(row: Mapping, *, require_content_revision: bool = True) -> dic
 def dispatch_at(row: Mapping, obligation: Mapping) -> float | None:
     """An earlier accepted deadline survives joins, new evidence and rollback."""
     saved = seconds(obligation.get('pipeline_dispatch_at'))
-    end = capture_end(row)
+    end = seconds(obligation.get('pipeline_capture_end')) or capture_end(row)
     proposed = end + DISPATCH_AFTER_SECONDS if end is not None else None
     values = [at for at in (saved, proposed) if at is not None]
     return min(values) if values else None

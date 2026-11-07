@@ -69,8 +69,8 @@ the upload of a chunk. The default conversation silence wait remains 120 seconds
 
 | Series/report | Source and limits |
 | --- | --- |
-| `omi_pipeline_stage_seconds` | Committed seal clock in `database/record_audio.py`; captured span/finish to seal (includes custody delay), configured silence wait from `quiet_finalization.arm`, boundary gap at episode attach, explicit user-finalize wait, processing work at the enrichment callback. Separate from existing provider queue/work and composer stage metrics. No user/content labels. |
-| `omi_pipeline_capture_to_notes_seconds{attention,lane}` | First durable notes receipt in the existing conversation persistence transaction; `recorded_end` is the capture anchor, attention frozen at seal. Missing capture clocks counted, never zero. |
+| `omi_pipeline_stage_seconds` | Committed seal clock in `database/record_audio.py`; recorded-speech span and stored finish to seal (includes custody delay), configured silence wait from `quiet_finalization.arm`, boundary gap at episode attach, explicit user-finalize wait, processing work at the enrichment callback. Physical capture-to-seal is emitted with the first committed note receipt once the complete intake clock is known. Separate from existing provider queue/work and composer stage metrics. No user/content labels. |
+| `omi_pipeline_capture_to_notes_seconds{attention,lane}` | First durable notes receipt in the existing conversation persistence transaction; the pinned native intake `record_ranges` maximum end is the capture anchor (including unprojected units and silent tails), attention frozen at seal. Missing complete-intake clocks counted, never substituted with preview speech or zero. |
 | `omi_pipeline_close_to_notes_seconds{attention,lane}` | The persisted server seal trigger to first durable notes; watched 2/5-minute target clock under ruling B. Does not erase capture-to-seal delay. |
 | `omi_pipeline_open_to_ready_seconds{trigger,initial_state}` | Owner hook at truthful existing-text/pending visibility, per ruling A. The callback must be wired by #24607/#23498; no samples are fabricated here. Pending generated notes, episode readiness and client visible acknowledgements remain separate. |
 | `omi_pipeline_notes_rewrites_per_conversation` | Durable `pipeline_attention.notes_versions` minus initial version, observed at each successful changed-revision commit. Per-commit histogram is **not** a census of unique conversations. The offline adapter's `--notes-receipts` census deduplicates protected metadata exports by owner/conversation and uses their latest stored count; attempts and discarded stale results are paid-usage-ledger inputs, not committed versions. |
@@ -155,3 +155,15 @@ The projection owner's all-sibling completion proof remains authoritative.
 Forced settlement refuses any pending F-join boundary in the planned episode,
 a fresh service read, and the closing transaction. Only canonical F reconciliation
 may consume that boundary; deadline pressure never clears a pending split decision.
+
+
+### Native capture clock authority
+
+The absolute deadline is pinned to the complete, barrier-bound native intake's
+`record_ranges`, not to a live preview or the first projected speech unit. The
+content-free `pipeline_capture_end` travels with the existing durable obligation
+and worker envelope. A later unit cannot move the accepted deadline; missing or
+invalid intake ranges or unknown presence retain legacy hold timing rather than inventing a patient deadline. The accepted `pipeline_record` gate still waits for complete projection, including after rollback; clock availability never authorizes partial-text notes.
+First-note capture latency and capture-to-seal use this same physical extent;
+recorded-span/finished-to-seal remain separately named clocks. No range query,
+index, historical backfill, or producer-grace bypass is introduced.

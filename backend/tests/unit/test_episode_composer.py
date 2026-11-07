@@ -1245,9 +1245,13 @@ def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, c
 def test_accepted_deadline_waits_for_all_projection_siblings_before_paid_compose(store, monkeypatch):
     store.episode['pipeline_dispatch_at'] = T0.timestamp() + 1680
     calls = []
-    monkeypatch.setattr(composer.record_attention, 'projection_state', lambda *a, **k: False)
+    monkeypatch.setattr(
+        composer.record_attention, 'receipt', lambda *a, **k: composer.record_attention.RecordReceipt(True, False, 100)
+    )
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
     assert calls == []
-    monkeypatch.setattr(composer.record_attention, 'projection_state', lambda *a, **k: True)
+    monkeypatch.setattr(
+        composer.record_attention, 'receipt', lambda *a, **k: composer.record_attention.RecordReceipt(True, True, 100)
+    )
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     assert len(calls) == 1

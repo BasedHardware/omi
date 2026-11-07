@@ -44,6 +44,8 @@ _PAYLOAD_FIELDS = (
     'version',
     'first_pending_at',
     'pipeline_dispatch_at',
+    'pipeline_capture_end',
+    'pipeline_record',
     'summary_deadline_at',
     'summary_lane',
     'summary_seen',
