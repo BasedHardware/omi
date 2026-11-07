@@ -294,7 +294,7 @@ def test_enabled_http_get_shapes(monkeypatch, http_client):
     }
     monkeypatch.setattr(store, 'list_items', lambda uid, **kwargs: [item])
     monkeypatch.setattr(store, 'pending_conversations', lambda uid: [])
-    monkeypatch.setattr(sync_jobs, 'pending_sync_jobs', lambda uid: [])
+    monkeypatch.setattr(sync_jobs, 'pending_sync_jobs', lambda uid, *, listed_conversation_ids=None: [])
     response = http_client.get('/v1/attention-items')
     assert response.status_code == 200
     assert response.json()['unseen_count'] == 1
@@ -455,7 +455,7 @@ def test_typed_pending_projection_serializes_rows(monkeypatch, http_client):
         'internal_only': 'omit',
     }
     monkeypatch.setattr(store, 'pending_conversations', lambda uid: [row])
-    monkeypatch.setattr(sync_jobs, 'pending_sync_jobs', lambda uid: [])
+    monkeypatch.setattr(sync_jobs, 'pending_sync_jobs', lambda uid, *, listed_conversation_ids=None: [])
     response = http_client.get('/v1/pending-work')
     assert response.status_code == 200
     body = response.json()
