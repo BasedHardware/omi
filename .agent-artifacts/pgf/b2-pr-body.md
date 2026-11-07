@@ -56,3 +56,11 @@ Failure-Class: none
 ## New guards (only when adding a check or ratchet)
 
 The PGF B2 round-1 D5 review identified incomplete deployment admission following B1 #24790 and M9 #24778. This extends the existing runtime-env validation primitive with fleet-wide binding admission and positive/negative fixtures; it adds no parallel checker or workflow.
+
+## Merge-owner review fixes
+
+The merge-owner BLOCKING review is addressed by synchronous off-mode checks at all async HTTP/WS routing callsites and before the wipe step (including its heartbeat); a separate `CELL_DIRECTORY_WIPE_ENABLED=false` kill switch; and fail-closed wipe admission requiring an explicit cell route plus the durable cell enrollment head. The retained tombstone admits interrupted-wipe retries, and is written before disabling the directory route so a crash cannot strand that proof. Routing on while the wipe switch is off refuses the required step; this switch must be explicitly enabled after synthetic wipe qualification and before W5 enrollment.
+
+Route resolution now checks a per-owner Redis epoch on every authenticated hot-path lookup (one GET on a warm cache); Redis loss denies HTTP 503 / WS 1013. Route invalidation publishes a fresh epoch that both process and Redis plane entries must match, including after key loss or an interleaved stale read. This supersedes the earlier deferral of cross-worker route visibility. Flip completion requires successful invalidation plus the existing writer-drain ceremony for already-admitted requests.
+
+The core `apply_cutover_transition` seam itself now rejects `migrated` without persisted cell kind, `cutover_ready`, and a bound destination (completed migrated retries retain idempotence). New regressions cover all async callsites, exact off-mode heartbeat behavior, rejected wipe admission, interrupted-wipe retries, two independent warm resolvers, Redis/key loss, stale cache publication, and direct transition calls. Verification results and exact commands for this round are recorded in `.agent-artifacts/pgf/merge-owner-fix-result.md`.
