@@ -16,6 +16,7 @@ Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/o
 - `backend/tests/unit/test_cells_task_workflow_migration.py`: numbered/expand-only schema contract and frozen checksum; fresh schema/reapply; codec timestamps; bounded lists over pending UoW changes; native replay receipts; fence-before-flush and retry cleanup; one bump per UoW; native revision-error attributes; mixed-scalar folder keysets; reserved-task no-op mutation receipts without duplicate cache bumps; scalar-type updates and codec/timestamp propagation through related-domain task patches. Redis is fixture-local/faked, preventing cached-client contamination.
 - `backend/tests/support/lifecycle_writer_inventory.py`: reviewed declarations for the new cell payload builders (scope extension below).
 - `backend/tests/unit/test_cell_store_conformance.py`: advance the exact migration-version expectation to 3 (scope extension below).
+- `backend/tests/unit/test_executors.py`: initialize cold exception-reporting dependencies during fixture setup, preserving the existing deadlines and assertions (scope extension below).
 - `backend/database/ARCHITECTURE.md`: adapter/flush/query/fence ownership and migration/admission dependencies.
 - `.agent-artifacts/pgf/a2b-pr-body.md`: PR draft using the repository template headings.
 
@@ -31,9 +32,11 @@ Serving selection, runtime flags and production config are unchanged. CELL_STORE
 
 ## Scope extensions taken
 
-`backend/tests/support/lifecycle_writer_inventory.py` and `backend/tests/unit/test_cell_store_conformance.py` extend the A2b file list. The existing lifecycle AST guard correctly rejected the new cell payload builders. Reviewed and added only those new sites: task retirement (superseded/cancelled); goal create/delete/focus replacement/focus/lifecycle/unfocus; workstream create, draft/superseded artifact versions, accepted candidate response, and validated artifact status transitions. Existing declarations are unchanged. This is required inventory maintenance, not an assertion weakening or new allowlist bypass.
+`backend/tests/support/lifecycle_writer_inventory.py`, `backend/tests/unit/test_cell_store_conformance.py`, and `backend/tests/unit/test_executors.py` extend the A2b file list. The existing lifecycle AST guard correctly rejected the new cell payload builders. Reviewed and added only those new sites: task retirement (superseded/cancelled); goal create/delete/focus replacement/focus/lifecycle/unfocus; workstream create, draft/superseded artifact versions, accepted candidate response, and validated artifact status transitions. Existing declarations are unchanged. This is required inventory maintenance, not an assertion weakening or new allowlist bypass.
 
 `backend/tests/unit/test_cell_store_conformance.py`: update the exact expected migration version from 1 to 3, because the expanded fresh schema correctly applies B2 0002 and A2b 0003. Both idempotent-reapply assertions are retained. The broad run exposed this stale B1 expectation; the complete cell-store file is replayed after the mechanical correction.
+
+`backend/tests/unit/test_executors.py`: the full run timed out in the BYOK exception future; the first file-isolated replay instead timed out in the first destructive-operation exception future (25 cell-store tests passed; executor file 35 passed / 1 failed). Both retain a two-second deadline. The executor deliberately imports its gateway classifier on its first exception, and the BYOK test constructs a real SDK error with its first SDK import inside that timed future. A module-scoped setup fixture now initializes those two cold dependencies before task timing. It preserves the real classifier, the two-second deadlines and every logging/privacy assertion; no product executor code changes.
 
 ## Validation environment and reproducibility
 

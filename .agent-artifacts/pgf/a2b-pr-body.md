@@ -28,7 +28,7 @@ Failure-Class: none
 
 ## Scoped cleanups (optional)
 
-Stacked on A2a and A1 #24800; B2 #24805 remains the write-admission dependency. The copied 0002 migration is byte-identical to B2, avoiding migration-number/checksum conflicts. No edits to cells/store.py, feed.py, purge.py, jobstore, workflows, runtime env or testing/store_fixtures.py. The pgserver wheel was installed only in this worktree's venv, without lock changes. Required scope extensions: declare the new cell lifecycle payload sites in the existing inventory, and advance B1's exact migration-version assertion from 1 to 3.
+Stacked on A2a and A1 #24800; B2 #24805 remains the write-admission dependency. The copied 0002 migration is byte-identical to B2, avoiding migration-number/checksum conflicts. No edits to cells/store.py, feed.py, purge.py, jobstore, workflows, runtime env or testing/store_fixtures.py. The pgserver wheel was installed only in this worktree's venv, without lock changes. Required scope extensions: declare the new cell lifecycle payload sites in the existing inventory, and advance B1's exact migration-version assertion from 1 to 3; initialize the executor tests' lazy error-classification and SDK dependencies during setup while preserving their deadlines and assertions.
 
 The following exact size declarations cover the inherited A2a diff while this stack is validated against main; remove them when A2a is the merged target base.
 
