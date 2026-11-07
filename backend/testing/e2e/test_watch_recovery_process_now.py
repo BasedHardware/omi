@@ -2,6 +2,7 @@
 
 import struct
 import time
+import traceback
 
 from testing.e2e.sync_helpers import patch_fresh_sync_lane
 from testing.e2e.test_sync_lifecycle import _drain_background_coroutines, _patch_sync_pipeline, _poll_sync_job
@@ -18,7 +19,7 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     classify_failure = pipeline.failure_from_exception
 
     def capture_failure(error, **kwargs):
-        failures.append(repr(error))
+        failures.append(''.join(traceback.format_exception(error)))
         return classify_failure(error, **kwargs)
 
     monkeypatch.setattr(pipeline, 'failure_from_exception', capture_failure)
