@@ -623,7 +623,8 @@ struct MemoryExportDestinationSheet: View {
         !updated.hasConnection,
         model.statusMessage != nil
       {
-        model.statusMessage =
+        model.statusMessage = nil
+        model.errorMessage =
           "Not connected yet. If the ChatGPT plugin page opened blank, sign in to ChatGPT, search for Omi in Settings → Apps & Connectors, or use the Developer-mode fallback below."
         showManualSetup = true
       }

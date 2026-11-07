@@ -215,18 +215,26 @@ void main() {
     usePhoneViewport(tester);
     await tester.pumpWidget(
       connectAgentHost(
-        Scaffold(
-          body: ChatGptConnectSheet(
-            service: backend.service(),
-            connections: const AgentConnections(chatGptGrantIds: [], agentKeys: {}),
-            urlLauncher: (url) async {
-              launched.add(url);
-              return true;
-            },
+        Builder(
+          builder: (context) => Scaffold(
+            body: OmiButton(
+              label: 'Show Sheet',
+              onPressed: () => showChatGptConnectSheet(
+                context,
+                service: backend.service(),
+                connections: const AgentConnections(chatGptGrantIds: [], agentKeys: {}),
+                urlLauncher: (url) async {
+                  launched.add(url);
+                  return true;
+                },
+              ),
+            ),
           ),
         ),
       ),
     );
+    await settle(tester);
+    await tester.tap(find.text('Show Sheet'));
     await settle(tester);
 
     await tester.tap(find.byKey(const ValueKey('connect_chatgpt_open')));
@@ -242,11 +250,18 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('connect_chatgpt_check_status')));
     await settle(tester);
-    expect(find.textContaining('Not connected yet.'), findsOneWidget);
+    expect(find.text("ChatGPT Hasn't Connected Yet"), findsOneWidget);
+
+    backend.chatGptConnected = true;
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_check_status')));
+    await settle(tester);
+    expect(find.byType(ChatGptConnectSheet), findsNothing);
   });
 
-  testWidgets('ChatGPT sheet falls back to Connectors URL when direct plugin link fails to open', (tester) async {
+  testWidgets('ChatGPT sheet falls back to Connectors URL when direct plugin link fails and reports when both fail',
+      (tester) async {
     final launched = <Uri>[];
+    var allowConnectors = true;
     final backend = FakeAgentBackend();
     usePhoneViewport(tester);
     await tester.pumpWidget(
@@ -257,7 +272,7 @@ void main() {
             connections: const AgentConnections(chatGptGrantIds: [], agentKeys: {}),
             urlLauncher: (url) async {
               launched.add(url);
-              return url == chatGptConnectorsUrl;
+              return allowConnectors && url == chatGptConnectorsUrl;
             },
           ),
         ),
@@ -268,7 +283,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('connect_chatgpt_open')));
     await settle(tester);
     expect(launched, [chatGptDirectoryUrl, chatGptConnectorsUrl]);
-    expect(find.textContaining('Opened ChatGPT Connectors because the direct plugin page was unavailable.'),
-        findsOneWidget);
+    expect(find.text('We check the connection automatically.'), findsNWidgets(2));
+
+    launched.clear();
+    allowConnectors = false;
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_open')));
+    await settle(tester);
+    expect(launched, [chatGptDirectoryUrl, chatGptConnectorsUrl]);
+    expect(find.text("Couldn't open ChatGPT. Make sure it's installed and try again."), findsAtLeastNWidgets(1));
   });
 }

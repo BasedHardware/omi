@@ -18,6 +18,7 @@ Future<bool?> showChatGptConnectSheet(
   AgentConnectService? service,
   AgentConnections? connections,
   Future<bool> Function(Uri url)? urlLauncher,
+  ValueChanged<AgentConnections>? onConnectionsLoaded,
 }) {
   return showOmiSheet<bool>(
     context: context,
@@ -25,6 +26,7 @@ Future<bool?> showChatGptConnectSheet(
       service: service,
       connections: connections,
       urlLauncher: urlLauncher,
+      onConnectionsLoaded: onConnectionsLoaded,
     ),
   );
 }
@@ -35,11 +37,13 @@ class ChatGptConnectSheet extends StatefulWidget {
     this.service,
     this.connections,
     this.urlLauncher,
+    this.onConnectionsLoaded,
   });
 
   final AgentConnectService? service;
   final AgentConnections? connections;
   final Future<bool> Function(Uri url)? urlLauncher;
+  final ValueChanged<AgentConnections>? onConnectionsLoaded;
 
   @override
   State<ChatGptConnectSheet> createState() => _ChatGptConnectSheetState();
@@ -88,17 +92,18 @@ class _ChatGptConnectSheetState extends State<ChatGptConnectSheet> with WidgetsB
     setState(() => _checkingStatus = true);
     try {
       final latest = await service.load();
+      widget.onConnectionsLoaded?.call(latest);
       if (!mounted) return;
       if (latest.chatGptConnected && !latest.chatGptNeedsReconnect) {
         Navigator.of(context).pop(false);
         return;
       }
+      final l10n = context.l10n;
       setState(() {
         _connections = latest;
         _checkingStatus = false;
-        _statusMessage = latest.chatGptNeedsReconnect
-            ? context.l10n.chatGptNeedsReconnect
-            : 'Not connected yet. If ChatGPT opened a blank plugin page, sign in to ChatGPT first or open ChatGPT Connectors and search for Omi.';
+        _statusMessage =
+            latest.chatGptNeedsReconnect ? l10n.chatGptNeedsReconnect : l10n.connectAgentWaitingTitle(chatGptBrandName);
       });
     } catch (_) {
       if (!mounted) return;
@@ -137,35 +142,35 @@ class _ChatGptConnectSheetState extends State<ChatGptConnectSheet> with WidgetsB
     final openedPrimary = await _launch(chatGptDirectoryUrl);
     final openedFallback = !openedPrimary && await _launch(chatGptConnectorsUrl);
     if (!context.mounted) return;
+    final l10n = context.l10n;
     if (openedPrimary || openedFallback) {
       setState(() {
         _handoffOpened = true;
         _launchFailed = false;
-        _statusMessage = openedPrimary
-            ? 'Opened ChatGPT. If the plugin page is blank, sign in to ChatGPT in your browser or open ChatGPT Connectors and search for Omi.'
-            : 'Opened ChatGPT Connectors because the direct plugin page was unavailable. Search for Omi and tap Connect.';
+        _statusMessage = l10n.connectChatGptStepReturnBody;
       });
     } else {
+      final errorText = l10n.chatAppsCouldNotOpen(chatGptBrandName);
       setState(() {
         _launchFailed = true;
-        _statusMessage =
-            'Could not open ChatGPT automatically. In ChatGPT, open Settings > Apps & Connectors, search for Omi, and tap Connect.';
+        _statusMessage = errorText;
       });
-      OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(chatGptBrandName));
+      OmiFeedback.error(context, errorText);
     }
   }
 
   Future<void> _openConnectorsFallback(BuildContext context) async {
     final opened = await _launch(chatGptConnectorsUrl);
     if (!context.mounted) return;
+    final l10n = context.l10n;
     if (opened) {
       setState(() {
         _handoffOpened = true;
         _launchFailed = false;
-        _statusMessage = 'Opened ChatGPT Connectors. Search for Omi, tap Connect, then return to Omi.';
+        _statusMessage = l10n.connectChatGptStepReturnBody;
       });
     } else {
-      OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(chatGptBrandName));
+      OmiFeedback.error(context, l10n.chatAppsCouldNotOpen(chatGptBrandName));
     }
   }
 
@@ -228,7 +233,7 @@ class _ChatGptConnectSheetState extends State<ChatGptConnectSheet> with WidgetsB
             const SizedBox(height: OmiSpacing.xs),
             OmiButton.secondary(
               key: const ValueKey('connect_chatgpt_open_connectors'),
-              label: 'Open ChatGPT Connectors',
+              label: l10n.openSettings,
               icon: Icons.open_in_new,
               expand: true,
               onPressed: () => _openConnectorsFallback(context),
@@ -237,7 +242,7 @@ class _ChatGptConnectSheetState extends State<ChatGptConnectSheet> with WidgetsB
               const SizedBox(height: OmiSpacing.xs),
               OmiButton.secondary(
                 key: const ValueKey('connect_chatgpt_check_status'),
-                label: 'Check Connection',
+                label: l10n.refresh,
                 expand: true,
                 isLoading: _checkingStatus,
                 onPressed: _checkingStatus ? null : _verifyConnection,

@@ -102,7 +102,7 @@ enum MemoryExportExecutor {
         mode: .assisted)
     }
     throw ExecutorError.browserSetupRequired(
-      "Couldn't open ChatGPT in your browser. Open https://chatgpt.com/#settings/Connectors, search for Omi, or use the Developer-mode fallback below."
+      "Couldn't open ChatGPT in your browser. Open \(MemoryExportDestination.chatGPTConnectorsSettingsURL.absoluteString), search for Omi, or use the Developer-mode fallback below."
     )
   }
 
