@@ -955,6 +955,46 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
     return 'not_actionable'
 
 
+@transactional
+def _requeue_statusless_deletion_marker_txn(transaction, doc_ref, generated_job_id: str) -> str | None:
+    """Move a status-less account-deletion marker to ``pending`` exactly once.
+
+    A marker whose ``wipe_status`` is absent or blank is invisible to the
+    reconciler (it queries on equality) and to the task claim (it returns
+    ``not_actionable``), so no wipe ever runs for it. This transition is the
+    only write that gives such a marker a status. It refuses any marker that
+    already has a status, so a concurrent writer's state is never overwritten.
+    Returns the wipe job id to enqueue, or ``None`` when nothing was changed.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict() or {}
+    raw_status = data.get('wipe_status')
+    if isinstance(raw_status, str) and raw_status.strip():
+        return None
+    job_id = data.get('wipe_job_id')
+    if not isinstance(job_id, str) or not job_id:
+        job_id = generated_job_id
+    transaction.update(
+        doc_ref,
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc), 'wipe_job_id': job_id},
+    )
+    return job_id
+
+
+def requeue_statusless_deletion_marker(uid: str) -> str | None:
+    """Give one status-less deletion marker a pending wipe and return its job id.
+
+    Callers must verify the Firebase Auth user is already gone first; the
+    worker's wipe is destructive and this transition does not check Auth.
+    """
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    transaction = client.transaction()
+    return _requeue_statusless_deletion_marker_txn(transaction, doc_ref, uuid.uuid4().hex)
+
+
 @cache_writer('deletion_marker_cache')
 def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER) -> str:
     """Claim an account-deletion wipe for a Cloud Tasks worker.
