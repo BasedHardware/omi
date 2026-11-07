@@ -28,6 +28,7 @@ from config.record_drain import (
     record_drain_concurrency,
     record_drain_lease_seconds,
     record_drain_privacy_defer_seconds,
+    record_drain_idle_without_progress_enabled,
     barrier_retry_delay,
     record_drain_barrier_backoff_enabled,
 )
@@ -522,6 +523,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
     lease_seconds = record_drain_lease_seconds()
     segments, partial_count = [], 0
     privacy_blocked = False
+    # Rows this pass actually admitted. A full page of deferred/failed rows (for
+    # example captures still behind their upload barrier) made no progress, so
+    # rescanning at once only re-reads it (2026-11-07: store:due 4x in 30 min).
+    admitted = 0
     # Every admission rewrites the owner's scheduler row, so two local workers
     # admitting one owner only exhaust each other's contention retries. Leave
     # the busy owner's other rows due for the next pass instead.
@@ -581,7 +586,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         return lease
 
     async def admit_and_defer(segment, pending, lease):
-        nonlocal partial_count, privacy_blocked
+        nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
         try:
@@ -609,6 +614,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                 # Same one-way key as the sync pending line (record content hash prefix), so the two join.
                 str(pending.get('record_content_id') or '-')[:16],
             )
+        if not failed:
+            admitted += 1
 
         def defer(tx):
             # Admission can return without moving the obligation (for example
@@ -682,7 +689,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         for result in results:
             if isinstance(result, BaseException):
                 raise result
-        return len(segments) == batch_size and not privacy_blocked
+        progressed = admitted > 0 or not record_drain_idle_without_progress_enabled()
+        return len(segments) == batch_size and not privacy_blocked and progressed
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
