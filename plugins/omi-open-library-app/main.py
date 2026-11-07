@@ -119,7 +119,10 @@ def _description_text(description: Any) -> str:
         description = description.get("value") or description.get("text") or ""
     elif isinstance(description, list):
         parts = [
-            _clean_text(d.get("value") if isinstance(d, dict) else d, preserve_newlines=True)
+            _clean_text(
+                (d.get("value") or d.get("text") or "") if isinstance(d, dict) else d,
+                preserve_newlines=True,
+            )
             for d in description
         ]
         description = "\n".join(p for p in parts if p)
@@ -135,7 +138,10 @@ def _work_id(value: Any) -> Optional[str]:
         return None
 
     candidate = candidate.strip("`'\"<>[]()")
-    if candidate.startswith(("http://", "https://")) or "openlibrary.org" in candidate.lower():
+    partial_url = candidate.lstrip("/").lower()
+    if candidate.lower().startswith(("http://", "https://")) or partial_url.startswith(
+        ("openlibrary.org/", "www.openlibrary.org/")
+    ):
         normalized_url = candidate if "://" in candidate else f"https://{candidate.lstrip('/')}"
         try:
             parsed = urlsplit(normalized_url)

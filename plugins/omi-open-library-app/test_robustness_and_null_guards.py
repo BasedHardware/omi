@@ -238,6 +238,10 @@ class TestOpenLibraryRobustnessAndNullGuards(unittest.TestCase):
             "OL45883W",
         )
         self.assertEqual(
+            _work_id("/works/OL45883W/openlibrary.org"),
+            "OL45883W",
+        )
+        self.assertEqual(
             _work_id("https://www.openlibrary.org/works/OL45883W.json"),
             "OL45883W",
         )
@@ -266,8 +270,8 @@ class TestOpenLibraryRobustnessAndNullGuards(unittest.TestCase):
             "First paragraph with extra spaces.\nSecond paragraph.\nThird line.",
         )
         self.assertEqual(
-            _description_text(["Paragraph one", {"value": "Paragraph two"}]),
-            "Paragraph one\nParagraph two",
+            _description_text(["Paragraph one", {"value": "Paragraph two"}, {"text": "Paragraph three"}]),
+            "Paragraph one\nParagraph two\nParagraph three",
         )
 
     def test_get_book_details_with_slug_url_and_multiline_description(self):
