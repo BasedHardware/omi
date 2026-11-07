@@ -14,12 +14,13 @@ Future<void> showEditSegmentBottomSheet(
   required TranscriptSegment segment,
   required String speakerName,
   required Function(String newText) onSave,
+  Future<TranscriptSegmentSplitResult> Function(int splitOffset, String currentText)? onSplit,
   VoidCallback? onDismissed,
 }) {
   return showOmiSheet<void>(
     context: context,
     title: speakerName,
-    builder: (_) => EditSegmentSheet(segment: segment, onSave: onSave),
+    builder: (_) => EditSegmentSheet(segment: segment, onSave: onSave, onSplit: onSplit),
   ).whenComplete(() => onDismissed?.call());
 }
 
@@ -27,8 +28,14 @@ Future<void> showEditSegmentBottomSheet(
 class EditSegmentSheet extends StatefulWidget {
   final TranscriptSegment segment;
   final Function(String newText) onSave;
+  final Future<TranscriptSegmentSplitResult> Function(int splitOffset, String currentText)? onSplit;
 
-  const EditSegmentSheet({super.key, required this.segment, required this.onSave});
+  const EditSegmentSheet({
+    super.key,
+    required this.segment,
+    required this.onSave,
+    this.onSplit,
+  });
 
   @override
   State<EditSegmentSheet> createState() => _EditSegmentSheetState();
@@ -37,6 +44,8 @@ class EditSegmentSheet extends StatefulWidget {
 class _EditSegmentSheetState extends State<EditSegmentSheet> {
   late final TextEditingController _controller;
   bool _dirty = false;
+  String? _splitError;
+  bool _splitting = false;
 
   @override
   void initState() {
@@ -54,7 +63,42 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
 
   void _onChanged() {
     final dirty = _controller.text.trim() != widget.segment.text.trim();
-    if (dirty != _dirty) setState(() => _dirty = dirty);
+    if (dirty != _dirty || _splitError != null) {
+      setState(() {
+        _dirty = dirty;
+        _splitError = null;
+      });
+    }
+  }
+
+  String _splitFailureMessage(TranscriptSegmentSplitFailure failure) => switch (failure) {
+        TranscriptSegmentSplitFailure.insufficientTiming =>
+          'This line does not have enough timing detail to split accurately.',
+        TranscriptSegmentSplitFailure.midWordBoundary =>
+          'Place the cursor between words to split this line into two turns.',
+        TranscriptSegmentSplitFailure.emptySide =>
+          'Place the cursor between two spoken parts so both turns have text.',
+      };
+
+  Future<void> _splitAtCursor() async {
+    final onSplit = widget.onSplit;
+    if (onSplit == null || _splitting) return;
+    final offset = _controller.selection.baseOffset;
+    setState(() {
+      _splitting = true;
+      _splitError = null;
+    });
+    final result = await onSplit(offset, _controller.text);
+    if (!mounted) return;
+    if (result.isSuccess) {
+      _dirty = false;
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _splitting = false;
+      _splitError = _splitFailureMessage(result.failure ?? TranscriptSegmentSplitFailure.emptySide);
+    });
   }
 
   void _save() {
@@ -104,6 +148,7 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
                   ),
                 ),
               TextField(
+                key: const Key('edit_segment_text_field'),
                 controller: _controller,
                 autofocus: true,
                 maxLines: null,
@@ -116,6 +161,23 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
                   contentPadding: const EdgeInsets.all(14),
                 ),
               ),
+              if (_splitError != null) ...[
+                const SizedBox(height: OmiSpacing.xs),
+                Text(
+                  _splitError!,
+                  key: const Key('split_segment_error'),
+                  style: OmiType.footnote.copyWith(color: OmiColors.danger),
+                ),
+              ],
+              if (widget.onSplit != null) ...[
+                const SizedBox(height: OmiSpacing.sm),
+                OmiButton.secondary(
+                  key: const Key('split_segment_button'),
+                  label: 'Split at cursor',
+                  expand: true,
+                  onPressed: _splitting ? null : _splitAtCursor,
+                ),
+              ],
               const SizedBox(height: OmiSpacing.md),
               Row(
                 children: [

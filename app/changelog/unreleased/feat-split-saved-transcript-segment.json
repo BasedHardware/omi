@@ -1,0 +1,3 @@
+{
+  "change": "Allow splitting a saved transcript segment at a word boundary into two separate turns so mixed-speaker segments can be assigned independently."
+}

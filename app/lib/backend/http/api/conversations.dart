@@ -604,11 +604,7 @@ String conversationTitlePath(String conversationId, String title) =>
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}${conversationTitlePath(conversationId, title)}',
-    headers: {},
-    method: 'PATCH',
-    body: '',
-  );
+      url: '${Env.apiBaseUrl}${conversationTitlePath(conversationId, title)}', headers: {}, method: 'PATCH', body: '');
   if (response == null) return false;
   Logger.debug('updateConversationTitle: ${response.body}');
   return response.statusCode == 200;
@@ -621,8 +617,21 @@ Future<bool> updateConversationSegmentText(String conversationId, String segment
     method: 'PATCH',
     body: jsonEncode({'segment_id': segmentId, 'text': text}),
   );
-  if (response == null) return false;
-  return response.statusCode == 200;
+  return response != null && response.statusCode == 200;
+}
+
+Future<bool> splitConversationSegment(
+    String conversationId, String segmentId, TranscriptSegment first, TranscriptSegment second) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/split',
+    headers: {'Content-Type': 'application/json'},
+    method: 'PATCH',
+    body: jsonEncode({'segment_id': segmentId, 'first': first.toJson(), 'second': second.toJson()}),
+  );
+  if (response != null && (response.statusCode == 404 || response.statusCode == 405)) {
+    return updateConversationSegmentText(conversationId, segmentId, '${first.text}\n${second.text}');
+  }
+  return response != null && response.statusCode == 200;
 }
 
 Future<bool> updateConversationSummary(String conversationId, String? appId, String content) async {
@@ -632,8 +641,7 @@ Future<bool> updateConversationSummary(String conversationId, String? appId, Str
     method: 'PATCH',
     body: jsonEncode({'app_id': appId, 'content': content}),
   );
-  if (response == null) return false;
-  return response.statusCode == 200;
+  return response != null && response.statusCode == 200;
 }
 
 class TranscriptsResponse {
@@ -651,20 +659,14 @@ class TranscriptsResponse {
     this.prerecorded = const [],
   });
 
-  factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
-    return TranscriptsResponse.fromGeneratedWireJson(json);
-  }
+  factory TranscriptsResponse.fromJson(Map<String, dynamic> json) => TranscriptsResponse.fromGeneratedWireJson(json);
 
   factory TranscriptsResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
     List<TranscriptSegment> readSegments(String key) {
       final segments = json[key];
       if (segments is! List) return [];
       return segments
-          .map(
-            (segment) => TranscriptSegment.fromGenerated(
-              wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>),
-            ),
-          )
+          .map((s) => TranscriptSegment.fromGenerated(wire.GeneratedTranscriptSegment.fromJson(s as Map<String, dynamic>)))
           .toList();
     }
 

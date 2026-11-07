@@ -42,6 +42,7 @@ part 'conversation_speaker_restore.dart';
 
 typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
     {bool? isUser, String? personId, int? speakerId});
+typedef SegmentSplitCall = Future<bool> Function(String, String, TranscriptSegment, TranscriptSegment);
 typedef ConversationReprocessCall = Future<ReprocessResult> Function(String,
     {String? appId, bool requireSpeakerReceipt, bool forceOmi});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
@@ -61,6 +62,7 @@ class ConversationDetailProvider extends ChangeNotifier
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
     SpeakerRejectionCall? rejectSpeaker,
+    SegmentSplitCall? splitSegment,
     EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
     SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
     PreferredSummaryAppWrite? writePreferredSummaryApp,
@@ -80,6 +82,7 @@ class ConversationDetailProvider extends ChangeNotifier
                   }
                 : (_) async => null),
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
+        _splitSegment = splitSegment ?? splitConversationSegment,
         _reprocess = reprocess ?? reProcessConversationServer,
         _fetchConversation = fetchConversation ?? getConversationById,
         enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
@@ -105,6 +108,7 @@ class ConversationDetailProvider extends ChangeNotifier
   final PreferredSummaryAppWrite preferredSummaryAppWrite;
   final ConversationDetailFetchCall _fetchConversation;
   final SpeakerRejectionCall _rejectSpeaker;
+  final SegmentSplitCall _splitSegment;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
   final Expando<int> _segmentLabelGeneration = Expando<int>();
@@ -790,13 +794,9 @@ class ConversationDetailProvider extends ChangeNotifier
   FocusNode? titleFocusNode;
 
   bool isTranscriptExpanded = false;
-
   bool canDisplaySeconds = true;
-
   bool hasAudioRecording = false;
-
   bool editSegmentLoading = false;
-
   bool showUnassignedFloatingButton = true;
 
   void toggleEditSegmentLoading(bool value) {
@@ -812,7 +812,6 @@ class ConversationDetailProvider extends ChangeNotifier
   Future<void> saveEditingSegmentText(int segmentIndex, String newText) async {
     final segment = conversation.transcriptSegments[segmentIndex];
     final oldText = segment.text;
-
     if (newText.trim().isEmpty || newText.trim() == oldText) return;
 
     // Optimistic update
@@ -825,6 +824,38 @@ class ConversationDetailProvider extends ChangeNotifier
       notifyError('SEGMENT_EDIT_FAILED');
       notifyListeners();
     }
+  }
+
+  bool isSplitTurnSegment(String segmentId) =>
+      segmentId.contains('__split_') || conversation.transcriptSegments.any((s) => s.id.startsWith('${segmentId}__split_'));
+
+  Future<TranscriptSegmentSplitResult> splitEditingSegment(
+      int segmentIndex, int splitOffset, {String? editedText}) async {
+    final target = conversation;
+    final segments = target.transcriptSegments;
+    if (segmentIndex < 0 || segmentIndex >= segments.length) {
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.emptySide);
+    }
+    final original = segments[segmentIndex];
+    final result = original.splitAtOffset(splitOffset, editedText: editedText);
+    if (!result.isSuccess) return result;
+    final (first, second) = (result.first!, result.second!);
+    final previousSegments = List<TranscriptSegment>.of(segments);
+    segments.replaceRange(segmentIndex, segmentIndex + 1, [first, second]);
+    replaceRecordingSegmentWithSplit(original.id, first, second);
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    final saved = await _splitSegment(target.id, original.id, first, second);
+    if (!saved && !_isDisposed && identical(conversationOrNull, target)) {
+      segments
+        ..clear()
+        ..addAll(previousSegments);
+      resetRecordingTranscript();
+      conversationProvider?.updateConversation(target);
+      notifyError('SEGMENT_EDIT_FAILED');
+      notifyListeners();
+    }
+    return result;
   }
 
   Future<void> _saveEditingSummary(String? appId, String newContent) async {

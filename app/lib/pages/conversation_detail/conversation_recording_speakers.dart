@@ -161,6 +161,49 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
     _recordingDisplaySegments = null;
   }
 
+  void replaceRecordingSegmentWithSplit(
+    String originalId,
+    TranscriptSegment first,
+    TranscriptSegment second,
+  ) {
+    final rec = _recording;
+    if (rec == null) return;
+    final idx = rec.lines.indexWhere((line) => line.segment.id == originalId);
+    if (idx < 0) return;
+    final existing = rec.lines[idx];
+    final firstLine = RecordingLine(
+      existing.conversationId,
+      first,
+      scope: existing.scope,
+      label: existing.label,
+      offset: existing.offset,
+    );
+    final secondLine = RecordingLine(
+      existing.conversationId,
+      second,
+      scope: existing.scope,
+      label: existing.label,
+      offset: existing.offset,
+    );
+    rec.lines.replaceRange(idx, idx + 1, [firstLine, secondLine]);
+    _recordingById[first.id] = firstLine;
+    _recordingById[second.id] = secondLine;
+    _recordingSegments = rec.lines.map((line) => line.segment).toList();
+    final displayIds = <Object, int>{};
+    _recordingDisplaySegments = [
+      for (final line in rec.lines)
+        TranscriptSegment.fromJson(line.segment.toJson())
+          ..start = line.segment.start + line.offset
+          ..end = line.segment.end + line.offset
+          ..speakerId = line.segment.speakerId == omiSpeakerId
+              ? omiSpeakerId
+              : displayIds.putIfAbsent(
+                  line.voice ?? (line.conversationId, line.segment.speakerId),
+                  () => displayIds.length + 1 >= omiSpeakerId ? displayIds.length + 2 : displayIds.length + 1,
+                ),
+    ];
+  }
+
   Future<ApiResult<int>> persistRecordingLabel(RecordingAssignmentCall assign, String conversationId,
       List<String> segmentIds, String personId, int? speakerId) async {
     speakerCoverageComplete = false;

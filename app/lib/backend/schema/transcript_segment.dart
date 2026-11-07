@@ -10,6 +10,25 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 // fromJsonList/toGenerated had no callers.
 typedef Translation = wire.GeneratedTranslation;
 
+enum TranscriptSegmentSplitFailure {
+  emptySide,
+  midWordBoundary,
+  insufficientTiming,
+}
+
+class TranscriptSegmentSplitResult {
+  final TranscriptSegment? first;
+  final TranscriptSegment? second;
+  final TranscriptSegmentSplitFailure? failure;
+
+  const TranscriptSegmentSplitResult.success(this.first, this.second) : failure = null;
+  const TranscriptSegmentSplitResult.failure(this.failure)
+      : first = null,
+        second = null;
+
+  bool get isSuccess => failure == null && first != null && second != null;
+}
+
 class TranscriptSegment {
   String id;
   late int idx;
@@ -28,6 +47,69 @@ class TranscriptSegment {
   String? speakerIdScope;
 
   static final _streamSpeakerNumber = RegExp(r'^SPEAKER_(\d+)$');
+  static final _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
+  static const double minSplitDurationSeconds = 0.2;
+
+  TranscriptSegmentSplitResult splitAtOffset(
+    int offset, {
+    String? editedText,
+    String? secondSegmentId,
+  }) {
+    final sourceText = editedText ?? text;
+    if (!start.isFinite || !end.isFinite || start < 0 || (end - start) < minSplitDurationSeconds) {
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.insufficientTiming);
+    }
+    if (offset <= 0 || offset >= sourceText.length) {
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.emptySide);
+    }
+    if (_wordChar.hasMatch(sourceText[offset - 1]) && _wordChar.hasMatch(sourceText[offset])) {
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.midWordBoundary);
+    }
+    final firstText = sourceText.substring(0, offset).trim();
+    final secondText = sourceText.substring(offset).trim();
+    if (firstText.isEmpty || secondText.isEmpty) {
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.emptySide);
+    }
+    final totalChars = firstText.length + secondText.length;
+    final ratio = (firstText.length / totalChars).clamp(0.05, 0.95);
+    final splitTime = double.parse((start + (end - start) * ratio).toStringAsFixed(3));
+    if (splitTime <= start || splitTime >= end) {
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.insufficientTiming);
+    }
+    final firstTurn = TranscriptSegment(
+      id: id,
+      text: firstText,
+      originalText: originalText ?? text,
+      speaker: speaker,
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: start,
+      end: splitTime,
+      translations: const [],
+      speechProfileProcessed: speechProfileProcessed,
+      sttProvider: sttProvider,
+      speakerIdScope: speakerIdScope,
+      speakerLabelSource: speakerLabelSource,
+    );
+    final secondTurn = TranscriptSegment(
+      id: secondSegmentId ?? '${id}__split_${(splitTime * 1000).round()}',
+      text: secondText,
+      originalText: secondText,
+      speaker: speaker,
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: splitTime,
+      end: end,
+      translations: const [],
+      speechProfileProcessed: false,
+      sttProvider: sttProvider,
+      speakerIdScope: speakerIdScope,
+      speakerLabelSource: speakerLabelSource,
+    );
+    return TranscriptSegmentSplitResult.success(firstTurn, secondTurn);
+  }
 
   (String, String)? get recordingVoice {
     final scope = speakerIdScope;
