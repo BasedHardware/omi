@@ -93,11 +93,10 @@ def gap_fill_chunk_path(uid: str, conversation_id: str, timestamp: float, protec
 def gap_fill_bucket(uid: str, client=None):
     """The bucket ``upload_audio_chunk`` would use; both are listed and admitted."""
     client = client if client is not None else create_storage_client()
-    return client.bucket(
-        audio_archive.regional_bucket(uid, private_cloud_sync_bucket)
-        if audio_archive.admitted(uid, 'SYNC')
-        else private_cloud_sync_bucket
+    regional = (
+        audio_archive.regional_bucket(uid, private_cloud_sync_bucket) if audio_archive.admitted(uid, 'SYNC') else None
     )
+    return client.bucket(regional or private_cloud_sync_bucket)
 
 
 def create_gap_fill_chunk(
