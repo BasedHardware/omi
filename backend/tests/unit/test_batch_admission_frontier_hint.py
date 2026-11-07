@@ -34,6 +34,17 @@ def test_default_reads_the_frontier_outside_the_transaction(monkeypatch, view):
     assert calls == [None]
 
 
+def test_hint_read_is_not_reported_as_a_contended_transactional_read(monkeypatch, view):
+    monkeypatch.delenv(levers.ENV_KEY, raising=False)
+    transaction_view, _, _ = view
+    store_module._note_direct_reads(transaction_view)
+    transaction_view.service_frontier(1)
+    assert 'control_query' not in transaction_view.direct_reads
+    monkeypatch.setenv(levers.ENV_KEY, '{"admission_frontier_hint": 0}')
+    transaction_view.service_frontier(1)
+    assert 'control_query' in transaction_view.direct_reads
+
+
 @pytest.mark.parametrize('value', ['0', '"x"', '101'])
 def test_lever_off_or_invalid_restores_the_transactional_query(monkeypatch, view, value):
     monkeypatch.setenv(levers.ENV_KEY, '{"admission_frontier_hint": %s}' % value)

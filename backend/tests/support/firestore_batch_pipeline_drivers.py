@@ -166,7 +166,7 @@ def entries():
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the frontier query unchanged; lever admission_frontier_hint (default on) drops only the transaction binding',
             expect_observed=False,
-            body_digest='19fc430158b42a6670d3177baa0f83d524286fa09062dbbea124756888d23ce5',
+            body_digest='56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
         ),
         CoveredByEntry(
             'database.batch_pipeline_staging.reap',

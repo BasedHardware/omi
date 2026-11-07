@@ -184,8 +184,11 @@ class FirestoreTransaction:
         # exhausted its retries (sync uploads 503 sync_batch_unavailable, 2026-11-07). The
         # frontier only seeds a rejoining owner's credit via max(own, frontier), so a
         # non-transactional hint is enough. Lever 'admission_frontier_hint' 0 restores the query.
-        transaction = None if lever_enabled('admission_frontier_hint') else self.transaction
-        return service_frontier(self.client, self.namespace, priority, transaction=transaction)
+        if lever_enabled('admission_frontier_hint'):
+            # Outside the transaction: do not report it as a contended transactional read.
+            self.direct_reads.discard('control_query')
+            return service_frontier(self.client, self.namespace, priority)
+        return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         options = {}
