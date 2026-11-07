@@ -92,6 +92,14 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    # Spaces device pulls and FCM refreshes permit paging bursts.
+    "spaces:changes": (600, 60),
+    # Cursor acknowledgements track device pull frequency.
+    "spaces:cursors": (600, 60),
+    # Full resync snapshots are rare (425 recovery).
+    "spaces:snapshot": (30, 3600),
+    # User edits share the memories/action-items write class.
+    "spaces:mutations": (120, 3600),
     "users:surface_state": (60, 60),  # Multiple devices plus foreground transitions; metadata only.
     "users:budget_choice": (6, 60),  # Shared GET/PUT ceiling before monthly usage reads.
     # A plans sheet opens on user intent; bound accidental polling before provider reads.

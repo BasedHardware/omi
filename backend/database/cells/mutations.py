@@ -1,12 +1,12 @@
 """Exactly-once application of optimistic space mutations through CellStore."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any
 
 from database.cells.errors import MutationIdReused
-from database.cells.feed import _read_head
+from database.cells.feed import read_enrolled_head
 from database.cells.store import CellStore, CellTransaction
 
 
@@ -44,7 +44,7 @@ def apply_space_mutation(
 ) -> tuple[dict[str, Any], bool]:
     # Deliberately copied from database/conversation_mutations.py:_fingerprint:
     # importing that Firestore adapter violates the cell boundary. A6 unifies it.
-    token = base_revision.isoformat() if isinstance(base_revision, datetime) else base_revision
+    token = base_revision.astimezone(timezone.utc).isoformat() if isinstance(base_revision, datetime) else base_revision
     fingerprint = sha256(
         json.dumps(
             {'base': token, 'operation': operation},
@@ -56,7 +56,7 @@ def apply_space_mutation(
     if operation.get('type') not in {'patch', 'delete'}:
         raise ValueError('unknown space mutation operation')
 
-    def conflict(code, row):
+    def conflict(code: str, row: dict[str, Any] | None) -> SpaceMutationConflictError:
         return SpaceMutationConflictError(
             dict(
                 status='conflict',
@@ -68,18 +68,30 @@ def apply_space_mutation(
             )
         )
 
-    def buffer(tx, doc, expected_rev=None):
-        kwargs = dict(
-            feed=True, expected_rev=expected_rev, client_mutation_id=client_mutation_id, fingerprint=fingerprint
-        )
+    def buffer(tx: CellTransaction, doc: dict[str, Any], expected_rev: int | None = None) -> None:
         if operation['type'] == 'delete':
-            tx.delete(entity, entity_id, **kwargs)
+            tx.delete(
+                entity,
+                entity_id,
+                feed=True,
+                expected_rev=expected_rev,
+                client_mutation_id=client_mutation_id,
+                fingerprint=fingerprint,
+            )
         else:
-            tx.put(entity, entity_id, doc, **kwargs)
+            tx.put(
+                entity,
+                entity_id,
+                doc,
+                feed=True,
+                expected_rev=expected_rev,
+                client_mutation_id=client_mutation_id,
+                fingerprint=fingerprint,
+            )
 
     def body(tx: CellTransaction):
         # Even an absent-entity request must observe the unenrolled/wipe fence.
-        _read_head(tx.conn, space_id)
+        read_enrolled_head(tx.conn, space_id)
         if tx.receipt_seq(client_mutation_id) is not None:
             # flush owns address/op/fingerprint validation, including deleted rows.
             # Buffer a replay candidate; flush discards it before checking the base.
@@ -109,13 +121,13 @@ def apply_space_mutation(
     except MutationIdReused as error:
         with store.pool.connection() as conn, conn.transaction():
             conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-            _read_head(conn, space_id)
+            read_enrolled_head(conn, space_id)
             row = _current_row(conn, space_id, entity, entity_id)
         raise conflict('mutation_id_reused', row) from error
     replayed = client_mutation_id in result.replayed
     with store.pool.connection() as conn, conn.transaction():
         conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-        _read_head(conn, space_id)
+        read_enrolled_head(conn, space_id)
         seq = CellTransaction(conn, space_id, actor_uid, now).receipt_seq(client_mutation_id)
         row = _current_row(conn, space_id, entity, entity_id) if replayed else None
     return (

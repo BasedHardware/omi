@@ -64,7 +64,7 @@ class SnapshotPage:
     epoch: int
 
 
-def _read_head(conn: Any, space_id: str) -> tuple[int, int]:
+def read_enrolled_head(conn: Any, space_id: str) -> tuple[int, int]:
     row = conn.execute('SELECT next_seq, epoch, tombstoned FROM space_heads WHERE space_id=%s', (space_id,)).fetchone()
     if row is None or row[2]:
         raise CellSpaceUnavailable(space_id)
@@ -107,7 +107,7 @@ class Feed:
             raise ValueError('cursor must be nonnegative')
         with self.pool.connection() as conn, conn.transaction():
             conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-            _read_head(conn, space_id)
+            read_enrolled_head(conn, space_id)
             floor, epoch, head_seq = _floor(conn, space_id, now)
             if cursor > head_seq:
                 raise CursorAhead(space_id, head_seq, epoch)
@@ -140,7 +140,7 @@ class Feed:
                         doc=doc,
                         updated_at=updated,
                     )
-            head, epoch = _read_head(conn, space_id)
+            head, epoch = read_enrolled_head(conn, space_id)
         next_cursor = raw[-1][0] if len(raw) == limit else head
         return PullPage(entries, rows, next_cursor, head, epoch)
 
@@ -167,7 +167,7 @@ class Feed:
         limit = max(1, min(limit, PULL_LIMIT_MAX))
         with self.pool.connection() as conn, conn.transaction():
             conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-            _read_head(conn, space_id)
+            read_enrolled_head(conn, space_id)
             found = conn.execute(
                 'SELECT entity, entity_id, author_id, rev, doc, updated_at FROM cell_docs '
                 'WHERE space_id=%s AND rev>%s '
@@ -182,7 +182,7 @@ class Feed:
                     limit,
                 ),
             ).fetchall()
-            head, epoch = _read_head(conn, space_id)
+            head, epoch = read_enrolled_head(conn, space_id)
         rows = [dict(entity=e, entity_id=i, author_id=a, rev=r, doc=d, updated_at=u) for e, i, a, r, d, u in found]
         token = base64.b64encode(json.dumps(list(found[-1][:2])).encode()).decode() if len(found) == limit else None
         return SnapshotPage(rows, token, head, epoch)
