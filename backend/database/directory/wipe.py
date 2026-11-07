@@ -21,7 +21,8 @@ def purge_owner_planes(uid: str, *, now: float | None = None) -> dict:
     if space is None:
         router.invalidate(uid)
         return {'status': 'absent'}
-    if not isinstance(space.cell, str) or not space.cell or space.cell == 'firestore':
+    cell = getattr(space, 'cell', None)  # Validate malformed driver results at this boundary.
+    if not isinstance(cell, str) or not cell or cell == 'firestore':
         raise RuntimeError('cell purge requires explicit directory cell enrollment')
     cells = cell_store()
     # A cell head is created only by explicit enrollment/backfill. Its retained
@@ -29,7 +30,7 @@ def purge_owner_planes(uid: str, *, now: float | None = None) -> dict:
     # enrollment as a side effect of wiping a directory-only owner.
     with cells.pool.connection() as conn:
         enrollment = conn.execute('SELECT tombstoned FROM space_heads WHERE space_id=%s', (uid,)).fetchone()
-    if enrollment is None or (space.cell == 'disabled' and not enrollment[0]):
+    if enrollment is None or (cell == 'disabled' and not enrollment[0]):
         raise RuntimeError('cell purge requires durable cell enrollment or wipe tombstone')
     now = time.time() if now is None else now
     cells.tombstone_space(uid)
