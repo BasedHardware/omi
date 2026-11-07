@@ -120,7 +120,7 @@ class AddAppProvider extends ChangeNotifier {
       setAppCategory('conversation-analysis');
 
       // Add memories capability
-      final memoriesCapability = capabilities.firstWhereOrNull((cap) => cap.id == 'memories');
+      final memoriesCapability = capabilities.firstWhereOrNull((cap) => _isCapability(cap, 'memories'));
       if (memoriesCapability != null && !selectedCapabilities.contains(memoriesCapability)) {
         selectedCapabilities.add(memoriesCapability);
       }
@@ -134,7 +134,7 @@ class AddAppProvider extends ChangeNotifier {
 
     // Preset external integration capability
     if (presetExternalIntegration) {
-      final externalIntegrationCapability = capabilities.firstWhereOrNull((cap) => cap.id == 'external_integration');
+      final externalIntegrationCapability = capabilities.firstWhereOrNull((cap) => _isCapability(cap, 'external_integration'));
       if (externalIntegrationCapability != null && !selectedCapabilities.contains(externalIntegrationCapability)) {
         selectedCapabilities.add(externalIntegrationCapability);
       }
@@ -225,7 +225,7 @@ class AddAppProvider extends ChangeNotifier {
     }
     if (app.proactiveNotification != null) {
       selectedScopes = app.getNotificationScopesFromIds(
-        capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes,
+        capabilities.firstWhere((element) => _isCapability(element, 'proactive_notification')).notificationScopes,
       );
     }
 
@@ -315,7 +315,7 @@ class AddAppProvider extends ChangeNotifier {
 
   List<CapacityAction> getActionTypes() {
     for (var capability in capabilities) {
-      if (capability.id == 'external_integration') {
+      if (_isCapability(capability, 'external_integration')) {
         if (capability.actions.isNotEmpty) {
           return capability.actions;
         }
@@ -447,48 +447,70 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _isCapability(AppCapability cap, String key) {
+    final lowerKey = key.toLowerCase();
+    final id = cap.id.trim().toLowerCase();
+    if (id.isNotEmpty) {
+      return id == lowerKey;
+    }
+    return cap.title.trim().toLowerCase() == lowerKey;
+  }
+
   bool isFormValid() {
-    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null) {
-      if (metadataKey.currentState != null && metadataKey.currentState!.validate()) {
-        bool isValid = false;
-        for (var capability in selectedCapabilities) {
-          if (capability.id == 'external_integration') {
-            isValid = true;
-            if (triggerEvent == null && actions.isEmpty) {
-              isValid = false;
-            } else if (triggerEvent != null) {
-              isValid = true;
-              if (externalIntegrationKey.currentState != null) {
-                isValid = externalIntegrationKey.currentState!.validate();
-              } else {
-                isValid = false;
-              }
-            }
-          }
-          if (capability.id == 'chat') {
-            isValid = chatPromptController.text.isNotEmpty;
-          }
-          if (capability.id == 'memories') {
-            isValid = conversationPromptController.text.isNotEmpty;
-          }
-          if (capability.id == 'proactive_notification') {
-            isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
-          }
-        }
-        if (isPaid) {
-          isValid = formKey.currentState!.validate() && selectePaymentPlan != null;
-        }
-        return isValid;
-      } else {
-        return false;
-      }
-    } else {
+    if (!capabilitySelected() || (imageFile == null && imageUrl == null) || appCategory == null) {
       return false;
     }
+
+    if (metadataKey.currentState != null && !metadataKey.currentState!.validate()) {
+      return false;
+    }
+
+    if (selectedCapabilities.isEmpty) return false;
+
+    for (var capability in selectedCapabilities) {
+      if (_isCapability(capability, 'external_integration')) {
+        if (triggerEvent == null && actions.isEmpty) {
+          return false;
+        }
+        if (triggerEvent != null && webhookUrlController.text.trim().isEmpty) {
+          return false;
+        }
+        if (externalIntegrationKey.currentState != null && !externalIntegrationKey.currentState!.validate()) {
+          return false;
+        }
+      } else if (_isCapability(capability, 'chat')) {
+        if (chatPromptController.text.trim().isEmpty) {
+          return false;
+        }
+      } else if (_isCapability(capability, 'memories')) {
+        if (conversationPromptController.text.trim().isEmpty) {
+          return false;
+        }
+      } else if (_isCapability(capability, 'proactive_notification')) {
+        if (selectedScopes.isEmpty || selectedCapabilities.length <= 1) {
+          return false;
+        }
+      }
+    }
+
+    if (isPaid) {
+      if (formKey.currentState != null && !formKey.currentState!.validate()) {
+        return false;
+      }
+      if (pricingKey.currentState != null && !pricingKey.currentState!.validate()) {
+        return false;
+      }
+      if (priceController.text.trim().isEmpty || selectePaymentPlan == null) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   bool validateForm() {
-    if (formKey.currentState!.validate()) {
+    final l10n = globalNavigatorKey.currentContext?.l10n;
+    if (formKey.currentState?.validate() ?? true) {
       if (promptKey.currentState != null) {
         if (!promptKey.currentState!.validate()) {
           return false;
@@ -509,64 +531,64 @@ class AddAppProvider extends ChangeNotifier {
           return false;
         }
       }
-      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
+      if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'proactive_notification')) {
         if (selectedScopes.isEmpty) {
-          AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCoreCapability);
+          if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectCoreCapability);
           return false;
         }
       }
-      if (isPaid && (priceController.text.isEmpty || selectePaymentPlan == null)) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectPaymentPlan);
+      if (isPaid && (priceController.text.trim().isEmpty || selectePaymentPlan == null)) {
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectPaymentPlan);
         return false;
       }
       if (!capabilitySelected()) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCapability);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectCapability);
         return false;
       }
       if (imageFile == null && imageUrl == null) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectLogo);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectLogo);
         return false;
       }
       for (var capability in selectedCapabilities) {
-        if (capability.title == 'chat') {
-          if (chatPromptController.text.isEmpty) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterChatPrompt);
+        if (_isCapability(capability, 'chat')) {
+          if (chatPromptController.text.trim().isEmpty) {
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppEnterChatPrompt);
             return false;
           }
         }
-        if (capability.title == 'memories') {
-          if (conversationPromptController.text.isEmpty) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterConversationPrompt);
+        if (_isCapability(capability, 'memories')) {
+          if (conversationPromptController.text.trim().isEmpty) {
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppEnterConversationPrompt);
             return false;
           }
         }
-        if (capability.title == 'external_integration') {
-          if (triggerEvent == null) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectTriggerEvent);
+        if (_isCapability(capability, 'external_integration')) {
+          if (triggerEvent == null && actions.isEmpty) {
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectTriggerEvent);
             return false;
           }
-          if (webhookUrlController.text.isEmpty) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterWebhookUrl);
+          if (triggerEvent != null && webhookUrlController.text.trim().isEmpty) {
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppEnterWebhookUrl);
             return false;
           }
           // Setup completed URL is optional, so we don't validate it here
         }
       }
       if (appCategory == null) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCategory);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectCategory);
         return false;
       }
       // Require source code URL for external integration or proactive notification apps
       bool needsSourceCode = selectedCapabilities.any(
-        (cap) => cap.id == 'external_integration' || cap.id == 'proactive_notification',
+        (cap) => _isCapability(cap, 'external_integration') || _isCapability(cap, 'proactive_notification'),
       );
       if (needsSourceCode && sourceCodeUrlController.text.trim().isEmpty) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.githubRepositoryUrlRequired);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.githubRepositoryUrlRequired);
         return false;
       }
       return true;
     } else {
-      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppFillRequiredFields);
+      if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppFillRequiredFields);
       return false;
     }
   }
@@ -591,7 +613,7 @@ class AddAppProvider extends ChangeNotifier {
     };
 
     for (var capability in selectedCapabilities) {
-      if (capability.id == 'external_integration') {
+      if (_isCapability(capability, 'external_integration')) {
         data['external_integration'] = {
           'triggers_on': triggerEvent,
           'webhook_url': webhookUrlController.text.trim(),
@@ -614,13 +636,13 @@ class AddAppProvider extends ChangeNotifier {
           data['external_integration']['actions'] = actions;
         }
       }
-      if (capability.id == 'chat') {
+      if (_isCapability(capability, 'chat')) {
         data['chat_prompt'] = chatPromptController.text;
       }
-      if (capability.id == 'memories') {
+      if (_isCapability(capability, 'memories')) {
         data['memory_prompt'] = conversationPromptController.text;
       }
-      if (capability.id == 'proactive_notification') {
+      if (_isCapability(capability, 'proactive_notification')) {
         if (data['proactive_notification'] == null) {
           data['proactive_notification'] = {};
         }
@@ -699,7 +721,7 @@ class AddAppProvider extends ChangeNotifier {
     };
 
     for (var capability in selectedCapabilities) {
-      if (capability.id == 'external_integration') {
+      if (_isCapability(capability, 'external_integration')) {
         data['external_integration'] = {
           'triggers_on': triggerEvent,
           'webhook_url': webhookUrlController.text.trim(),
@@ -722,13 +744,13 @@ class AddAppProvider extends ChangeNotifier {
           data['external_integration']['actions'] = actions;
         }
       }
-      if (capability.id == 'chat') {
+      if (_isCapability(capability, 'chat')) {
         data['chat_prompt'] = chatPromptController.text.trim();
       }
-      if (capability.id == 'memories') {
+      if (_isCapability(capability, 'memories')) {
         data['memory_prompt'] = conversationPromptController.text.trim();
       }
-      if (capability.id == 'proactive_notification') {
+      if (_isCapability(capability, 'proactive_notification')) {
         if (data['proactive_notification'] == null) {
           data['proactive_notification'] = {};
         }
@@ -954,9 +976,9 @@ class AddAppProvider extends ChangeNotifier {
     if (selectedCapabilities.contains(capability)) {
       selectedCapabilities.remove(capability);
     } else {
-      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'persona') {
+      if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'persona')) {
         AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppCapabilityConflictWithPersona);
-      } else if (selectedCapabilities.isNotEmpty && capability.id == 'persona') {
+      } else if (selectedCapabilities.isNotEmpty && _isCapability(capability, 'persona')) {
         AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppPersonaConflictWithCapabilities);
       } else {
         selectedCapabilities.add(capability);
@@ -985,12 +1007,12 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool isCapabilitySelectedById(String capability) {
-    return selectedCapabilities.any((e) => e.id == capability);
+    return selectedCapabilities.any((e) => _isCapability(e, capability));
   }
 
   List<TriggerEvent> getTriggerEvents() {
     return selectedCapabilities
-        .where((element) => element.id == 'external_integration')
+        .where((element) => _isCapability(element, 'external_integration'))
         .map((e) => e.triggerEvents)
         .expand((element) => element)
         .toList();
@@ -998,14 +1020,14 @@ class AddAppProvider extends ChangeNotifier {
 
   List<NotificationScope> getNotificationScopes() {
     return selectedCapabilities
-        .where((item) => item.id == 'proactive_notification')
+        .where((item) => _isCapability(item, 'proactive_notification'))
         .map((e) => e.notificationScopes)
         .expand((element) => element)
         .toList();
   }
 
   bool capabilitySelected() {
-    if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
+    if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'proactive_notification')) {
       return false;
     } else {
       return selectedCapabilities.isNotEmpty;

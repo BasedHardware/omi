@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -80,7 +81,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
   bool get isSubmitting => _state == GenerationState.submitting;
 
   bool get hasGeneratedApp =>
-      _generatedName != null && _generatedDescription != null && _generatedIconBytes != null && !isGenerating;
+      _generatedName != null && _generatedDescription != null && !isGenerating;
 
   /// Get current step index (0-4)
   int get currentStepIndex => _currentStep.index;
@@ -236,10 +237,32 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     }
   }
 
+  static final Uint8List _defaultAppIconBytes = Uint8List.fromList([
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0x9C, 0x63, 0x60, 0x60, 0x60, 0x00,
+    0x00, 0x00, 0x04, 0x00, 0x01, 0x85, 0x35, 0x01,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+  ]);
+
+  @visibleForTesting
+  static Future<Uint8List> getDefaultAppIconBytes() async {
+    try {
+      final ByteData data = await rootBundle.load('assets/images/herologo.png');
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } catch (_) {
+      return _defaultAppIconBytes;
+    }
+  }
+
   /// Submit the generated app to create it
   /// Returns the appId if successful, null otherwise
   Future<String?> submitGeneratedApp() async {
-    if (!hasGeneratedApp || _generatedIconBytes == null) {
+    if (!hasGeneratedApp) {
       _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenPleaseGenerateAppFirst;
       notifyListeners();
       return null;
@@ -253,7 +276,8 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       // Save icon bytes to a temporary file
       final tempDir = await getTemporaryDirectory();
       final iconFile = File('${tempDir.path}/generated_icon_${DateTime.now().millisecondsSinceEpoch}.png');
-      await iconFile.writeAsBytes(_generatedIconBytes!);
+      final iconBytes = _generatedIconBytes ?? await getDefaultAppIconBytes();
+      await iconFile.writeAsBytes(iconBytes);
 
       // Prepare app data
       Map<String, dynamic> appData = {

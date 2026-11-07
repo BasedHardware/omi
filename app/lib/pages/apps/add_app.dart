@@ -390,11 +390,11 @@ class _AddAppPageState extends State<AddAppPage> {
                         // Not awaited: the confirmation dialog (and the submit it guards) run on their
                         // own, the same as the pre-migration hand-drawn button. The page-level
                         // OmiLoadingState above already covers provider.isSubmitting.
-                        onPressed: provider.isValid
-                            ? () {
+                        onPressed: provider.isSubmitting
+                            ? null
+                            : () {
                                 _confirmAndSubmit(context, provider);
-                              }
-                            : null,
+                              },
                       ),
                       const SizedBox(height: 10),
                       GestureDetector(
