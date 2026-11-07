@@ -34,7 +34,8 @@ from utils.conversations.episode_attach_key import content_key
 from utils.sync.assignment import assign_in_transaction
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from models.review import ReviewChange, ChangeRef
-from utils.conversations import transcript_chunks
+from utils.conversations import transcript_chunks, speaker_grouping_storage
+from utils import encryption
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from models.conversation import Conversation
 from routers import conversations as conversation_router
@@ -1226,3 +1227,107 @@ def test_cosmetic_terminal_helpers_never_fetch_inside_direct_sdk_transactions(la
     assert result['discarded'] is False
     assert lake_world.calls['get'] == before
     assert not pointer._client.in_transaction_body()
+
+
+@pytest.mark.parametrize('raw', [{}, {'invalid': 'pointer'}])
+@pytest.mark.parametrize('signal', [{}, {'photos': [{'id': 'photo-1'}]}, {'has_content': True}])
+def test_cleanup_retains_malformed_transcript_pointer(lake_world, monkeypatch, raw, signal):
+    doc = {'id': CID, 'status': 'in_progress', 'transcript_segments': raw, **signal}
+    lake_world.store.rows[PATH] = deepcopy(doc)
+    monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    monkeypatch.setattr(recording_sessions, 'invalidate_people_stats_cache', lambda *a: None)
+    assert (
+        recording_sessions.tombstone_and_delete_empty_conversation(UID, CID, None, firestore_client=lake_world.store)
+        is False
+    )
+    assert lake_world.store.rows[PATH] == doc
+    assert db.raw_conversation_has_content(UID, doc) is True
+    assert lake_world.calls == {'get': 0, 'put': 0}
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_grouping_sidecars_do_not_churn_live_upload_retries(lake_world, level):
+
+    segments = speech()
+    provider = {'id': 0, 'scope': 'final:batch:c2-probe', 'provider': 'soniox', 'timing_store': 'batch'}
+    segments[0]['provider_speaker'] = provider
+    lake_world.store.rows[PATH] = {
+        'id': CID,
+        'status': 'in_progress',
+        'data_protection_level': level,
+        'transcript_segments': [],
+    }
+    assert db.update_conversation_segments(UID, CID, segments, firestore_client=lake_world.store) is True
+    stored = lake_world.store.rows[PATH]['transcript_segments']
+    assert isinstance(stored, dict)
+    assert lake_world.calls['put'] == 1
+    decoded = db.decode_transcript_segments_blob(UID, stored, True)
+    assert 'provider_speaker' not in decoded[0]
+    assert isinstance(decoded[0][speaker_grouping_storage.FIELD], str)
+    speaker_grouping_storage.reveal_segments(decoded, UID)
+    assert decoded[0]['provider_speaker'] == provider
+
+
+def test_grouping_retry_cache_matches_uploaded_bytes_and_all_source_fields(lake_world):
+
+    segments = speech()
+    segments[0]['provider_speaker'] = {
+        'id': 0,
+        'scope': 'final:batch:c2-probe',
+        'provider': 'soniox',
+        'timing_store': 'batch',
+    }
+    first = encode(segments)['transcript_segments']
+    assert encode(segments)['transcript_segments'] == first
+    assert lake_world.calls['put'] == 1
+    ref = lake.LakeObjectRef.from_pointer_dict(first)
+    actual = json.loads(lake.get_space_object(ref))
+    assert db.decode_transcript_segments_blob(UID, first, True) == actual
+    changed = deepcopy(segments)
+    changed[0]['provider_speaker']['id'] = 1
+    second = encode(changed)['transcript_segments']
+    assert second != first
+    assert lake_world.calls['put'] == 2
+    decoded = db.decode_transcript_segments_verified(UID, second, True)
+    assert decoded[0]['provider_speaker']['id'] == 1
+
+
+@pytest.mark.parametrize('invalid', ['object', 'cycle'])
+def test_invalid_optional_grouping_evidence_does_not_block_transcript(lake_world, invalid):
+
+    segments = speech()
+    segments[0]['provider_speaker'] = {
+        'id': 0,
+        'scope': 'final:batch:c2-probe',
+        'provider': 'soniox',
+        'timing_store': 'batch',
+    }
+    bad = object() if invalid == 'object' else {}
+    if invalid == 'cycle':
+        bad['self'] = bad
+    segments[0]['speaker_grouping_shadow'] = bad
+    lake_world.store.rows[PATH] = {'id': CID, 'status': 'in_progress', 'transcript_segments': []}
+    assert db.update_conversation_segments(UID, CID, segments, firestore_client=lake_world.store) is True
+    stored = lake_world.store.rows[PATH]['transcript_segments']
+    assert isinstance(stored, dict)
+    assert lake_world.calls['put'] == 1
+    decoded = db.decode_transcript_segments_verified(UID, stored, True)
+    assert decoded[0]['text'] == segments[0]['text']
+    assert 'speaker_grouping_shadow' not in decoded[0]
+    assert decoded[0]['provider_speaker']['id'] == 0
+
+
+def test_grouping_protection_rechecks_write_kill_switch(lake_world, monkeypatch):
+
+    original = encryption.encrypt
+
+    def encrypt(value, uid):
+        result = original(value, uid)
+        monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'false')
+        return result
+
+    monkeypatch.setattr(encryption, 'encrypt', encrypt)
+    segments = speech()
+    segments[0]['provider_speaker'] = {'id': 0, 'scope': 'final:batch:c2-probe'}
+    assert isinstance(encode(segments)['transcript_segments'], bytes)
+    assert lake_world.calls == {'get': 0, 'put': 0}
