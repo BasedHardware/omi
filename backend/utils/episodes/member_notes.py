@@ -50,10 +50,6 @@ def before_notes(uid, conversation, trigger, *, finalization_fence=None):
 
 
 def open_recording(uid: str, row: dict) -> None:
-    from utils.conversations.summary_delivery import present
-
-    if present(row.get('structured')):
-        return
     if not waits(uid, row) or row.get('status') == 'in_progress' or not row.get('transcript_segments'):
         return
     from utils.conversations.demand_processing import client

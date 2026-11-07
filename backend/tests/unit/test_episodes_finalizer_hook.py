@@ -148,7 +148,8 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
         read.assert_not_called()
 
 
-def test_recording_detail_escalates_only_that_recording(monkeypatch):
+@pytest.mark.parametrize('has_existing_notes', [False, True])
+def test_recording_detail_escalates_only_that_recording(monkeypatch, has_existing_notes):
     from unittest.mock import Mock
     from utils.episodes import member_notes
     from utils.conversations import demand_processing
@@ -166,7 +167,15 @@ def test_recording_detail_escalates_only_that_recording(monkeypatch):
     monkeypatch.setattr(demand_processing, 'client', lambda: redis)
     enqueue = Mock()
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'enqueue', enqueue)
-    member_notes.open_recording('u', {'id': 'c1', 'status': 'completed', 'transcript_segments': [{'text': 'text'}]})
+    member_notes.open_recording(
+        'u',
+        {
+            'id': 'c1',
+            'status': 'completed',
+            'transcript_segments': [{'text': 'text'}],
+            'structured': {'overview': 'Earlier notes'} if has_existing_notes else {},
+        },
+    )
     assert redis.set.call_args.args[0].endswith(':u:c1')
     assert enqueue.call_args.args[2]['conversation_id'] == 'c1'
     assert enqueue.call_args.kwargs['coalesce'] == 'min'
