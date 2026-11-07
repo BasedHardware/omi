@@ -46,14 +46,27 @@ export interface SpendDayRow {
   rows: string | number;
 }
 
+/** A real ISO calendar date (YYYY-MM-DD), not just the right shape. */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  return (
+    probe.getUTCFullYear() === y &&
+    probe.getUTCMonth() === m - 1 &&
+    probe.getUTCDate() === d
+  );
+}
+
 /**
- * Daily totals over `days` settled days ending on `end`. Dedupe: the producer
- * may write the same (date, line, source, status) across runs, so keep the
- * latest `computed_at` for each key. Only settled inputs count.
+ * Daily totals over `days` days ending on `end`. Dedupe first: the producer may
+ * write the same (date, line, source, status) across runs, so keep the latest
+ * `computed_at` for each key. Only then drop rows whose latest run is unsettled,
+ * so an older settled row can never stand in for a newer unsettled one.
  */
 export function spendDailyQuery(end: string, days: number): string {
-  // Interpolated into SQL: accept only an ISO date and a bounded window.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) throw new Error("bad end date");
+  // Interpolated into SQL: accept only a real ISO calendar date and a bounded window.
+  if (!isCalendarDate(end)) throw new Error("bad end date");
   if (!Number.isInteger(days) || days < 1 || days > 400)
     throw new Error("bad window");
   return `
@@ -62,7 +75,6 @@ WITH latest AS (
   FROM \`${SPEND_TABLE}\`
   WHERE date > DATE_SUB(DATE '${end}', INTERVAL ${days} DAY)
     AND date <= DATE '${end}'
-    AND inputs_settled
   QUALIFY ROW_NUMBER() OVER (
     PARTITION BY date, line, source, status ORDER BY computed_at DESC
   ) = 1
@@ -74,14 +86,14 @@ SELECT
   SUM(IF(in_all_in, usd, NULL)) AS all_in_usd,
   COUNT(*) AS rows
 FROM latest
+WHERE inputs_settled
 GROUP BY day
 ORDER BY day`;
 }
 
 /** Turn raw rows into typed days. Missing sums stay null, never 0. */
 export function spendDays(rows: SpendDayRow[]): SpendDay[] {
-  const num = (v: string | number | null) =>
-    v == null ? null : Number(v);
+  const num = (v: string | number | null) => (v == null ? null : Number(v));
   return rows
     .map((r) => ({
       day: r.day,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isCalendarDate,
   PARITY_ALL_IN_USD,
   PARITY_DAY,
   parityDelta,
@@ -21,6 +22,27 @@ describe("spendDailyQuery", () => {
     expect(sql).toContain("INTERVAL 7 DAY");
   });
 
+  it("dedupes to the latest run before it drops unsettled rows", () => {
+    const sql = spendDailyQuery("2026-11-04", 7);
+    const latestBlock = sql.slice(
+      sql.indexOf("latest AS ("),
+      sql.indexOf("QUALIFY")
+    );
+    expect(latestBlock).not.toContain("inputs_settled");
+    expect(sql.indexOf("QUALIFY")).toBeLessThan(
+      sql.indexOf("WHERE inputs_settled")
+    );
+  });
+
+  it("rejects dates that are not real calendar days", () => {
+    expect(isCalendarDate("2026-02-31")).toBe(false);
+    expect(isCalendarDate("2026-02-29")).toBe(false);
+    expect(isCalendarDate("2026-13-01")).toBe(false);
+    expect(isCalendarDate("2024-02-29")).toBe(true);
+    expect(isCalendarDate("2026-11-04")).toBe(true);
+    expect(() => spendDailyQuery("2026-02-31", 7)).toThrow();
+  });
+
   it("rejects inputs that are not a date or a bounded window", () => {
     expect(() => spendDailyQuery("2026-11-04; DROP", 7)).toThrow();
     expect(() => spendDailyQuery("2026-11-04", 0)).toThrow();
@@ -32,8 +54,20 @@ describe("spendDailyQuery", () => {
 describe("spendDays", () => {
   it("keeps missing sums as null, not zero, and sorts by day", () => {
     const days = spendDays([
-      { day: "2026-11-05", variable_usd: "10.5", listen_usd: null, all_in_usd: "100", rows: "4" },
-      { day: "2026-11-04", variable_usd: null, listen_usd: "2", all_in_usd: "3549.21", rows: 6 },
+      {
+        day: "2026-11-05",
+        variable_usd: "10.5",
+        listen_usd: null,
+        all_in_usd: "100",
+        rows: "4",
+      },
+      {
+        day: "2026-11-04",
+        variable_usd: null,
+        listen_usd: "2",
+        all_in_usd: "3549.21",
+        rows: 6,
+      },
     ]);
     expect(days.map((d) => d.day)).toEqual(["2026-11-04", "2026-11-05"]);
     expect(days[0].variableUsd).toBeNull();
