@@ -110,16 +110,47 @@ def cost_per_captured_hour(capture, costs):
     return result
 
 
+def rewrite_census(receipts):
+    """One latest durable automatic-note count per conversation, no IDs exported."""
+    versions = {}
+    unknown = 0
+    for receipt in receipts:
+        owner, conversation = receipt.get('owner_key'), receipt.get('conversation_id')
+        count = receipt.get('notes_versions')
+        if not owner or not conversation or type(count) is not int or count < 1:
+            unknown += 1
+            continue
+        identity = owner, conversation
+        versions[identity] = max(versions.get(identity, 0), count)
+    distribution = defaultdict(int)
+    for count in versions.values():
+        distribution[count - 1] += 1
+    return {
+        'omi_pipeline_notes_rewrites_per_conversation': dict(sorted(distribution.items())),
+        'conversations': len(versions),
+        'unknown_receipts': unknown,
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifests', type=Path, required=True)
     parser.add_argument('--costs', type=Path)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument(
+        '--notes-receipts',
+        type=Path,
+        help='Metadata-only protected receipt export for a unique-conversation rewrite census',
+    )
     args = parser.parse_args(argv)
     if os.getenv('PIPELINE_CAPTURE_COST_ENABLED', 'false').strip().lower() != 'true':
         parser.exit(0, 'captured-hour reporting disabled; prior reports are stale\n')
     result = captured_hours(json.loads(line) for line in args.manifests.read_text().splitlines() if line.strip())
     result['cost'] = cost_per_captured_hour(result, json.loads(args.costs.read_text()) if args.costs else {})
+    if args.notes_receipts:
+        result['notes_rewrites'] = rewrite_census(
+            json.loads(line) for line in args.notes_receipts.read_text().splitlines() if line.strip()
+        )
     result['generated_at'] = datetime.now(timezone.utc).isoformat()
     result['sources'] = {'capture': args.manifests.name, 'cost': args.costs.name if args.costs else None}
     args.output.write_text(json.dumps(result, indent=2) + '\n')

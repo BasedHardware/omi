@@ -53,6 +53,19 @@ def test_small_fast_passes_alternate_oldest_service_and_cap_owner(fast_records):
     assert len(records.select([], 4, redis=redis, now=200)) == 2
 
 
+def test_oldest_reserve_counts_distinct_eligible_owners(fast_records):
+    records, redis = fast_records
+    from config.record_audio import record_identity
+
+    records.register('aged-one', 'first', 1)
+    records.register('aged-one', 'second', 2)
+    records.register('aged-two', 'first', 3)
+    for n in range(10):
+        records.register(f'fresh-{n}', 'c', 1000 + n)
+    selected = records.select([], 8, redis=redis, now=2000)
+    assert selected[:2] == [record_identity('aged-one', 'first')[1], record_identity('aged-two', 'first')[1]]
+
+
 def test_seal_wakes_parked_record_but_never_steals_active_lease(fast_records):
     records, redis = fast_records
     from config.record_audio import record_identity

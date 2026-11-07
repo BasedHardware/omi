@@ -139,7 +139,15 @@ def select(legacy, batch_size, *, redis=None, now=None):
             if s not in legacy and attention.attention(metadata[s]['uid'], now=now, redis=r) == 'watched'
         ]
         candidates, owners = [], set()
-        for segment in oldest[:reserve] + watched + newest:
+        for segment in oldest if reserve else []:
+            owner = metadata[segment]['uid']
+            if owner in owners:
+                continue
+            owners.add(owner)
+            candidates.append(segment)
+            if len(candidates) >= reserve:
+                break
+        for segment in watched + newest:
             if segment in candidates:
                 continue
             owner = metadata[segment]['uid']
@@ -186,6 +194,8 @@ def completed(segment, *, redis=None):
 
 
 def promote_owner(uid, *, limit=20, now=None):
+    if type(limit) is not int or not 1 <= limit <= 20:
+        raise ValueError('record promotion limit must be 1..20')
     if not policy.record_fast_enabled() or not attention.serving(uid):
         return 0
     r = attention.client()

@@ -71,7 +71,11 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
         captured = pipeline_policy.capture_end(committed_row)
         closed = pipeline_policy.seconds(committed_row.get('finished_at'))
         pipeline_attention.metrics.stage('capture_to_seal', time.time() - captured if captured else None, observed)
-        pipeline_attention.metrics.stage('silence_wait', time.time() - closed if closed else None, observed)
+        pipeline_attention.metrics.stage('speech_to_seal', time.time() - closed if closed else None, observed)
+        finished = pipeline_policy.seconds((committed_row.get(pipeline_policy.FIELD) or {}).get('producer_finished_at'))
+        pipeline_attention.metrics.stage(
+            'producer_finish_to_seal', time.time() - finished if finished else None, observed
+        )
     if result is None and pipeline_policy.record_fast_enabled() and committed_row:
         record_attention.sealed(uid, conversation_id, committed_row)
     return result
@@ -87,6 +91,7 @@ def set_record_upload_pending(
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    instrument = pipeline_attention.admitted(uid)
 
     @firestore.transactional
     def commit(tx):
@@ -114,7 +119,13 @@ def set_record_upload_pending(
             if isinstance(sessions[session], dict) and 'abandoned_at' in sessions[session]:
                 return False  # Only repair's retained-tail proof may release this fence.
             sessions.pop(session)
-            tx.update(ref, {'record_upload_sessions': sessions})
+            update = {'record_upload_sessions': sessions}
+            if not sessions and instrument:
+                update[pipeline_policy.FIELD] = {
+                    **(row.get(pipeline_policy.FIELD) or {}),
+                    'producer_finished_at': time.time(),
+                }
+            tx.update(ref, update)
         return True
 
     return run_transactional(client, commit, transient=True)

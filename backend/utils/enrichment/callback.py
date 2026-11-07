@@ -145,7 +145,6 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
                 pipeline_fingerprint=digest,
                 pipeline_attention=pipeline_attention.attention(uid),
             )
-            pipeline_attention.metrics.event('notes_attempt')
 
     if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
         context['sync_hold'] = True
@@ -260,6 +259,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
+    if context and context.get('pipeline_seal'):
+        pipeline_attention.metrics.event('notes_attempt')
     try:
         processed_conversation = process_conversation(
             uid=uid,

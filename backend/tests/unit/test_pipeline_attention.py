@@ -86,9 +86,25 @@ def test_generic_app_open_promotes_but_cannot_sustain_watch(serving):
     assert runtime.hold_decision('u', sealed(), {}, now=101)[0]
 
 
+def test_mcp_promotion_does_not_require_a_mobile_presence_lease(serving):
+    assert runtime.attention('u', now=100) == 'unknown'
+    assert runtime.begin_promotion('u', trigger='mcp_read', now=100)
+    assert runtime.hold_decision('u', sealed(), {}, now=101)[0]
+
+
+def test_unknown_presence_keeps_legacy_policy_without_explicit_demand(serving):
+    assert runtime.hold_decision('u', sealed(), {}, now=100) == (False, None, None)
+
+
+def test_accepted_deadline_dispatch_does_not_need_redis(serving, monkeypatch):
+    monkeypatch.setattr(runtime, 'attention', lambda *_a, **_k: pytest.fail('deadline must be durable'))
+    assert runtime.hold_decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1770)[0]
+
+
 def test_patient_wait_and_absolute_deadline_cannot_slide(serving):
     row = sealed()
     obligation = {'pipeline_dispatch_at': 1770}
+    runtime.observe_surface('u', 'background', {'foreground': False}, now=1700)
     assert policy.dispatch_at(sealed(recorded_end=1000), obligation) == 1770
     assert runtime.hold_decision('u', row, obligation, now=1700) == (False, 1760, policy.seal_snapshot(row))
     assert runtime.hold_decision('u', row, obligation, now=1770)[0]

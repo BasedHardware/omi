@@ -82,7 +82,17 @@ def open_ready(seconds, *, trigger, initial_state):
 
 
 def stage(name, seconds, attention='unknown'):
-    if name not in {'capture_to_seal', 'silence_wait', 'conversation_gap', 'notes_work', 'user_finalize_wait'}:
+    if name not in {
+        'capture_to_seal',
+        'speech_to_seal',
+        'producer_finish_to_seal',
+        'record_queue',
+        'record_admission',
+        'silence_configured',
+        'conversation_gap',
+        'notes_work',
+        'user_finalize_wait',
+    }:
         raise ValueError('unknown stage')
     if attention not in {'watched', 'unwatched', 'unknown'}:
         raise ValueError('unknown attention')

@@ -92,6 +92,18 @@ def test_capture_report_dark_default_does_not_read_or_write(tmp_path, monkeypatc
     assert stopped.value.code == 0 and not out.exists()
 
 
+def test_unique_conversation_rewrite_census_survives_export_replay():
+    receipts = [
+        {'owner_key': 'one', 'conversation_id': 'c', 'notes_versions': 1},
+        {'owner_key': 'one', 'conversation_id': 'c', 'notes_versions': 3},
+        {'owner_key': 'two', 'conversation_id': 'c', 'notes_versions': 1},
+    ]
+    census = capture.rewrite_census(receipts * 3)
+    assert census['omi_pipeline_notes_rewrites_per_conversation'] == {0: 1, 2: 1}
+    assert census['conversations'] == 2 and census['unknown_receipts'] == 0
+    assert 'owner_key' not in json.dumps(census)
+
+
 def test_writer_is_finops_sa_not_human_or_readonly_bot():
     assert gcpauth.WRITER_ACCOUNT == "finops-writer@based-hardware.iam.gserviceaccount.com"
     assert gcpauth.READONLY_ACCOUNT == "read-only-bot-account@based-hardware.iam.gserviceaccount.com"

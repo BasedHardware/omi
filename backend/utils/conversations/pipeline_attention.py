@@ -57,6 +57,9 @@ def attention(uid: str, *, now=None, redis=None) -> str:
     now = time.time() if now is None else now
     try:
         r = redis or client()
+        seen = r.get(key(uid) + ':presence_at')
+        if seen is None or now - float(seen) >= policy.LEASE_SECONDS * 2:
+            return 'unknown'
         return 'watched' if r.zcount(key(uid) + ':watched', now, '+inf') else 'unwatched'
     except Exception:
         unavailable()
@@ -81,6 +84,7 @@ def observe_surface(uid, session, payload, *, now=None, redis=None):
         payload.get('home_visible') is True or payload.get('transcript_visible') is True
     )
     p = r.pipeline()
+    p.set(key(uid) + ':presence_at', now, ex=policy.LEASE_SECONDS * 2)
     p.zremrangebyscore(key(uid) + ':watched', '-inf', now)
     if watched:
         p.zadd(key(uid) + ':watched', {session: now + policy.LEASE_SECONDS})
@@ -111,12 +115,14 @@ def hold_decision(uid, row, obligation, *, settled=False, now=None):
     if policy.mode() == 'shadow' and not accepted:
         metrics.event('shadow')
         return False, None, None
+    if accepted and now >= accepted:
+        return True, None, proof  # Durable accepted work must survive Redis loss/kill.
     if accepted and policy.mode() == 'off':
-        return (True, None, proof) if now >= accepted else (False, accepted, proof)
+        return False, accepted, proof
     state = attention(uid, now=now)
-    if state == 'unknown':
-        return False, None, None
     fast = state == 'watched' or promoted(uid)
+    if state == 'unknown' and not fast:
+        return False, None, None
     deadline = policy.dispatch_at(row, obligation)
     if not fast and not settled and deadline is not None and now < deadline:
         metrics.event('patient_wait')

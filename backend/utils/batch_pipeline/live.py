@@ -552,6 +552,13 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
 
     async def admit_and_defer(segment, pending, lease):
         nonlocal partial_count, privacy_blocked
+        attempt_started = time.monotonic()
+        instrument = pipeline_policy.mode() != 'off' and await run_blocking(
+            db_executor, record_attention.attention.admitted, pending['owner_id']
+        )
+        if instrument:
+            enqueued = pipeline_policy.seconds(pending.get('enqueued_at'))
+            record_attention.metrics.stage('record_queue', time.time() - enqueued if enqueued else None)
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
         try:
@@ -609,6 +616,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             await run_blocking(db_executor, record_attention.defer, segment, due)
         else:
             await run_blocking(db_executor, record_attention.completed, segment)
+        if instrument:
+            record_attention.metrics.stage('record_admission', time.monotonic() - attempt_started)
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.
