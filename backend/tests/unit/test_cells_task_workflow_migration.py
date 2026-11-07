@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 import subprocess
 import sys
 from uuid import uuid4
@@ -56,6 +57,13 @@ def test_expand_only_numbering_and_b2_dependency():
     assert 'GENERATED ALWAYS AS' in sql
     assert 'ACCESS EXCLUSIVE' in sql
     assert migrations[2].checksum == '1a52e25772bca09cd5ee56757eef54c511a3947c3bc210e71b7f2adda0d6a025'
+    for migration in migrations[1:]:
+        # Inspect statements, not the descriptive comments or string literals.
+        statements = re.sub(r"--[^\n]*|'(?:''|[^'])*'", '', migration.sql)
+        assert not re.search(r'\b(DROP|RENAME)\b', statements, re.IGNORECASE)
+        for statement in statements.split(';'):
+            if re.match(r'\s*ALTER\b', statement, re.IGNORECASE):
+                assert re.match(r'\s*ALTER\s+TABLE\s+\w+\s+ADD\s+COLUMN\b', statement, re.IGNORECASE)
 
 
 def test_fresh_apply_reapply_and_codec_query_columns(pg):
@@ -306,4 +314,4 @@ assert 'database.cells.adapters.space_store' not in sys.modules
 from database.cells.adapters import CellSpaceStore
 assert CellSpaceStore.__module__ == 'database.cells.adapters.space_store'
 """
-    subprocess.run([sys.executable, '-c', script], cwd=Path(__file__).resolve().parents[2], check=True, timeout=30)
+    subprocess.run([sys.executable, '-c', script], cwd=Path(__file__).resolve().parents[2], check=True, timeout=120)

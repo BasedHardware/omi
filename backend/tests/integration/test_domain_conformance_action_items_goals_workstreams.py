@@ -654,3 +654,63 @@ def test_legacy_workflow_ids_and_retirement_use_document_keys(domain_backend):
         == 'ws-key'
     )
     assert 'id' not in h.read(sid, 'workstreams', 'ws-key')
+
+
+def test_legacy_goal_focus_replacement_uses_document_keys(domain_backend):
+    h = domain_backend
+    sid = h.space('legacy-focus')
+    for gid, status in [('focused-key', 'focused'), ('replacement-key', 'background')]:
+        h.seed(
+            sid,
+            'goals',
+            gid,
+            {
+                'title': gid,
+                'desired_outcome': 'Finish',
+                'is_active': True,
+                'status': status,
+                'focus_rank': 0 if status == 'focused' else None,
+            },
+        )
+    repo = h.goals(sid)
+    assert (
+        repo.focus(
+            'replacement-key',
+            idempotency_key='replace',
+            account_generation=0,
+            replacement_goal_id='focused-key',
+            focus_cap=1,
+        ).id
+        == 'replacement-key'
+    )
+    assert repo.get('focused-key').status == 'background'
+    assert repo.get('replacement-key').status == 'focused'
+
+
+def test_retirement_ignores_redundant_payload_id(domain_backend):
+    h = domain_backend
+    sid = h.space('retire-payload-id')
+    h.seed(
+        sid,
+        'action_items',
+        'keep-key',
+        {
+            'id': 'wrong-keep',
+            'description': 'Keep',
+            'conversation_id': 'c',
+        },
+    )
+    h.seed(
+        sid,
+        'action_items',
+        'retire-key',
+        {
+            'id': 'keep-key',
+            'description': 'Retire',
+            'conversation_id': 'c',
+        },
+    )
+    repo = h.action_items(sid)
+    assert repo.retire_for_conversation('c', active_ids=['keep-key'], replacements={'retire-key': 'keep-key'}) == 1
+    assert not repo.get('keep-key').deleted
+    assert repo.get('retire-key').superseded_by == 'keep-key'

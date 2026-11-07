@@ -64,3 +64,11 @@ Only the synthetic domain conformance harness selects these adapters. Serving
 routing and `CELL_STORE_MODE` are unchanged; B2 enrollment/write fences remain
 required before any serving use. Adding stored columns requires an exclusive
 lock and must happen before enrollment.
+
+Legacy cell payloads need not duplicate their document key in an `id` field.
+Read projections restore `id` from the key without rewriting the payload;
+retirement and relationship operations also use document keys as identity.
+Cell-native creates currently include a redundant `id` (Firestore creates may
+omit it). This is an explicit metadata exception to byte parity: the shared
+codec preserves the same content values, while W6 backfill must retain legacy
+payloads verbatim and never depend on the redundant `id` being present.
