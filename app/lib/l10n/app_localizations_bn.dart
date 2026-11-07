@@ -10009,6 +10009,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়';
 
   @override
+  String get syncStatusSpeechWithoutText => 'কোনো কথা পাওয়া যায়নি — অডিও রাখা হয়েছে';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

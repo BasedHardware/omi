@@ -3230,6 +3230,7 @@
     "tagSpeakerIncludingLaterSpeech": "Tandai juga ucapan berikutnya dari pembicara ini",
     "updateSummaryWithNewNames": "Perbarui ringkasan dengan nama baru",
     "syncStatusUnsupportedAudio": "Audio tidak terbaca — tidak bisa disinkronkan",
+    "syncStatusSpeechWithoutText": "Tidak ditemukan ucapan — audio disimpan",
     "chatStarterPrompt": "{kind, select, capabilities{Apa yang bisa kamu lakukan untukku?} goal{Bantu aku menetapkan tujuan} activity{Ringkas aktivitas terbaruku} improve{Bagaimana aku bisa menjadi lebih baik?} other{}}",
     "nextWeek": "Minggu depan",
     "clearSearch": "Hapus pencarian",

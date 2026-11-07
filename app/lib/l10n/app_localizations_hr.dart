@@ -10041,6 +10041,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Zvuk se ne može pročitati — sinkronizacija nije moguća';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Govor nije pronađen — zvuk je zadržan';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

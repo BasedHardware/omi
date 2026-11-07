@@ -3230,6 +3230,7 @@
     "tagSpeakerIncludingLaterSpeech": "Bu konuşmacının sonraki konuşmasını da etiketle",
     "updateSummaryWithNewNames": "Özeti yeni adlarla güncelle",
     "syncStatusUnsupportedAudio": "Ses okunamadı — eşitlenemiyor",
+    "syncStatusSpeechWithoutText": "Konuşma bulunamadı — ses korundu",
     "chatStarterPrompt": "{kind, select, capabilities{Benim için neler yapabilirsin?} goal{Bir hedef belirlememe yardım et} activity{Son etkinliklerimi özetle} improve{Kendimi nasıl geliştirebilirim?} other{}}",
     "nextWeek": "Gelecek hafta",
     "clearSearch": "Aramayı temizle",

@@ -35298,6 +35298,13 @@
             "title": "New Memories",
             "type": "array"
           },
+          "speech_without_text": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Speech Without Text",
+            "type": "array"
+          },
           "total_segments": {
             "default": 0,
             "title": "Total Segments",

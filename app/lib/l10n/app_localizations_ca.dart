@@ -10061,6 +10061,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'No s\'ha pogut llegir l\'àudio — no es pot sincronitzar';
 
   @override
+  String get syncStatusSpeechWithoutText => 'No s\'ha trobat cap veu — s\'ha conservat l\'àudio';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

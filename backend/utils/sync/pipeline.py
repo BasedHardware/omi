@@ -228,6 +228,10 @@ from utils.capture.sync_coverage import (
 )
 from utils.sync.word_timing import first_word_offset, shift_to_vad_file_clock
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
+from utils.sync.speech_without_text import (
+    SourceTrackingSegmentSet as _SourceTrackingSegmentSet,
+    compute_speech_without_text_files as _compute_speech_without_text_files,
+)
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
 from config.sync_lineage import sync_lineage_resolve_active_for
@@ -2565,14 +2569,20 @@ async def _run_sync_vad_phase(
     source_frame_maps: dict | None = None,
     segment_source_maps: dict | None = None,
     early_segment_times: dict[str, float] | None = None,
+    segment_source_files: dict[str, str] | None = None,
 ) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
     vad_errors: list[str] = []
-    segment_source_lock = threading.Lock()
+    segment_source_lock = threading.RLock()
 
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
+        target_segments = (
+            _SourceTrackingSegmentSet(segmented_paths, segment_source_files, path, segment_source_lock)
+            if segment_source_files is not None
+            else segmented_paths
+        )
         try:
             source_early = early_segment_times is not None and is_early_capture_time(
                 ((source_frame_maps or {}).get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path))
@@ -2588,16 +2598,16 @@ async def _run_sync_vad_phase(
             if segment_source_maps is not None:
                 retrieve(
                     path,
-                    segmented_paths,
+                    target_segments,
                     local_errors,
                     source_frame_map=(source_frame_maps or {}).get(path),
                     segment_source_maps=segment_source_maps,
                     segment_source_lock=segment_source_lock,
                 )
             elif source_early:
-                retrieve(path, segmented_paths, local_errors, segment_source_lock=segment_source_lock)
+                retrieve(path, target_segments, local_errors, segment_source_lock=segment_source_lock)
             else:
-                retrieve(path, segmented_paths, local_errors)
+                retrieve(path, target_segments, local_errors)
         except Exception as error:
             if not local_errors:
                 local_errors.append(_bounded_exception_type(error))
@@ -2774,6 +2784,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
+        raw_upload_names = [os.path.basename(p) for p in raw_paths if isinstance(p, str)]
+        segment_source_files: dict[str, str] = {}
+        silent_segment_paths: set[str] = set()
         safety_coverage_paths = set()
         coverage_suppressed_all = False
         wav_paths = []
@@ -3078,11 +3091,19 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             admitted_early_times = early_segment_times if capture_received_at is not None else None
             if source_frame_maps:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, admitted_early_times
+                    wav_paths,
+                    segmented_paths,
+                    source_frame_maps,
+                    segment_source_maps,
+                    admitted_early_times,
+                    segment_source_files=segment_source_files,
                 )
             else:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, early_segment_times=admitted_early_times
+                    wav_paths,
+                    segmented_paths,
+                    early_segment_times=admitted_early_times,
+                    segment_source_files=segment_source_files,
                 )
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
@@ -3533,6 +3554,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                 silence_confirmed = (
                     ok is False and deferred_outcome.get('outcome') == TranscriptionOutcome.EXPECTED_SILENCE
                 )
+                if silence_confirmed:
+                    with segment_lock:
+                        silent_segment_paths.add(path)
                 if (ok or silence_confirmed) and task_mode:
                     _add_processed_segment_for_run(job_id, active_run_lock_token, path)
                 if ledger_segment == SEGMENT_ALREADY_PROCESSED:
@@ -3740,9 +3764,16 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             if cap_holds:
                 successful_segments -= len(cap_holds)
             job_outcome = _job_transcription_outcome(segment_errors)
+            speech_without_text = _compute_speech_without_text_files(
+                raw_upload_names=raw_upload_names,
+                segment_source_files=segment_source_files,
+                silent_segment_paths=silent_segment_paths,
+                source_frame_maps=source_frame_maps,
+            )
             result = {
                 'new_memories': sorted(response['new_memories']),
                 'updated_memories': sorted(response['updated_memories']),
+                'speech_without_text': speech_without_text,
             }
             if failed_segments > 0:
                 result['failed_segments'] = failed_segments
@@ -3784,6 +3815,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             final_result = {
                 'new_memories': result['new_memories'],
                 'updated_memories': result['updated_memories'],
+                'speech_without_text': speech_without_text,
                 'failed_segments': failed_segments,
                 'total_segments': total_segments,
                 'errors': segment_errors[:10] if segment_errors else [],

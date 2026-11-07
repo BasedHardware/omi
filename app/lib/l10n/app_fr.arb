@@ -3230,6 +3230,7 @@
     "tagSpeakerIncludingLaterSpeech": "Étiqueter aussi les propos ultérieurs de cet interlocuteur",
     "updateSummaryWithNewNames": "Mettre à jour le résumé avec les nouveaux noms",
     "syncStatusUnsupportedAudio": "Audio illisible — synchronisation impossible",
+    "syncStatusSpeechWithoutText": "Aucune parole détectée — audio conservé",
     "chatStarterPrompt": "{kind, select, capabilities{Que peux-tu faire pour moi ?} goal{Aide-moi à me fixer un objectif} activity{Résume mon activité récente} improve{Comment puis-je m’améliorer ?} other{}}",
     "nextWeek": "La semaine prochaine",
     "clearSearch": "Effacer la recherche",

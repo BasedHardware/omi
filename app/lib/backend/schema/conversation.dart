@@ -834,6 +834,7 @@ class ServerConversation {
 class SyncLocalFilesResponse {
   List<String> newConversationIds = [];
   List<String> updatedConversationIds = [];
+  List<String> speechWithoutText = [];
   int failedSegments;
   int totalSegments;
   List<String> errors;
@@ -853,13 +854,14 @@ class SyncLocalFilesResponse {
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
+    List<String>? speechWithoutText,
     this.failedSegments = 0,
     this.totalSegments = 0,
     this.errors = const [],
     this.localUploadFailures = 0,
     this.localUploadPermanentFailures = 0,
     this.localUploadPermanentError,
-  });
+  }) : speechWithoutText = List<String>.from(speechWithoutText ?? const <String>[]);
 
   bool get hasPartialFailure => failedSegments > 0;
 
@@ -871,6 +873,7 @@ class SyncLocalFilesResponse {
     return SyncLocalFilesResponse(
       newConversationIds: generated.newMemories ?? [],
       updatedConversationIds: generated.updatedMemories ?? [],
+      speechWithoutText: generated.speechWithoutText ?? [],
       failedSegments: generated.failedSegments,
       totalSegments: generated.totalSegments,
       errors: generated.errors ?? [],

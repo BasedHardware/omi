@@ -5743,6 +5743,7 @@ export interface SyncLocalFilesResultResponse {
   failed_segments?: number;
   held_audio?: boolean | null;
   new_memories?: Array<string>;
+  speech_without_text?: Array<string>;
   total_segments?: number;
   updated_memories?: Array<string>;
 }

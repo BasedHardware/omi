@@ -152,7 +152,10 @@ bool isAttentionSyncState(WalSyncDisplayState state) =>
 /// uploading — the refusal label belongs to the former, so the latter's audio
 /// is never deleted under it.
 bool walDeletionAllowed(Wal wal) =>
-    !wal.isSyncing && (isAttentionSyncState(wal.syncDisplayState) || wal.status == WalStatus.uploadRejected);
+    !wal.isSyncing &&
+    (isAttentionSyncState(wal.syncDisplayState) ||
+        wal.status == WalStatus.uploadRejected ||
+        (wal.status == WalStatus.synced && wal.speechWithoutText));
 
 /// Whether a deliberate retry of this recording can change its outcome. A
 /// `too_large` refusal (413) is deterministic — the same bytes are the same
@@ -676,6 +679,14 @@ class Wal {
     _changed();
   }
 
+  bool _speechWithoutText;
+  bool get speechWithoutText => _speechWithoutText;
+  set speechWithoutText(bool value) {
+    if (_speechWithoutText == value) return;
+    _speechWithoutText = value;
+    _changed();
+  }
+
   /// Set only when [timerStart] is an app estimate (the device gave no
   /// trustworthy recording time): names the one contiguous device recording
   /// this audio belongs to. The upload filename carries it so the backend
@@ -868,6 +879,7 @@ class Wal {
     int jobPendingConfirmedAt = 0,
     int syncedAt = 0,
     bool keptForTranscriptRecovery = false,
+    bool speechWithoutText = false,
     String? clockRun,
     String? uploadRejectionReason,
     int uploadRejectionStatusCode = 400,
@@ -913,6 +925,7 @@ class Wal {
         _jobPendingConfirmedAt = jobPendingConfirmedAt,
         _syncedAt = syncedAt,
         _keptForTranscriptRecovery = keptForTranscriptRecovery,
+        _speechWithoutText = speechWithoutText,
         _clockRun = clockRun,
         _uploadRejectionReason = uploadRejectionReason,
         _uploadRejectionStatusCode = uploadRejectionStatusCode,
@@ -970,6 +983,7 @@ class Wal {
       jobPendingConfirmedAt: json['job_pending_confirmed_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
+      speechWithoutText: json['speech_without_text'] == true,
       clockRun: json['clock_run'] as String?,
       uploadRejectionReason: json['upload_rejection_reason'] == null
           ? null
@@ -1025,6 +1039,7 @@ class Wal {
       'job_pending_confirmed_at': jobPendingConfirmedAt,
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
+      if (speechWithoutText) 'speech_without_text': true,
       if (clockRun != null) 'clock_run': clockRun,
       if (uploadRejectionReason != null) 'upload_rejection_reason': uploadRejectionReason,
       'upload_rejection_status_code': uploadRejectionStatusCode,
@@ -1085,6 +1100,7 @@ class Wal {
     h = _mixFingerprint(h, jobPendingConfirmedAt);
     h = _mixFingerprint(h, syncedAt);
     h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
+    h = _mixFingerprint(h, speechWithoutText ? 1 : 0);
     h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
     h = _mixFingerprint(h, uploadRejectionReason?.hashCode ?? 0);
     h = _mixFingerprint(h, uploadRejectionStatusCode);
@@ -1108,6 +1124,14 @@ class Wal {
 
   getFileName() {
     return getFileNameByTimeStarts(timerStart, clockRun: clockRun);
+  }
+
+  bool matchesSpeechWithoutText(List<String> speechWithoutTextFiles) {
+    if (speechWithoutTextFiles.isEmpty) return false;
+    final pathName = (filePath != null && filePath!.isNotEmpty) ? filePath!.split('/').last : null;
+    final generatedName = getFileName();
+    return (pathName != null && speechWithoutTextFiles.contains(pathName)) ||
+        speechWithoutTextFiles.contains(generatedName);
   }
 
   /// `_clke<run>` sits directly before the timestamp: older backends read only

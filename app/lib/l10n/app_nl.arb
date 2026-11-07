@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Ook latere spraak van deze spreker taggen",
     "updateSummaryWithNewNames": "Samenvatting bijwerken met nieuwe namen",
     "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd",
+    "syncStatusSpeechWithoutText": "Geen spraak gevonden — audio bewaard",
     "chatStarterPrompt": "{kind, select, capabilities{Wat kun je voor me doen?} goal{Help me een doel te stellen} activity{Vat mijn recente activiteiten samen} improve{Hoe kan ik me verbeteren?} other{}}",
     "nextWeek": "Volgende week",
     "clearSearch": "Zoekopdracht wissen",

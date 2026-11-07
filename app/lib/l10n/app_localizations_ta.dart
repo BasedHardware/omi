@@ -10082,6 +10082,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
 
   @override
+  String get syncStatusSpeechWithoutText => 'பேச்சு எதுவும் கண்டறியப்படவில்லை — ஆடியோ வைக்கப்பட்டுள்ளது';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

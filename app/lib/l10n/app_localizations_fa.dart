@@ -10003,6 +10003,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
 
   @override
+  String get syncStatusSpeechWithoutText => 'گفتاری یافت نشد — صدا نگه داشته شد';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

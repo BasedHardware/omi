@@ -9943,6 +9943,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'تعذّرت قراءة الصوت — لا يمكن مزامنته';
 
   @override
+  String get syncStatusSpeechWithoutText => 'لم يتم العثور على كلام — تم الاحتفاظ بالصوت';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

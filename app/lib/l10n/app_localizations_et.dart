@@ -9998,6 +9998,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Kõnet ei leitud — heli jäeti alles';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

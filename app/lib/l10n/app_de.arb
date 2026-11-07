@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Spätere Sprache dieses Sprechers ebenfalls markieren",
     "updateSummaryWithNewNames": "Zusammenfassung mit neuen Namen aktualisieren",
     "syncStatusUnsupportedAudio": "Audio nicht lesbar — Synchronisierung nicht möglich",
+    "syncStatusSpeechWithoutText": "Keine Sprache gefunden — Audio behalten",
     "chatStarterPrompt": "{kind, select, capabilities{Was kannst du für mich tun?} goal{Hilf mir, ein Ziel zu setzen} activity{Fasse meine letzten Aktivitäten zusammen} improve{Wie kann ich mich verbessern?} other{}}",
     "nextWeek": "Nächste Woche",
     "clearSearch": "Suche löschen",

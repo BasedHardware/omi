@@ -454,6 +454,7 @@ _TERMINAL_RESULT_FIELDS = frozenset(
     (
         'new_memories',
         'updated_memories',
+        'speech_without_text',
         'failed_segments',
         'total_segments',
         'errors',

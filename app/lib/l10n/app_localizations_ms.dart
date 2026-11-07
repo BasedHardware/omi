@@ -10027,6 +10027,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio tidak dapat dibaca — tidak boleh disegerakkan';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Tiada pertuturan ditemui — audio disimpan';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

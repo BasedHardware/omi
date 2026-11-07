@@ -10020,6 +10020,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی';
 
   @override
+  String get syncStatusSpeechWithoutText => 'کوئی گفتگو نہیں ملی — آڈیو محفوظ رکھی گئی';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

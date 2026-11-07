@@ -10077,6 +10077,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Δεν βρέθηκε ομιλία — ο ήχος διατηρήθηκε';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

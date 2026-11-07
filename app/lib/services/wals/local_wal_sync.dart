@@ -1433,6 +1433,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           (wal) =>
               wal.storage == WalStorage.disk &&
               wal.status == WalStatus.synced &&
+              !wal.speechWithoutText &&
               wal.syncedAt > 0 &&
               wal.syncedAt <= cutoff,
         )
@@ -2237,8 +2238,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
             ),
           );
+          resp.speechWithoutText.addAll(r.speechWithoutText.where((f) => !resp.speechWithoutText.contains(f)));
           for (final wal in batchWals) {
             wal.status = WalStatus.synced;
+            wal.speechWithoutText = wal.matchesSpeechWithoutText(r.speechWithoutText) ||
+                (batchWals.length == 1 && r.speechWithoutText.isNotEmpty);
             wal.isSyncing = false;
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
@@ -2540,7 +2544,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
           ),
         );
+        resp.speechWithoutText.addAll(r.speechWithoutText.where((f) => !resp.speechWithoutText.contains(f)));
         walToSync.status = WalStatus.synced;
+        walToSync.speechWithoutText = walToSync.matchesSpeechWithoutText(r.speechWithoutText) ||
+            r.speechWithoutText.isNotEmpty;
         walToSync.isSyncing = false;
         walToSync.syncStartedAt = null;
         walToSync.syncEtaSeconds = null;

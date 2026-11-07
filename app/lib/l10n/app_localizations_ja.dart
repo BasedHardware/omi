@@ -9850,6 +9850,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '音声を読み取れません — 同期できません';
 
   @override
+  String get syncStatusSpeechWithoutText => '音声が検出されませんでした — 録音は保持されています';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

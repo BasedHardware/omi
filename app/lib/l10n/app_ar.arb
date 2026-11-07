@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "وسم الكلام اللاحق من هذا المتحدث أيضًا",
     "updateSummaryWithNewNames": "تحديث الملخص بالأسماء الجديدة",
     "syncStatusUnsupportedAudio": "تعذّرت قراءة الصوت — لا يمكن مزامنته",
+    "syncStatusSpeechWithoutText": "لم يتم العثور على كلام — تم الاحتفاظ بالصوت",
     "chatStarterPrompt": "{kind, select, capabilities{ماذا يمكنك أن تفعل من أجلي؟} goal{ساعدني في تحديد هدف} activity{لخّص نشاطي الأخير} improve{كيف يمكنني التحسّن؟} other{}}",
     "nextWeek": "الأسبوع القادم",
     "clearSearch": "مسح البحث",

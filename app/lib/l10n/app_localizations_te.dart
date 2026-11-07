@@ -10056,6 +10056,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు';
 
   @override
+  String get syncStatusSpeechWithoutText => 'మాటలు కనుగొనబడలేదు — ఆడియో ఉంచబడింది';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

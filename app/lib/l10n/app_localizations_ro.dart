@@ -10056,6 +10056,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Nu s-a găsit vorbire — fișierul audio a fost păstrat';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

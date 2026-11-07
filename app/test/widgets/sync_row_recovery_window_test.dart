@@ -168,6 +168,14 @@ void main() {
     expect(find.text('Conversation created'), findsNothing);
   });
 
+  testWidgets('speech that transcribed to nothing labels audio kept and offers Delete', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.synced)..speechWithoutText = true);
+    expect(find.text('No speech found — audio kept'), findsOneWidget);
+    expect(find.text('Processed'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Delete'), findsOneWidget);
+  });
+
   testWidgets('the row explains the rejection and offers no Retry', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
 

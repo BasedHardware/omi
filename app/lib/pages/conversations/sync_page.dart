@@ -67,6 +67,9 @@ class WalListItem extends StatelessWidget {
     if (hasError && state != WalSyncDisplayState.uploadRejected) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
+        if (wal.speechWithoutText) {
+          return (Colors.grey.shade500, l.syncStatusSpeechWithoutText);
+        }
         return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
         return (Colors.grey.shade400, l.syncStatusUploaded);
@@ -109,7 +112,8 @@ class WalListItem extends StatelessWidget {
     // offered here: the swipe still removes it, after confirmation.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio) {
+        state == WalSyncDisplayState.unsupportedAudio ||
+        (state == WalSyncDisplayState.synced && wal.speechWithoutText)) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,

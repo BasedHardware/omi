@@ -3230,6 +3230,7 @@
     "tagSpeakerIncludingLaterSpeech": "Также отметить последующую речь этого говорящего",
     "updateSummaryWithNewNames": "Обновить сводку с новыми именами",
     "syncStatusUnsupportedAudio": "Не удалось прочитать аудио — синхронизация невозможна",
+    "syncStatusSpeechWithoutText": "Речь не обнаружена — аудио сохранено",
     "chatStarterPrompt": "{kind, select, capabilities{Что ты можешь для меня сделать?} goal{Помоги мне поставить цель} activity{Подведи итог моей недавней активности} improve{Как мне стать лучше?} other{}}",
     "nextWeek": "На следующей неделе",
     "clearSearch": "Очистить поиск",

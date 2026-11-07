@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Etichetta anche il parlato successivo di questo speaker",
     "updateSummaryWithNewNames": "Aggiorna il riepilogo con i nuovi nomi",
     "syncStatusUnsupportedAudio": "Audio illeggibile — impossibile sincronizzare",
+    "syncStatusSpeechWithoutText": "Nessun parlato trovato — audio conservato",
     "chatStarterPrompt": "{kind, select, capabilities{Cosa puoi fare per me?} goal{Aiutami a fissare un obiettivo} activity{Riassumi le mie attività recenti} improve{Come posso migliorare?} other{}}",
     "nextWeek": "La prossima settimana",
     "clearSearch": "Cancella ricerca",

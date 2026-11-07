@@ -9948,6 +9948,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'อ่านเสียงไม่ได้ — ซิงค์ไม่ได้';
 
   @override
+  String get syncStatusSpeechWithoutText => 'ไม่พบเสียงพูด — เก็บไฟล์เสียงไว้แล้ว';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

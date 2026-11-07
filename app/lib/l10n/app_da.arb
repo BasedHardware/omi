@@ -3237,6 +3237,7 @@
     "tagSpeakerIncludingLaterSpeech": "Mærk også senere tale fra denne taler",
     "updateSummaryWithNewNames": "Opdater resuméet med de nye navne",
     "syncStatusUnsupportedAudio": "Lyden kunne ikke læses — kan ikke synkroniseres",
+    "syncStatusSpeechWithoutText": "Ingen tale fundet — lyd gemt",
     "chatStarterPrompt": "{kind, select, capabilities{Hvad kan du gøre for mig?} goal{Hjælp mig med at sætte et mål} activity{Opsummer mine seneste aktiviteter} improve{Hvordan kan jeg blive bedre?} other{}}",
     "nextWeek": "Næste uge",
     "clearSearch": "Ryd søgning",

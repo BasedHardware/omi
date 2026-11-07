@@ -10040,6 +10040,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು';
 
   @override
+  String get syncStatusSpeechWithoutText => 'ಯಾವುದೇ ಮಾತು ಕಂಡುಬಂದಿಲ್ಲ — ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

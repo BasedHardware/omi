@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Маркирай и по-късната реч на този говорител",
     "updateSummaryWithNewNames": "Актуализирай резюмето с новите имена",
     "syncStatusUnsupportedAudio": "Звукът не може да се прочете — синхронизирането е невъзможно",
+    "syncStatusSpeechWithoutText": "Не е открита реч — аудиото е запазено",
     "chatStarterPrompt": "{kind, select, capabilities{Какво можеш да направиш за мен?} goal{Помогни ми да си поставя цел} activity{Обобщи последните ми дейности} improve{Как мога да се подобря?} other{}}",
     "nextWeek": "Следващата седмица",
     "clearSearch": "Изчистване на търсенето",

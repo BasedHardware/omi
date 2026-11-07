@@ -9853,6 +9853,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
 
   @override
+  String get syncStatusSpeechWithoutText => '음성을 찾지 못함 — 오디오 보관됨';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Gắn thẻ cả lời nói sau này của người nói này",
     "updateSummaryWithNewNames": "Cập nhật tóm tắt với tên mới",
     "syncStatusUnsupportedAudio": "Không đọc được âm thanh — không thể đồng bộ",
+    "syncStatusSpeechWithoutText": "Không tìm thấy giọng nói — đã giữ lại âm thanh",
     "chatStarterPrompt": "{kind, select, capabilities{Bạn có thể giúp gì cho tôi?} goal{Giúp tôi đặt mục tiêu} activity{Tóm tắt hoạt động gần đây của tôi} improve{Tôi có thể cải thiện như thế nào?} other{}}",
     "nextWeek": "Tuần tới",
     "clearSearch": "Xóa tìm kiếm",

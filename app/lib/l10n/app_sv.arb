@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Märk även senare tal från den här talaren",
     "updateSummaryWithNewNames": "Uppdatera sammanfattningen med de nya namnen",
     "syncStatusUnsupportedAudio": "Ljudet kunde inte läsas — kan inte synkroniseras",
+    "syncStatusSpeechWithoutText": "Inget tal hittades — ljudet behölls",
     "chatStarterPrompt": "{kind, select, capabilities{Vad kan du göra för mig?} goal{Hjälp mig att sätta ett mål} activity{Sammanfatta mina senaste aktiviteter} improve{Hur kan jag bli bättre?} other{}}",
     "nextWeek": "Nästa vecka",
     "clearSearch": "Rensa sökning",

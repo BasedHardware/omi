@@ -10008,6 +10008,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Zvuk nelze přečíst — synchronizace není možná';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Nebyla nalezena žádná řeč — zvuk byl zachován';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

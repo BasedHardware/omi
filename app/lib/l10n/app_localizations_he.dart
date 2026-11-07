@@ -9925,6 +9925,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
 
   @override
+  String get syncStatusSpeechWithoutText => 'לא נמצא דיבור — השמע נשמר';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

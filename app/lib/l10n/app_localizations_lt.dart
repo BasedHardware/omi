@@ -10024,6 +10024,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Nepavyko nuskaityti garso — sinchronizuoti negalima';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Kalbos nerasta — garso įrašas paliktas';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

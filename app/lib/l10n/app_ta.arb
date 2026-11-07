@@ -10615,6 +10615,7 @@
     "tagSpeakerIncludingLaterSpeech": "இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு",
     "updateSummaryWithNewNames": "புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி",
     "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது",
+    "syncStatusSpeechWithoutText": "பேச்சு எதுவும் கண்டறியப்படவில்லை — ஆடியோ வைக்கப்பட்டுள்ளது",
     "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
     "nextWeek": "அடுத்த வாரம்",
     "clearSearch": "தேடலை அழி",

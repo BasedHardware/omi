@@ -808,6 +808,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   (Color, String) _rowLabel(Wal wal) {
     final state = wal.syncDisplayState;
+    if (state == WalSyncDisplayState.synced && wal.speechWithoutText) {
+      return (Colors.grey.shade500, context.l10n.syncStatusSpeechWithoutText);
+    }
     var (color, _, label) = _rowVisual(state, rejectionReason: wal.uploadRejectionReason);
     // On-device WALs surface their transfer state instead of "Waiting to sync".
     final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
@@ -861,7 +864,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
         state == WalSyncDisplayState.unsupportedAudio ||
-        (state == WalSyncDisplayState.uploadRejected);
+        (state == WalSyncDisplayState.uploadRejected) ||
+        (state == WalSyncDisplayState.synced && wal.speechWithoutText);
   }
 
   Future<void> _confirmDeleteWals(List<Wal> wals) async {

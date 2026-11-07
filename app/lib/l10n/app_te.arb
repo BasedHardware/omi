@@ -10615,6 +10615,7 @@
     "tagSpeakerIncludingLaterSpeech": "ఈ స్పీకర్ తర్వాతి మాటను కూడా ట్యాగ్ చేయండి",
     "updateSummaryWithNewNames": "కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి",
     "syncStatusUnsupportedAudio": "ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు",
+    "syncStatusSpeechWithoutText": "మాటలు కనుగొనబడలేదు — ఆడియో ఉంచబడింది",
     "chatStarterPrompt": "{kind, select, capabilities{నువ్వు నా కోసం ఏమి చేయగలవు?} goal{లక్ష్యాన్ని నిర్దేశించుకోవడంలో నాకు సహాయం చేయి} activity{నా ఇటీవలి కార్యకలాపాలను సంక్షిప్తంగా చెప్పు} improve{నేను ఎలా మెరుగుపడగలను?} other{}}",
     "nextWeek": "వచ్చే వారం",
     "clearSearch": "శోధనను క్లియర్ చేయండి",

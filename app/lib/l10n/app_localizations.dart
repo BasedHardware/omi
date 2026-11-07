@@ -18429,6 +18429,12 @@ abstract class AppLocalizations {
   /// **'Audio couldn\'t be read — can\'t be synced'**
   String get syncStatusUnsupportedAudio;
 
+  /// Sync row status when VAD found speech segments that all transcribed to empty text; local audio is retained.
+  ///
+  /// In en, this message translates to:
+  /// **'No speech found — audio kept'**
+  String get syncStatusSpeechWithoutText;
+
   /// Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.
   ///
   /// In en, this message translates to:

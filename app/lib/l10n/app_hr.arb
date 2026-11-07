@@ -10615,6 +10615,7 @@
     "tagSpeakerIncludingLaterSpeech": "Označi i kasniji govor ovog govornika",
     "updateSummaryWithNewNames": "Ažuriraj sažetak s novim imenima",
     "syncStatusUnsupportedAudio": "Zvuk se ne može pročitati — sinkronizacija nije moguća",
+    "syncStatusSpeechWithoutText": "Govor nije pronađen — zvuk je zadržan",
     "chatStarterPrompt": "{kind, select, capabilities{Što možeš učiniti za mene?} goal{Pomozi mi postaviti cilj} activity{Sažmi moje nedavne aktivnosti} improve{Kako mogu napredovati?} other{}}",
     "nextWeek": "Sljedeći tjedan",
     "clearSearch": "Očisti pretragu",

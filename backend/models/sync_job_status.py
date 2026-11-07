@@ -9,6 +9,7 @@ from utils.sync.lanes import SyncLane
 class SyncLocalFilesResultResponse(BaseModel):
     new_memories: list[str] = Field(default_factory=list)
     updated_memories: list[str] = Field(default_factory=list)
+    speech_without_text: list[str] = Field(default_factory=list)
     failed_segments: int = 0
     total_segments: int = 0
     errors: list[str] = Field(default_factory=list)

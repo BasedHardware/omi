@@ -1653,6 +1653,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
         sys.modules.pop('utils.sync.ledger_completion', None)
+        sys.modules.pop('utils.sync.speech_without_text', None)
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -1683,6 +1684,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
         sys.modules.pop('utils.sync.ledger_completion', None)
+        sys.modules.pop('utils.sync.speech_without_text', None)
         sys.modules.pop('sync_behavioral', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -2631,6 +2633,7 @@ class TestAsyncCoordinatorBehavioral:
             assert result['failed_segments'] == 0
             assert result['errors'] == []
             assert result['outcome'] == 'success'
+            assert result['speech_without_text'] == (['f.opus'] if intake_outcome == 'silence' else [])
             # Marked complete, not released for a retry that would repeat identically.
             stubs['pipeline'].mark_sync_content_completed.assert_called_once()
             stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_not_called()
@@ -2638,6 +2641,64 @@ class TestAsyncCoordinatorBehavioral:
             # No transcript was produced, so nothing is billed.
             stubs['pipeline'].record_usage.assert_not_called()
             assert 'content_completed' in terminal_events
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
+    async def test_speech_without_text_reports_only_files_whose_every_vad_segment_is_empty(self, fenced_worker_module):
+        """A batch reports only files whose every VAD segment transcribed to empty text."""
+        module, stubs = fenced_worker_module
+        try:
+            stubs['pipeline'].decode_files_to_wav = MagicMock(
+                return_value=['/tmp/audio_a.wav', '/tmp/audio_b.wav', '/tmp/audio_c.wav']
+            )
+            stubs['pipeline']._cleanup_files = MagicMock()
+
+            def _vad_per_file(path, segmented_paths, _errors):
+                if path.endswith('audio_a.wav'):
+                    segmented_paths.add('/tmp/seg_a1_1700000001.wav')
+                    segmented_paths.add('/tmp/seg_a2_1700000002.wav')
+                elif path.endswith('audio_b.wav'):
+                    segmented_paths.add('/tmp/seg_b1_1700000003.wav')
+                    segmented_paths.add('/tmp/seg_b2_1700000004.wav')
+
+            stubs['pipeline'].retrieve_vad_segments = _vad_per_file
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            stubs['pipeline'].users_db.get_data_protection_level = MagicMock(return_value=None)
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
+
+            def _process_segment_stub(path, _uid, response, lock, _errors, *_args, **kwargs):
+                deferred = kwargs.get('deferred_outcome')
+                if 'seg_a' in path or 'seg_b1' in path:
+                    stubs['pipeline']._record_empty_segment_as_silence(
+                        provider='deepgram',
+                        model='nova-3',
+                        lane='fresh',
+                        deferred_outcome=deferred,
+                    )
+                    return False
+                with lock:
+                    response['new_memories'].add('conv-b')
+                return True
+
+            stubs['pipeline'].process_segment = _process_segment_stub
+            stubs['pipeline']._reprocess_merged_conversations = MagicMock()
+
+            await module.run_full_pipeline_background_async(
+                'j-mixed-speech',
+                'uid',
+                ['/tmp/audio_a.bin', '/tmp/audio_b.bin', '/tmp/audio_c.bin'],
+                'omi',
+                False,
+                '/tmp/job-mixed-speech',
+            )
+
+            result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
+            assert result['speech_without_text'] == ['audio_a.bin']
+            assert result['new_memories'] == ['conv-b']
         finally:
             self._cleanup(stubs['saved_modules'])
 

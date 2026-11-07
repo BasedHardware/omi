@@ -10094,6 +10094,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Walang nakitang pagsasalita — pinanatili ang audio';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

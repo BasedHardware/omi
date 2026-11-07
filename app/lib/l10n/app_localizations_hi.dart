@@ -9987,6 +9987,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता';
 
   @override
+  String get syncStatusSpeechWithoutText => 'कोई बोलचाल नहीं मिली — ऑडियो सुरक्षित रखा गया';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

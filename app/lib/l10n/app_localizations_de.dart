@@ -10090,6 +10090,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nicht lesbar — Synchronisierung nicht möglich';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Keine Sprache gefunden — Audio behalten';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

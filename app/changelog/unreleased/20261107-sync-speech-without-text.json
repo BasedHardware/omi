@@ -1,0 +1,3 @@
+{
+  "change": "Keep local offline audio when speech segments transcribe to empty text, and label those recordings in Offline Sync with Delete available."
+}

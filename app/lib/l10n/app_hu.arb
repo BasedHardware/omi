@@ -3291,6 +3291,7 @@
     "tagSpeakerIncludingLaterSpeech": "Jelöld meg ennek a beszélőnek a későbbi beszédét is",
     "updateSummaryWithNewNames": "Összefoglaló frissítése az új nevekkel",
     "syncStatusUnsupportedAudio": "A hang nem olvasható — nem szinkronizálható",
+    "syncStatusSpeechWithoutText": "Nem található beszéd — a hanganyag megmaradt",
     "chatStarterPrompt": "{kind, select, capabilities{Mit tudsz tenni értem?} goal{Segíts kitűzni egy célt} activity{Foglald össze a legutóbbi tevékenységeimet} improve{Hogyan fejlődhetek?} other{}}",
     "nextWeek": "Jövő héten",
     "clearSearch": "Keresés törlése",

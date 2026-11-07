@@ -145,6 +145,9 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                   (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
                 ),
               );
+              resp.speechWithoutText.addAll(
+                s.result!.speechWithoutText.where((f) => !resp.speechWithoutText.contains(f)),
+              );
             }
             if (terminalPolicy == SyncJobTerminalPolicy.acknowledge) {
               if (s.result != null) completed.add(s.result!);
@@ -160,6 +163,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
               } catch (_) {
                 // Completion telemetry must not change WAL acknowledgement.
               }
+              final speechWithoutTextFiles = s.result?.speechWithoutText ?? const <String>[];
               for (final w in members) {
                 if (!_stillUploadedUnder(w, jobId)) continue;
                 if ((s.result?.newConversationIds.length ?? 0) == 0 &&
@@ -180,6 +184,8 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                 changed = true;
                 heldChanged |= w.holdForUser;
                 w.status = WalStatus.synced;
+                w.speechWithoutText = w.matchesSpeechWithoutText(speechWithoutTextFiles) ||
+                    (members.length == 1 && speechWithoutTextFiles.isNotEmpty);
                 w.holdForUser = false;
                 w.jobId = null;
                 if (w.syncedAt == 0) w.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;

@@ -9995,6 +9995,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Lyden kunne ikke læses — kan ikke synkroniseres';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Ingen tale fundet — lyd gemt';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

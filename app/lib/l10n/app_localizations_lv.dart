@@ -10034,6 +10034,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Runa netika atrasta — audio saglabāts';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

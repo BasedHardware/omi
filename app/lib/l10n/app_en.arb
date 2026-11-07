@@ -11825,6 +11825,10 @@
     "@syncStatusUnsupportedAudio": {
         "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
     },
+    "syncStatusSpeechWithoutText": "No speech found — audio kept",
+    "@syncStatusSpeechWithoutText": {
+        "description": "Sync row status when VAD found speech segments that all transcribed to empty text; local audio is retained."
+    },
     "chatStarterPrompt": "{kind, select, capabilities{What can you do for me?} goal{Help me set a goal} activity{Summarize my recent activity} improve{How can I improve?} other{}}",
     "@chatStarterPrompt": {
         "description": "Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.",

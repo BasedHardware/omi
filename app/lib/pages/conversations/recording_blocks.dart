@@ -48,7 +48,14 @@ class RecordingBlock {
 
   /// The piece whose state the row shows: the most serious one, so a block is
   /// never reported healthier than its worst part.
-  Wal get representative => wals.reduce((a, b) => _rank(b.syncDisplayState) > _rank(a.syncDisplayState) ? b : a);
+  Wal get representative => wals.reduce((a, b) {
+        final rankCompare = _rank(b.syncDisplayState).compareTo(_rank(a.syncDisplayState));
+        if (rankCompare != 0) return rankCompare > 0 ? b : a;
+        if (a.syncDisplayState == WalSyncDisplayState.synced && a.speechWithoutText && !b.speechWithoutText) {
+          return b;
+        }
+        return a;
+      });
 
   WalSyncDisplayState get state => representative.syncDisplayState;
 }

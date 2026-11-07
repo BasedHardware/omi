@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Merkitse myös tämän puhujan myöhempi puhe",
     "updateSummaryWithNewNames": "Päivitä yhteenveto uusilla nimillä",
     "syncStatusUnsupportedAudio": "Ääntä ei voitu lukea — ei voi synkronoida",
+    "syncStatusSpeechWithoutText": "Puhetta ei löytynyt — ääni säilytettiin",
     "chatStarterPrompt": "{kind, select, capabilities{Mitä voit tehdä hyväkseni?} goal{Auta minua asettamaan tavoite} activity{Tee yhteenveto viimeaikaisista toimistani} improve{Miten voin kehittyä?} other{}}",
     "nextWeek": "Ensi viikolla",
     "clearSearch": "Tyhjennä haku",

@@ -10018,6 +10018,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Ses okunamadı — eşitlenemiyor';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Konuşma bulunamadı — ses korundu';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

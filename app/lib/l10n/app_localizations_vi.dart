@@ -10006,6 +10006,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Không tìm thấy giọng nói — đã giữ lại âm thanh';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

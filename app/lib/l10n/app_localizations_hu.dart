@@ -10049,6 +10049,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
 
   @override
+  String get syncStatusSpeechWithoutText => 'Nem található beszéd — a hanganyag megmaradt';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,

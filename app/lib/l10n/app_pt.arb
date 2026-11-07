@@ -3230,6 +3230,7 @@
     "tagSpeakerIncludingLaterSpeech": "Etiquetar também a fala posterior deste locutor",
     "updateSummaryWithNewNames": "Atualizar o resumo com os novos nomes",
     "syncStatusUnsupportedAudio": "Não foi possível ler o áudio — não pode ser sincronizado",
+    "syncStatusSpeechWithoutText": "Nenhuma fala encontrada — áudio mantido",
     "chatStarterPrompt": "{kind, select, capabilities{O que você pode fazer por mim?} goal{Ajude-me a definir uma meta} activity{Resuma minha atividade recente} improve{Como posso melhorar?} other{}}",
     "nextWeek": "Na próxima semana",
     "clearSearch": "Limpar pesquisa",

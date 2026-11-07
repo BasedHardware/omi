@@ -3195,6 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Označit i pozdější řeč tohoto mluvčího",
     "updateSummaryWithNewNames": "Aktualizovat souhrn s novými jmény",
     "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná",
+    "syncStatusSpeechWithoutText": "Nebyla nalezena žádná řeč — zvuk byl zachován",
     "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
     "nextWeek": "Příští týden",
     "clearSearch": "Vymazat hledání",

@@ -9835,6 +9835,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
 
   @override
+  String get syncStatusSpeechWithoutText => '未检测到语音 — 已保留音频';
+
+  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
