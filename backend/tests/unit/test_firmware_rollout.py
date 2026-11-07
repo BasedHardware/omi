@@ -1,7 +1,8 @@
 """Firmware rollout policy with real KV parsing and mocked GitHub reads."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+import hashlib
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -121,3 +122,99 @@ def test_explicit_version_endpoint_ignores_rollout_percent_for_support_and_rever
     assert response.status_code == 200
     assert response.json()['version'] == '3.0.21'
     assert stable.status_code == 404
+
+
+# Release audiences: an allowlist of hashed uids and app channels.
+
+TESTER_UID = 'tester-uid'
+TESTER_HASH = hashlib.sha256(TESTER_UID.encode()).hexdigest()
+OTHER_HASH = hashlib.sha256(b'someone-else').hexdigest()
+
+
+def audience(uid=None, channel='store'):
+    return fw.ReleaseAudience(uid_sha256=hashlib.sha256(uid.encode()).hexdigest() if uid else None, channel=channel)
+
+
+def test_allowlisted_uid_gets_zero_percent_release():
+    kv = {'rollout_percent': '0', 'allow_uid_sha256': f'{OTHER_HASH}, {TESTER_HASH}'}
+    assert fw._release_is_eligible(kv, None, audience=audience(TESTER_UID))
+    assert not fw._release_is_eligible(kv, None, audience=audience('stranger'))
+    assert not fw._release_is_eligible(kv, None)
+
+
+def test_allowlist_alone_keeps_the_percent_cohort():
+    kv = {'rollout_percent': '100', 'allow_uid_sha256': TESTER_HASH}
+    assert fw._release_is_eligible(kv, None, audience=audience('stranger'))
+
+
+def test_beta_channel_only_release():
+    kv = {'rollout_percent': '100', 'channels': 'beta'}
+    assert fw._release_is_eligible(kv, 'device', audience=audience(channel='beta'))
+    for other in ('store', 'unknown'):
+        assert not fw._release_is_eligible(kv, 'device', audience=audience(channel=other))
+    assert not fw._release_is_eligible(kv, 'device')
+
+
+def test_channel_and_allowlist_combine():
+    kv = {'rollout_percent': '0', 'channels': 'beta', 'allow_uid_sha256': TESTER_HASH}
+    assert fw._release_is_eligible(kv, None, audience=audience(TESTER_UID, 'store'))
+    assert fw._release_is_eligible(kv, None, audience=audience('stranger', 'beta'))
+    assert not fw._release_is_eligible(kv, None, audience=audience('stranger', 'store'))
+
+
+@pytest.mark.parametrize(
+    'policy',
+    [
+        {'allow_uid_sha256': ''},
+        {'allow_uid_sha256': 'tester-uid'},
+        {'allow_uid_sha256': f'{TESTER_HASH},'},
+        {'channels': ''},
+        {'channels': 'beta,testflight'},
+    ],
+)
+def test_malformed_audience_fails_closed(policy):
+    kv = {'rollout_percent': '100', **policy}
+    assert not fw._release_is_eligible(kv, 'device', audience=audience(TESTER_UID, 'beta'))
+
+
+def test_blocked_beats_audience():
+    kv = {'blocked': 'true', 'channels': 'beta', 'allow_uid_sha256': TESTER_HASH}
+    assert not fw._release_is_eligible(kv, None, audience=audience(TESTER_UID, 'beta'))
+
+
+def _client_get(releases, headers, verified_uid=None):
+    app = FastAPI()
+    app.include_router(fw.router)
+    params = {
+        'device_model': 'Omi CV 1',
+        'firmware_revision': '3.0.21',
+        'hardware_revision': '1',
+        'manufacturer_name': 'Omi',
+    }
+    verifier = MagicMock(return_value=verified_uid)
+    with patch.object(fw, 'get_omi_github_releases', AsyncMock(return_value=releases)), patch.object(
+        fw, '_verified_uid', verifier
+    ):
+        with TestClient(app) as client:
+            response = client.get('/v2/firmware/latest', params=params, headers=headers)
+    return response, verifier
+
+
+def test_latest_endpoint_reads_token_for_allowlisted_release():
+    releases = [release('3.0.23', f'rollout_percent:0\nallow_uid_sha256:{TESTER_HASH}')]
+    response, verifier = _client_get(releases, {'Authorization': 'Bearer t'}, verified_uid=TESTER_UID)
+    assert response.status_code == 200
+    assert response.json()['version'] == '3.0.23'
+    verifier.assert_called_once_with('Bearer t')
+
+    response, _ = _client_get(releases, {'Authorization': 'Bearer t'}, verified_uid=None)
+    assert response.status_code == 404
+
+
+def test_latest_endpoint_reads_app_channel_and_skips_token_without_allowlist():
+    releases = [release('3.0.23', 'rollout_percent:0\nchannels:beta'), release('3.0.22')]
+    beta, verifier = _client_get(releases, {'X-Omi-App-Channel': 'beta', 'Authorization': 'Bearer t'})
+    store, _ = _client_get(releases, {'X-Omi-App-Channel': 'store'})
+    assert beta.json()['version'] == '3.0.23'
+    assert store.json()['version'] == '3.0.22'
+    verifier.assert_not_called()
