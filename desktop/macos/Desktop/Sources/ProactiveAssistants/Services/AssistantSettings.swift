@@ -166,6 +166,22 @@ class AssistantSettings {
     }
   }
 
+  /// Persists an explicit user-initiated Screen Analysis toggle, records local disable
+  /// ownership when turned off, and pushes the partial update for non-lazy-dev bundles.
+  func setUserScreenAnalysisEnabled(_ enabled: Bool) {
+    screenAnalysisEnabled = enabled
+    SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(enabled)
+    SettingsSyncManager.shared.pushScreenAnalysisPreference(enabled)
+  }
+
+  /// Reverts `screenAnalysisEnabled` locally after `startMonitoring` fails without
+  /// recording a user-authored privacy disable or pushing `false` to the account.
+  func revertScreenAnalysisAfterFailedStart() {
+    UserDefaults.standard.set(true, forKey: .screenAnalysisSetByRemoteSync)
+    UserDefaults.standard.removeObject(forKey: .screenAnalysisDisabledOwner)
+    screenAnalysisEnabled = false
+  }
+
   /// The single persisted source of truth for whether and when ambient audio is recorded.
   var audioRecordingMode: AudioRecordingMode {
     get {

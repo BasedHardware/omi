@@ -107,6 +107,17 @@ enum DefaultsKey: String {
   /// skip separately so later microphone sessions do not test the tap anyway.
   case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
+  /// Account owner ID that explicitly disabled screen analysis on this Mac, or `"local"` when
+  /// disabled while signed out. When a disable is recorded under a signed-in account, a different
+  /// account signing in later can still hydrate from remote settings, whereas a disable recorded
+  /// while signed out (`"local"` owner) intentionally stays off across subsequent sign-ins as a
+  /// privacy-conservative default.
+  case screenAnalysisDisabledOwner = "screenAnalysisDisabledOwner"
+  /// Marker recording that local `screenAnalysisEnabled == false` is not user-authored (set by
+  /// `SettingsSyncManager.applyRemoteSettings` when remote is `false` or by
+  /// `AssistantSettings.revertScreenAnalysisAfterFailedStart`), so a non-user-authored `false`
+  /// does not masquerade as a local user disable when a later sync re-enables screen analysis.
+  case screenAnalysisSetByRemoteSync = "screenAnalysisSetByRemoteSync"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
   case ratingPromptDismissed = "ratingPromptDismissed"

@@ -760,7 +760,7 @@ extension SettingsContentView {
     }
 
     // Persist the setting
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    AssistantSettings.shared.setUserScreenAnalysisEnabled(enabled)
   }
 
   func startGlowPreview() {

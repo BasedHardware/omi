@@ -5,6 +5,8 @@ import Foundation
 @MainActor
 class SettingsSyncManager {
   static let shared = SettingsSyncManager()
+  private var isApplyingRemoteScreenAnalysis = false
+  private var screenAnalysisPushTask: Task<Void, Never>?
   private init() {}
 
   /// Pull settings from server and apply non-nil values to local singletons.
@@ -62,8 +64,21 @@ class SettingsSyncManager {
       // Lazy-dev bundles keep their per-bundle capture preference instead of
       // importing another bundle's remote value. Capture defaults to enabled;
       // the runtime checks TCC without prompting when permission is absent.
-      if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
+      // A local off preference on this Mac is a privacy control and must not be
+      // silently re-enabled by a background server sync (#24765).
+      if let v = shared.screenAnalysisEnabled,
+        !shouldKeepLocalScreenAnalysisDefault,
+        !shouldPreserveLocalScreenAnalysisOff(remoteEnabled: v)
+      {
+        isApplyingRemoteScreenAnalysis = true
         AssistantSettings.shared.screenAnalysisEnabled = v
+        isApplyingRemoteScreenAnalysis = false
+        if v {
+          UserDefaults.standard.removeObject(forKey: .screenAnalysisSetByRemoteSync)
+          UserDefaults.standard.removeObject(forKey: .screenAnalysisDisabledOwner)
+        } else if !hasRecordedLocalScreenAnalysisDisable {
+          UserDefaults.standard.set(true, forKey: .screenAnalysisSetByRemoteSync)
+        }
       }
     }
 
@@ -117,6 +132,66 @@ class SettingsSyncManager {
 
   private var shouldKeepLocalScreenAnalysisDefault: Bool {
     AppBuild.usesLazyDevPermissions
+  }
+
+  private var hasRecordedLocalScreenAnalysisDisable: Bool {
+    guard let recordedOwner = UserDefaults.standard.string(forKey: .screenAnalysisDisabledOwner) else {
+      return false
+    }
+    if recordedOwner == "local" {
+      return true
+    }
+    return recordedOwner == Self.currentOwnerID
+  }
+
+  /// Pushes a coalesced `screen_analysis_enabled` partial update for non-lazy-dev bundles.
+  func pushScreenAnalysisPreference(_ enabled: Bool) {
+    guard !shouldKeepLocalScreenAnalysisDefault else { return }
+    let payload = Self.screenAnalysisEnabledUpdate(enabled)
+    screenAnalysisPushTask?.cancel()
+    screenAnalysisPushTask = Task {
+      guard !Task.isCancelled else { return }
+      do {
+        let _ = try await APIClient.shared.updateAssistantSettings(payload)
+      } catch {
+        if !Task.isCancelled {
+          logError("SettingsSyncManager: failed to push partial update", error: error)
+        }
+      }
+    }
+  }
+
+  /// Records whether the user explicitly enabled or disabled screen analysis on this Mac.
+  func recordLocalScreenAnalysisPreference(_ enabled: Bool) {
+    guard !isApplyingRemoteScreenAnalysis else { return }
+    UserDefaults.standard.removeObject(forKey: .screenAnalysisSetByRemoteSync)
+    if enabled {
+      UserDefaults.standard.removeObject(forKey: .screenAnalysisDisabledOwner)
+    } else {
+      let owner = Self.currentOwnerID ?? "local"
+      UserDefaults.standard.set(owner, forKey: .screenAnalysisDisabledOwner)
+    }
+  }
+
+  /// Preserves a local `screenAnalysisEnabled == false` privacy choice across server syncs
+  /// so another signed-in Mac or a stale server snapshot cannot silently restart screen capture.
+  func shouldPreserveLocalScreenAnalysisOff(remoteEnabled: Bool) -> Bool {
+    guard remoteEnabled else { return false }
+    guard (UserDefaults.standard.object(forKey: .screenAnalysisEnabled) as? Bool) == false else {
+      return false
+    }
+    if UserDefaults.standard.bool(forKey: .screenAnalysisSetByRemoteSync) {
+      return false
+    }
+    if let recordedOwner = UserDefaults.standard.string(forKey: .screenAnalysisDisabledOwner),
+      recordedOwner != "local",
+      let currentOwner = Self.currentOwnerID,
+      recordedOwner != currentOwner
+    {
+      return false
+    }
+    log("SettingsSyncManager: preserved local screenAnalysisEnabled=false during server sync")
+    return true
   }
 
   private func buildFromLocal() -> AssistantSettingsResponse {

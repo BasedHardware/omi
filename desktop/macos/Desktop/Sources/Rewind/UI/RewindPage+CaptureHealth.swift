@@ -57,7 +57,7 @@ extension RewindPage {
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     screenAnalysisEnabled = enabled
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    AssistantSettings.shared.setUserScreenAnalysisEnabled(enabled)
 
     if enabled {
       ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
@@ -68,7 +68,7 @@ extension RewindPage {
             screenCaptureHealth = .stopped
             // Revert persistent setting so UI and auto-start stay in sync
             screenAnalysisEnabled = false
-            AssistantSettings.shared.screenAnalysisEnabled = false
+            AssistantSettings.shared.revertScreenAnalysisAfterFailedStart()
           }
         }
       }

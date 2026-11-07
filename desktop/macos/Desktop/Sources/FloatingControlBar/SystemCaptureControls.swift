@@ -57,7 +57,7 @@ enum SystemCaptureControls {
   @discardableResult
   static func setScreenCapture(_ enabled: Bool, onStartResult: ((Bool) -> Void)? = nil) -> SystemCaptureOutcome {
     guard enabled else {
-      AssistantSettings.shared.screenAnalysisEnabled = false
+      AssistantSettings.shared.setUserScreenAnalysisEnabled(false)
       ProactiveAssistantsPlugin.shared.stopMonitoring()
       return .disabled
     }
@@ -73,12 +73,12 @@ enum SystemCaptureControls {
       return .blockedPermission
     }
 
-    AssistantSettings.shared.screenAnalysisEnabled = true
+    AssistantSettings.shared.setUserScreenAnalysisEnabled(true)
     ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
       DispatchQueue.main.async {
         if !success {
           log("SystemCaptureControls: screen capture failed to start: \(error ?? "unknown")")
-          AssistantSettings.shared.screenAnalysisEnabled = false
+          AssistantSettings.shared.revertScreenAnalysisAfterFailedStart()
         }
         onStartResult?(success)
       }

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed screen analysis turning itself back on after being disabled when settings sync runs"
+}
