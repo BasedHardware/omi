@@ -201,3 +201,13 @@ def test_pending_episode_deadline_preserved_and_unresolved_sibling_never_sealed(
     )
     assert pipeline_settlement.settle('u', 'c', sealed(), 3000, now=1770)
     assert close[0][2] == 1770
+
+
+def test_non_clock_objects_cannot_mint_an_accepted_deadline(serving):
+    class Floatable:
+        def __float__(self):
+            raise AssertionError('unknown clock objects must not be coerced')
+
+    value = Floatable()
+    assert policy.seconds(value) is None
+    assert runtime.hold_decision('other', sealed(), {'pipeline_dispatch_at': value}, now=2000) == (False, None, None)

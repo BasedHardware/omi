@@ -1123,11 +1123,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         return sync_defer(context, 'open_live_target')
 
     pipeline_fast = False
-    if context is not None and (pipeline_attention.admitted(uid) or context.get('pipeline_dispatch_at')):
+    accepted_deadline = pipeline_policy.seconds(context.get('pipeline_dispatch_at')) if context is not None else None
+    if context is not None and (pipeline_attention.admitted(uid) or accepted_deadline):
         deadline = pipeline_policy.dispatch_at(conversation_data, context)
         settled = (
             pipeline_settlement.settle(uid, conversation_id, conversation_data, deadline)
-            if pipeline_attention.serving(uid) or context.get('pipeline_dispatch_at')
+            if pipeline_attention.serving(uid) or accepted_deadline
             else False
         )
         pipeline_fast, pipeline_due, proof = pipeline_attention.hold_decision(

@@ -7,6 +7,10 @@ across all previously-bypassed endpoints by calling the real code paths.
 from unittest.mock import MagicMock, call, patch
 import os
 import pytest
+
+from utils.conversations import pipeline_attention  # noqa: F401 - retain dark runtime before legacy cloud stubs
+from utils.batch_pipeline import record_attention  # noqa: F401 - retain scheduling dependencies before model stubs
+from utils.episodes import pipeline_settlement  # noqa: F401 - retain real episode types before legacy model stubs
 import sys
 from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType, SimpleNamespace

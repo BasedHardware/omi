@@ -44,7 +44,7 @@ def capture_cost_enabled() -> bool:
 def seconds(value) -> float | None:
     if isinstance(value, datetime):
         value = value.timestamp()
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         return None
     try:
         result = float(value)

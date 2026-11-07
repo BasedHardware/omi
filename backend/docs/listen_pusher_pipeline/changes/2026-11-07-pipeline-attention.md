@@ -122,6 +122,7 @@ cancel jobs, revert another owner's PR or roll back user data.
 | False seal / lost late tail | medium / critical | Full AND proof, revision fences at notes and episode close; retained-tail/producer tests, stale/refusal counters, retain raw audio. |
 | Record seal mistaken for episode boundary | high / high | Close-on-seal off until F full ramp; bounded member proofs and canonical F reconciliation; watch split/rejoin and visible backfill. |
 | Cold open target misreported | high / high | Ruling A pending presentation only; separate generated-ready and visible acknowledgements; no cold-work exclusion. |
+| Lost existing composer scheduling on process kill | medium / high | Canonical Firestore episode stays closed/uncomposed; existing read/member-finalize reschedules after lease expiry. No durable immediate compose wake is added here. Owner recovery proof and provider-to-Home crash acceptance are required before ramp. |
 | Patient rewrites or deadline miss | medium / high | Immutable deadline/fingerprint and one obligation; track durable versions, pending age and composer calls. Reserve needs staging proof. |
 | Fresh traffic starves old owners | high / high | Oldest reserve, original enqueue age, owner cap; loaded-aging tests and oldest-age/control comparison. |
 | Stale/multiple sessions or Redis loss | medium / medium | Session leases and conservative unknown-state fallback; expiry/logout/fault tests; pause ramp if indexing is unavailable. |

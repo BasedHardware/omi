@@ -55,6 +55,10 @@ def _build_pipeline_fakes() -> dict:
     # Pure metric owners must outlive per-test stub windows. Otherwise import
     # cleanup removes their modules while Prometheus retains their collectors,
     # and the next isolated segment fails before reaching its provider.
+    # Retain the new dark-policy graph before this fixture replaces database/models packages.
+    importlib.import_module('utils.conversations.pipeline_attention')
+    importlib.import_module('utils.batch_pipeline.record_attention')
+    importlib.import_module('utils.episodes.pipeline_settlement')
     importlib.import_module('utils.stt.batch_language')
     importlib.import_module('utils.speakers.context')
     importlib.import_module('utils.stt.transcript_admission')
