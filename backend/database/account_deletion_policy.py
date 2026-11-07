@@ -10,6 +10,7 @@ from datetime import timedelta
 
 ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES = frozenset({'cancelled', 'billing_failed'})
 ACCOUNT_DELETION_INVALID_STATUS = '__invalid_account_deletion_status__'
+MAX_ACCOUNT_DELETION_STATUS_CHARS = 256
 
 # Grace window admission state: the deletion intent is durable and every
 # access fence treats it like an active deletion, but the irreversible wipe is
@@ -25,6 +26,8 @@ DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 
 def deletion_wipe_retry_delay(attempts: int) -> timedelta:
     """Back off failed wipe retries without making accepted deletion terminal."""
+    if isinstance(attempts, bool) or not isinstance(attempts, int):
+        raise TypeError('attempts must be an int')
     if attempts <= 1:
         return timedelta(0)
     doublings = min(attempts - 2, 20)
@@ -55,16 +58,29 @@ def deletion_billing_error_is_already_gone(error: object) -> bool:
 
 def normalize_account_deletion_status(*, marker_exists: bool, raw_status: object) -> str | None:
     """Normalize marker state without treating malformed markers as misses."""
+    if not isinstance(marker_exists, bool):
+        raise TypeError('marker_exists must be a boolean')
     if not marker_exists:
         return None
-    if isinstance(raw_status, str) and raw_status.strip():
-        return raw_status.strip()
+    if isinstance(raw_status, str):
+        cleaned = raw_status.strip()
+        if cleaned and len(cleaned) <= MAX_ACCOUNT_DELETION_STATUS_CHARS:
+            return cleaned
     return ACCOUNT_DELETION_INVALID_STATUS
 
 
 def account_deletion_blocks_access(status: str | None) -> bool:
     """Deny every existing marker unless its state explicitly restores access."""
-    return status is not None and status not in ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES
+    if status is None:
+        return False
+    if not isinstance(status, str):
+        raise TypeError('status must be a str or None')
+    cleaned = status.strip()
+    return (
+        not cleaned
+        or len(cleaned) > MAX_ACCOUNT_DELETION_STATUS_CHARS
+        or cleaned not in ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES
+    )
 
 
 def account_deletion_marker_blocks_access(*, marker_exists: bool, raw_status: object) -> bool:
@@ -76,7 +92,16 @@ def account_deletion_marker_blocks_access(*, marker_exists: bool, raw_status: ob
 
 def account_deletion_restorable(status: str | None) -> bool:
     """Whether the owner can still cancel the deletion and keep their data."""
-    return status in ACCOUNT_DELETION_RESTORABLE_STATUSES
+    if status is None:
+        return False
+    if not isinstance(status, str):
+        raise TypeError('status must be a str or None')
+    cleaned = status.strip()
+    return (
+        bool(cleaned)
+        and len(cleaned) <= MAX_ACCOUNT_DELETION_STATUS_CHARS
+        and cleaned in ACCOUNT_DELETION_RESTORABLE_STATUSES
+    )
 
 
 __all__ = [
@@ -86,6 +111,7 @@ __all__ = [
     'ACCOUNT_DELETION_RESTORABLE_STATUSES',
     'DELETION_WIPE_RETRY_BASE_DELAY',
     'DELETION_WIPE_RETRY_MAX_DELAY',
+    'MAX_ACCOUNT_DELETION_STATUS_CHARS',
     'account_deletion_blocks_access',
     'account_deletion_marker_blocks_access',
     'account_deletion_restorable',
