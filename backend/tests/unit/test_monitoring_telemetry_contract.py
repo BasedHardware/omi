@@ -467,7 +467,14 @@ def test_every_scrape_job_is_enforced_by_a_named_coverage_rule():
             assert extra, f"{name}: empty mode must be owned by a named rule"
             owner_rule = rules[extra]
             owner_expr = owner_rule['data'][0]['model']['expr']
-            assert 'scrape_samples_scraped' in owner_expr and name in owner_expr, name
+            # The named owner is the only empty-mode guard, so pin it exactly; it is gated on the
+            # target being up so down/absence stays with this job's own rule (no double firing).
+            assert owner_expr == (
+                f'(min(min_over_time(scrape_samples_scraped{{{matcher}}}[15m])) < bool 1) '
+                f'and on() (max(max_over_time(up{{{matcher}}}[15m])) == 1)'
+            ), f"{name}: empty-scrape owner {extra} must alert on empty scrapes while up"
+            assert owner_rule['for'] == '30m' and owner_rule['noDataState'] == 'OK', extra
+            assert owner_rule['labels']['alert_identity'] == extra, extra
         assert rule['for'] == '30m' and rule['labels']['tier'] == 'agent', uid
         assert rule['labels']['alert_identity'] == uid, uid
 
