@@ -70,16 +70,31 @@ def test_env_is_read_at_call_time(monkeypatch):
     assert object_lake.inline_max_bytes() == 4096
 
 
-@pytest.mark.parametrize('stage', ['', 'dev', 'prod', 'staging', 'unknown'])
+@pytest.mark.parametrize('stage', ['', 'prod', 'staging', 'unknown'])
 @pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '1'), ('true', '100')])
-def test_deployed_writes_blocked_even_with_real_kms(monkeypatch, stage, enabled, percent):
+def test_deployed_write_settings_blocked_until_c4(monkeypatch, stage, enabled, percent):
     monkeypatch.setenv('OMI_ENV_STAGE', stage)
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'bound-lake')
     monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', enabled)
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', percent)
-    assert object_lake.validate_write_settings(stage, enabled, percent)
-    assert not object_lake.write_admitted('owner')
+    errors = object_lake.validate_write_settings(stage, enabled, percent)
+    assert errors and all('C4 wipe-coverage' in error for error in errors)
+
+
+def test_dev_writes_admitted_with_real_bindings(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'bound-lake')
+    monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '100')
+    assert object_lake.validate_write_settings('dev', 'true', '100') == []
+    assert object_lake.write_admitted('owner')
+    assert not object_lake.fake_kms_allowed()
+    for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY', 'OBJECT_LAKE_RELEASE'):
+        with monkeypatch.context() as context:
+            context.setenv(name, '')
+            assert not object_lake.write_admitted('owner')
 
 
 @pytest.mark.parametrize('stage', ['local', 'offline', ' LOCAL '])

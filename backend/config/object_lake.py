@@ -61,11 +61,8 @@ def fake_kms_allowed() -> bool:
 
 
 def write_admitted(space_id: str) -> bool:
-    # TODO(#24811, per-object DEK follow-up): remove this stage fence only after each
-    # object has its own DEK; a configured KMS key does not bound nonce reuse.
     return (
-        fake_kms_allowed()
-        and bool(space_id)
+        bool(space_id)
         and write_enabled()
         and bool(bucket())
         and bool(release())
@@ -76,10 +73,10 @@ def write_admitted(space_id: str) -> bool:
 
 def validate_write_settings(stage: str, enabled: object, percent: object) -> list[str]:
     """Deployment gate independent of cohort admission or provisioned bindings."""
-    if stage.strip().lower() in _FAKE_KMS_STAGES:
+    if stage.strip().lower() in _FAKE_KMS_STAGES | {'dev'}:
         return []
     errors = []
-    reason = 'must stay off outside local/offline until per-object DEKs are implemented'
+    reason = 'must stay off until the C4 wipe-coverage gate is green'
     if str(enabled).strip().lower() in {'true', '1', 'on', 'yes'}:
         errors.append(f'OBJECT_LAKE_WRITE_ENABLED {reason}')
     try:

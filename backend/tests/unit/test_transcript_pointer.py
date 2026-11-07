@@ -161,9 +161,10 @@ def test_deployed_stage_without_kms_key_closes_write_admission(lake_world, monke
     assert isinstance(encode()['transcript_segments'], bytes)
     put.assert_not_called()
     monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
-    assert not pointer.config.write_admitted(UID)
-    assert isinstance(encode()['transcript_segments'], bytes)
-    put.assert_not_called()
+    # Per-object DEKs lift the cryptographic stage fence. Production remains
+    # blocked by deployment validation until C4, independently of codec admission.
+    assert pointer.config.write_admitted(UID)
+    assert bool(pointer.config.validate_write_settings(stage, 'true', '100')) == (stage != 'dev')
 
 
 def test_cold_transaction_reloads_outside_body(lake_world):
