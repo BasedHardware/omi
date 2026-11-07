@@ -91,6 +91,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED", "value": "true"},
         {"name": "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT", "value": "g1"},
         {"name": "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
         {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
