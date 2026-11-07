@@ -474,6 +474,30 @@ def test_quarantine_fenced_revokes_only_fenced_leases_and_retries(h):
     assert h.store.quarantine_fenced('missing', 12.0) is False
 
 
+def test_privacy_defer_moves_only_due_blocked_record_pending_available_at(h):
+    put_all(
+        h,
+        [
+            ('jobs', 'rp', job(h, 'rp', state='record_pending', available_at=5.0)),
+            ('jobs', 'later', job(h, 'later', state='record_pending', available_at=50.0)),
+            ('jobs', 'ready', job(h, 'ready', state='ready', available_at=5.0)),
+            ('jobs', 'other', job(h, 'other', owner='p', state='record_pending', available_at=5.0)),
+        ],
+    )
+    before = h.store.run(lambda tx: tx.get('jobs', 'rp'))
+    assert h.store.defer_privacy_blocked_record('rp', 910.0, 10.0) is False  # not blocked: the claim owns it
+    h.customer.block_privacy(h.uid('o'))
+    assert h.store.defer_privacy_blocked_record('rp', 910.0, 10.0) is True
+    after = h.store.run(lambda tx: tx.get('jobs', 'rp'))
+    assert after == {**before, 'available_at': 910.0}  # nothing but available_at changed
+    assert h.store.defer_privacy_blocked_record('rp', 1810.0, 20.0) is False  # no longer due
+    assert h.store.defer_privacy_blocked_record('later', 910.0, 10.0) is False  # not due yet
+    assert h.store.defer_privacy_blocked_record('ready', 910.0, 10.0) is False  # not record_pending
+    assert h.store.defer_privacy_blocked_record('other', 910.0, 10.0) is False  # other owner unblocked
+    assert h.store.defer_privacy_blocked_record('missing', 910.0, 10.0) is False  # purged: never created
+    assert h.store.run(lambda tx: tx.get('jobs', 'missing')) == {}
+
+
 # -- projection keyset scan -----------------------------------------------------------------------------
 def _projection_rows(h):
     states = ['pending', 'persisted', 'ready', 'completed', 'pending']
