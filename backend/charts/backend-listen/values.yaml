@@ -3,3 +3,14 @@
 podMonitoring:
   enabled: true
   interval: 15s
+# The backend unit fixture (tests/unit/test_live_capture_retention_limits.py)
+# pins every *values.yaml declaration; base files carry the kill-switches off.
+env:
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: "false"
