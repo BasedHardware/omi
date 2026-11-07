@@ -15412,4 +15412,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+  @override
+  String get voiceSetupTaskSubline => 'تاکہ Omi جانے کہ یہ آپ ہیں · تقریباً ایک منٹ';
 }

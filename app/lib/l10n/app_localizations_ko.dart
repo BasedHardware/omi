@@ -15180,4 +15180,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+  @override
+  String get voiceSetupTaskSubline => 'Omi가 내 목소리를 알아보도록 · 약 1분';
 }
