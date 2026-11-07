@@ -51,8 +51,41 @@ void main() {
   test('a discarded update immediately disappears from Home groups', () async {
     final provider = ConversationProvider(isSignedIn: () => true);
     addTearDown(provider.dispose);
+    provider.processingConversations = [row('donor')..status = ConversationStatus.processing];
     await provider.addConversation(row('donor'));
     provider.updateConversationInSortedList(row('donor', discarded: true));
+    expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  test('upserting a discarded sync result clears processing state without showing on Home', () {
+    final provider = ConversationProvider(isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    provider.processingConversations = [row('synced')..status = ConversationStatus.processing];
+    provider.upsertConversation(row('synced', discarded: true));
+    expect(provider.processingConversations, isEmpty);
+    expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
+  });
+
+  test('bridging a donor into a discarded survivor hides both when discarded conversations are off', () async {
+    final provider = ConversationProvider(isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    provider.processingConversations = [row('donor')..status = ConversationStatus.processing];
+    await provider.addConversation(row('donor'));
+    provider.searchedConversations = [row('donor')];
+    provider.replaceBridgedConversation('donor', row('survivor', discarded: true));
+    expect(provider.processingConversations, isEmpty);
+    expect(provider.conversations, isEmpty);
+    expect(provider.searchedConversations, isEmpty);
+    expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
+  });
+
+  test('addConversationWithDateGrouped does not insert discarded rows into Home groups when filter is off', () {
+    final provider = ConversationProvider(isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    provider.addConversationWithDateGrouped(row('discarded', discarded: true));
+    provider.addConversationWithDateGrouped(row('discarded', discarded: true));
+    expect(provider.conversations.map((c) => c.id), ['discarded']);
     expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
   });
 
