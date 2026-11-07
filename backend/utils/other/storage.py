@@ -820,6 +820,62 @@ def upload_audio_chunk(
     return path
 
 
+def gap_fill_chunk_path(uid: str, conversation_id: str, timestamp: float, protection_level: str) -> str:
+    """Key of a phone-WAL gap-fill object; no other writer can produce it.
+
+    Every other ``chunks/`` writer names objects with a 3-decimal timestamp
+    (``{ts:.3f}.opus``/``.enc``/``.bin`` and ``{a:.3f}-{b:.3f}.batch.*``). Six
+    decimals can never equal one of those names, so a later pusher or sync
+    upload never targets (or overwrites) a gap-fill object, and a gap-fill write
+    never targets theirs. The suffix is lossless PCM16 (``.bin``/``.enc``),
+    which admission and playback already decode.
+    """
+    suffix = 'enc' if protection_level == 'enhanced' else 'bin'
+    return f'chunks/{uid}/{conversation_id}/{timestamp:.6f}.{suffix}'
+
+
+@sync_phase('gcs')
+def create_gap_fill_chunk(
+    pcm: bytes,
+    uid: str,
+    conversation_id: str,
+    timestamp: float,
+    protection_level: str,
+    metadata: Dict[str, str],
+    *,
+    bucket: Any = None,
+) -> Optional[str]:
+    """Create-only write of one gap-fill PCM16 object; None if the key exists.
+
+    Unlike ``upload_audio_chunk`` there is no overwrite fallback: an existing
+    object at the key always wins and this write is skipped.
+    """
+    if not pcm or len(pcm) % 2:
+        raise ValueError('gap fill needs aligned PCM16')
+    if bucket is None:
+        bucket = _get_storage_client().bucket(
+            audio_archive.regional_bucket(uid, private_cloud_sync_bucket)
+            if audio_archive.admitted(uid, 'SYNC')
+            else private_cloud_sync_bucket
+        )
+    path = gap_fill_chunk_path(uid, conversation_id, timestamp, protection_level)
+    payload = encryption.encrypt_audio_chunk(pcm, uid) if protection_level == 'enhanced' else pcm
+    with owner_storage_write_gate(uid, bucket):
+        blob = bucket.blob(path)
+        blob.metadata = {
+            **span_blob_metadata({'start': timestamp, 'samples': len(pcm) // 2, 'sample_rate': 16000}),
+            **metadata,
+            'canonical': 'false',
+            'codec': 'pcm16',
+            'record_sample_rate': '16000',
+        }
+        try:
+            blob.upload_from_string(payload, content_type='application/octet-stream', if_generation_match=0)
+        except PreconditionFailed:
+            return None
+    return path
+
+
 def _backfill_chunk_metadata(blob, generation: int, wanted: Optional[dict]) -> None:
     """Patch this writer's metadata onto the verified generation of a chunk.
 

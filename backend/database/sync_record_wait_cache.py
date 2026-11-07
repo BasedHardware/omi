@@ -11,6 +11,7 @@ fail open to the full check (a pure cache miss, no mode change).
 
 from typing import Optional
 
+from database import redis_db
 from database.redis_db import delete_generic_cache, get_generic_cache, set_generic_cache
 
 RECORD_WAIT_CACHE_SECONDS = 30
@@ -32,3 +33,16 @@ def cached_record_wait(uid: str, conversation_id: str) -> Optional[str]:
 
 def forget_record_wait(uid: str, conversation_id: str) -> None:
     delete_generic_cache(_path(uid, conversation_id))
+
+
+def claim_gap_fill_marker(record_key: str, wal_key: str, ttl: int) -> bool:
+    """First claim of a (record, WAL) gap fill inside ``ttl``; False on a repeat.
+
+    Keys are one-way hashes, never a uid or conversation id. A Redis error
+    counts as no marker: the gap-fill write is create-only, so a repeat that
+    gets through is a no-op.
+    """
+    try:
+        return bool(redis_db.r.set(f'sync:record_gap_fill:v1:{record_key}:{wal_key}', '1', ex=ttl, nx=True))
+    except Exception:
+        return True
