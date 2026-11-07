@@ -76,6 +76,14 @@ def test_account_deletion_blocks_access_allows_none_and_whitelisted():
         assert account_deletion_blocks_access(f'  {allowed}  ') is False
 
 
+def test_account_deletion_marker_blocks_access_trims_padded_raw_status():
+    """Verify account_deletion_marker_blocks_access trims whitespace-padded raw_status end-to-end."""
+    for allowed in ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES:
+        assert account_deletion_marker_blocks_access(marker_exists=True, raw_status=f'  {allowed}  ') is False
+    for blocked in ('in_progress', 'completed', 'failed', 'pending_deletion'):
+        assert account_deletion_marker_blocks_access(marker_exists=True, raw_status=f'  {blocked}  ') is True
+
+
 def test_account_deletion_blocks_access_blocks_non_whitelisted_empty_and_oversized():
     """Verify non-whitelisted, blank, and oversized statuses fail closed by blocking access."""
     assert account_deletion_blocks_access('in_progress') is True
