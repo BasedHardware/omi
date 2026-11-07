@@ -162,6 +162,20 @@ def entries():
             neutrals={'transaction': (None, 'transaction binding only')},
         ),
         CoveredByEntry(
+            'database.batch_pipeline_store.reseed_hinted_activation',
+            covered_by=('database.batch_pipeline_store.service_frontier',),
+            reason='post-commit re-seed: the frontier query unchanged (no transaction) plus one direct control doc get',
+            expect_observed=False,
+            body_digest='b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.run',
+            covered_by=('database.batch_pipeline_store.service_frontier',),
+            reason='queries only through reseed_hinted_activation after the body transaction commits',
+            expect_observed=False,
+            body_digest='d7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the frontier query unchanged; lever admission_frontier_hint (default on) drops only the transaction binding',
@@ -291,7 +305,7 @@ def entries():
         DriverEntry(
             'database.batch_pipeline_store.service_frontier',
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
-            neutrals={'transaction': (None, 'transaction binding only')},
+            neutrals={'transaction': (None, 'transaction binding only'), 'timeout': (None, 'RPC deadline only')},
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.control_candidates',
