@@ -90,3 +90,28 @@ def test_shared_configmap_off_is_rejected_while_pusher_has_the_diarizer_url(conf
     config['gke']['config_map']['entries'][FLAG]['value'] = 'false'
     errors = validate_batch_final_pass_hosts('prod', config)
     assert any(error.scope == 'gke/pusher' for error in errors)
+
+
+def test_secret_backed_diarizer_url_counts_as_present(config):
+    # backend-integration's URL comes from a secret: the host must keep its pass on.
+    services = config['cloud_run']['services']
+    services['backend-integration'].setdefault('secrets', {})[HOSTED_URL] = {'secret': 'diarizer-url'}
+    services['backend-integration']['env'][FLAG]['value'] = 'false'
+    errors = validate_batch_final_pass_hosts('prod', config)
+    assert any(error.scope == 'cloud_run/backend-integration' for error in errors)
+
+
+def test_empty_shared_literal_diarizer_url_counts_as_absent(config):
+    from scripts.runtime_env_capability_contracts import _host_has_diarizer_url
+
+    shared = config['gke']['config_map']['entries']
+    shared[HOSTED_URL] = {'source': 'literal', 'value': ''}
+    assert not _host_has_diarizer_url('gke', 'backend-listen', config)
+
+
+def test_unknown_shared_source_diarizer_url_counts_as_present(config):
+    from scripts.runtime_env_capability_contracts import _host_has_diarizer_url
+
+    shared = config['gke']['config_map']['entries']
+    shared[HOSTED_URL] = {'source': 'secret'}
+    assert _host_has_diarizer_url('gke', 'backend-listen', config)

@@ -69,18 +69,32 @@ def _host_env(platform: str, name: str, config: ConfigDict) -> ConfigDict:
 def _host_has_diarizer_url(platform: str, name: str, config: ConfigDict) -> bool:
     """True when the host can call the batch diarizer.
 
-    An unknown source (environment or secret) counts as present, so the check
-    errs toward keeping the pass on.
+    A literal value decides. An unknown source (environment, secret, or any
+    other non-literal binding) counts as present, so the check errs toward
+    keeping the pass on.
     """
     env = _host_env(platform, name, config)
     if HOSTED_DIARIZATION_URL_ENV in env:
-        entry = env[HOSTED_DIARIZATION_URL_ENV] or {}
-        value = entry.get('value') if isinstance(entry, dict) else None
-        return value is None or bool(str(value).strip())
+        return _binding_has_url(env[HOSTED_DIARIZATION_URL_ENV])
+    if platform == 'cloud_run':
+        services = config.get('cloud_run', {}).get('services', {})
+        secrets = (services.get(name, {}) or {}).get('secrets', {}) or {}
+        if HOSTED_DIARIZATION_URL_ENV in secrets:
+            return True
     if platform == 'gke':
         shared = (config.get('gke', {}).get('config_map', {}) or {}).get('entries', {}) or {}
-        return HOSTED_DIARIZATION_URL_ENV in shared
+        if HOSTED_DIARIZATION_URL_ENV in shared:
+            return _binding_has_url(shared[HOSTED_DIARIZATION_URL_ENV])
     return False
+
+
+def _binding_has_url(binding: object) -> bool:
+    if not isinstance(binding, dict):
+        return True
+    if 'value' not in binding:
+        return True  # Not a literal: unknown source, keep the pass on.
+    value = binding.get('value')
+    return value is not None and bool(str(value).strip())
 
 
 def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
