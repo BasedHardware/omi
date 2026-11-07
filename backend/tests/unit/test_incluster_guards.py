@@ -1233,6 +1233,32 @@ def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
     assert guard.evaluate(v)['blind']
 
 
+def test_v2_guard_signal_across_busy_v1_quiet_v1_hung_v2_and_caller_error_cases():
+    hpa, dep = objects()
+    # 1. Quiet v1 (first_count < 20 or admission_count < 20) with fresh telemetry:
+    # NaN v2_p95 is covered by LOW_SAMPLE and never accumulates blind strikes.
+    quiet = dict(values(), first_count=12, admission_count=15, v2_p95=float('nan'))
+    state = {}
+    for now in (0, 300, 600, 900, 1200, 1500):
+        verdict, state, reading = guard.decide(hpa, dep, [], quiet, state, now)
+        assert verdict == ('WARMUP' if now < 900 else 'LOW_SAMPLE')
+        assert reading['low_sample'] and reading['blind'] == [] and state['blind'] == 0
+
+    # 2. Busy v1 with zero v2 duration completions (NaN v2_p95): whether v2 is idle,
+    # hung in flight (shared live_requests_max > 0), or failing early on 422/503 before
+    # duration observation, NaN v2_p95 stays BLIND and trips after 3 consecutive runs.
+    for case in (
+        dict(values(), first_count=150, admission_count=100, v2_p95=float('nan')),
+        dict(values(), first_count=150, admission_count=100, live_requests_max=6, v2_p95=float('nan')),
+        dict(values(), first_count=150, admission_count=100, live_requests_max=0, v2_p95=float('nan')),
+    ):
+        assert guard.evaluate(case)['blind'] == ['missing_or_nonfinite_v2_p95']
+        _, state, _ = guard.decide(hpa, dep, [], case, {}, 0)
+        _, state, _ = guard.decide(hpa, dep, [], case, state, 300)
+        verdict, state, reading = guard.decide(hpa, dep, [], case, state, 900)
+        assert verdict == 'TRIP' and reading['blind'] == ['missing_or_nonfinite_v2_p95'] and state['blind'] == 3
+
+
 def test_render_packages_exact_entrypoint_and_shared_logging_module():
     output = subprocess.check_output(
         [

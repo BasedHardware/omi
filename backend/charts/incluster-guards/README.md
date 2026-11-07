@@ -192,10 +192,20 @@ trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
 The v2 duration series can be fresh with no completed observations while v1
-is busy. Its NaN p95 remains blind under the existing policy: zero completed
-requests cannot distinguish an idle v2 endpoint from requests stuck in flight.
-No idle exception or v1-for-v2 latency substitution is applied. Three blind
-readings can therefore restore the rollback cap after the arming window.
+is busy. During quiet windows (`first_count < 20` or `admission_count < 20`
+with all five staleness checks `<= 120s`), its `NaN` p95 is covered by the
+existing `LOW_SAMPLE` exception (`idle_nan`) and does not increment `blind`.
+When v1 is busy (`first_count >= 20` and `admission_count >= 20`), its `NaN`
+`v2_p95` remains `BLIND` (`missing_or_nonfinite_v2_p95`) under the existing
+policy: zero completed duration observations alone cannot distinguish an idle
+v2 endpoint from requests stuck in flight, and early `v2_transcribe`
+rejections (`422` speaker-bound validation errors or `503` not-ready responses)
+increment `parakeet_requests_total{endpoint="v2_transcribe",status="error"}`
+and return before `parakeet_request_duration_seconds` is observed or the shared
+`parakeet_active_batch_requests` gauge is incremented. Until endpoint-specific
+v2 arrival/in-flight and error telemetry is exported and queried, no busy-v1
+idle exception or v1-for-v2 latency substitution is applied. Three consecutive
+blind readings therefore restore the rollback cap after the arming window.
 
 The serving rollback retains P77's atomic whole-spec test and latency metric:
 JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, restores
