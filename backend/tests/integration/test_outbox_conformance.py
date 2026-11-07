@@ -418,3 +418,32 @@ def test_pl004_failed_wakes_are_errors_until_a_repair_actually_succeeds(ob):
     settled = ob.outbox.sweep(now=T0 + 3, limit=3)
     assert (settled.rewoken, settled.expired_leases, settled.discarded, settled.errors) == (0, 0, 0, 0)
     assert ob.wakes == []
+
+
+def test_pl342_stuck_custody_deferral_episode_backoff_and_reason_reset(ob):
+    queued, claim = take(ob, 'stuck-episode')
+    # First deferral for a stuck reason keeps the requested short cadence (120s).
+    w1 = ob.outbox.defer(claim, T0 + 120, 'conversation_missing', now=T0)
+    assert w1 is not None and ob.wakes[-1] == (queued.row_id, w1, T0 + 120)
+
+    # Still within the 6-hour grace window: keeps the 120s cadence.
+    mid = T0 + 3600
+    c2 = ob.outbox.claim_key(queued.row_id, w1, LEASE, now=mid)
+    assert isinstance(c2, Claim)
+    w2 = ob.outbox.defer(c2, mid + 120, 'conversation_missing', now=mid)
+    assert w2 is not None and ob.wakes[-1] == (queued.row_id, w2, mid + 120)
+
+    # Past 6 hours from the initial deferral of the same stuck reason: 1-hour floor applies.
+    late = T0 + 6 * 3600 + 1
+    c3 = ob.outbox.claim_key(queued.row_id, w2, LEASE, now=late)
+    assert isinstance(c3, Claim)
+    w3 = ob.outbox.defer(c3, late + 120, 'conversation_missing', now=late)
+    assert w3 is not None and ob.wakes[-1] == (queued.row_id, w3, late + 3600)
+    assert ob.outbox.claim(1, LEASE, now=late + 120) == []
+
+    # Switching to a different reason resets the episode start and restores the short cadence.
+    after_floor = late + 3600
+    c4 = ob.outbox.claim_key(queued.row_id, w3, LEASE, now=after_floor)
+    assert isinstance(c4, Claim)
+    w4 = ob.outbox.defer(c4, after_floor + 120, 'pending_live_bridge', now=after_floor)
+    assert w4 is not None and ob.wakes[-1] == (queued.row_id, w4, after_floor + 120)

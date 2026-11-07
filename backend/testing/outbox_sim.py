@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Callable, Iterator, Mapping
 
-from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
+from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts, defer_episode
 
 
 def _token() -> str:
@@ -50,7 +50,14 @@ class SimOutbox:
 
     @staticmethod
     def _close(row: dict[str, Any], reason: str, now: float) -> None:
-        row.update(done_at=now, done_reason=reason, lease_token=None, lease_until=0.0)
+        row.update(
+            done_at=now,
+            done_reason=reason,
+            deferred_reason=None,
+            deferred_since=None,
+            lease_token=None,
+            lease_until=0.0,
+        )
 
     def _claim(self, row: dict[str, Any], lease_seconds: float, now: float, wake_token: str) -> Claim:
         row.update(
@@ -87,7 +94,7 @@ class SimOutbox:
         row = dict(
             id=self._next, dedupe_key=dedupe_key, owner_id=owner_id, payload=dict(payload), policy_id=policy_id,
             available_at=available_at, version=1, attempts=0, wake_token=_token(), lease_token=None, lease_until=0.0,
-            done_at=None, done_reason=None, wake_pending=True,
+            done_at=None, done_reason=None, deferred_reason=None, deferred_since=None, wake_pending=True,
         )  # fmt: skip
         self.rows[self._next] = row
         self._next += 1
@@ -159,8 +166,11 @@ class SimOutbox:
         row = self._held(claim)
         if row is None:
             return None
+        since, due_at = defer_episode(row.get('deferred_reason'), row.get('deferred_since'), reason, available_at, now)
         row.update(
-            available_at=available_at,
+            available_at=due_at,
+            deferred_reason=reason,
+            deferred_since=since,
             wake_token=_token(),
             wake_pending=True,
             lease_token=None,

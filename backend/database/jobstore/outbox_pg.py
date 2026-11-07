@@ -28,7 +28,16 @@ import uuid
 from typing import Any, Callable, Literal, Mapping
 
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction, jsonb
-from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
+from database.outbox import (
+    STUCK_DEFER_GRACE_SECONDS,
+    STUCK_DEFER_POLL_SECONDS,
+    STUCK_DEFER_REASONS,
+    Claim,
+    EnqueueResult,
+    OutboxKind,
+    Outcome,
+    SweepCounts,
+)
 
 MAX_PAYLOAD_BYTES = 4096
 PrivacyProbe = Callable[[str, Mapping[str, Any]], bool]  # (owner_id, payload) -> True when fenced
@@ -75,7 +84,8 @@ class PostgresOutbox:
 
     def _close(self, conn: Any, row_id: int, reason: str, now: float) -> None:
         conn.execute(
-            'UPDATE outbox SET done_at = %s, done_reason = %s, lease_token = NULL, lease_until = 0 WHERE id = %s',
+            'UPDATE outbox SET done_at = %s, done_reason = %s, deferred_reason = NULL, deferred_since = NULL, '
+            'lease_token = NULL, lease_until = 0 WHERE id = %s',
             (now, reason, row_id),
         )
 
@@ -258,18 +268,41 @@ class PostgresOutbox:
     def ack(self, claim: Claim, reason: str, *, now: float) -> bool:
         return (
             self._fenced_update(
-                claim, 'done_at = %s, done_reason = %s, lease_token = NULL, lease_until = 0', (now, reason)
+                claim,
+                'done_at = %s, done_reason = %s, deferred_reason = NULL, deferred_since = NULL, '
+                'lease_token = NULL, lease_until = 0',
+                (now, reason),
             )
             is not None
         )
 
     def defer(self, claim: Claim, available_at: float, reason: str, *, now: float) -> str | None:
         wake_token = _token()
+        since_expr = (
+            'CASE WHEN deferred_reason = %s AND deferred_since IS NOT NULL AND deferred_since > 0 '
+            'THEN deferred_since ELSE %s END'
+        )
+        stuck = reason in STUCK_DEFER_REASONS
+        floor = max(float(available_at), float(now) + STUCK_DEFER_POLL_SECONDS) if stuck else float(available_at)
+        due_expr = f'CASE WHEN %s AND (%s - ({since_expr})) >= %s THEN %s ELSE %s END'
         done = self._fenced_update(
             claim,
-            'available_at = %s, wake_token = %s, wake_pending = true, lease_token = NULL, lease_until = 0, '
-            'done_reason = %s',
-            (available_at, wake_token, reason),
+            f'available_at = {due_expr}, deferred_reason = %s, deferred_since = {since_expr}, '
+            'wake_token = %s, wake_pending = true, lease_token = NULL, lease_until = 0, done_reason = %s',
+            (
+                stuck,
+                now,
+                reason,
+                now,
+                STUCK_DEFER_GRACE_SECONDS,
+                floor,
+                available_at,
+                reason,
+                reason,
+                now,
+                wake_token,
+                reason,
+            ),
         )
         if done is None:
             return None

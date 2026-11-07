@@ -40,3 +40,29 @@ def test_gaps_and_bad_names_are_rejected(tmp_path):
     (tmp_path / '0002_x.sql').rename(tmp_path / 'bad.sql')
     with pytest.raises(migrate.MigrationError, match='bad migration'):
         migrate.load(tmp_path)
+
+
+def test_outbox_deferred_episode_migration_and_helper():
+    from database.outbox import defer_episode
+
+    migrations = {m.name: m.sql for m in migrate.load()}
+    assert 'outbox_deferred_since' in migrations
+    assert 'ADD COLUMN deferred_reason text' in migrations['outbox_deferred_since']
+    assert 'ADD COLUMN deferred_since float8' in migrations['outbox_deferred_since']
+
+    t0 = 1_000_000.0
+    since, due = defer_episode(None, None, 'conversation_missing', t0 + 120, t0)
+    assert (since, due) == (t0, t0 + 120)
+
+    late = t0 + 6 * 3600 + 1
+    since2, due2 = defer_episode('conversation_missing', since, 'conversation_missing', late + 120, late)
+    assert (since2, due2) == (t0, late + 3600)
+
+    # Reason change resets the episode start and keeps the caller's short cadence.
+    since3, due3 = defer_episode('conversation_missing', since2, 'pending_live_bridge', late + 120, late)
+    assert (since3, due3) == (late, late + 120)
+
+    # Non-stuck reason never applies the 1-hour floor even past 6 hours.
+    later = late + 6 * 3600 + 1
+    since4, due4 = defer_episode('not_due', late, 'not_due', later + 30, later)
+    assert (since4, due4) == (late, later + 30)
