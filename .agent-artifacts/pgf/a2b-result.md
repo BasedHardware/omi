@@ -85,6 +85,7 @@ Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest s
 | backend | `OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest -q tests/unit/test_cell_store_conformance.py` | After migration-version correction: 25 passed, 0 failed |
 | root | `OMI_REQUIRE_STORE_BACKENDS=postgres backend/.venv/bin/python /tmp/a2b-b2-compat.py` (temporary import overlay described below) | Final source with B2 store/purge/errors at `67894e0e15cc0c9ee55d1433d8014c202772d6e9`: 120 passed, 55 unavailable-emulator skips, 0 failed |
 | root | `scripts/pr-preflight --pr-body-file .agent-artifacts/pgf/a2b-pr-body.md --metadata-only` | 4 checks passed, 0 failed; 28.80 s |
+| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2b-executor-warm.txt BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=1 bash backend/test.sh` (credential-scrubbed short setup check) | Executor fixture correction: 36 passed, 0 failed; 12.43 s pytest / 23 s file wall. Two-second deadlines and all assertions unchanged. Managed repetition and full gates remain queued. |
 | root | `scripts/pr-preflight --suggest` | PASS; INV-TASK-2 and Failure-Class: none retained |
 | root | `black --line-length 120 --skip-string-normalization <changed Python files>` plus the pinned staged-file hook | PASS |
 
