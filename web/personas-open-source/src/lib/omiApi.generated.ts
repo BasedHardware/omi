@@ -5672,6 +5672,7 @@ export interface SummaryTaskReference {
 
 export interface SurfaceStateRequest {
   foreground: boolean;
+  home_visible?: boolean;
   session_id: string;
   surface_open: boolean;
   transcript_visible: boolean;

@@ -34,6 +34,9 @@ At least a quarter of slots serve oldest work; passes below four slots alternate
 One owner gets at most one hint admission per pass. A seal advances a known parked
 retry, never an active/unclassified lease. The existing poll survives lost hints.
 This adds no projection ordering: that remains #24731's responsibility.
+Publication sequencing follows coordinator bus ruling `d5fafb` (2026-11-07):
+publish dark on current main, document the shared hooks, and let #24731's owner
+rebase later. This lane has no merge or deployment authority.
 
 ## Owner integration contracts
 

@@ -34893,6 +34893,11 @@
             "title": "Foreground",
             "type": "boolean"
           },
+          "home_visible": {
+            "default": false,
+            "title": "Home Visible",
+            "type": "boolean"
+          },
           "session_id": {
             "maxLength": 64,
             "minLength": 1,
