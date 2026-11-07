@@ -40,10 +40,16 @@ Failure-Class: none
 
 ## Scoped cleanups
 
-Line-Count-Exception: backend/database/conversations.py | 4855 -> 4895 | Preserve domain transaction structure while adding pointer decoding and narrow unavailable-content refusals; codec mechanics live in transcript_pointer.py.
+Line-Count-Exception: backend/database/conversations.py | 4855 -> 4938 | Preserve domain transaction structure while adding pointer decoding and narrow unavailable-content refusals; codec mechanics live in transcript_pointer.py.
 
 Line-Count-Exception: backend/database/conversation_finalization_jobs.py | 3549 -> 3551 | Wrap the existing admission owner in the transcript preload boundary without changing lead2 queue state.
 Line-Count-Exception: backend/database/users.py | 2516 -> 2517 | Preserve the voice publication transaction and move its runner to the shared preload boundary.
 Line-Count-Exception: backend/utils/sync/assignment.py | 1527 -> 1536 | Validate lake-pointer availability at the existing transaction load boundary before candidate or canonical selection.
 
 Scope provenance: C1-result.md Review disposition assigned tombstones, decompression bounds and authority-read budgeting to C2; those inherited library changes remain in this branch. The inherited .github dead-code allowlist removal follows its own instruction to remove the entry when C2 adds its first caller; round 3 makes no .github edits. Round 3 extends scope only to config/object_lake.py admission and the existing cohort test setup, as required by fix-r2.md. Deep verification returns False for destroyed keys and raises SpaceKeyUnavailable for temporarily unavailable keys; shallow verification checks metadata only. C3 must account for both the 32-reference and 64-MiB operation ceilings before backfill.
+
+## Merge-owner review fixes
+
+B1: normal encoding and backfill share an explicit visibility/deletion/privacy policy: private or unknown visibility, deleted rows and locked rows remain inline. Partial writes use the authoritative stored policy, so a stale shared payload cannot override current private state. Lifecycle decorators prepare inline; the accepted transaction runs all lifecycle and recurring-voice filters before requesting an upload through the existing preupload/replay boundary. Deleted/stale/missing-owner refusals and create-if-absent collisions therefore upload nothing before their guards. Regressions exercise the decorated writers and verify privacy filtering precedes every upload.
+
+B2: runtime write admission is closed outside local/offline even with a real bucket and KMS key. Both the runtime-env and deploy validators independently refuse a positive write percent or enabled master flag. A TODO keeps the fence in place until per-object DEKs are implemented. This supersedes the earlier dev-first ramp wording: deployed writes remain blocked pending per-object DEKs as well as C4 wipe qualification.
