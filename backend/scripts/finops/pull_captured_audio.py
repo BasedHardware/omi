@@ -42,6 +42,8 @@ def captured_hours(rows):
             rate, start, end = (row.get(field) for field in ('sample_rate', 'start_frame', 'end_frame'))
             if any(type(value) is not int for value in (rate, start, end)) or rate <= 0 or start < 0 or end <= start:
                 raise ValueError('source frame range unavailable')
+            if not isinstance(row.get('epoch_started_at'), str):
+                raise ValueError('source clock unavailable')
             epoch = datetime.fromisoformat(row['epoch_started_at'].replace('Z', '+00:00'))
             if epoch.tzinfo is None:
                 raise ValueError('source clock has no timezone')
@@ -104,16 +106,48 @@ def verify_inventory_coverage(capture, proof, manifest_digest, *, now=None):
             and proof['source_receipt'].strip()
             and generated <= now <= valid_until
         )
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, AttributeError):
         pass
     return {
         **capture,
         'denominator_complete': verified,
         'inventory_receipt': proof['source_receipt'] if verified else None,
+        'inventory_generated_at': generated.isoformat() if verified else None,
+        'valid_until': valid_until.isoformat() if verified else None,
     }
 
 
-def cost_per_captured_hour(capture, costs):
+def inventory_current(capture, *, now=None):
+    now = now or datetime.now(timezone.utc)
+    try:
+        generated = datetime.fromisoformat(capture['inventory_generated_at'])
+        expires = datetime.fromisoformat(capture['valid_until'])
+        return bool(
+            capture.get('denominator_complete') is True
+            and capture.get('manifest_ranges_valid') is True
+            and isinstance(capture.get('inventory_receipt'), str)
+            and capture['inventory_receipt'].strip()
+            and generated <= now <= expires
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def revalidate_report(capture, *, now=None):
+    """No old aggregate can republish prices after its inventory proof expires."""
+    if inventory_current(capture, now=now):
+        return capture
+    return {
+        **capture,
+        'denominator_complete': False,
+        'cost': {
+            day: {**row, 'pipeline_cost_usd': None, 'usd_per_captured_audio_hour': None, 'status': 'unknown'}
+            for day, row in capture.get('cost', {}).items()
+        },
+    }
+
+
+def cost_per_captured_hour(capture, costs, *, now=None):
     """Cost input must already be reconciled and allocated to captured UTC day.
 
     gpu_fleet includes idle and busy; its invoice lines must be excluded from
@@ -124,8 +158,7 @@ def cost_per_captured_hour(capture, costs):
         row = costs.get(day, {})
         components = row.get('components', {})
         known = (
-            capture['denominator_complete']
-            and bool(capture.get('inventory_receipt'))
+            inventory_current(capture, now=now)
             and row.get('reconciled') is True
             and row.get('basis') == 'captured_utc_day'
             and row.get('gpu_excluded_from_cloud') is True

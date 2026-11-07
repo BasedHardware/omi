@@ -100,9 +100,26 @@ async def wait_for_wake(stop):
         except asyncio.TimeoutError:
             pass
         return
+    if stop.is_set():
+        return
     try:
         redis = await get_async_redis_client()
-        await asyncio.wait_for(redis.blpop(base() + 'wakes', timeout=20), timeout=21)
+        wake = asyncio.create_task(redis.blpop(base() + 'wakes', timeout=20))
+        stopped = asyncio.create_task(stop.wait())
+        try:
+            done, _ = await asyncio.wait({wake, stopped}, timeout=21, return_when=asyncio.FIRST_COMPLETED)
+            if stopped in done:
+                return
+            if wake not in done:
+                raise asyncio.TimeoutError
+            if wake.result():
+                # Coalesce a seal burst into one drain pass; durable polling
+                # covers hints arriving concurrently with this deletion.
+                await redis.delete(base() + 'wakes')
+        finally:
+            wake.cancel()
+            stopped.cancel()
+            await asyncio.gather(wake, stopped, return_exceptions=True)
     except (Exception, asyncio.TimeoutError):
         attention.unavailable()
         try:

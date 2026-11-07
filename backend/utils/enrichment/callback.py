@@ -287,6 +287,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         context
         and context.get('pipeline_seal')
         and not context.get('hold_budget_denied_at_max')
+        and not context.get('blocked_reason')
         and not processed_conversation.discarded
         and not summary_output_present(processed_conversation.structured)
     ):

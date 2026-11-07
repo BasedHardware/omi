@@ -24,8 +24,7 @@ UID = 'composer-uid'
 T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
 
 
-def test_patient_settle_uses_absolute_deadline_even_after_rollout_kill(monkeypatch):
-    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+def test_patient_settle_uses_absolute_accepted_deadline():
     episode = {
         'compose_pending_since': T0 + timedelta(seconds=1000),
         'compose_activity_at': T0 + timedelta(seconds=1600),

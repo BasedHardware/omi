@@ -538,12 +538,16 @@ def mark_update(
 def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
     if not pipeline_attention.serving(uid):
         return None
-    row = conversations_db.get_conversation_raw_snapshot(
-        uid,
-        conversation_id,
-        firestore_client=firestore_client,
-        field_paths=['recorded_end', 'record_lane_owner'],
-    )
+    try:
+        row = conversations_db.get_conversation_raw_snapshot(
+            uid,
+            conversation_id,
+            firestore_client=firestore_client,
+            field_paths=['recorded_end', 'record_lane_owner'],
+        )
+    except Exception:
+        pipeline_attention.unavailable()
+        return None  # Retain the original durable obligation with legacy timing.
     return row if row and row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'} else None
 
 
@@ -562,10 +566,27 @@ def promote_pipeline(uid, document_id, *, now):
             or key(uid, old.get('conversation_id', '')) != document_id
         ):
             return old, None
-        source = conversations_db.get_conversation_raw_snapshot(uid, old['conversation_id'])
+        source = conversations_db.get_conversation_raw_snapshot(
+            uid,
+            old['conversation_id'],
+            field_paths=[
+                'record_lane_owner',
+                'status',
+                'finished_at',
+                'record_audio_closed',
+                'record_audio_partial',
+                'record_upload_failed',
+                'record_upload_sessions',
+                'deleted',
+                'discarded',
+                'record_upload_revision',
+                'sync_content_revision',
+            ],
+        )
         if not source or pipeline_policy.seal_snapshot(source) is None:
             return old, None
-        row = dict(old, due_at=now, task_due_at=now, task_token=uuid.uuid4().hex, immediate=True)
+        row = dict(old, due_at=now, task_due_at=now, task_token=uuid.uuid4().hex)
+        row.pop('immediate', None)
         return row, row
 
     return _mutate(document_id, promote)

@@ -4,12 +4,13 @@ Lifecycle: rollout, default off; owner pipeline-approved; review 2026-11-21.
 """
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 import os
 
-DISPATCH_AFTER_SECONDS = 1680
+NOTES_TARGET_SECONDS = 1800
 PROCESSING_RESERVE_SECONDS = 120
+DISPATCH_AFTER_SECONDS = NOTES_TARGET_SECONDS - PROCESSING_RESERVE_SECONDS
 LEASE_SECONDS = 90
 COHORT_KEY = 'pipeline_attention'
 FIELD = 'pipeline_attention'
@@ -42,14 +43,14 @@ def capture_cost_enabled() -> bool:
 
 
 def seconds(value) -> float | None:
-    if isinstance(value, datetime):
-        value = value.timestamp()
-    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-        return None
     try:
+        if isinstance(value, datetime):
+            value = (value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)).timestamp()
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            return None
         result = float(value)
         return result if math.isfinite(result) and result > 0 else None
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError, OSError):
         return None
 
 
@@ -96,4 +97,4 @@ def dispatch_at(row: Mapping, obligation: Mapping) -> float | None:
 
 
 def snapshot_matches(row: Mapping, expected: Mapping) -> bool:
-    return seal_snapshot(row) == expected
+    return isinstance(expected, Mapping) and bool(expected) and seal_snapshot(row) == expected

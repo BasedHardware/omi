@@ -126,8 +126,8 @@ def admission(
     due = min(last + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
     watermark = state.get('upload_watermark_at')
     gap = timestamp(row.get('finished_at')) + QUIET_SECONDS
-    if not sealed_fast and now < first + MAX_HOLD_SECONDS:
-        if now < due:
+    if now < first + MAX_HOLD_SECONDS:
+        if not sealed_fast and now < due:
             return 'quiet_wait', due
         if watermark is not None and timestamp(watermark) < gap:
             return 'watermark_wait', min(now + QUIET_SECONDS, first + MAX_HOLD_SECONDS)

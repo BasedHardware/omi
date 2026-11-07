@@ -565,3 +565,64 @@ def test_explicit_rollback_only_settles_existing_hold_metadata(monkeypatch):
     )
     complete.assert_not_called()
     assert hold.FIELD not in world.raw('parent')
+
+
+def test_seal_fast_skips_quiet_only_and_preserves_watermark_proof():
+    conversation = row()
+    conversation[hold.FIELD]['upload_watermark_at'] = 659
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=101, sealed_fast=True) == ('watermark_wait', 701)
+
+
+def test_optional_pipeline_snapshot_failure_does_not_drop_obligation(state, monkeypatch):
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(
+        outbox.conversations_db, 'get_conversation_raw_snapshot', Mock(side_effect=RuntimeError('optional'))
+    )
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    assert outbox.key('u', 'c') in rows
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+
+
+def test_promotion_does_not_persist_a_permanent_immediate_tier(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    read = Mock(
+        return_value={
+            'status': 'completed',
+            'record_lane_owner': 'batch_live_v1',
+            'finished_at': 100,
+            'record_audio_closed': True,
+            'record_upload_revision': 3,
+            'sync_content_revision': 7,
+        }
+    )
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', read)
+    promoted = outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101)
+    assert promoted and 'immediate' not in promoted
+    assert 'transcript_segments' not in read.call_args.kwargs['field_paths']
+    assert rows[outbox.key('u', 'c')]['due_at'] == 101
+
+
+@pytest.mark.parametrize('reason', ['content_below_floor', 'local_only'])
+def test_pipeline_intentionally_blocked_minimum_is_not_empty_output(monkeypatch, reason):
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2)
+    current = world.get('user-1', 'parent')
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
+    minimum = callback.deserialize_conversation({**current, 'structured': {'title': 'Pending'}})
+    monkeypatch.setattr(callback, 'process_conversation', Mock(return_value=minimum))
+    context = {'owner': 'worker', 'pipeline_seal': {'synthetic': 'claim'}, 'blocked_reason': reason}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        assert callback.enrich_conversation('user-1', 'parent', 'en') is minimum
+    finally:
+        PROCESS_CONTEXT.reset(token)

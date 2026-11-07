@@ -55,12 +55,12 @@ def arm(
 ) -> None:
     if not enabled():
         return
-    if pipeline_attention.admitted(uid):
-        pipeline_attention.metrics.stage('silence_configured', checks_db.quiet_timeout(timeout))
     check = checks_db.arm_quiet_check(
         uid, conversation_id, timeout, requires_byok=requires_byok, firestore_client=firestore_client
     )
     if check is not None:
+        if pipeline_attention.admitted(uid):
+            pipeline_attention.metrics.stage('silence_configured', checks_db.quiet_timeout(timeout))
         _dispatch(check)
 
 

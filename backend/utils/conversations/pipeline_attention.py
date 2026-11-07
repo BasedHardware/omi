@@ -5,6 +5,7 @@ Redis never proves a seal or completion. Unknown presence keeps legacy timing.
 """
 
 from collections.abc import Mapping
+from functools import cache
 import hashlib
 import json
 import os
@@ -31,6 +32,7 @@ def serving(uid: str) -> bool:
     return policy.mode() == 'serve' and admitted(uid)
 
 
+@cache
 def client():
     return create_bounded_redis_client(0.5)
 
@@ -117,7 +119,7 @@ def hold_decision(uid, row, obligation, *, settled=False, now=None):
         return False, None, None
     if accepted and now >= accepted:
         return True, None, proof  # Durable accepted work must survive Redis loss/kill.
-    if accepted and policy.mode() == 'off':
+    if accepted and (policy.mode() != 'serve' or not policy.seal_fast_enabled() or not admitted(uid)):
         return False, accepted, proof
     state = attention(uid, now=now)
     fast = state == 'watched' or promoted(uid)

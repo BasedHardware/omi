@@ -94,7 +94,9 @@ def test_actual_writer_refuses_late_producer_after_pipeline_claim(writer, change
     else:
         writer.document[changed] += 1
     try:
-        assert not db.persist_processing_result_with_lifecycle('u', payload())
+        assert not db.persist_processing_result_with_lifecycle(
+            'u', {**payload(), 'sync_content_revision': writer.document['sync_content_revision']}
+        )
         assert all(value is None for value in writer.commits)
     finally:
         delivery.PROCESS_CONTEXT.reset(token)

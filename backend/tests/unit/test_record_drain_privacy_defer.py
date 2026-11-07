@@ -19,7 +19,7 @@ def fast_records(monkeypatch):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
     monkeypatch.setenv('PIPELINE_RECORD_FAST_ENABLED', 'true')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    redis = fakeredis.FakeRedis()
+    redis = fakeredis.FakeRedis(server=fakeredis.FakeServer())
     monkeypatch.setattr(record_attention.attention, 'serving', lambda _: True)
     monkeypatch.setattr(record_attention.attention, 'client', lambda: redis)
     return record_attention, redis
@@ -271,3 +271,37 @@ def test_kill_switch_parsing():
             assert record_drain_privacy_defer_seconds() == expected
         finally:
             del os.environ['RECORD_DRAIN_PRIVACY_DEFER_SECONDS']
+
+
+@pytest.mark.asyncio
+async def test_seal_wake_burst_is_coalesced_and_stop_interrupts_pop(fast_records, monkeypatch):
+    import fakeredis.aioredis
+
+    records, _ = fast_records
+    redis = fakeredis.aioredis.FakeRedis(server=fakeredis.FakeServer())
+
+    async def client():
+        return redis
+
+    monkeypatch.setattr(records, 'get_async_redis_client', client)
+    stop = asyncio.Event()
+    try:
+        await redis.lpush(records.base() + 'wakes', *[str(n) for n in range(100)])
+        await asyncio.wait_for(records.wait_for_wake(stop), timeout=3)
+        assert await redis.llen(records.base() + 'wakes') == 0
+        waiting = asyncio.create_task(records.wait_for_wake(stop))
+        await asyncio.sleep(0)
+        stop.set()
+        await asyncio.wait_for(waiting, timeout=3)
+    finally:
+        await redis.aclose()
+
+
+def test_admission_owner_cap_survives_missing_redis_hints(drain, fast_records, monkeypatch):
+    live, admitted = drain
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
+    store = fenced_store(('a', False), ('b', False), ('c', False))
+    for row in store.rows.values():
+        row['owner_id'] = 'same-owner'
+    assert asyncio.run(live.drain_recordings(store)) is True  # The original due page was full.
+    assert len(admitted) == 1

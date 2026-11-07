@@ -9439,7 +9439,7 @@ The 120-second silence wait, 30-minute target and two-hour alarm remain intact.
 
 `POST /v1/users/client-state` adds optional `home_visible=false`. Only foreground
 Home/live visibility renews the new watched lease; generic foreground app-open
-is a bounded promotion edge. Authenticated read owners call
+is a bounded promotion edge. Authenticated read owners still need to wire
 `demand_processing.promote_owner` off the event loop, without holding HTTP for
 notes generation. Readiness means existing text plus truthful notes/episode
 pending markers, with generated-ready and client-visible clocks separate.

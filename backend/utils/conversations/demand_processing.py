@@ -2,7 +2,8 @@
 
 Cloud Tasks remains the wakeup owner; Redis contains IDs and scheduling metadata
 only. Losing Redis fails eager, leaving durable retries and reconciliation intact.
-No Firestore read is performed by admission, promotion or queue-age publication.
+Admission and queue-age publication do not read Firestore. The dark pipeline
+owner promotion may advance bounded sealed sync obligations with a Firestore CAS.
 """
 
 from __future__ import annotations
@@ -194,7 +195,11 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
         return False
     due = max(now, row.get('not_before', now))
     if row.get('payload', {}).get('kind') == 'sync_reprocess':
-        advanced = enrichment_outbox.promote_pipeline(uid, obligation, now=now)
+        try:
+            advanced = enrichment_outbox.promote_pipeline(uid, obligation, now=now)
+        except Exception:
+            _fallback()  # One optional advance cannot strand the rest of the owner snapshot.
+            advanced = None
         if advanced:
             due = now
             row['not_before'] = now
@@ -250,7 +255,10 @@ def observe_surface(uid: str, session: str, payload: dict, *, now: float | None 
     now = time.time() if now is None else now
     try:
         r = client()
-        pipeline_attention.observe_surface(uid, session, payload, now=now, redis=r)
+        try:
+            pipeline_attention.observe_surface(uid, session, payload, now=now, redis=r)
+        except Exception:
+            pipeline_attention.unavailable()
         base = owner_key(uid)
         was_open = bool(r.zcount(base + ':surfaces', now, '+inf'))
         p = r.pipeline()

@@ -91,12 +91,12 @@ def test_cost_requires_complete_denominator_and_reconciled_captured_day_sources(
             'components': {name: 1 for name in capture.REQUIRED_COSTS},
         }
     }
-    assert capture.cost_per_captured_hour(report, costs)[day]['usd_per_captured_audio_hour'] == 12
+    assert capture.cost_per_captured_hour(report, costs, now=now)[day]['usd_per_captured_audio_hour'] == 12
     costs[day]['basis'] = 'processing_day'
-    assert capture.cost_per_captured_hour(report, costs)[day]['usd_per_captured_audio_hour'] is None
+    assert capture.cost_per_captured_hour(report, costs, now=now)[day]['usd_per_captured_audio_hour'] is None
     costs[day]['basis'] = 'captured_utc_day'
     report['denominator_complete'] = False
-    assert capture.cost_per_captured_hour(report, costs)[day]['status'] == 'unknown'
+    assert capture.cost_per_captured_hour(report, costs, now=now)[day]['status'] == 'unknown'
 
 
 @pytest.mark.parametrize('changed', ['missing', 'expired', 'wrong_hash', 'incomplete_population', 'missing_frames'])
@@ -481,3 +481,29 @@ def test_cohort_window_is_a_trailing_window_ending_on_the_usage_day():
 def test_cohort_window_can_be_pinned_to_reproduce_an_older_report():
     assert alloc.cohort_window_start_for("2026-09-07", 7, fixed="2026-08-31") == "2026-08-31"
     assert alloc.cohort_window_start_for("2026-09-01", 7, fixed="2026-08-31") == "2026-08-31"
+
+
+@pytest.mark.parametrize('clock', [None, 42, {}, []])
+def test_non_string_capture_epoch_is_unknown(clock):
+    report = capture.captured_hours([_manifest(epoch_started_at=clock)])
+    assert report['unknown_manifest_rows'] == 1 and not report['manifest_ranges_valid']
+
+
+def test_republishing_an_expired_capture_report_removes_price():
+    report = {
+        'manifest_ranges_valid': True,
+        'denominator_complete': True,
+        'inventory_receipt': 'synthetic-inventory',
+        'inventory_generated_at': '2026-11-08T00:00:00+00:00',
+        'valid_until': '2026-11-09T00:00:00+00:00',
+        'cost': {'2026-11-07': {'status': 'reconciled', 'pipeline_cost_usd': 6, 'usd_per_captured_audio_hour': 12}},
+    }
+    assert alloc.revalidate_report(report, now=datetime(2026, 11, 8, tzinfo=timezone.utc)) is report
+    checked = alloc.revalidate_report(report, now=datetime(2026, 11, 10, tzinfo=timezone.utc))
+    assert not checked['denominator_complete']
+    assert checked['cost']['2026-11-07'] == {
+        'status': 'unknown',
+        'pipeline_cost_usd': None,
+        'usd_per_captured_audio_hour': None,
+    }
+    assert report['cost']['2026-11-07']['usd_per_captured_audio_hour'] == 12

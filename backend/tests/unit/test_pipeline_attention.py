@@ -1,6 +1,7 @@
 """Dark scheduling policy, durable deadlines and source clocks, no services."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import fakeredis
@@ -211,3 +212,47 @@ def test_non_clock_objects_cannot_mint_an_accepted_deadline(serving):
     value = Floatable()
     assert policy.seconds(value) is None
     assert runtime.hold_decision('other', sealed(), {'pipeline_dispatch_at': value}, now=2000) == (False, None, None)
+
+
+def test_naive_clock_is_utc_and_missing_seal_proof_cannot_compare_equal():
+    at = datetime(2026, 11, 7, 12)
+    assert policy.seconds(at) == at.replace(tzinfo=timezone.utc).timestamp()
+    assert not policy.snapshot_matches(sealed(record_audio_closed=False), None)
+    assert not policy.snapshot_matches(sealed(), {})
+    assert policy.DISPATCH_AFTER_SECONDS + policy.PROCESSING_RESERVE_SECONDS == policy.NOTES_TARGET_SECONDS
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+def test_accepted_deadline_survives_partial_flag_kill(serving, monkeypatch, mode):
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'false')
+    assert runtime.hold_decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=100) == (
+        False,
+        1770,
+        policy.seal_snapshot(sealed()),
+    )
+
+
+def test_no_episode_does_not_invent_early_patient_settlement(serving, monkeypatch):
+    monkeypatch.setattr(pipeline_settlement.episodes, 'get_episode_for_conversation', lambda *_: None)
+    row = sealed(sync_processing_hold={'last_content_at': 100})
+    assert not pipeline_settlement.settle('u', 'c', row, 1770, now=1000)
+
+
+def test_episode_deadline_conflict_keeps_existing_hold_path(serving, monkeypatch):
+    monkeypatch.setattr(
+        pipeline_settlement.episodes,
+        'get_episode_for_conversation',
+        lambda *_: {
+            'id': 'e',
+            'status': 'live',
+            'state_version': 2,
+            'conversation_ids': ['c'],
+        },
+    )
+
+    def conflict(*_a, **_k):
+        raise pipeline_settlement.episodes.EpisodeConflict('changed')
+
+    monkeypatch.setattr(pipeline_settlement.episodes, 'update_episode', conflict)
+    assert not pipeline_settlement.settle('u', 'c', sealed(), 1770, now=1000)

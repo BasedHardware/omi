@@ -290,7 +290,7 @@ async def finalize_persisted_conversation(
             ):
                 raise RuntimeError('server batch empty cleanup fenced')
             return ConversationFinalizationDisposition.fenced
-        # No preview to enrich. Reserve batch before terminalizing this generation;
+        # Hand batch-covered capture to its retained-audio owner before notes. Reserve batch before terminalizing this generation;
         # its upload barrier still prevents work until pusher has committed the tail.
         if not await run_blocking(db_executor, register_recording, uid, conversation_data):
             raise RuntimeError('desktop batch registration refused')

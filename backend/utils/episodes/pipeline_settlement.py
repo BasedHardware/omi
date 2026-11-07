@@ -14,21 +14,21 @@ def settle(uid, conversation_id, row, deadline, *, now=None):
     now = time.time() if now is None else now
     episode = episodes.get_episode_for_conversation(uid, conversation_id)
     if not episode:
-        # No episode consumer: the existing quiet hold supplies settlement.
-        state = row.get('sync_processing_hold') or {}
-        last = policy.seconds(state.get('last_content_at'))
-        return bool(last and now >= last + 600)
+        return False  # A quiet conversation alone does not prove episode settlement.
     saved = policy.seconds(episode.get('pipeline_dispatch_at'))
     deadline = min(at for at in (saved, deadline) if at is not None) if saved or deadline else None
     if episode.get('status') != 'live':
         return True
     if deadline and saved != deadline:
-        episode = episodes.update_episode(
-            uid,
-            episode['id'],
-            expected_version=int(episode['state_version']),
-            updates={'pipeline_dispatch_at': deadline},
-        )
+        try:
+            episode = episodes.update_episode(
+                uid,
+                episode['id'],
+                expected_version=int(episode['state_version']),
+                updates={'pipeline_dispatch_at': deadline},
+            )
+        except episodes.EpisodeConflict:
+            return False
     fast = pipeline_attention.serving(uid) and (
         pipeline_attention.attention(uid, now=now) == 'watched' or pipeline_attention.promoted(uid)
     )

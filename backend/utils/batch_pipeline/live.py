@@ -492,6 +492,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     # admitting one owner only exhaust each other's contention retries. Leave
     # the busy owner's other rows due for the next pass instead.
     busy_owners = set()
+    admitted_owners = set()
 
     async def drain_one(segment):
         nonlocal privacy_blocked
@@ -504,6 +505,13 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return
         busy_owners.add(owner)
         try:
+            cap_owner = (
+                pipeline_policy.record_fast_enabled()
+                and pipeline_policy.mode() == 'serve'
+                and await run_blocking(db_executor, record_attention.attention.serving, owner)
+            )
+            if cap_owner and owner in admitted_owners:
+                return
             try:
                 lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
             except BatchPrivacyBlocked:
@@ -516,6 +524,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             if lease is None:
                 await run_blocking(db_executor, record_attention.defer, segment, pending.get('available_at', 0))
                 return
+            if cap_owner:
+                admitted_owners.add(owner)
             await run_blocking(db_executor, record_attention.defer, segment, lease)
             await admit_and_defer(segment, pending, lease)
         finally:
@@ -631,6 +641,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
 
     try:
         segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
+        full_page = len(segments) == batch_size
         segments = await run_blocking(db_executor, record_attention.select, segments, batch_size)
         # Every replica selects the same oldest page; a per-replica order plus
         # the per-row lease keeps replicas from admitting the same rows at once.
@@ -646,7 +657,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
         for result in results:
             if isinstance(result, BaseException):
                 raise result
-        return len(segments) == batch_size and not privacy_blocked
+        return full_page and not privacy_blocked
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',

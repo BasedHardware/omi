@@ -35,6 +35,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from gcp_cost_reconciliation import company_stt_rows  # noqa: E402
+from pull_captured_audio import revalidate_report  # noqa: E402
 
 STT_VENDOR_RATE_PER_MIN = 0.0043  # PLACEHOLDER (Deepgram Nova list). Modulate/Soniox contract rates pending.
 STT_VENDOR_HIGH_MULTIPLIER = 1.8
@@ -883,7 +884,7 @@ def main(argv=None) -> None:
     res = assemble(raw, out, start, end, a.cohort_window_start, a.settled_through, a.cohort_lookback_days)
     report(res, start, end)
     if a.captured_audio_report and os.getenv('PIPELINE_CAPTURE_COST_ENABLED', 'false').strip().lower() == 'true':
-        captured = json.loads(a.captured_audio_report.read_text())
+        captured = revalidate_report(json.loads(a.captured_audio_report.read_text()))
         (out / 'captured_audio_cost.json').write_text(json.dumps(captured, indent=2) + '\n')
         print('Captured-audio cost (independent of transcription allocation):')
         for day, row in sorted(captured.get('cost', {}).items()):
