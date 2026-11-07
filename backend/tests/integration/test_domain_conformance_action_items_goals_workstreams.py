@@ -301,11 +301,12 @@ def test_goal_revision_and_mutation_receipt(domain_backend):
         repo.update(row.id, GoalUpdate(data={'title': 'Stale'}), expected_revision=1)
 
 
-def test_goal_progress_and_local_history_bucket(domain_backend):
+@pytest.mark.parametrize('time_zone', ['Pacific/Honolulu', None, 'Invalid/Zone', ''])
+def test_goal_progress_and_local_history_bucket(domain_backend, time_zone):
     h = domain_backend
     sid = h.space('history')
     repo = h.goals(sid)
-    h.seed(sid, 'users', 'profile', {'time_zone': 'Pacific/Honolulu'})
+    h.seed(sid, 'users', 'profile', {'time_zone': time_zone})
     row = repo.create(GoalCreate(data={'title': 'Progress'}))
     event = {
         'kind': 'metric_update',
@@ -318,8 +319,17 @@ def test_goal_progress_and_local_history_bucket(domain_backend):
         == saved.event_id
     )
     assert len(repo.list_progress_events(row.id)) == 1
-    expected = saved.created_at.astimezone(ZoneInfo('Pacific/Honolulu')).strftime('%Y-%m-%d')
+    expected = saved.created_at.astimezone(
+        ZoneInfo('Pacific/Honolulu') if time_zone == 'Pacific/Honolulu' else timezone.utc
+    ).strftime('%Y-%m-%d')
     assert repo.get_history(row.id)[0]['date'] == expected and repo.get_history(row.id)[0]['value'] == 2
+    assert repo.update_progress(row.id, 3, idempotency_key='update', account_generation=0).id == row.id
+    latest = repo.list_progress_events(row.id)[0]
+    expected_update = latest.created_at.astimezone(
+        ZoneInfo('Pacific/Honolulu') if time_zone == 'Pacific/Honolulu' else timezone.utc
+    ).strftime('%Y-%m-%d')
+    assert repo.get_history(row.id)[0]['date'] == expected_update
+    assert repo.get_history(row.id)[0]['value'] == 3
 
 
 def test_goal_sort_retains_missing_created_at(domain_backend):

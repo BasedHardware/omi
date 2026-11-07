@@ -223,6 +223,18 @@ class CellGoals(WorkflowRepo):
             entity_id=goal_id,
         )
 
+    def _history_date_str(self, now: datetime) -> str:
+        # Match database.goals: absent/falsy zones and any lookup/conversion
+        # failure fall back to the UTC date supplied by the progress writer.
+        try:
+            payload = self.store.state['users'].get('profile')
+            zone = payload.get('time_zone') if isinstance(payload, dict) else None
+            if not zone:
+                return now.strftime('%Y-%m-%d')
+            return now.astimezone(ZoneInfo(str(zone))).strftime('%Y-%m-%d')
+        except Exception:
+            return now.strftime('%Y-%m-%d')
+
     @atomic
     def append_progress_event(
         self, goal_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
@@ -247,8 +259,7 @@ class CellGoals(WorkflowRepo):
             row.update(latest_progress_sequence=sequence, updated_at=now)
             if event.get('metric') is not None:
                 row['metric'] = deepcopy(event['metric'])
-                zone = self.store.state['users'].get('profile', {}).get('time_zone', 'UTC')
-                day = now.astimezone(ZoneInfo(zone)).strftime('%Y-%m-%d')
+                day = self._history_date_str(now)
                 self.store.state['goal_history'][goal_id + '/' + day] = {
                     'date': day,
                     'value': event['metric']['current'],
