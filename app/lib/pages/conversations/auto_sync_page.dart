@@ -534,8 +534,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return items;
   }
 
-  /// A one-file recording keeps the swipe-to-delete row; a longer one is a single row that opens
-  /// its files, so a continuous recording no longer reads as a column of 75 s and 3 min rows.
+  /// Both single-file and grouped recording rows support swipe-to-delete; a grouped row opens
+  /// its files on tap, so a continuous recording no longer reads as a column of 75 s and 3 min rows.
   Widget _buildBlockListItem(
     SyncProvider syncProvider,
     RecordingBlock block,
@@ -544,7 +544,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     required bool isLast,
   }) {
     final wal = block.wals.first;
-    final state = wal.syncDisplayState;
     return Container(
       decoration: BoxDecoration(
         color: OmiColors.surface1,
@@ -557,36 +556,40 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (block.wals.length > 1)
-            _blockRow(block)
-          else
-            Dismissible(
-              // Storage suffix because `wal.id` (device_timerStart) is shared by the
-              // SD-card and on-phone copies of one recording. Not the row index: rows
-              // shift after a dismiss, and a reused key asserts.
-              key: ValueKey('${wal.id}#${wal.storage.name}'),
-              direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
-              confirmDismiss: (direction) {
-                final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
-                return showOmiConfirm(
-                  context,
-                  title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                  message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
-                  confirmLabel: context.l10n.delete,
-                  destructive: true,
-                );
-              },
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20.0),
-                color: Colors.red,
-                child: const Icon(Icons.delete, color: Colors.white),
-              ),
-              onDismissed: (direction) {
-                syncProvider.deleteWal(wal);
-              },
-              child: _walRow(wal, showDay: false),
+          Dismissible(
+            // Storage suffix because `wal.id` (device_timerStart) is shared by the
+            // SD-card and on-phone copies of one recording. Not the row index: rows
+            // shift after a dismiss, and a reused key asserts.
+            key: ValueKey('${wal.id}#${wal.storage.name}'),
+            direction: block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.syncing)
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
+            confirmDismiss: (direction) async {
+              final uploading = block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.uploaded);
+              final confirmed = await showOmiConfirm(
+                context,
+                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                confirmLabel: context.l10n.delete,
+                destructive: true,
+              );
+              if (!confirmed) return false;
+              for (final item in List<Wal>.of(block.wals)) {
+                await syncProvider.deleteWal(item);
+              }
+              return !block.wals.any(
+                (item) => syncProvider.allWals.any((w) => w.id == item.id && w.storage == item.storage),
+              );
+            },
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20.0),
+              color: Colors.red,
+              child: const Icon(Icons.delete, color: Colors.white),
             ),
+            onDismissed: (direction) {},
+            child: block.wals.length > 1 ? _blockRow(block) : _walRow(wal, showDay: false),
+          ),
           if (!isLast) _rowDivider,
         ],
       ),
@@ -1031,8 +1034,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
+            final pendingBefore = provider.pendingDeletableWals.length;
             await clearActions.pending();
-            if (context.mounted) {
+            if (context.mounted && (pendingBefore == 0 || provider.pendingDeletableWals.length < pendingBefore)) {
               OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
             }
           }
@@ -1047,8 +1051,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
+            final totalBefore = provider.clearableWalsCount;
             await clearActions.all();
-            if (context.mounted) {
+            if (context.mounted && (totalBefore == 0 || provider.clearableWalsCount < totalBefore)) {
               OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }

@@ -20,9 +20,10 @@ import 'package:omi/services/wals/wal.dart';
 /// Delete buttons.
 
 class _Sync extends ChangeNotifier implements SyncProvider {
-  _Sync(this.wals);
+  _Sync(this.wals, {this.removeOnDelete = true});
 
   final List<Wal> wals;
+  final bool removeOnDelete;
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
   int retried = 0;
@@ -52,7 +53,9 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   @override
   Future<void> deleteWal(Wal wal) async {
     deleted.add(wal);
-    wals.remove(wal);
+    if (removeOnDelete) {
+      wals.remove(wal);
+    }
     notifyListeners();
   }
 
@@ -105,8 +108,8 @@ List<Wal> _tooOldAfternoon() {
   ];
 }
 
-Future<_Sync> _pump(WidgetTester tester, List<Wal> wals) async {
-  final sync = _Sync(wals);
+Future<_Sync> _pump(WidgetTester tester, List<Wal> wals, {bool removeOnDelete = true}) async {
+  final sync = _Sync(wals, removeOnDelete: removeOnDelete);
   tester.view.physicalSize = const Size(1170, 4000);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -247,5 +250,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Share Recording'), findsOneWidget);
     expect(find.text('Try Again'), findsNothing, reason: 'automatic recovery owns deterministic refusals');
+  });
+
+  testWidgets('swiping a grouped recording row confirms once and deletes every file in the block', (tester) async {
+    final sync = await _pump(tester, _tooOldAfternoon());
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(10));
+    expect(sync.wals, isEmpty);
+  });
+
+  testWidgets('swiping a recording whose device delete fails snaps back instead of asserting', (tester) async {
+    final start = DateTime.now().subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+    final ringWal = Wal(
+      timerStart: start,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'omi_ring',
+    );
+    final sync = await _pump(tester, [ringWal], removeOnDelete: false);
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, [ringWal]);
+    expect(sync.wals, [ringWal]);
+    expect(find.byType(Dismissible), findsOneWidget);
   });
 }

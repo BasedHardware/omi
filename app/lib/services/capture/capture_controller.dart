@@ -4134,7 +4134,6 @@ class CaptureController extends ChangeNotifier
     final sessionStart = _sessionStartSeconds;
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
-
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
     // finalizeCurrentSession first is the 30–60s dead window users hit today.
@@ -4145,7 +4144,6 @@ class CaptureController extends ChangeNotifier
     );
     _finalizeGate.markFinalized();
     externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
-
     await phoneSync.finalizeCurrentSession();
     if (lifetime.isClosed ||
         recordingSessionId != activeRecordingId ||
@@ -4159,7 +4157,8 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _clearSessionLocation();
-
+    final (segmentArrivals, needsRepair) = (Map<String, int>.of(_segmentArrivals), _sessionTransportInterrupted);
+    _sessionTransportInterrupted = false;
     _resetStateVariables();
     final confirmedProcessing = _firstCaptureProcess;
     final Future<InProgressProcessOutcome> request;
@@ -4173,9 +4172,7 @@ class CaptureController extends ChangeNotifier
     } else {
       request = processInProgressConversationOutcome();
     }
-    if (confirmedProcessing) {
-      _lastProcessRequest = request.then((outcome) => outcome.response);
-    }
+    if (confirmedProcessing) _lastProcessRequest = request.then((outcome) => outcome.response);
     _processInFlight = request.then((_) {}, onError: (_) {});
     request.then<void>((outcome) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
@@ -4187,11 +4184,14 @@ class CaptureController extends ChangeNotifier
         removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
       );
       if (sessionStart > 0 && conversationId != null) {
-        if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
-        }
+        if (phoneSync is LocalWalSyncImpl) phoneSync.prepareConversationStamp(recordingSessionId);
         await phoneSync.stampConversationId(sessionStart, conversationId);
-        _autoSyncSessionWals();
+        final saved = outcome.response?.conversation;
+        if (saved != null && phoneSync is LocalWalSyncImpl) {
+          await _confirmSessionTranscript(sessionStart, saved, segmentArrivals, needsRepair: needsRepair);
+        } else {
+          _autoSyncSessionWals();
+        }
       }
     }).catchError((Object error, StackTrace stack) => OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,

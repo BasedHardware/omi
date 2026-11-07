@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/wals/capture_committed_journal.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
@@ -105,6 +108,25 @@ void main() {
     await ledger.confirmSessionTranscription(100, 'conversation', transcriptSpans: [(0, 1000)]);
     expect(copy.status, WalStatus.miss);
     expect(copy.keptForTranscriptRecovery, isTrue);
+  });
+  test('live custom STT releases covered phone backups without server frame receipts and keeps uncovered ones', () async {
+    await setRefactorFlags({'custody_capture_committed_release': true});
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'gemini-key'),
+    );
+    addTearDown(() => SharedPreferencesUtil().saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.omi)));
+    final ledger = await custodyLedger();
+    final covered = wal();
+    final uncovered = wal()
+      ..timerStart = 500
+      ..filePath = 'audio_phone_pcm16_16000_1_500.bin';
+    ledger.testWals = [covered, uncovered];
+    await ledger.confirmSessionTranscription(100, 'conversation', transcriptSpans: [(95, 105)]);
+    expect(covered.status, WalStatus.synced);
+    expect(covered.syncedAt, greaterThan(0));
+    expect(covered.keptForTranscriptRecovery, isFalse);
+    expect(uncovered.status, WalStatus.miss);
+    expect(uncovered.keptForTranscriptRecovery, isTrue);
   });
   for (final flush in [false, true]) {
     test('index save failure reverts committed release before retention (flush=$flush)', () async {
