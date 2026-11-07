@@ -28,12 +28,14 @@ except ImportError:
 
 try:
     from database.legal_holds import (
+        DestructiveGateTakeover,
         DestructiveOperationInProgress,
         LegalHoldActive,
         LegalHoldAuthorityUnavailable,
     )
 except ImportError:
     # Route tests stub legal_holds with the gate helpers and omit the exception types.
+    DestructiveGateTakeover = None
     DestructiveOperationInProgress = None
     LegalHoldActive = None
     LegalHoldAuthorityUnavailable = None
@@ -720,6 +722,7 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
         return 0
     if (
         destructive_operation_gate is None
+        or DestructiveGateTakeover is None
         or LegalHoldActive is None
         or LegalHoldAuthorityUnavailable is None
         or DestructiveOperationInProgress is None
@@ -734,6 +737,10 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
                 namespace=MEMORIES_NAMESPACE,
             )
             provider_deleted = True
+    except DestructiveGateTakeover:
+        # A same-kind peer displaced this token, so the finish is not retried and
+        # the caller must not see a success count for a delete it no longer owns.
+        raise
     except (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress):
         if gate_token is not None:
             _retry_stale_vector_gate_finish(
