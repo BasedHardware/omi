@@ -556,10 +556,12 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
-                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s',
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s record=%s',
                 type(error).__name__,
                 _retry_reason(error),
                 getattr(error, 'store_tables', 'n/a'),
+                # Same one-way key as the sync pending line (record content hash prefix), so the two join.
+                str(pending.get('record_content_id') or '-')[:16],
             )
 
         def defer(tx):
