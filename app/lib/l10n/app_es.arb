@@ -3195,7 +3195,7 @@
     "tagSpeakerIncludingLaterSpeech": "Etiquetar también el habla posterior de este hablante",
     "updateSummaryWithNewNames": "Actualizar el resumen con los nombres nuevos",
     "syncStatusUnsupportedAudio": "No se pudo leer el audio — no se puede sincronizar",
-    "syncStatusSpeechWithoutText": "No se encontró voz — audio conservado",
+    "syncStatusSpeechWithoutText": "No se detectó habla — audio conservado",
     "chatStarterPrompt": "{kind, select, capabilities{¿Qué puedes hacer por mí?} goal{Ayúdame a fijar una meta} activity{Resume mi actividad reciente} improve{¿Cómo puedo mejorar?} other{}}",
     "nextWeek": "La próxima semana",
     "clearSearch": "Borrar búsqueda",

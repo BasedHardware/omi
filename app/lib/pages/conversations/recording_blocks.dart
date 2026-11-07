@@ -51,7 +51,7 @@ class RecordingBlock {
   Wal get representative => wals.reduce((a, b) {
         final rankCompare = _rank(b.syncDisplayState).compareTo(_rank(a.syncDisplayState));
         if (rankCompare != 0) return rankCompare > 0 ? b : a;
-        if (a.syncDisplayState == WalSyncDisplayState.synced && a.speechWithoutText && !b.speechWithoutText) {
+        if (a.syncDisplayState == WalSyncDisplayState.synced && !a.speechWithoutText && b.speechWithoutText) {
           return b;
         }
         return a;

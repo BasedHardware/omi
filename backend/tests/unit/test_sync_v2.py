@@ -2699,6 +2699,32 @@ class TestAsyncCoordinatorBehavioral:
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
             assert result['speech_without_text'] == ['audio_a.bin']
             assert result['new_memories'] == ['conv-b']
+
+            # Retry attempt where seg_a1 was already processed as silence in a prior attempt
+            # and an upload filename contains 'safety-coverage' as a substring (not parent dir).
+            stubs['sync_jobs'].finalize_sync_job.reset_mock()
+            stubs['pipeline'].get_processed_segments = MagicMock(return_value={'/tmp/seg_a1_1700000001.wav'})
+            stubs['pipeline'].get_sync_job = MagicMock(
+                return_value={
+                    'partial_result': {
+                        'new_memories': ['conv-b'],
+                        'updated_memories': [],
+                        'fenced_conversation_ids': [],
+                        'transcribed_segments': ['seg_b2_1700000004.wav'],
+                    }
+                }
+            )
+            await module.run_full_pipeline_background_async(
+                'j-mixed-speech-retry',
+                'uid',
+                ['/tmp/audio_a.bin', '/tmp/audio_b.bin', '/tmp/audio_c.bin'],
+                'omi',
+                False,
+                '/tmp/job-mixed-speech-retry',
+                task_mode=True,
+            )
+            retry_result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
+            assert retry_result['speech_without_text'] == ['audio_a.bin']
         finally:
             self._cleanup(stubs['saved_modules'])
 

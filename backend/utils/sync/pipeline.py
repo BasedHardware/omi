@@ -231,6 +231,8 @@ from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
 from utils.sync.speech_without_text import (
     SourceTrackingSegmentSet as _SourceTrackingSegmentSet,
     compute_speech_without_text_files as _compute_speech_without_text_files,
+    record_transcribed_segment_in_partial as _record_transcribed_segment_in_partial,
+    restore_retry_silent_segment_paths as _restore_retry_silent_segment_paths,
 )
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
@@ -3354,7 +3356,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             )
             t0 = time.monotonic()
             current_job = await run_blocking(db_executor, get_sync_job, job_id)
-            partial_result = (current_job or {}).get('partial_result') or {}
+            job_partial = (current_job or {}).get('partial_result') or {}
+            durable_partial = None
+            partial_result = job_partial
             if content_id:
                 durable_partial = await run_blocking(db_executor, get_sync_content_partial_result, uid, content_id)
                 partial_result = merge_lineage_partial_results(partial_result, durable_partial)
@@ -3394,6 +3398,16 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                 segment_ids_by_path = {
                     p: await run_blocking(sync_executor, compute_sync_segment_id, uid, p) for p in segmented_paths
                 }
+            _restore_retry_silent_segment_paths(
+                response=response,
+                partial_result=job_partial,
+                durable_partial=durable_partial,
+                segmented_paths=segmented_paths,
+                already_processed=already_processed,
+                durable_processed_segment_ids=durable_processed_segment_ids,
+                segment_ids_by_path=segment_ids_by_path,
+                silent_segment_paths=silent_segment_paths,
+            )
 
             # One server-clock offset per request, computed once after
             # segmentation: the furthest segment end (VAD names carry the
@@ -3523,6 +3537,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     with segment_lock:
                         content_segment_count[0] += 1
                         partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
+                        _record_transcribed_segment_in_partial(response, partial, path, segment_id)
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
                             # With a segment id, one ledger commit carries checkpoint and
@@ -3769,6 +3784,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                 segment_source_files=segment_source_files,
                 silent_segment_paths=silent_segment_paths,
                 source_frame_maps=source_frame_maps,
+                safety_coverage_paths=safety_coverage_paths,
             )
             result = {
                 'new_memories': sorted(response['new_memories']),
