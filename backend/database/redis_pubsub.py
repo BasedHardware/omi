@@ -52,8 +52,26 @@ class RedisPubSubManager:
         self.pubsub: Optional[Any] = None
         self.subscriber_thread: Optional[threading.Thread] = None
         self.running = False
+        self._stop_event = threading.Event()
         self.callbacks: Dict[str, List[Callable[[List[str]], None]]] = {}
         self.lock = threading.Lock()
+
+    @staticmethod
+    def _safe_log(log_fn: Callable[[str], None], message: str) -> None:
+        """Log without raising if stdio streams are already closed during interpreter shutdown."""
+        try:
+            log_fn(message)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _run_bounded(action: Callable[[], None], deadline: float) -> bool:
+        """Run a potentially blocking teardown action on a daemon thread up to deadline."""
+        remaining = max(0.0, deadline - time.monotonic())
+        worker = threading.Thread(target=action, daemon=True, name='redis-pubsub-teardown')
+        worker.start()
+        worker.join(timeout=remaining)
+        return not worker.is_alive()
 
     def start(self) -> None:
         """Start the pub/sub subscription thread."""
@@ -61,6 +79,7 @@ class RedisPubSubManager:
             logger.warning("PubSub manager already running")
             return
 
+        self._stop_event.clear()
         self.running = True
 
         try:
@@ -76,25 +95,29 @@ class RedisPubSubManager:
         except Exception as e:
             logger.error(f"Failed to start Redis pub/sub: {e}")
             self.running = False
+            self._stop_event.set()
             raise
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Stop the subscription and clean up."""
+        """Stop the subscription and clean up within a bounded deadline."""
         self.running = False
-        join_timeout = (
+        self._stop_event.set()
+        stop_timeout = (
             max(0.0, float(timeout))
             if isinstance(timeout, (int, float)) and not isinstance(timeout, bool)
             else 5.0
         )
+        deadline = time.monotonic() + stop_timeout
+        pubsub = self.pubsub
 
-        if self.pubsub:
-            try:
-                self.pubsub.unsubscribe(self.CHANNEL)
-            except Exception as e:
+        if pubsub:
+            def _unsubscribe() -> None:
                 try:
-                    logger.error(f"Error closing pub/sub connection: {e}")
-                except Exception:
-                    pass
+                    pubsub.unsubscribe(self.CHANNEL)
+                except Exception as e:
+                    self._safe_log(logger.error, f"Error closing pub/sub connection: {e}")
+
+            self._run_bounded(_unsubscribe, deadline)
 
         if (
             self.subscriber_thread
@@ -102,23 +125,21 @@ class RedisPubSubManager:
             and self.subscriber_thread is not threading.current_thread()
         ):
             try:
-                self.subscriber_thread.join(timeout=join_timeout)
+                self.subscriber_thread.join(timeout=max(0.0, deadline - time.monotonic()))
             except Exception:
                 pass
 
-        if self.pubsub:
-            try:
-                self.pubsub.close()
-            except Exception as e:
+        if pubsub:
+            def _close() -> None:
                 try:
-                    logger.error(f"Error closing pub/sub connection: {e}")
-                except Exception:
-                    pass
+                    pubsub.close()
+                except Exception as e:
+                    self._safe_log(logger.error, f"Error closing pub/sub connection: {e}")
 
-        try:
-            logger.info("Stopped Redis pub/sub manager")
-        except Exception:
-            pass
+            if time.monotonic() < deadline or stop_timeout == 0.0:
+                self._run_bounded(_close, deadline)
+
+        self._safe_log(logger.info, "Stopped Redis pub/sub manager")
 
     def register_callback(self, key_pattern: str, callback: Callable[[List[str]], None]) -> None:
         """
@@ -154,7 +175,8 @@ class RedisPubSubManager:
         while self.running:
             try:
                 if self.pubsub is None:
-                    time.sleep(self.RECONNECT_DELAY)
+                    if self._stop_event.wait(timeout=self.RECONNECT_DELAY):
+                        break
                     continue
                 message: Optional[Dict[str, Any]] = self.pubsub.get_message(timeout=1.0)
                 if message and message.get('type') == 'message':
@@ -162,28 +184,51 @@ class RedisPubSubManager:
             except redis.ConnectionError as e:
                 if not self.running:
                     break
-                logger.error(f"Redis connection error in pub/sub: {e}")
+                self._safe_log(logger.error, f"Redis connection error in pub/sub: {e}")
                 self._reconnect()
             except Exception as e:
                 if not self.running:
                     break
-                logger.error(f"Error in pub/sub loop: {e}")
-                time.sleep(self.RECONNECT_DELAY)
+                self._safe_log(logger.error, f"Error in pub/sub loop: {e}")
+                if self._stop_event.wait(timeout=self.RECONNECT_DELAY):
+                    break
 
     def _reconnect(self) -> None:
         """Attempt to reconnect to Redis pub/sub."""
-        logger.info("Attempting to reconnect to Redis pub/sub...")
-        time.sleep(self.RECONNECT_DELAY)
+        if not self.running:
+            return
+        self._safe_log(logger.info, "Attempting to reconnect to Redis pub/sub...")
+        if self._stop_event.wait(timeout=self.RECONNECT_DELAY) or not self.running:
+            return
 
+        pubsub: Optional[Any] = None
         try:
             if self.pubsub:
                 self.pubsub.close()
+            if not self.running:
+                return
             pubsub = self.redis_client.pubsub()
             pubsub.subscribe(self.CHANNEL)
+            if not self.running:
+                try:
+                    pubsub.unsubscribe(self.CHANNEL)
+                except Exception:
+                    pass
+                try:
+                    pubsub.close()
+                except Exception:
+                    pass
+                return
             self.pubsub = pubsub
-            logger.info("Successfully reconnected to Redis pub/sub")
+            self._safe_log(logger.info, "Successfully reconnected to Redis pub/sub")
         except Exception as e:
-            logger.error(f"Failed to reconnect: {e}")
+            if pubsub is not None and not self.running:
+                try:
+                    pubsub.close()
+                except Exception:
+                    pass
+            if self.running:
+                self._safe_log(logger.error, f"Failed to reconnect: {e}")
 
     def _handle_message(self, data: Any) -> None:
         """

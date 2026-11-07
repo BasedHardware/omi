@@ -1,4 +1,5 @@
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 from database.redis_pubsub import RedisPubSubManager
@@ -83,3 +84,47 @@ def test_cache_shutdown_suppresses_exceptions():
     mock_manager.stop.side_effect = RuntimeError("Fatal connection blip")
     with patch.object(cache_module, "_pubsub_manager", mock_manager):
         cache_module._shutdown()
+
+
+def test_redis_pubsub_stop_bounds_hanging_unsubscribe():
+    """Verify stop() returns within its deadline even when pubsub.unsubscribe() blocks."""
+    release_unsubscribe = threading.Event()
+
+    class _HangingPubSub(_FakePubSub):
+        def unsubscribe(self, channel: str) -> None:
+            release_unsubscribe.wait(timeout=2.0)
+
+    fake_client = MagicMock()
+    hanging_pubsub = _HangingPubSub()
+    fake_client.pubsub.return_value = hanging_pubsub
+
+    manager = RedisPubSubManager(fake_client)
+    manager.start()
+
+    start_ts = time.monotonic()
+    try:
+        manager.stop(timeout=0.1)
+        elapsed = time.monotonic() - start_ts
+        assert elapsed < 0.8
+        assert manager.running is False
+    finally:
+        release_unsubscribe.set()
+        hanging_pubsub._stop_event.set()
+
+
+def test_redis_pubsub_reconnect_does_not_subscribe_after_stop():
+    """Verify _reconnect() aborts after stop() instead of creating a post-stop subscription."""
+    fake_client = MagicMock()
+    initial_pubsub = _FakePubSub()
+    replacement_pubsub = _FakePubSub()
+    fake_client.pubsub.side_effect = [initial_pubsub, replacement_pubsub]
+
+    manager = RedisPubSubManager(fake_client)
+    manager.RECONNECT_DELAY = 5
+    manager.start()
+    manager.stop(timeout=0.5)
+
+    manager._reconnect()
+
+    assert fake_client.pubsub.call_count == 1
+    assert replacement_pubsub.subscribed_channels == []
