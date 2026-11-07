@@ -493,6 +493,7 @@ void main() {
 
     expect(local.added, isNotEmpty);
     expect(local.added.first.timerStart, equals(recordTimestamp));
+    expect(local.added.first.clockRun, isNull);
     expect(wal.status, WalStatus.synced);
     await card.controller.close();
     await sync.stop();
@@ -515,7 +516,9 @@ void main() {
     await future;
 
     expect(local.added, isNotEmpty);
-    expect(local.added.first.timerStart, greaterThan(1700000000));
+    expect(local.added.first.timerStart, equals(recordTimestamp));
+    expect(local.added.last.timerStart, equals(recordTimestamp));
+    expect(local.added.last.clockRun, isNull);
     await card.controller.close();
     await sync.stop();
   });

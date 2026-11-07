@@ -59,12 +59,14 @@ const ringRecordGapBreakSeconds = 60;
   required bool rtcValid,
   required String? currentRun,
 }) {
-  if (!rtcValid || ts <= 0) {
+  final hasUsableTs = RingProtocol.isUsableEpochTimestamp(ts) || (rtcValid && ts > 0);
+  if (!hasUsableTs) {
     return (breaks: false, run: currentRun ?? Wal.newClockRun());
   }
   if (previousTs == null) return (breaks: false, run: currentRun);
   // A device-clocked record after an untimed one starts a new recording.
-  if (previousTs <= 0) return (breaks: true, run: null);
+  final previousUsable = RingProtocol.isUsableEpochTimestamp(previousTs) || (rtcValid && previousTs > 0);
+  if (!previousUsable) return (breaks: true, run: null);
   final step = ts - previousTs;
   if (step < 0) return (breaks: true, run: Wal.newClockRun());
   if (step > ringRecordGapBreakSeconds) return (breaks: true, run: null);
@@ -521,6 +523,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     int elapsedTotal = 0;
     int bufferBaseElapsed = 0;
     final fps = wal.codec.getFramesPerSecond();
+    final fallbackStartTs =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - wal.totalFrames ~/ (fps == 0 ? 1 : fps);
     final chunkFrames = sdcardChunkSizeSecs * fps;
     int? doneNextSeq;
     bool doneOk = false;
@@ -591,7 +595,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           framesBeforeRecord += recordFrameCounts[i];
         }
         final chunkTimerStart = chunkTs ??
-            ((firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
+            ((firstRecordTs ?? fallbackStartTs) +
                 bufferBaseElapsed ~/ (fps > 0 ? fps : 1));
         final chunkClockRun = recordRuns.isNotEmpty ? recordRuns.first : null;
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
@@ -772,11 +776,6 @@ class RingStorageSyncImpl implements RingStorageSync {
         recordBreaks.add(boundary.breaks);
         recordRuns.add(boundary.run);
         bytesData.addAll(frames);
-      }
-
-      // If no valid hardware timestamp was found, fall back conservatively on unread duration.
-      if (doneOk || recordsConsumed >= wal.totalFrames) {
-        firstRecordTs ??= (DateTime.now().millisecondsSinceEpoch ~/ 1000 - wal.totalFrames ~/ (fps == 0 ? 1 : fps));
       }
 
       // Throttled progress update.

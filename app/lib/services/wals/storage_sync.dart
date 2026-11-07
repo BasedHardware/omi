@@ -645,8 +645,11 @@ class StorageSyncImpl implements StorageSync {
         }
         if (value.length > 4) {
           final packetTs = RingProtocol.readRecordTimestamp(value);
-          if (RingProtocol.isUsableEpochTimestamp(packetTs) && wal.timerStart <= 0) {
-            wal.timerStart = packetTs;
+          if (RingProtocol.isUsableEpochTimestamp(packetTs) &&
+              !RingProtocol.isUsableEpochTimestamp(wal.timerStart)) {
+            final fps = wal.codec.getFramesPerSecond();
+            final elapsedBeforePacket = bytesData.length ~/ (fps > 0 ? fps : 1);
+            wal.timerStart = packetTs - elapsedBeforePacket;
           }
           var audioData = value.sublist(4);
           var audioLen = audioData.length;
