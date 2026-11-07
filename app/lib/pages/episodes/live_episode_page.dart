@@ -149,7 +149,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final (listening, hasCapture, canPause) = context.select<CaptureProvider, (bool, bool, bool)>(
       (c) => (
         EpisodePresentation.isListening(EpisodePresentation.displayState(c)),
-        c.liveCaptureSource != null || c.segments.isNotEmpty || c.photos.isNotEmpty,
+        c.liveCaptureSource != null || c.havingRecordingDevice || c.segments.isNotEmpty || c.photos.isNotEmpty,
         EpisodePresentation.canPause(c),
       ),
     );
@@ -175,8 +175,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       body: LiveTranscriptView(topConversationId: widget.topConversationId, rejectSpeaker: widget.rejectSpeaker),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
-      floatingActionButton:
-          (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+      floatingActionButton: (provider.liveCaptureSource != null ||
+              provider.havingRecordingDevice ||
+              provider.segments.isNotEmpty ||
+              provider.photos.isNotEmpty)
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,

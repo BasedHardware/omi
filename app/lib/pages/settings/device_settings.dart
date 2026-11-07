@@ -619,15 +619,24 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget build(BuildContext context) {
     final provider = context.watch<DeviceProvider>();
     final capture = context.read<CaptureProvider?>();
-    // Audio metrics/transcript notifications must not rebuild the settings page.
-    final (deviceSource, devicePaused, canPause) = context.select<CaptureProvider?, (String?, bool, bool)>(
-      (c) => (c?.liveCaptureSource, c?.isPaused ?? false, c != null && EpisodePresentation.canPause(c)),
-    );
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
+    // Audio metrics/transcript notifications must not rebuild the settings page.
+    final (deviceSource, devicePaused, canPause, pendantYielded) =
+        context.select<CaptureProvider?, (String?, bool, bool, bool)>(
+      (c) => (
+        c?.liveCaptureSource,
+        c?.isPaused ?? false,
+        c != null && EpisodePresentation.canPause(c, connectedDevice: connected),
+        (c?.pendantPausedForPhone ?? false) || (c?.isCallActive ?? false),
+      ),
+    );
     const gap = SizedBox(height: OmiSpacing.xxl);
 
-    final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
+    final deviceStreaming = capture != null &&
+        ((deviceSource != null && deviceSource != 'phone') ||
+            (connected != null && deviceSource == null && !pendantYielded));
+    final controlsVisible = deviceStreaming && canPause;
 
     return Scaffold(
       backgroundColor: OmiColors.surface0,
@@ -648,8 +657,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             isCharging: connected != null && provider.isCharging,
           ),
           DeviceRecentlyGroup(load: provider.disconnectHistory),
-          if (deviceStreaming && canPause) ...[
-            DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
+          if (controlsVisible) ...[
+            DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture, connected)),
             gap,
           ],
           if (provider.isConnected)
@@ -862,9 +871,12 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     );
   }
 
-  Future<void> _togglePause(CaptureProvider capture) async {
+  Future<void> _togglePause(CaptureProvider capture, BtDevice? connected) async {
     try {
       OmiHaptics.medium();
+      if (connected != null && !capture.havingRecordingDevice) {
+        capture.updateRecordingDevice(connected);
+      }
       if (capture.isPaused) {
         await capture.resumeCapture();
       } else {

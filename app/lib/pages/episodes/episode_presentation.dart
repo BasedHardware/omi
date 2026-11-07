@@ -1,3 +1,4 @@
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -120,9 +121,16 @@ abstract final class EpisodePresentation {
       state == CaptureDisplayState.capturing ||
       state == CaptureDisplayState.recording;
 
-  static bool canPause(CaptureProvider provider) =>
-      provider.liveCaptureSource != null &&
-      LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource);
+  static bool canPause(CaptureProvider provider, {BtDevice? connectedDevice}) {
+    final device = provider.recordingDevice ?? connectedDevice;
+    final source = provider.liveCaptureSource ??
+        ((provider.havingRecordingDevice || connectedDevice != null) &&
+                !provider.pendantPausedForPhone &&
+                !provider.isCallActive
+            ? (device?.type == DeviceType.openglass ? 'openglass' : 'omi')
+            : null);
+    return source != null && LiveCaptureCard.canPause(device, source: source);
+  }
 
   /// How far the running notes reach, "Covers up to 9:28 AM · full notes when it wraps up".
   /// Notes with no moment behind them yet say when they last changed instead.
