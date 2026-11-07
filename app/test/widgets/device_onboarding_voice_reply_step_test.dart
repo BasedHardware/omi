@@ -233,7 +233,7 @@ void main() {
     expect(find.text('Star Ongoing Conversation'), findsOneWidget);
     expect(
       find.text('Replay this tour anytime in Settings › Device Settings › How to Use Your Omi'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.byKey(const Key('all_set_press_once')), findsOneWidget);
     expect(find.byKey(const Key('all_set_voice_reply')), findsOneWidget);
