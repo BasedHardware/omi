@@ -165,6 +165,19 @@ class RingProtocol {
   /// (custody firmware writes it when the RTC is unset). Legacy firmware never sets it.
   static const int recordTimestampUptimeFlag = 0x80000000;
 
+  /// Sanity bounds for a real-world UTC epoch timestamp (seconds):
+  /// - Floor: 2023-11-14 (1700000000)
+  /// - Ceiling: now + 1 day
+  static const int minValidEpochSeconds = 1700000000;
+
+  /// Check whether [timestamp] is a valid wall-clock UTC epoch timestamp (seconds)
+  /// rather than an uptime counter or missing timestamp (#20358).
+  static bool isUsableEpochTimestamp(int timestamp, {int? nowSeconds}) {
+    if (timestamp < minValidEpochSeconds) return false;
+    final maxFuture = (nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) + 86400;
+    return timestamp <= maxFuture;
+  }
+
   /// Read the 4-byte big-endian timestamp prefix of a ring record as epoch seconds,
   /// or 0 (no usable time) when the record carries the uptime flag.
   /// Caller is responsible for supplying a buffer of at least 4 bytes.

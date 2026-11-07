@@ -59,12 +59,14 @@ const ringRecordGapBreakSeconds = 60;
   required bool rtcValid,
   required String? currentRun,
 }) {
-  if (!rtcValid || ts <= 0) {
+  final hasUsableTs = RingProtocol.isUsableEpochTimestamp(ts) || (rtcValid && ts > 0);
+  if (!hasUsableTs) {
     return (breaks: false, run: currentRun ?? Wal.newClockRun());
   }
   if (previousTs == null) return (breaks: false, run: currentRun);
   // A device-clocked record after an untimed one starts a new recording.
-  if (previousTs <= 0) return (breaks: true, run: null);
+  final previousUsable = RingProtocol.isUsableEpochTimestamp(previousTs) || (rtcValid && previousTs > 0);
+  if (!previousUsable) return (breaks: true, run: null);
   final step = ts - previousTs;
   if (step < 0) return (breaks: true, run: Wal.newClockRun());
   if (step > ringRecordGapBreakSeconds) return (breaks: true, run: null);
@@ -521,6 +523,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     int elapsedTotal = 0;
     int bufferBaseElapsed = 0;
     final fps = wal.codec.getFramesPerSecond();
+    final fallbackStartTs =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - wal.totalFrames ~/ (fps == 0 ? 1 : fps);
     final chunkFrames = sdcardChunkSizeSecs * fps;
     int? doneNextSeq;
     bool doneOk = false;
@@ -580,10 +584,19 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final chunkSeqs = recordSeqs.sublist(0, recordsToTake);
         final chunk = bytesData.sublist(0, framesToTake);
-        final chunkTimerStart = (recordTimestamps.isNotEmpty && recordTimestamps.first > 0 && rtcValid)
-            ? recordTimestamps.first
-            : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
-                bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
+        int? chunkTs;
+        var framesBeforeRecord = 0;
+        for (var i = 0; i < recordsToTake; i++) {
+          final t = recordTimestamps[i];
+          if (RingProtocol.isUsableEpochTimestamp(t) || (rtcValid && t > 0)) {
+            chunkTs = t - framesBeforeRecord ~/ (fps > 0 ? fps : 1);
+            break;
+          }
+          framesBeforeRecord += recordFrameCounts[i];
+        }
+        final chunkTimerStart = chunkTs ??
+            ((firstRecordTs ?? fallbackStartTs) +
+                bufferBaseElapsed ~/ (fps > 0 ? fps : 1));
         final chunkClockRun = recordRuns.isNotEmpty ? recordRuns.first : null;
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
         try {
@@ -736,15 +749,10 @@ class RingStorageSyncImpl implements RingStorageSync {
         final frames = RingProtocol.parseAudioPayload(audio);
         elapsedTotal += frames.length;
 
-        // Anchor timerStart on the first usable timestamp.
-        if (firstRecordTs == null) {
-          if (rtcValid && ts > 0) {
-            firstRecordTs = ts;
-          } else {
-            // Fallback: now - estimated duration of the unread region.
-            final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
-            firstRecordTs = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estSecs;
-          }
+        // Anchor timerStart on the first usable timestamp (#20358).
+        if (firstRecordTs == null && (RingProtocol.isUsableEpochTimestamp(ts) || (rtcValid && ts > 0))) {
+          final elapsedBeforeRecord = (elapsedTotal - frames.length) ~/ (fps == 0 ? 1 : fps);
+          firstRecordTs = ts - elapsedBeforeRecord;
         }
 
         if (await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq)) {
