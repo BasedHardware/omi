@@ -72,16 +72,6 @@ class AllSetStep extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Text(
-            context.l10n.deviceOnboardingAllSetReplayHint(
-              context.l10n.settings,
-              context.l10n.deviceSettings,
-              context.l10n.deviceTutorial,
-            ),
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: OmiSpacing.sm),
           OmiButton(
             key: const Key('all_set_finish'),
             label: context.l10n.deviceOnboardingFinish,
