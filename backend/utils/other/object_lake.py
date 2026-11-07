@@ -193,8 +193,9 @@ def put_space_object(
     )
     _assert_owner_write_allowed(space_id, entity_id)
     keys, kek = space_keys.active_space_dek(space_id)
-    # Two authority reads per put: get/create before encryption and a fresh
-    # post-upload check. Share the first snapshot with unwrap, never cache authority.
+    # Key authority is read before encryption and again after upload. The
+    # candidate transaction also reads both deletion fences before its write.
+    # Share the first key snapshot with unwrap; never cache authority.
     try:
         dek = os.urandom(32)
         try:
