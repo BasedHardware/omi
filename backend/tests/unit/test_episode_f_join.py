@@ -68,6 +68,8 @@ def _env(monkeypatch):
 @pytest.fixture
 def store(monkeypatch):
     store = StrictFirestore()
+    # The user's current private cloud sync consent (read last, before any Jev question) is on by default here.
+    store.rows[('users', UID)] = {'private_cloud_sync_enabled': True}
     # Policy/storage seam as in test_episode_live_integrity; query ordering runs on the emulator.
     monkeypatch.setattr(
         episode_timeline,
@@ -557,6 +559,53 @@ def test_a_candidate_changed_while_the_predecessor_is_read_never_reaches_jev(sto
     assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
 
 
+@pytest.mark.parametrize('user_state', ['doc_missing', 'field_missing', 'off'])
+def test_a_synced_candidate_without_current_user_consent_is_never_sent_to_jev(store, user_state):
+    # The user-level toggle is read last. A missing user document or field is not permission (fail closed).
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    if user_state == 'doc_missing':
+        store.rows.pop(('users', UID))
+    elif user_state == 'field_missing':
+        store.rows[('users', UID)] = {}
+    else:
+        store.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    span = conversation_span(row)
+    asked = []
+    ask = lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    service._attach_recorded_synced(
+        UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+    )
+    assert asked == [], 'a user without current consent must never reach Jev'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+def test_a_user_who_turns_private_cloud_sync_off_while_the_predecessor_is_read_is_never_asked_about(store, monkeypatch):
+    # The row-level snapshot still says on; the user's current toggle, read last, says off.
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    span = conversation_span(row)
+    real_previous = f_join.previous_transcript
+
+    def toggling_previous(*a, **kw):
+        out = real_previous(*a, **kw)
+        store.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+        return out
+
+    monkeypatch.setattr(f_join, 'previous_transcript', toggling_previous)
+    asked = []
+    ask = lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    service._attach_recorded_synced(
+        UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+    )
+    assert asked == [], 'a toggle turned off during the reads must keep today\'s join'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
 def test_an_unexpected_failure_closing_the_owner_keeps_todays_join(store, monkeypatch):
     first = _first_episode(store)
     _store_row(store, 'c2', SECOND, minutes=12)
@@ -868,7 +917,7 @@ def test_synced_f_read_and_jev_budget_includes_close_and_all_attach_retries(
 
     def counted(ref, *a, **kw):
         reads.append(ref.path)
-        if ref.path[2] == 'people':
+        if len(ref.path) > 2 and ref.path[2] == 'people':
             assert kw.pop('field_paths') == ['name']
             name_reads.append(ref.path[-1])
         return read(ref, *a, **kw)
@@ -914,6 +963,10 @@ def test_synced_f_read_and_jev_budget_includes_close_and_all_attach_retries(
     assert sum(pid.startswith('c2-') for pid in name_reads) == 2
     assert sum(pid.startswith('c4-') for pid in name_reads) == 2
     assert len(reads) <= 24, reads
+    if answer != 0.05:
+        # Non-close outcomes: 12 in the default configuration. The optimization-off and owner-reuse-off
+        # configurations add one re-read each, so the worst case is 13 until lead2 rules on the bound.
+        assert len(reads) <= 13, reads
     if answer == 0.05:
         assert store.rows[('users', UID, 'episodes', first['id'])]['status'] == 'closed'
         assert store.transactions[-1]._max_attempts == 1

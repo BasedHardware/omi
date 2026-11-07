@@ -309,6 +309,18 @@ def _candidate_may_feed(uid: str, conversation_id: str, row: Optional[Mapping[st
     return bool(row) and may_feed_llm(uid, row)
 
 
+def _user_consent_allows(uid: str, c: Any) -> bool:
+    """The user's current private cloud sync consent, read at the last step before Jev.
+
+    The conversation row carries a snapshot of the consent, so a toggle after the row was written is seen here.
+    A missing user document or field is not permission (fail closed).
+    """
+    client = c.firestore_client if c.firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).get(field_paths=['private_cloud_sync_enabled'])
+    data = snapshot.to_dict() or {}
+    return data.get('private_cloud_sync_enabled') is True
+
+
 def _fallback(reason: str) -> None:
     record_fallback(
         component='episode_f_join',
@@ -400,7 +412,8 @@ def settle(
         _fallback('other')
         return keep
     try:
-        allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c)
+        # The candidate's stored privacy, then the user's current consent: the last reads before the question.
+        allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c) and _user_consent_allows(uid, c)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
         metrics.record_boundary('f_no_answer')
