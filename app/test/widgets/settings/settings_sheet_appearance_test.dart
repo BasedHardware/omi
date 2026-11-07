@@ -25,6 +25,9 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => true;
 
   @override
+  int get batteryLevel => -1;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

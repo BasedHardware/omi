@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +48,9 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 
   @override
   BtDevice? get pairedDevice => paired;
+
+  @override
+  int get batteryLevel => 82;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -159,45 +163,49 @@ void main() {
   }
 
   testWidgets(
-      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+      'the sheet is Account (name and email), Plan, the most-opened groups, Voice, Integrations, Connect an Agent, Memories, Goals, Help, Referral and Feedback, in order, keyed',
       (
     tester,
   ) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
     expect(rows.map(_keyOf).toList(), [
-      'settings_account',
       'settings_row_planAndUsage',
-      'settings_row_referral',
       'settings_group_device',
       'settings_group_recording',
-      'settings_group_voice',
       'settings_group_notifications',
+      'settings_group_privacy',
+      'settings_group_voice',
       'settings_group_integrations',
       'settings_row_connect_agent',
-      'settings_group_privacy',
       'settings_row_memories',
       'settings_row_goals',
       'settings_group_help',
+      'settings_row_referral',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
     ]);
-    // Account shows who is signed in.
-    expect(rows.first.title, 'Ada');
-    expect(rows.first.subtitle, 'ada@example.com');
-    expect(rows.skip(1).map((r) => r.title).toList(), [
+    // Account, above the rows, shows who is signed in: the name and the email, no picture.
+    final account = find.byKey(const ValueKey('settings_account'));
+    expect(account, findsOneWidget);
+    expect(find.descendant(of: account, matching: find.text('Ada')), findsOneWidget);
+    expect(find.descendant(of: account, matching: find.text('ada@example.com')), findsOneWidget);
+    expect(find.descendant(of: account, matching: find.byType(FaIcon)), findsNothing);
+    // Device shows the connected device's battery without opening the group.
+    expect(rows[1].value, '82%');
+    expect(rows.map((r) => r.title).toList(), [
       en.planAndUsage,
-      en.referralProgram,
       en.device,
       en.recordingAndTranscription,
-      en.assistantVoiceSettingsTitle,
       en.notificationsAndDisplay,
+      en.dataAndPrivacy,
+      en.assistantVoiceSettingsTitle,
       en.integrations,
       en.connectAnAgent,
-      en.dataAndPrivacy,
       en.memories,
       en.goals,
       en.helpAndAbout,
+      en.referralProgram,
       en.feedbackBug,
       en.developerSettings,
     ]);
@@ -223,6 +231,8 @@ void main() {
     }
 
     record(0);
+    // Account is a header above the rows rather than a row.
+    if (find.byKey(const ValueKey('settings_account')).evaluate().isNotEmpty) keyDepth['settings_account'] = 0;
 
     // Depth 1: every page of rows one tap below the sheet.
     final pageTitles = <String, List<String>>{};
