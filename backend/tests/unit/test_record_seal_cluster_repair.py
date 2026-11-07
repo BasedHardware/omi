@@ -137,6 +137,21 @@ def test_spawn_failure_closes_terminal_transport(monkeypatch):
     assert output.closed
 
 
+def test_counter_sample_map_matches_served_counter_metadata():
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+    from utils.observability.firestore_probe_export import COUNTER_SAMPLES
+
+    FIRESTORE_BILLED_READS.labels(collection='x', kind='query', tier='unattributed').inc(1)
+    FIRESTORE_BILLED_READS_BY_CALLER.labels(collection='x', kind='query', caller='tests:probe_export_pin').inc(1)
+    seen = {}
+    for collector, _label_keys in COUNTER_SAMPLES.values():
+        for family in collector.collect():
+            for sample in family.samples:
+                if sample.name.endswith('_total'):
+                    seen[sample.name] = frozenset(sample.labels)
+    assert seen == {name: frozenset(label_keys) for name, (_collector, label_keys) in COUNTER_SAMPLES.items()}
+
+
 def test_repair_coordinator_terminal_totals_escape_dependency_silencing(tmp_path):
     entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
     script = tmp_path / 'terminal_boundary.py'

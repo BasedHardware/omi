@@ -11,6 +11,21 @@ from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_
 
 logger = logging.getLogger(__name__)
 COLLECTORS = (FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER)
+# Sample names and label keys of the served counters, pinned from their
+# declarations in database/firestore_document_probe.py. prometheus_client
+# exposes them only via private attributes (_name/_labelnames), which backend
+# typecheck forbids; the drift pin in test_record_seal_cluster_repair.py
+# fails if the probe renames either side.
+COUNTER_SAMPLES = {
+    'omi_firestore_billed_reads_total': (
+        FIRESTORE_BILLED_READS,
+        ('collection', 'kind', 'tier'),
+    ),
+    'omi_firestore_billed_reads_by_caller_total': (
+        FIRESTORE_BILLED_READS_BY_CALLER,
+        ('collection', 'kind', 'caller'),
+    ),
+}
 CHILD_FD_ENV = 'OMI_FIRESTORE_PROBE_TERMINAL_FD'
 MAX_TERMINAL_BYTES = 4 * 1024 * 1024
 
@@ -109,17 +124,18 @@ def collect_child_probe(process):
             raw = output.read(MAX_TERMINAL_BYTES + 1)
         if not raw or len(raw) > MAX_TERMINAL_BYTES:
             raise ValueError('missing or oversized terminal aggregate')
-        counters = {collector._name + '_total': collector for collector in COLLECTORS}
+        counters = COUNTER_SAMPLES
         rows = json.loads(raw)
         # Validate the whole snapshot before incrementing any parent counter.
         for name, labels, value in rows:
-            if name not in counters or set(labels) != set(counters[name]._labelnames):
+            expected = counters.get(name)
+            if expected is None or set(labels) != set(expected[1]):
                 raise ValueError('invalid terminal metric')
             if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
                 raise ValueError('invalid terminal total')
         for name, labels, value in rows:
             if 'caller' in labels:
                 labels = {**labels, 'caller': bound_caller(labels['caller'])}
-            counters[name].labels(**labels).inc(value)
+            counters[name][0].labels(**labels).inc(value)
     except Exception:
         _unavailable()
