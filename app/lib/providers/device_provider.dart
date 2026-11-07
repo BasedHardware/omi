@@ -129,6 +129,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final FirmwareUpdatePromptCoordinator _firmwareUpdatePromptCoordinator = FirmwareUpdatePromptCoordinator();
   bool _pairingLostDialogShowing = false;
   bool _isFirmwareUpdateInProgress = false;
+  bool _dfuDisconnectedDevice = false;
+  int _dfuDisconnectGeneration = 0;
+  Future<void>? _dfuReconnectFuture;
   bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
 
   // Current and latest firmware versions for UI display
@@ -279,6 +282,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _firmwareUpdateCheckSessionGuard.invalidate();
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _checkingFirmwareSession = null;
+    _dfuDisconnectedDevice = false;
+    _dfuReconnectFuture = null;
     _havingNewFirmware = false;
     _latestFirmwareVersion = '';
     _latestStableFirmwareVersion = '';
@@ -834,6 +839,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// Hardware connect is not account publication; `_handleDeviceConnected` is.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     if (_isDisposed) return;
+    final dfuReconnect = _dfuReconnectFuture;
+    if (dfuReconnect != null) {
+      return dfuReconnect;
+    }
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
     if (pairedDeviceId.isNotEmpty) {
       unawaited(DeviceHealthTelemetry.maybeEmit(SharedPreferencesUtil().btDevice));
@@ -973,6 +982,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _deviceHealthTimer?.cancel();
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
+    _dfuDisconnectedDevice = false;
+    _dfuReconnectFuture = null;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
       BleBridge.instance.pairingLostCallback = null;
@@ -1687,7 +1698,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _connectDebouncer.cancel();
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
-        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+        if ((deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) &&
+            !(_isFirmwareUpdateInProgress && !isConnected && connectedDevice == null)) {
           // Invalidate immediately, before disconnect UI/capture work is debounced.
           _resetBatteryState();
           notifyListeners();
@@ -1706,24 +1718,55 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   @override
   void onStatusChanged(DeviceServiceStatus status) {}
 
-  prepareDFU() {
+  Future<void> prepareDFU() async {
     if (!FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate || connectedDevice == null) {
       return;
     }
+    final device = connectedDevice!;
+    final dfuGeneration = ++_dfuDisconnectGeneration;
+    _dfuDisconnectedDevice = true;
     setFirmwareUpdateInProgress(true);
-    _bleDisconnectDevice(connectedDevice!);
+    try {
+      await _bleDisconnectDevice(device);
+    } catch (e) {
+      Logger.debug('prepareDFU: disconnect failed: $e');
+    }
+    if (dfuGeneration != _dfuDisconnectGeneration || !_dfuDisconnectedDevice || !_isFirmwareUpdateInProgress) {
+      return;
+    }
+    _disconnectDebouncer.cancel();
+    if (connectedDevice?.id == device.id) {
+      onDeviceDisconnected();
+    }
   }
 
   // Reset firmware update state when update completes or fails
   void resetFirmwareUpdateState() {
+    _dfuDisconnectGeneration++;
+    final shouldReconnect = _dfuDisconnectedDevice;
+    final wasInProgress = _isFirmwareUpdateInProgress || ServiceManager.instance().device.reconnectPaused;
+    _dfuDisconnectedDevice = false;
     _isFirmwareUpdateInProgress = false;
     ServiceManager.instance().device.reconnectPaused = false;
-    unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
     notifyListeners();
+    if (shouldReconnect) {
+      late final Future<void> reconnect;
+      reconnect = initiateConnection('resetFirmwareUpdateState', boundDeviceOnly: true).whenComplete(() {
+        if (identical(_dfuReconnectFuture, reconnect)) {
+          _dfuReconnectFuture = null;
+        }
+      });
+      _dfuReconnectFuture = reconnect;
+    } else if (wasInProgress && _dfuReconnectFuture == null) {
+      unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
+    }
   }
 
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
+    if (!inProgress) {
+      _dfuDisconnectGeneration++;
+    }
     _isFirmwareUpdateInProgress = inProgress;
     ServiceManager.instance().device.reconnectPaused = inProgress;
     if (inProgress) {

@@ -2,14 +2,21 @@ import 'dart:async';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core_platform_interface/test.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -18,6 +25,7 @@ import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 // A native link that is up while Dart shows "Disconnected" until the app is
 // killed: the launch connect gave up at its 60s deadline, the pendant arrived
@@ -37,6 +45,28 @@ class _TestConnectivityPlatform extends ConnectivityPlatform {
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
+class _CrashlyticsCapableFirebaseCore implements TestFirebaseCoreHostApi {
+  @override
+  Future<PigeonInitializeResponse> initializeApp(
+    String appName,
+    PigeonFirebaseOptions initializeAppRequest,
+  ) async {
+    return PigeonInitializeResponse(
+      name: appName,
+      options: initializeAppRequest,
+      pluginConstants: {
+        'plugins.flutter.io/firebase_crashlytics': {'isCrashlyticsCollectionEnabled': true},
+      },
+    );
+  }
+
+  @override
+  Future<List<PigeonInitializeResponse?>> initializeCore() async => [];
+
+  @override
+  Future<PigeonFirebaseOptions> optionsFromResource() async => throw UnimplementedError();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -48,6 +78,7 @@ void main() {
   var manageCalls = 0;
   var unmanageCalls = 0;
   var unmanageFails = false;
+  Completer<void>? unmanageGate;
 
   void handle(String method, Object? Function(List<Object?> args) reply) {
     final name = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
@@ -70,9 +101,30 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    PlatformManager.initializeForLocalHarness();
+    Env.overrideApiBaseUrl('https://api.omi.me/');
+    TestFirebaseCoreHostApi.setup(_CrashlyticsCapableFirebaseCore());
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/firebase_crashlytics'),
+      (call) async => null,
+    );
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: 'fake',
+          appId: '1:1:ios:fake',
+          messagingSenderId: '1',
+          projectId: 'demo-omi-local',
+        ),
+      );
+    }
     try {
       await ServiceManager.init();
     } catch (_) {}
+  });
+
+  tearDownAll(() {
+    Env.clearApiBaseUrlOverrideForTesting();
   });
 
   setUp(() {
@@ -82,6 +134,7 @@ void main() {
     SharedPreferencesUtil().saveStringList('manualBleDisconnects', []);
     nativeReplaysReady = false;
     unmanageFails = false;
+    unmanageGate = null;
     manageCalls = 0;
     unmanageCalls = 0;
     handle('getBluetoothState', (_) => adapterState);
@@ -107,6 +160,10 @@ void main() {
     const unmanage = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice';
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(unmanage, (message) async {
       unmanageCalls++;
+      final gate = unmanageGate;
+      if (gate != null) {
+        await gate.future;
+      }
       // A pigeon error reply: [code, message, details].
       return BleHostApi.pigeonChannelCodec
           .encodeMessage(unmanageFails ? <Object?>['ble', 'native busy', null] : <Object?>[null]);
@@ -676,5 +733,219 @@ void main() {
       provider.dispose();
       async.flushTimers();
     });
+  });
+
+  test('finishing a firmware update re-initiates connection after prepareDFU disconnected the pendant', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 1, reason: 'prepareDFU disconnects the pendant before starting DFU');
+      expect(provider.isConnected, isFalse);
+
+      // Simulate tapping Done after firmware update finishes: resetFirmwareUpdateState
+      // followed by FirmwareUpdateDone initiateConnection must call manageDevice once
+      // so native clears manuallyDisconnected and reconnects the pendant.
+      provider.resetFirmwareUpdateState();
+      provider.initiateConnection('FirmwareUpdateDone', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+
+      expect(manageCalls, 2);
+      expect(provider.isConnected, isTrue);
+      expect(provider.connectedDevice?.id, _deviceId);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('a failed DFU arms native reconnect and adopts the pendant once it exits DFU', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 1);
+      expect(provider.isConnected, isFalse);
+      expect(provider.isFirmwareUpdateInProgress, isTrue);
+
+      // Update fails while the pendant is still in DFU mode (not yet answering normal BLE).
+      linkUp = false;
+      nativeReplaysReady = false;
+      provider.resetFirmwareUpdateState();
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      // Even if the initial reconnect attempt times out while the pendant remains in DFU,
+      // manageDevice was called once to clear manuallyDisconnected and _dfuReconnectFuture
+      // clears on completion so subsequent connection attempts are not short-circuited.
+      async.elapse(const Duration(seconds: 61));
+      expect(manageCalls, 2, reason: 'failure-path resetFirmwareUpdateState arms native auto-reconnect');
+      expect(provider.isConnected, isFalse, reason: 'pendant is still in DFU mode');
+
+      // Once the pendant reboots out of DFU and native reports device-ready, the provider adopts it.
+      linkUp = true;
+      BleBridge.instance.onDeviceReady(_deviceId, _services);
+      async.elapse(const Duration(seconds: 5));
+
+      expect(provider.isConnected, isTrue);
+      expect(provider.connectedDevice?.id, _deviceId);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('prepareDFU does not tear down a reconnect started before its awaited disconnect completes', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      unmanageGate = Completer<void>();
+      unawaited(provider.prepareDFU());
+      async.flushMicrotasks();
+      expect(unmanageCalls, 1);
+
+      // Before the awaited native disconnect finishes, the DFU episode is reset and
+      // a fresh reconnect completes.
+      provider.resetFirmwareUpdateState();
+      async.elapse(const Duration(seconds: 5));
+      expect(manageCalls, 2);
+      expect(provider.isConnected, isTrue);
+
+      // Now the delayed unmanageDevice call from the retired prepareDFU episode resolves;
+      // it must not clear the newly established connection.
+      unmanageGate!.complete();
+      async.elapse(const Duration(seconds: 2));
+      expect(provider.isConnected, isTrue);
+      expect(provider.connectedDevice?.id, _deviceId);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  testWidgets('FirmwareUpdate widget disposal reconnects mid-DFU and no-ops after Done', (tester) async {
+    Future<bool> dummyHomeOpener(String route, {bool Function()? canOpen}) async => true;
+    HomeNavigation.register(dummyHomeOpener);
+    addTearDown(() => HomeNavigation.unregister(dummyHomeOpener));
+
+    pairPendant();
+    linkUp = true;
+    nativeReplaysReady = true;
+    final provider = DeviceProvider();
+
+    unawaited(provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true));
+    await tester.pump(const Duration(seconds: 5));
+    expect(provider.isConnected, isTrue);
+    expect(manageCalls, 1);
+
+    final fixtureDevice = BtDevice(
+      id: _deviceId,
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -60,
+      modelNumber: 'Omi',
+      firmwareRevision: '2.0.10',
+    );
+
+    Widget buildHost() {
+      return ChangeNotifierProvider<DeviceProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                key: const Key('open_firmware_update'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => FirmwareUpdate(device: fixtureDevice),
+                    ),
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildHost());
+    await tester.tap(find.byKey(const Key('open_firmware_update')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FirmwareUpdate), findsOneWidget);
+    expect(provider.onFirmwareUpdatePage, isTrue);
+
+    // 1) Leaving the FirmwareUpdate page without tapping Done: popping disposes
+    // FirmwareUpdate, which schedules a post-frame callback that clears
+    // onFirmwareUpdatePage and calls resetFirmwareUpdateState().
+    await provider.prepareDFU();
+    await tester.pump(const Duration(seconds: 2));
+    expect(unmanageCalls, 1);
+    expect(provider.isConnected, isFalse);
+
+    Navigator.of(tester.element(find.byType(FirmwareUpdate))).pop();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(find.byType(FirmwareUpdate), findsNothing);
+    expect(provider.onFirmwareUpdatePage, isFalse);
+    expect(manageCalls, 2, reason: 'FirmwareUpdate.dispose post-frame reset must reconnect the pendant');
+    expect(provider.isConnected, isTrue);
+
+    // 2) Tapping Done on FirmwareUpdate consumes _dfuDisconnectedDevice and pops back Home;
+    // when FirmwareUpdate.dispose()'s post-frame callback runs on the following frame,
+    // it must not start a duplicate reconnect.
+    await tester.tap(find.byKey(const Key('open_firmware_update')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FirmwareUpdate), findsOneWidget);
+    expect(provider.onFirmwareUpdatePage, isTrue);
+
+    await provider.prepareDFU();
+    await tester.pump(const Duration(seconds: 2));
+    expect(unmanageCalls, 2);
+    expect(provider.isConnected, isFalse);
+
+    final dynamic state = tester.state(find.byType(FirmwareUpdate));
+    state.isLoading = false;
+    state.isInstalling = false;
+    state.isInstalled = true;
+    (state as State).setState(() {});
+    await tester.pump();
+
+    expect(find.byKey(const Key('firmware_update_done')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('firmware_update_done')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(find.byType(FirmwareUpdate), findsNothing);
+    expect(provider.onFirmwareUpdatePage, isFalse);
+    expect(manageCalls, 3, reason: 'Done button + FirmwareUpdate.dispose must issue only one manageDevice call');
+    expect(provider.isConnected, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+    await ServiceManager.instance().device.forgetDevice(_deviceId);
+    provider.dispose();
   });
 }
