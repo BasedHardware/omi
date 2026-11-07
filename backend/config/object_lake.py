@@ -56,13 +56,23 @@ def key_cache_ttl_seconds() -> int:
 _FAKE_KMS_STAGES = frozenset({'local', 'offline'})
 
 
+# Production stays refused at runtime too, not only in deploy validation, until
+# the C4 wipe-coverage gate is green.
+_WRITE_STAGES = _FAKE_KMS_STAGES | {'dev'}
+
+
+def _stage() -> str:
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower()
+
+
 def fake_kms_allowed() -> bool:
-    return os.getenv('OMI_ENV_STAGE', '').strip().lower() in _FAKE_KMS_STAGES
+    return _stage() in _FAKE_KMS_STAGES
 
 
 def write_admitted(space_id: str) -> bool:
     return (
         bool(space_id)
+        and _stage() in _WRITE_STAGES
         and write_enabled()
         and bool(bucket())
         and bool(release())
@@ -73,7 +83,7 @@ def write_admitted(space_id: str) -> bool:
 
 def validate_write_settings(stage: str, enabled: object, percent: object) -> list[str]:
     """Deployment gate independent of cohort admission or provisioned bindings."""
-    if stage.strip().lower() in _FAKE_KMS_STAGES | {'dev'}:
+    if stage.strip().lower() in _WRITE_STAGES:
         return []
     errors = []
     reason = 'must stay off until the C4 wipe-coverage gate is green'

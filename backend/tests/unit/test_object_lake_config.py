@@ -80,6 +80,8 @@ def test_deployed_write_settings_blocked_until_c4(monkeypatch, stage, enabled, p
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', percent)
     errors = object_lake.validate_write_settings(stage, enabled, percent)
     assert errors and all('C4 wipe-coverage' in error for error in errors)
+    # Runtime admission refuses too, so drifted settings that skip deploy validation cannot write.
+    assert not object_lake.write_admitted('owner')
 
 
 def test_dev_writes_admitted_with_real_bindings(monkeypatch):

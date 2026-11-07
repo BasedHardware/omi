@@ -161,9 +161,9 @@ def test_deployed_stage_without_kms_key_closes_write_admission(lake_world, monke
     assert isinstance(encode()['transcript_segments'], bytes)
     put.assert_not_called()
     monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
-    # Per-object DEKs lift the cryptographic stage fence. Production remains
-    # blocked by deployment validation until C4, independently of codec admission.
-    assert pointer.config.write_admitted(UID)
+    # Per-object DEKs lift the cryptographic stage fence for dev. Production and
+    # unknown stages stay refused at runtime and in deployment validation until C4.
+    assert pointer.config.write_admitted(UID) == (stage == 'dev')
     assert bool(pointer.config.validate_write_settings(stage, 'true', '100')) == (stage != 'dev')
 
 
