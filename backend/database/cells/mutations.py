@@ -42,8 +42,9 @@ def apply_space_mutation(
     operation: dict[str, Any],
     now: float,
 ) -> tuple[dict[str, Any], bool]:
-    # Deliberately copied from database/conversation_mutations.py:_fingerprint:
-    # importing that Firestore adapter violates the cell boundary. A6 unifies it.
+    # Canonicalization follows database/conversation_mutations.py:_fingerprint,
+    # but uses 'base' instead of 'base_revision'; fingerprints are not identical.
+    # Importing that Firestore adapter violates the cell boundary. A6 unifies it.
     token = base_revision.astimezone(timezone.utc).isoformat() if isinstance(base_revision, datetime) else base_revision
     fingerprint = sha256(
         json.dumps(

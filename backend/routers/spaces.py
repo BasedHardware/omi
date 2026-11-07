@@ -3,12 +3,14 @@
 import base64
 import binascii
 import json
+import logging
 import time
 from contextlib import contextmanager
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 
 from config import spaces_sync_api
 from database.cells import serving
@@ -29,14 +31,28 @@ from models.space_sync import (
 from utils.other import endpoints as auth
 from utils.product_metrics import record_product_event
 
+logger = logging.getLogger(__name__)
+
 
 def _require_enabled():
     if not spaces_sync_api.enabled():
         raise HTTPException(503, detail={'code': 'spaces_sync_api_disabled', 'retryable': False})
 
 
-# Router dependencies execute before auth/limiter dependencies: dark means zero IO.
-router = APIRouter(dependencies=[Depends(_require_enabled)])
+class _EnabledSpaceRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def admitted(request: Request):
+            # FastAPI parses bodies before dependencies. Check admission before
+            # entering that handler so dark POSTs never even receive the body.
+            _require_enabled()
+            return await handler(request)
+
+        return admitted
+
+
+router = APIRouter(route_class=_EnabledSpaceRoute)
 
 
 def _directory_unavailable():
@@ -61,7 +77,7 @@ def _serving_space(sid: str, uid: str):
         raise HTTPException(404, detail='Space not found')
     if space.cell == 'firestore':
         raise HTTPException(503, detail={'code': 'space_not_cell_served', 'retryable': False})
-    if space.cell == 'disabled':
+    if not isinstance(space.cell, str) or not space.cell or space.cell == 'disabled':
         raise _directory_unavailable()
     return space
 
@@ -98,6 +114,8 @@ def _cell_errors():
         raise
     except Exception as error:
         # Dial/configuration/pool failures can precede the store's typed fence.
+        # Exception messages/tracebacks may include document values or SQL args.
+        logger.error('Space sync cell operation failed: exception_type=%s', type(error).__name__)
         raise HTTPException(503, detail={'code': 'cell_space_unavailable', 'retryable': True}) from error
 
 

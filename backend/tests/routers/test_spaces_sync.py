@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -105,6 +105,42 @@ def no_io(*args, **kwargs):
     raise AssertionError('unexpected IO')
 
 
+@pytest.mark.parametrize('endpoint', ['mutations', 'cursors'])
+@pytest.mark.parametrize('body', [b'{', b'{"padding":"' + b'x' * (1024 * 1024) + b'"}'], ids=['malformed', 'oversized'])
+async def test_disabled_gate_never_reads_request_body(monkeypatch, endpoint, body):
+    monkeypatch.delenv('SPACES_SYNC_API_ENABLED', raising=False)
+    monkeypatch.setattr(serving, 'cell_store', no_io)
+    monkeypatch.setattr(directory_router, 'directory_store', no_io)
+    limiter = Mock(side_effect=no_io)
+    monkeypatch.setattr(auth, '_enforce_rate_limit', limiter)
+    app = FastAPI()
+    app.include_router(spaces.router)
+    authenticate = Mock(side_effect=no_io)
+    app.dependency_overrides[auth.get_current_user_uid] = authenticate
+    receive = AsyncMock(return_value={'type': 'http.request', 'body': body, 'more_body': False})
+    send = AsyncMock()
+    await app(
+        {
+            'type': 'http',
+            'http_version': '1.1',
+            'method': 'POST',
+            'path': f'/v1/spaces/synthetic-space/{endpoint}',
+            'root_path': '',
+            'query_string': b'',
+            'scheme': 'http',
+            'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body)).encode())],
+        },
+        receive,
+        send,
+    )
+    messages = [call.args[0] for call in send.await_args_list]
+    assert messages[0]['status'] == 503
+    assert json.loads(messages[1]['body']) == {'detail': {'code': 'spaces_sync_api_disabled', 'retryable': False}}
+    receive.assert_not_awaited()
+    authenticate.assert_not_called()
+    limiter.assert_not_called()
+
+
 @pytest.mark.parametrize('endpoint', ['changes', 'snapshot', 'mutations', 'cursors'])
 @pytest.mark.parametrize(
     'gate,status,code',
@@ -165,6 +201,31 @@ def test_invalid_sid_and_membership_refresh(api):
     assert request(api, 'changes').status_code == 200
     api.directory.revoke_member(api.sid, api.sid, now=time.time())
     assert request(api, 'changes').status_code == 404
+
+
+@pytest.mark.parametrize('cell', [None, '', 123])
+def test_malformed_directory_route_fails_closed(api, monkeypatch, cell):
+    enroll(api)
+    monkeypatch.setattr(api.directory, 'get_space', lambda sid: SimpleNamespace(cell=cell))
+    monkeypatch.setattr(serving, 'cell_store', no_io)
+    for endpoint in ['changes', 'snapshot', 'mutations', 'cursors']:
+        response = request(api, endpoint)
+        assert response.status_code == 503
+        assert response.json()['detail'] == {'code': 'directory_routing_unavailable', 'retryable': True}
+
+
+def test_unexpected_cell_error_logs_only_exception_type(api, monkeypatch, caplog):
+    enroll(api)
+    monkeypatch.setattr(serving, 'cell_store', Mock(side_effect=RuntimeError('synthetic-private-content')))
+    with caplog.at_level('ERROR', logger=spaces.__name__):
+        response = request(api, 'changes')
+    assert response.status_code == 503
+    assert response.json()['detail'] == {'code': 'cell_space_unavailable', 'retryable': True}
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.getMessage() == 'Space sync cell operation failed: exception_type=RuntimeError'
+    assert record.exc_info is None
+    assert 'synthetic-private-content' not in caplog.text
 
 
 def test_changes_content_free_coalesced_current_state_and_tail(api):
