@@ -300,7 +300,7 @@ class ReportTests(DoctorTestCase):
         self.assertEqual(report.findings, [])
         self.assertNotIn("app dependencies", report.checked)
         self.assertIn(
-            "app dependencies (deferred: the first flutter command resolves them; the pre-push check still requires them when app/ changes)",
+            "app dependencies (deferred: the first flutter command resolves them; the pre-push check still requires them for Dart formatting and Flutter generated output)",
             report.skipped,
         )
 
