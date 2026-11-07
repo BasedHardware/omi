@@ -2491,7 +2491,7 @@ def test_worker_heartbeats_at_major_operation_boundaries(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1') is True
     for operation in ('billing', 'agent_vm', 'credentials', 'auth', 'derived', 'firestore'):
         assert calls[calls.index(operation) - 1] == 'heartbeat'
-    assert calls.count('heartbeat') == 10
+    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat']
     account_deletion.users_db.mark_user_deletion_auth_deleted.assert_called_once_with('uid1')
 
 
@@ -2592,8 +2592,18 @@ def test_required_cell_purge_failure_retries_before_firestore(monkeypatch):
 def test_off_wipe_never_enters_cell_step(monkeypatch):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
+    events = []
+    monkeypatch.setattr(
+        account_deletion.users_db, 'heartbeat_user_deletion_wipe', lambda uid: events.append('heartbeat')
+    )
+    monkeypatch.setattr(account_deletion, 'purge_derived_user_data', lambda uid: events.append('derived') or {})
+    monkeypatch.setattr(
+        account_deletion.users_db, 'delete_user_data', lambda uid: events.append('firestore') or {'status': 'ok'}
+    )
     purge = MagicMock(side_effect=AssertionError('off-mode cell wipe'))
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', purge)
     assert account_deletion.background_wipe_user_data('uid1') is True
     purge.assert_not_called()
-    assert account_deletion.users_db.heartbeat_user_deletion_wipe.call_count == 10
+    # The single legacy heartbeat before Firestore is still required. A new
+    # heartbeat for the skipped cell step would add a second event here.
+    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat']
