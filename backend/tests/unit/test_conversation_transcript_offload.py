@@ -1368,8 +1368,25 @@ def test_grouping_protection_rechecks_write_kill_switch(lake_world, monkeypatch)
     assert lake_world.calls == {'get': 0, 'put': 0}
 
 
-@pytest.mark.parametrize('writer', ['persist', 'upsert', 'create'])
-@pytest.mark.parametrize('reason', ['deleted', 'private', 'locked', 'missing', 'stale'])
+@pytest.mark.parametrize(
+    'writer,reason',
+    [
+        ('persist', 'deleted'),
+        ('persist', 'private'),
+        ('persist', 'locked'),
+        ('persist', 'missing'),
+        ('persist', 'stale'),
+        ('upsert', 'deleted'),
+        ('upsert', 'private'),
+        ('upsert', 'locked'),
+        ('upsert', 'missing'),
+        ('create', 'deleted'),
+        ('create', 'private'),
+        ('create', 'locked'),
+        ('create', 'missing'),
+        ('create', 'stale'),
+    ],
+)
 def test_lifecycle_decorator_never_uploads_before_guard(lake_world, monkeypatch, writer, reason):
     client = DreamFirestore()
     existing = {'id': CID, 'status': 'processing', 'visibility': 'shared', 'transcript_segments': []}
@@ -1381,7 +1398,7 @@ def test_lifecycle_decorator_never_uploads_before_guard(lake_world, monkeypatch,
         existing['is_locked'] = True
     elif reason == 'stale':
         existing['sync_content_revision'] = 7
-    if reason != 'missing' or writer == 'upsert':
+    if reason != 'missing':
         client.rows[PATH] = deepcopy(existing)
     payload = {
         'id': CID,
@@ -1408,8 +1425,12 @@ def test_lifecycle_decorator_never_uploads_before_guard(lake_world, monkeypatch,
         assert result is False
     if refused or reason in {'deleted', 'private', 'locked'}:
         assert lake_world.calls['put'] == 0
+    else:
+        assert result is not False
+        assert lake_world.calls['put'] == 1
+        assert isinstance(client.rows[PATH]['transcript_segments'], dict)
     if refused or (writer == 'upsert' and reason == 'deleted'):
-        assert client.rows.get(PATH) == (existing if reason != 'missing' or writer == 'upsert' else None)
+        assert client.rows.get(PATH) == (existing if reason != 'missing' else None)
 
 
 def test_processing_upload_follows_recurring_privacy_filter(lake_world, monkeypatch):
