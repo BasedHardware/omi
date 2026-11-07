@@ -109,7 +109,9 @@ def _make_txn():
 
 def _run(data, generated='generated-job'):
     txn = _make_txn()
-    raw_fn = getattr(users_db._requeue_statusless_deletion_marker_txn, 'to_wrap', users_db._requeue_statusless_deletion_marker_txn)
+    raw_fn = getattr(
+        users_db._requeue_statusless_deletion_marker_txn, 'to_wrap', users_db._requeue_statusless_deletion_marker_txn
+    )
     snapshot = _make_snapshot(data)
     doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
     result = raw_fn(txn, doc_ref, generated)
