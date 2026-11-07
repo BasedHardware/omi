@@ -84,6 +84,24 @@ Older app builds and devices without a usable DIS serial receive a new release
 only at 100%, retaining an earlier eligible release during the ramp. David
 expands each cohort after the health checks above; there is no automatic ramp.
 
+### Tester audiences
+
+Two optional keys in the same block offer a release to named testers whatever
+its `rollout_percent`, so a release published at 0% can reach only them. Neither
+needs a DIS serial, so they also reach units on 3.0.21 and earlier.
+
+- `allow_uid_sha256:<hex>,<hex>`: hex SHA-256 of each tester's Firebase uid
+  (`printf %s "$UID" | shasum -a 256`). Hashes, because release bodies are
+  public. The server verifies the app's token only when some release carries
+  this key; a missing or invalid token just isn't on the list.
+- `channels:beta`: callers whose `X-Omi-App-Channel` is listed (`beta` is
+  TestFlight and non-production builds; `store` is everything else). While
+  `channels` is set, nobody outside those channels or the allowlist gets the
+  release, whatever the percentage. Remove it to start the device ramp.
+
+A malformed value in either key excludes the release. `blocked:true` still wins.
+Stable discovery has no token or channel, so an audience never admits a release there.
+
 Set `blocked:true` in the same block to stop all new offers, even at 100%.
 The stable and exact-version endpoints also honor the block. Stable discovery
 excludes partial rollouts because it has no device identifier. Explicit version

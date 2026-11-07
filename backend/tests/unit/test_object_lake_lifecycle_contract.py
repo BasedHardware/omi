@@ -130,7 +130,23 @@ def test_enabled_write_requires_real_bindings(enabled):
     bindings = document['environments']['prod']['gke']['pusher']['env']
     bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
     bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = '1'
-    assert len(validator.validate_runtime_binding(document, contract())) == 2
+    errors = validator.validate_runtime_binding(document, contract())
+    assert any('OBJECT_LAKE_WRITE_ENABLED' in error and 'per-object DEKs' in error for error in errors)
+    assert any('OBJECT_LAKE_WRITE_PERCENT' in error and 'per-object DEKs' in error for error in errors)
+
+
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+@pytest.mark.parametrize('plane,service', validator.EXPECTED_SERVICES)
+@pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '0.01'), ('true', '100')])
+def test_provisioned_deploy_bindings_cannot_enable_writes(stage, plane, service, enabled, percent):
+    document = runtime()
+    env = document['environments'][stage][plane]
+    bindings = (env['services'] if plane == 'cloud_run' else env)[service]['env']
+    bindings['BUCKET_OBJECT_LAKE']['value'] = 'bound-lake'
+    bindings['OBJECT_LAKE_KMS_KEY']['value'] = 'projects/p/locations/l/keyRings/r/cryptoKeys/k'
+    bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
+    bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = percent
+    assert any('per-object DEKs' in error for error in validator.validate_runtime_binding(document, contract()))
 
 
 def test_validator_cli_is_offline_by_default_and_rejects_mutations(tmp_path):

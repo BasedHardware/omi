@@ -8,9 +8,25 @@ Repo-enforceable inventory of expected prod scrape targets, routing labels, and
 no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.prod.yaml).
 
 - **Enforced in CI** by `backend/tests/unit/test_monitoring_telemetry_contract.py`.
-- Jobs marked `coverage_status: enforced` must appear in `omi-journey-scrape-missing`.
-- Jobs marked `coverage_status: declared` are wired in values/ServiceMonitors but
-  do not yet have a dedicated coverage alert (follow-up to expand the scrape-missing rule).
+- Jobs marked `coverage_status: enforced` must have their own `omi-scrape-<job>`
+  rule in [`alerts/scrape-health.json`](./alerts/scrape-health.json), mirrored exactly
+  in `alert-rules.json`. The Stackdriver job uses `omi-scrape-stackdriver-metrics`
+  to stay within Grafana's 40-character UID limit. The former `declared` status
+  is no longer accepted.
+- Exemptions require a reviewed reason and an explicit entry in the contract
+  test's reviewed exemptions; no jobs are currently exempt.
+- Scrape-health rules are muted agent-tier warnings sustained for 30m. Always-on
+  jobs cover down, absent and empty scrapes; kube-state-metrics keeps its existing
+  `omi-kube-state-metrics-empty` owner for empty scrapes. Opt-in batch releases
+  cover down/empty only while targets exist and treat NoData as OK.
+- Down and empty boolean results are added before thresholding above zero;
+  PromQL `or` would retain a healthy down-result zero and mask an empty-scrape
+  result one with the same labels. Always-on rules aggregate the absent/down
+  branch to a single unlabeled result before adding the empty branch.
+- These rules do not pin autoscaling target counts. For multi-release jobs
+  (Parakeet main/LID and the two Cloud Run exporters), a silently deleted release
+  is not detected while another release remains healthy. Whole-job absence takes
+  roughly 35m to fire, including Prometheus staleness and the 30m pending period.
 - Managed GKE control-plane exclusions (`kubeProxy` / `kubeScheduler` /
   `kubeControllerManager`) are documented here and owned by #9138 / PR #11093 —
   do not page `TargetDown` for those endpoints.

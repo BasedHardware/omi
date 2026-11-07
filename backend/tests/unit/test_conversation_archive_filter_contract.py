@@ -158,7 +158,7 @@ def conversations_db():
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
     from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
-    from database import sync_live_overlap
+    from database import sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap
 
     firestore = _Firestore([])
@@ -224,6 +224,9 @@ def conversations_db():
         # Archive reads do not execute sync admission. Keep the real pure
         # overlap policy and discovery seam loaded before closing utils paths.
         "database.sync_live_overlap": sync_live_overlap,
+        # Load the real codec before closing utils.other; archive query tests do
+        # not execute transcript IO, but its module dependencies must stay real.
+        "database.transcript_pointer": transcript_pointer,
         "utils.sync.live_overlap": live_overlap,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         # Archive queries never invoke the separate speaker publication/revocation IO seam.
