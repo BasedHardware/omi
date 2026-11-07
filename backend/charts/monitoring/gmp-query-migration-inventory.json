@@ -174,6 +174,32 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})",
+      "file": "alerts/batch-queue-safety.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_retry_age_seconds"
+      ],
+      "owner_title": "Batch retry item has been failing for over 24 hours",
+      "owner_uid": "omi-batch-retry-age-over-24h",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_capture_retry_cap_total{outcome=\"would_quarantine\"}[7d]))",
+      "file": "alerts/batch-queue-safety.json",
+      "issues": [],
+      "metrics": [
+        "omi_capture_retry_cap_total"
+      ],
+      "owner_title": "Capture retry cap has counted would-quarantine for seven days",
+      "owner_uid": "omi-capture-retry-cap-shadow-7d",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
       "file": "alerts/batch-timeliness.json",
       "issues": [],
@@ -1980,6 +2006,17 @@
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(absent(up{job=\"cloud-run-application-metrics\"}) or (min(up{job=\"cloud-run-application-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"cloud-run-application-metrics\"}[15m])) or vector(0)) < bool 1)",
+      "file": "alerts/scrape-health.json",
+      "issues": [],
+      "metrics": [],
+      "owner_title": "cloud-run-application-metrics scrape health (down/absent/empty)",
+      "owner_uid": "omi-scrape-cloud-run-application-metrics",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
     },
     {
       "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
@@ -3882,8 +3919,8 @@
     }
   ],
   "counts": {
-    "explicit_bridge": 33,
-    "query_consumers": 259
+    "explicit_bridge": 34,
+    "query_consumers": 262
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

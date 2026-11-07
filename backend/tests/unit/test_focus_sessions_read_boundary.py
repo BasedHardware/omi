@@ -38,6 +38,7 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from testing.import_isolation import AutoMockModule, stub_modules
+from database import transcript_pointer
 
 # Hermetic isolation stubs for external cloud and telemetry packages
 _STUB_MODULES = [
@@ -77,6 +78,10 @@ for _name in _STUB_MODULES:
     _m = AutoMockModule(_name)
     _m.__path__ = []
     _fakes[_name] = _m
+
+# The conversation codec is import-pure, but its SDK imports must resolve
+# before this legacy focus-only fixture closes the cloud package paths.
+_fakes["database.transcript_pointer"] = transcript_pointer
 
 with stub_modules(_fakes):
     from fastapi import FastAPI

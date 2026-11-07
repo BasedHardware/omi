@@ -8,7 +8,7 @@ from google.cloud import firestore
 
 from database.people_generation import bump_people_generation
 from database._client import get_firestore_client
-from database import _client, speaker_profile_authority, recurring_voices
+from database import _client, speaker_profile_authority, recurring_voices, transcript_pointer
 from database.legal_holds import external_write_fence
 from utils.speakers import auto_enroll as policy
 from utils.stt.voiceprints import usable_person_voiceprint
@@ -186,7 +186,7 @@ def publish(
             transaction.update(user, {OWNER_INDEX: sorted(set([*index, person_id])), **authority_update})
             return True
 
-    stored = _client.run_transactional(client, commit)
+    stored = transcript_pointer.run_preloaded_transactional(client, commit)
     if stored:
         for event in binding_events:
             recurring_voices.profile_event(event)
