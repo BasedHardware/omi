@@ -278,9 +278,6 @@ class RecoverTx:
     def check_privacy(self, uid, conversation_ids=(), expected_generation=None):
         return expected_generation or 0
 
-    def service_frontier(self, priority):
-        return 0.0
-
 
 class RecoverStore:
     """Snapshot store over recover's tx surface; run ordinal k fails when scripted.
@@ -298,6 +295,13 @@ class RecoverStore:
         self.run_calls = 0
         self.run_operations = []
         self.quarantined_fenced = []
+        self.hint_calls = []
+
+    def service_frontier_hint(self, priority):
+        if priority not in (0, 1, 2):
+            raise ValueError('bounded priority required')
+        self.hint_calls.append(priority)
+        return 0.0
 
     def run(self, body, *, operation=None):
         ordinal = self.run_calls

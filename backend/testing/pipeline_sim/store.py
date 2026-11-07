@@ -149,9 +149,6 @@ class SimTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key, ready_only=True)
 
-    def service_frontier(self, priority: int) -> float:
-        return self.store.service_frontier(priority)
-
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return self.store.customer.check(uid, conversation_ids, expected_generation)
 
@@ -431,7 +428,7 @@ class SimStore:
             owners.append((key, job['owner_id'] if job else None))
         return owners
 
-    def service_frontier(self, priority: int) -> float:
+    def service_frontier_hint(self, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
         name = f'p{priority}_service'

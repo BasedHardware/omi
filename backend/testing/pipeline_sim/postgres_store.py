@@ -81,9 +81,6 @@ class _Recording:
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._tx.ready_predecessor(owner_key, priority, segment_id)
 
-    def service_frontier(self, priority: int) -> float:
-        return self._tx.service_frontier(priority)
-
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return self._tx.check_privacy(uid, conversation_ids, expected_generation)
 
@@ -140,8 +137,8 @@ class PgSimStore(SimStore):
     def first_pending(self, owner_key: str) -> dict | None:
         return self.pg.run(lambda tx: tx.first_pending(owner_key))
 
-    def service_frontier(self, priority: int) -> float:
-        return self.pg.run(lambda tx: tx.service_frontier(priority))
+    def service_frontier_hint(self, priority: int) -> float:
+        return self.pg.service_frontier_hint(priority)
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self.pg.run(lambda tx: tx.ready_predecessor(owner_key, priority, segment_id))

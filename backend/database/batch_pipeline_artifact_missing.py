@@ -93,7 +93,7 @@ class ArtifactMissingStore:
         absent units; projected siblings never re-enter compute or assignment.
         """
         from database.batch_pipeline_staging import artifact_id
-        from utils.batch_pipeline.scheduler import Scheduler
+        from utils.batch_pipeline.scheduler import Scheduler, rejoin_frontiers
         from database.batch_pipeline_projection import held_without_recovery
 
         if not snapshots or set(snapshots) != set(uris):
@@ -142,7 +142,9 @@ class ArtifactMissingStore:
                     'restored_at': now,
                     'restored_uri_sha256': hashlib.sha256(uri.encode()).hexdigest(),
                 }
-                Scheduler.restore_audio_in_transaction(tx, job, now)
+                Scheduler.restore_audio_in_transaction(
+                    tx, job, now, frontier=seeds.get(int(job.get('priority', 0)), 0.0)
+                )
             # Keep partial status and usage_steps: changing it to processing
             # would charge already projected speech a second time on completion.
             ledger['artifact_reupload'] = {'segment_ids': list(snapshots), 'restored_at': now}
@@ -154,6 +156,9 @@ class ArtifactMissingStore:
             tx.put('content', f'{uid}/{content_id}', ledger)
             return binding.job_id
 
+        # Advisory rejoin seeds for the restored units' priorities, read
+        # outside the transaction (never the argmax shard's abort set).
+        seeds = rejoin_frontiers(self.store, (job.get('priority', 0) for job in snapshots.values()))
         return self.store.run(commit, operation='batch_artifact_missing_restore')
 
     def apply(self, segment_id, snapshot, evidence, plan_digest, now):

@@ -23,19 +23,38 @@ def read_control(tx: Transaction, key: str) -> dict:
     return control
 
 
-def activate(tx: Transaction, control: dict, priority: int, now: float) -> None:
+def activate(tx: Transaction, control: dict, priority: int, now: float, frontier: float = 0.0) -> None:
+    """Activate ``priority`` on this shard, seeding service from the rejoin hint.
+
+    ``frontier`` is the advisory fairness seed read OUTSIDE the transaction via
+    ``Store.service_frontier_hint`` (the fleet's highest committed virtual
+    service). It used to be an indexed query inside the caller's transaction —
+    but the max-service control document is the hottest shard under load (every
+    fairness scan of the winning shard rewrites it), so a rejoining admission
+    joined that abort set for a purely advisory value and burned its contention
+    budget on a document it never writes. A stale seed is a bounded, self-
+    correcting fairness transient: too low re-joins slightly under-served, too
+    high slightly over-served; it is never authorization, custody or ordering.
+    ``0.0`` (the empty-collection seed) is the degraded value.
+    """
     if not control[field(priority, 'active')]:
         # Rejoining starts at the persistent frontier, never ancient or reset
-        # credit. Indexed read only: no shared write clock or control hotspot.
-        control[field(priority, 'service')] = max(control[field(priority, 'service')], tx.service_frontier(priority))
+        # credit. Advisory hint read, never a transactional read: no shared
+        # write clock, no control hotspot, no abort-set membership.
+        control[field(priority, 'service')] = max(control[field(priority, 'service')], frontier)
     control[field(priority, 'active')] = True
     for pool in ('batch', 'live'):
         key = field(priority, f'{pool}_available_at')
         control[key] = min(control[key], now)
 
 
-def migrate_legacy(tx: Transaction, now: float) -> None:
-    """One-time bounded transfer of pre-sharding metadata; never touches content."""
+def migrate_legacy(tx: Transaction, now: float, frontiers: dict | None = None) -> None:
+    """One-time bounded transfer of pre-sharding metadata; never touches content.
+
+    ``frontiers`` carries the advisory rejoin seeds read outside the caller's
+    transaction (see ``activate``); absent priorities degrade to ``0.0``.
+    """
+    seeds = frontiers or {}
     legacy = tx.get('control', 'scheduler')
     moved = 0
     for priority, ring in legacy.get('rings', {}).items():
@@ -47,7 +66,7 @@ def migrate_legacy(tx: Transaction, now: float) -> None:
                 shard = read_control(tx, key)
                 if queue_key not in shard['rings'][priority]:
                     shard['rings'][priority].append(queue_key)
-                activate(tx, shard, int(priority), now)
+                activate(tx, shard, int(priority), now, seeds.get(int(priority), 0.0))
                 tx.put('control', key, shard)
             moved += 1
     if moved:

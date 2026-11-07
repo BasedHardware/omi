@@ -174,9 +174,6 @@ class PostgresTransaction:
         ).fetchall()
         return self._locked_query_row(*rows[0]) if len(rows) == 1 else None
 
-    def service_frontier(self, priority: int) -> float:
-        return self.store.service_frontier_in(self.conn, priority)
-
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return self.store.check_privacy_for(uid, conversation_ids, expected_generation)
 
@@ -533,7 +530,19 @@ class PostgresStore:
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
             )
 
-    def service_frontier_in(self, conn: Any, priority: int) -> float:
+    def service_frontier_hint(self, priority: int) -> float:
+        """Advisory probe twin of the retired transactional frontier read.
+
+        The rejoin fairness seed (utils/batch_pipeline/control.activate) never
+        joins a transaction's read set: the max-service control row is the
+        hottest shard under load, so it is read outside any transaction.
+        """
+        if priority not in (0, 1, 2):
+            raise ValueError('bounded priority required')
+        with self._read_conn() as conn:
+            return self.service_frontier_hint_in(conn, priority)
+
+    def service_frontier_hint_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
         row = conn.execute(

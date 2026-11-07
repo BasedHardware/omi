@@ -156,10 +156,10 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-05: the adapter gained the head_pending hint-read delegate; the
     # covered query driver exercises the identical filter/order shape without the adapter.
     'database.batch_pipeline_store.FirestoreStore.head_pending': '679059b9df92bafe11de34374fef09dfa8c595f41a2ac91e4449aefe012d385c',
+    'database.batch_pipeline_store.FirestoreStore.service_frontier_hint': '5415067bc8df9fd5f2719ea01f16c9594b5d19a3c5ff1896c2fe8be6fb7115ca',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
-    'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',

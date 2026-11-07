@@ -35,6 +35,7 @@ def admit(
     enqueue: Callable[..., bool] | None = None,
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
+    frontiers: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -43,7 +44,10 @@ def admit(
     record the admission ``policy`` on the job as the ring does. ``adopt`` lets a caller take over a
     non-batch ledger row it has re-validated inside this transaction (a legacy
     row legacy can no longer finish); the batch ledger write below replaces it.
-    With both unset, behaviour is unchanged.
+    With both unset, behaviour is unchanged. ``frontiers`` carries the advisory
+    rejoin fairness seeds for the items' priorities, read outside the
+    transaction (``Scheduler.rejoin_frontiers``); the default ring enqueue
+    consumes them per item priority and a missing priority degrades to ``0.0``.
     """
     enqueue_item = enqueue or Scheduler.enqueue_in_transaction
     if not items or tuple(item.segment_id for item in items) != binding.segment_ids:
@@ -144,7 +148,16 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = enqueue_item(tx, item, now, policy=admission)
+            if enqueue is None:
+                created = enqueue_item(
+                    tx,
+                    item,
+                    now,
+                    policy=admission,
+                    frontier=float((frontiers or {}).get(int(item.priority)) or 0.0),
+                )
+            else:
+                created = enqueue_item(tx, item, now, policy=admission)
             job = tx.get('jobs', item.segment_id)
             previous_binding = dict(job.get('projection_binding') or {})
             if previous_binding.get('partial_record') is False:

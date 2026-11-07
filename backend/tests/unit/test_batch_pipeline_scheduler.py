@@ -29,11 +29,6 @@ class MemoryTransaction:
     def patch(self, table, key, fields):
         self.rows[(table, key)].update(deepcopy(fields))
 
-    def service_frontier(self, priority):
-        return max(
-            (v.get(f'p{priority}_service', 0) for (table, _), v in self.rows.items() if table == 'control'), default=0.0
-        )
-
     def check_privacy(self, uid, conversation_ids=(), expected_generation=None):
         # This hermetic state-machine store models authorized synthetic accounts.
         return expected_generation or 0
@@ -92,6 +87,19 @@ class MemoryStore:
             result = body(MemoryTransaction(snapshot))
             self.rows = snapshot
             return result
+
+    def service_frontier_hint(self, priority):
+        # Advisory probe twin (mirrors FirestoreStore.service_frontier_hint):
+        # the rejoin fairness seed is read outside any transaction.
+        if priority not in (0, 1, 2):
+            raise ValueError('bounded priority required')
+        with self.lock:
+            values = [
+                v.get(f'p{priority}_service', 0)
+                for (table, _), v in self.rows.items()
+                if table == 'control' and f'p{priority}_service' in v
+            ]
+            return max(values) if values else 0.0
 
     def probe(self, table, key):
         with self.lock:

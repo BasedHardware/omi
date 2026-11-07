@@ -382,8 +382,8 @@ def test_purging_adjacent_jobs_rereads_repaired_links_before_next_admission(h):
     assert [lease.item.segment_id for lease in queue.pull(3)] == ['survivor']
 
 
-def test_service_frontier_is_the_maximum_virtual_time_or_zero(h):
-    assert h.store.run(lambda tx: tx.service_frontier(1)) == 0.0
+def test_service_frontier_hint_is_the_maximum_virtual_time_or_zero(h):
+    assert h.store.service_frontier_hint(1) == 0.0
     put_all(
         h,
         [
@@ -392,10 +392,10 @@ def test_service_frontier_is_the_maximum_virtual_time_or_zero(h):
             ('control', 'c', {'p2_service': 99.0}),
         ],
     )
-    assert h.store.run(lambda tx: tx.service_frontier(1)) == 7.5
-    assert h.store.run(lambda tx: tx.service_frontier(2)) == 99.0
+    assert h.store.service_frontier_hint(1) == 7.5
+    assert h.store.service_frontier_hint(2) == 99.0
     with pytest.raises(ValueError):
-        h.store.run(lambda tx: tx.service_frontier(3))
+        h.store.service_frontier_hint(3)
 
 
 # -- privacy fence ---------------------------------------------------------------------------------------

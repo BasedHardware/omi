@@ -79,7 +79,7 @@ def test_reupload_reclaims_only_missing_span_without_resetting_siblings_or_paid_
 
     # StrictFirestore covers write ordering; service-frontier aggregation is
     # exercised by the real-emulator restore/queue/projection integration test.
-    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier_hint', lambda *a, **kw: 0.0)
     row(setup[0])['recovery'] = {
         'token': 'synthetic-spent-once',
         'epoch': 1,
@@ -168,7 +168,7 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
             'repair_languages': {} if change == 'no_language' else {'bad': ORIGINAL_LANGUAGE},
         }
     ProjectionStore(store).complete_partial(binding, 102, PARTIAL_ACCOUNTING)
-    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier_hint', lambda *a, **kw: 0.0)
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'prod')
     probes, staged_ids, contexts = [], [], []

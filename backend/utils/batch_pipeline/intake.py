@@ -52,7 +52,7 @@ from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
 from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route, record_sample_window
 from utils.batch_pipeline.retention import batch_artifact_authorize
-from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.batch_pipeline.scheduler import Scheduler, owner_key, rejoin_frontiers
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
@@ -228,6 +228,16 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 def durable_status(store, uid: str, job_id: str) -> dict | None:
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
 
+    # Advisory rejoin seeds, probe-gated: the redrive branch below only opens
+    # for an incomplete ledger, so completed polls never pay for the hint
+    # reads. The transaction re-verifies everything it acts on.
+    seeds: dict = {}
+    probed = store.probe('intakes', job_id)
+    if probed and not (
+        probed.get('status') == 'completed' and is_valid_completed_sync_content_result(probed.get('result'))
+    ):
+        seeds = rejoin_frontiers(store, (0, 1, 2))
+
     def read(tx):
         intake = tx.get('intakes', job_id)
         if not intake:
@@ -280,7 +290,9 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
             for job in jobs:
-                Scheduler.redrive_in_transaction(tx, job, time.time())
+                Scheduler.redrive_in_transaction(
+                    tx, job, time.time(), frontier=seeds.get(int(job.get('priority', 0)), 0.0)
+                )
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must
             # never ACK custody of unresolved units, including after 30 minutes.
@@ -947,6 +959,9 @@ async def accept_upload(
         wakes: dict[str, str] = {}
         phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
+        # Advisory rejoin seeds: read outside the admission transaction so the
+        # ring enqueue never joins the argmax shard's abort set.
+        frontiers = rejoin_frontiers(store, (item.priority for item in items))
         outcome = await run_blocking(
             db_executor,
             admit,
@@ -977,6 +992,7 @@ async def accept_upload(
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
+            frontiers=frontiers,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():

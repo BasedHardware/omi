@@ -85,7 +85,6 @@ class Transaction(Protocol):
     def first_pending(self, owner_key: str) -> dict | None: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
-    def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
 
 
@@ -108,6 +107,7 @@ class Store(Protocol):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def head_pending(self, owner_key: str) -> dict | None: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
+    def service_frontier_hint(self, priority: int) -> float: ...
 
 
 class FirestoreTransaction:
@@ -181,9 +181,6 @@ class FirestoreTransaction:
         return ready_predecessor(
             self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
         )
-
-    def service_frontier(self, priority: int) -> float:
-        return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         options = {}
@@ -460,6 +457,13 @@ class FirestoreStore:
 
     def oldest_retry(self, priority: int) -> float | None:
         return oldest_retry(self.client, self.namespace, priority)
+
+    def service_frontier_hint(self, priority: int) -> float:
+        # Advisory probe twin of the retired transactional frontier read: the
+        # rejoin fairness seed is read outside any transaction so an admission
+        # body never joins the argmax shard's abort set
+        # (utils/batch_pipeline/control.activate).
+        return service_frontier_hint(self.client, self.namespace, priority)
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
@@ -1045,14 +1049,19 @@ def timeliness_sample(
     }
 
 
-def service_frontier(client: Any, namespace: str, priority: int, *, transaction: Any = None) -> float:
+def service_frontier_hint(client: Any, namespace: str, priority: int) -> float:
+    """The fleet's highest committed virtual service for ``priority``, read outside any transaction.
+
+    Advisory probe: the rejoin fairness seed. The max-service control document
+    is the hottest shard under load — every fairness scan of the winning shard
+    rewrites it — so a transaction that reads it joins that abort set for a
+    purely advisory value. Reading the seed as a hint trades a bounded fairness
+    transient for never joining the hottest abort set; it authorizes nothing.
+    """
     if priority not in (0, 1, 2):
         raise ValueError('bounded priority required')
     name = f'p{priority}_service'
     docs = list(
-        client.collection(f'{namespace}_control')
-        .order_by(name, direction=firestore.Query.DESCENDING)
-        .limit(1)
-        .stream(transaction=transaction)
+        client.collection(f'{namespace}_control').order_by(name, direction=firestore.Query.DESCENDING).limit(1).stream()
     )
     return docs[0].to_dict()[name] if docs else 0.0

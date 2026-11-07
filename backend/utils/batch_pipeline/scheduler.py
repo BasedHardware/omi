@@ -76,6 +76,30 @@ def owner_key(owner_id: str) -> str:
     return hashlib.sha256(owner_id.encode()).hexdigest()
 
 
+def rejoin_frontiers(store: Store, priorities) -> dict[int, float]:
+    """Advisory rejoin fairness seeds keyed by priority, read outside any transaction.
+
+    The seed only biases least-service-first scheduling for a shard rejoining a
+    priority (``control.activate``); a failed or stale read degrades to ``0.0``
+    instead of failing admission — the seed is never authorization, custody or
+    ordering. Every entry point reads its map once before ``store.run`` so the
+    transactional body stays free of the hottest control read (the argmax
+    shard's document, rewritten by every lease of the winning shard).
+    """
+    seeds: dict[int, float] = {}
+    for priority in sorted({int(p) for p in priorities}):
+        try:
+            seeds[priority] = float(store.service_frontier_hint(priority))
+        except Exception as error:
+            logger.warning(
+                'event=batch_frontier_hint outcome=degraded priority=%d exception_type=%s',
+                priority,
+                type(error).__name__,
+            )
+            seeds[priority] = 0.0
+    return seeds
+
+
 def _fifo_read_chain(tx: Transaction, queue: dict) -> list[str] | None:
     """Read a legacy ``head -> next`` chain for conversion; ``None`` vetoes conversion.
 
@@ -150,13 +174,16 @@ def _fifo_absorb_strays(tx: Transaction, queue: dict) -> bool:
     return False
 
 
-def _append_fifo_array(tx: Transaction, queue: dict, queue_key: str, control: dict, job: dict, now: float) -> bool:
+def _append_fifo_array(
+    tx: Transaction, queue: dict, queue_key: str, control: dict, job: dict, now: float, frontier: float
+) -> bool:
     """Append through the queue-document FIFO; False falls back to the legacy chain.
 
     Conversion happens here, at the only writer that must see it: a whole
     legacy chain converts while it fits the bounded migration walk, and a
     vetoed conversion stamps ``link_probe_at`` so a deep backlog does not pay
     the walk on every append. The job document never joins the write set.
+    ``frontier`` is the advisory rejoin seed read outside the transaction.
     """
     if queue.get('link_mode') != 'fifo_array':
         probe_at = queue.get('link_probe_at')
@@ -187,16 +214,20 @@ def _append_fifo_array(tx: Transaction, queue: dict, queue_key: str, control: di
         queue['deficit'] = 0.0
         queue['continuing'] = False
     queue['tail'] = job['segment_id']
-    activate(tx, control, job['priority'], job['available_at'])
+    activate(tx, control, job['priority'], job['available_at'], frontier)
     tx.put('control', scheduler_control_key(job['owner_key']), control)
     tx.put('queues', queue_key, queue)
     return True
 
 
-def _append(tx: Transaction, control: dict, job: dict, now: float) -> None:
+def _append(tx: Transaction, control: dict, job: dict, now: float, frontier: float) -> None:
+    """Append one admitted job to its owner's FIFO; ``frontier`` is the advisory
+    rejoin seed for the shard's priority, read outside the transaction by the
+    entry point (``rejoin_frontiers``) so the activation never joins the
+    argmax shard's abort set."""
     queue_key = f"{job['priority']}_{job['owner_key']}"
     queue = tx.get('queues', queue_key) or {'head': '', 'tail': '', 'deficit': 0.0, 'continuing': False}
-    if fifo_array_link_enabled() and _append_fifo_array(tx, queue, queue_key, control, job, now):
+    if fifo_array_link_enabled() and _append_fifo_array(tx, queue, queue_key, control, job, now, frontier):
         return
     ring = control['rings'][str(job['priority'])]
     if not queue['head']:
@@ -214,7 +245,7 @@ def _append(tx: Transaction, control: dict, job: dict, now: float) -> None:
     queue['tail'] = job['segment_id']
     job['next'] = ''
     tx.put('queues', queue_key, queue)
-    activate(tx, control, job['priority'], job['available_at'])
+    activate(tx, control, job['priority'], job['available_at'], frontier)
     tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 
@@ -273,9 +304,6 @@ class _OwnWrites:
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._own(self._tx.ready_predecessor(owner_key, priority, segment_id))
-
-    def service_frontier(self, priority: int) -> float:
-        return self._tx.service_frontier(priority)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return self._tx.check_privacy(uid, conversation_ids, expected_generation)
@@ -391,11 +419,23 @@ class Scheduler:
         self._contention_lock = Lock()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
+        # Advisory rejoin seed: read outside the transaction so a rejoining
+        # admission never joins the argmax shard's abort set.
+        frontier = rejoin_frontiers(self.store, (item.priority,)).get(int(item.priority), 0.0)
         with store_operation('batch_enqueue'):
-            return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
+            return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now, frontier=frontier))
 
     @staticmethod
-    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
+    def enqueue_in_transaction(
+        tx: Transaction, item: WorkItem, now: float, *, policy=None, frontier: float = 0.0
+    ) -> bool:
+        """Admit one work item into the GPU ring.
+
+        ``frontier`` is the advisory rejoin fairness seed for the item's
+        priority, read outside any transaction (``Scheduler.rejoin_frontiers`` /
+        ``Store.service_frontier_hint``); the default ``0.0`` is the
+        empty-collection seed and never authorizes anything.
+        """
         if item.shadow:
             raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
@@ -445,7 +485,7 @@ class Scheduler:
             # Merge class only: fresh rows commit ahead of the owner's catch-up backlog.
             'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         }
-        _append(tx, control, job, now)
+        _append(tx, control, job, now, frontier)
         tx.put('jobs', item.segment_id, job)
         # Admission and merge serialize through this fence even for different classes.
         owner['revision'] = owner.get('revision', 0) + 1
@@ -1060,9 +1100,13 @@ class Scheduler:
             return self.store.run(commit)
 
     def recover(self, now: float, limit: int = 100) -> int:
+        # Advisory rejoin seeds for the sweep: one map per sweep covers the
+        # legacy migration and every retry requeue below, read outside the
+        # transactions (never the argmax shard's abort set).
+        seeds = rejoin_frontiers(self.store, (0, 1, 2))
         with store_operation('batch_recover'):
             try:
-                self.store.run(lambda tx: migrate_legacy(tx, now))
+                self.store.run(lambda tx: migrate_legacy(tx, now, seeds))
             except FirestoreContentionExhausted as error:
                 # A lost migration budget is one bounded retry at the next
                 # sweep, not a reason to starve every expired lease behind it.
@@ -1094,7 +1138,7 @@ class Scheduler:
                         elif job.get('state') == 'retry' and job['available_at'] <= now:
                             control = read_control(tx, scheduler_control_key(job['owner_key']))
                             job['state'] = 'ready'
-                            _append(tx, control, job, now)
+                            _append(tx, control, job, now, seeds.get(int(job['priority']), 0.0))
                             outcome = ('requeued', 0, None)
                         else:
                             return None
@@ -1127,11 +1171,13 @@ class Scheduler:
             return recovered
 
     @staticmethod
-    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float, *, frontier: float = 0.0) -> None:
         """Requeue one CAS-verified missing-input repair under its original identity.
 
         The artifact-missing store owns the content/privacy/staging checks. No
         paid recovery intent or sibling receipt is reset by this queue mutation.
+        ``frontier`` is the advisory rejoin seed read outside the caller's
+        transaction (``Scheduler.rejoin_frontiers``).
         """
         marker = job.get('artifact_disposition') or {}
         if (
@@ -1146,11 +1192,13 @@ class Scheduler:
             raise ValueError('verified missing-input repair required')
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
-        _append(tx, control, job, now)
+        _append(tx, control, job, now, frontier)
         tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def redrive_in_transaction(tx: Transaction, job: dict, now: float, *, frontier: float = 0.0) -> bool:
+        """Requeue one dead unit; ``frontier`` is the advisory rejoin seed read
+        outside the caller's transaction (``Scheduler.rejoin_frontiers``)."""
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
         control = read_control(tx, scheduler_control_key(job['owner_key']))
@@ -1162,14 +1210,21 @@ class Scheduler:
             lease_until=0.0,
             retry_started_at=job.get('retry_started_at', now),
         )
-        _append(tx, control, job, now)
+        _append(tx, control, job, now, frontier)
         tx.put('jobs', job['segment_id'], job)
         return True
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
+        # Advisory rejoin seed: probe the row for its priority outside the
+        # transaction; the body re-verifies every fence it acts on.
+        probed = self.store.probe('jobs', segment_id)
+        priority = int(probed.get('priority', 0))
+        frontier = rejoin_frontiers(self.store, (priority,)).get(priority, 0.0)
         with store_operation('batch_redrive'):
-            return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+            return self.store.run(
+                lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now, frontier=frontier)
+            )
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
