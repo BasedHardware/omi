@@ -28,6 +28,7 @@ class OmiDeviceConnection extends DeviceConnection {
   final PendantRingCustody _custody;
 
   RingInfo? _lastRingInfo;
+  String? _resolvedFirmwareRevision;
   bool _livePersistEnabled = false;
   int _ringEffectiveCaps = 0;
   Object? _custodyToken;
@@ -936,6 +937,13 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
+    if (command == 0 || command == 1) {
+      final resolvedFw = _lastRingInfo != null ? null : await _resolveFirmwareForStorageGuard();
+      if (_lastRingInfo != null || RingProtocol.isRingBufferFirmware(resolvedFw)) {
+        Logger.debug('OmiDeviceConnection: Refusing legacy SD card command $command on ring-buffer firmware');
+        return false;
+      }
+    }
     try {
       Logger.debug('About to write to storage bytes');
       Logger.debug('about to send $numFile');
@@ -1344,7 +1352,9 @@ class OmiDeviceConnection extends DeviceConnection {
           firmwareRevisionCharacteristicUuid,
         );
         if (firmwareValue.isNotEmpty) {
-          deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
+          final fw = String.fromCharCodes(firmwareValue);
+          deviceInfo['firmwareRevision'] = fw;
+          if (fw.isNotEmpty && fw != 'Unknown') _resolvedFirmwareRevision = fw;
         }
       } catch (e) {
         Logger.debug('OmiDeviceConnection: Error reading firmware revision: $e');
@@ -1417,6 +1427,17 @@ class OmiDeviceConnection extends DeviceConnection {
     deviceInfo['hasImageStream'] ??= 'false';
 
     return deviceInfo;
+  }
+
+  Future<String?> _resolveFirmwareForStorageGuard() async {
+    final current = _resolvedFirmwareRevision ?? device.firmwareRevision;
+    if (current.isNotEmpty && current != 'Unknown') return current;
+    try {
+      final raw = await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
+      final fw = raw.isEmpty ? '' : String.fromCharCodes(raw).replaceAll('\u0000', '').trim();
+      if (fw.isNotEmpty && fw != 'Unknown') return _resolvedFirmwareRevision = fw;
+    } catch (_) {}
+    return null;
   }
 }
 

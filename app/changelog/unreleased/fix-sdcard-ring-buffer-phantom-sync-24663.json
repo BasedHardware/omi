@@ -1,0 +1,3 @@
+{
+  "change": "Offline sync no longer repeatedly retries an unavailable SD card recording."
+}
