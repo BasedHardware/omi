@@ -198,6 +198,7 @@ void main() {
     for (final status in [WalStatus.corrupted, WalStatus.outsideRecoveryWindow, WalStatus.unsupportedAudio]) {
       await pumpRow(tester, makeWal(status));
       expect(find.text('Delete'), findsOneWidget, reason: '$status has no other resolution');
+      expect(find.byIcon(FontAwesomeIcons.chevronRight), findsOneWidget, reason: '$status keeps detail navigation');
       expect(find.text('Try Again'), findsNothing, reason: '$status cannot be retried into success');
     }
   });
@@ -239,7 +240,7 @@ void main() {
     expect(find.text('Delete'), findsNothing, reason: 'a refusal is removed by swiping the row, after confirmation');
   });
 
-  testWidgets('unsyncable recordings retain navigation affordance to allow detail inspection and export', (tester) async {
+  testWidgets('unsyncable recordings keep the navigation chevron for detail and export', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
     expect(find.text('Delete'), findsOneWidget);
     expect(find.byIcon(FontAwesomeIcons.chevronRight), findsOneWidget);

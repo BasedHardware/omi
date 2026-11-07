@@ -170,7 +170,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Failed'), findsOneWidget);
-    expect(find.text("Too old to sync — Omi can't accept it"), findsOneWidget);
+    expect(find.text('File unavailable'), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
     await tester.tap(find.text('Clear'));
     expect(clearedUnsyncable, isTrue);

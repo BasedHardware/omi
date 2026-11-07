@@ -60,7 +60,7 @@ class OfflineSyncStorageSheet extends StatelessWidget {
               icon: FontAwesomeIcons.triangleExclamation,
               iconColor: Colors.redAccent,
               title: context.l10n.failedStatus,
-              subtitle: context.l10n.syncStatusTooOld,
+              subtitle: context.l10n.syncStatusFileUnavailable,
               count: unsyncableCount,
               onClear: onClearUnsyncable,
               clearLabel: context.l10n.clear,
