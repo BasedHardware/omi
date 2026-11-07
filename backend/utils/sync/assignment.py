@@ -234,12 +234,16 @@ def assign_in_transaction(
     live_lookup_complete: bool = False,
     live_lookup_incomplete_reason: str | None = None,
     discover_on_reroute: bool = False,
+    capture_episode_log: bool = True,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
     ``absorbed`` (optional, filled in place) receives the conversations this
     plan newly turns into redirect donors, unlike the cumulative
     ``sync_merged_from`` lineage.
+
+    ``capture_episode_log`` is false only for bounded, discard-only shadow plans;
+    serving transactions retain atomic member-policy invalidation.
 
     The user-level index document is read AND written by every intake, including
     the empty-index case. Concurrent jobs cannot both commit an absent target.
@@ -251,6 +255,9 @@ def assign_in_transaction(
     untouched: the chunk's new speech goes to another conversation instead.
     """
     # The SDK may retry this body after contention; only its winning plan may log success.
+    from database import episode_log
+
+    episode_capture = episode_log.prepare_member_change(transaction, user_ref) if capture_episode_log else None
     finish_size_attempt(logger, committed=False)
     if absorbed is not None:
         absorbed.clear()
@@ -363,6 +370,7 @@ def assign_in_transaction(
                 # No text landed or left, so the automatic verdict stands: skip the relevance rerun.
                 result['_sync_lineage_repeat_only'] = True
         if target_id not in full_ids and estimated <= SYNC_CONVERSATION_BYTE_BUDGET:
+            episode_log.member_changed(episode_capture, [target_id])
             transaction.update(collection.document(target_id), encoded)
             result['_sync_projected_size_bucket'] = projected_size_bucket(estimated)
             return result, False, survivors
@@ -1341,6 +1349,14 @@ def assign_in_transaction(
     ):
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     remember_size_payload(canonical, result)
+    episode_log.member_changed(
+        episode_capture,
+        [
+            cid
+            for accepted in [chosen, *extra_plans]
+            for cid in [accepted.canonical, *accepted.donor_updates, *accepted.ancestor_updates]
+        ],
+    )
     for accepted in [chosen, *extra_plans]:
         remember_size_payload(accepted.canonical, accepted.result)
         payload = accepted.payload

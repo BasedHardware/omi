@@ -2214,6 +2214,9 @@ INDEX_REQUIREMENTS = (
 # Exempting a field only removes single-field indexes — composite indexes declared above are
 # unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('episode_facts', 'payload'),
+    ('episode_log_checkpoint', 'payload'),
+    ('episode_views', 'home_payload'),
     ('sync_backfill_pending', 'payload'),
     ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
@@ -2224,6 +2227,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('episode_log_due_owner_group', 'episode_log_state', 'scan_at', ('ASCENDING',)),
     FieldIndexRequirement('lifecycle_pair_finalization_status', 'conversations', 'finalization_status', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),

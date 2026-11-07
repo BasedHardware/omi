@@ -41,6 +41,7 @@ def list_episode_window(
     limit: int = 50,
     cursor: str | None = None,
     firestore_client: Any = None,
+    namespace: str = 'episodes',
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Bounded Firestore page; use the canonical half-open ownership predicate.
 
@@ -49,7 +50,9 @@ def list_episode_window(
     Snapshot cursors include Firestore's implicit document-ID tie breaker.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    root = client.collection('users').document(uid).collection('episodes')
+    if namespace not in {'episodes', 'episode_views'}:
+        raise ValueError('Invalid episode namespace')
+    root = client.collection('users').document(uid).collection(namespace)
     query = (
         root.where(filter=FieldFilter('started_at', '>=', start - timedelta(seconds=MAX_EPISODE_SECONDS)))
         .where(filter=FieldFilter('started_at', '<=' if start == end else '<', end))
@@ -120,7 +123,9 @@ MEMBER_FIELDS = [
 ]
 
 
-def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> dict[str, dict[str, Any]]:
+def read_members(
+    uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None, source_versions: dict | None = None
+) -> dict[str, dict[str, Any]]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
     root = client.collection('users').document(uid).collection('conversations')
     all_ids: list[str] = []
@@ -132,6 +137,10 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
     for offset in range(0, len(ids), episodes.MEMBERSHIP_BATCH_LIMIT):
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
         for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
+            if source_versions is not None:
+                # Include absent/hidden/unreadable members: creation or a policy
+                # change can alter the projection just as an ordinary edit can.
+                source_versions[snapshot.reference.path] = snapshot.update_time
             if snapshot.exists:
                 members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
     return {
@@ -151,15 +160,15 @@ def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: 
         new['id'] for old, new in zip(rows, settled) if old.get('status') == 'live' and new.get('status') == 'closed'
     }
     rows = settled
-    members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
+    members = read_members(uid, rows, firestore_client=firestore_client) if rows else {}
     wires = [wire for row in rows if (wire := project_episode(uid, row, members=members, list_row=True)) is not None]
-    contained = _contained_ids(rows, wires)
+    contained = contained_ids(rows, wires)
     wires = [wire for wire in wires if wire['id'] not in contained]
     schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained | just_closed], wires)
     return wires
 
 
-def _contained_ids(rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
+def contained_ids(rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
     """Closed episodes whose visible members another closed episode on the page already shows. Episodes
     from before membership became singular (2026-10-30) can share members, and each would otherwise
     get its own row and its own paid compose over the same speech."""
@@ -267,10 +276,11 @@ def project_episode(
     *,
     members: dict[str, dict[str, Any]] | None = None,
     list_row: bool = False,
+    observe_members: bool = True,
 ) -> dict[str, Any] | None:
     if episode is None:
         return None
-    by_id = members if members is not None else _read_members(uid, [episode])
+    by_id = members if members is not None else read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
     hidden = 0
     now = datetime.now(timezone.utc)
@@ -323,7 +333,7 @@ def project_episode(
                         started = datetime.fromtimestamp(value, timezone.utc)
                     else:
                         finished = datetime.fromtimestamp(value, timezone.utc)
-            if overdue:
+            if overdue and observe_members:
                 episode_metrics.record_batch_pending_overdue()
         retained.append(
             {
@@ -335,7 +345,7 @@ def project_episode(
                 'status': status,
             }
         )
-    if list_row:
+    if list_row and observe_members:
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None

@@ -590,3 +590,16 @@ def stable_recording_arrival(monkeypatch):
     from database import conversations
 
     monkeypatch.setattr(conversations, 'datetime', FixedArrival)
+
+
+def test_episode_log_switch_off_preserves_the_original_absorb_reads(world, recorded, reads, monkeypatch):
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
+    assert _merge(world) is True
+    absorb = _absorb_transaction(world.store)
+    assert [path for txn, path in reads if txn is absorb] == [
+        ('users', UID, 'conversations', 'p'),
+        ('users', UID, 'conversations', 'n'),
+        MARKER,
+        GATE,
+    ]
+    assert recorded.audit == ['written']

@@ -16419,6 +16419,17 @@
             "title": "Episodes",
             "type": "array"
           },
+          "home_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Version"
+          },
           "next_cursor": {
             "anyOf": [
               {
@@ -58626,6 +58637,23 @@
             }
           },
           {
+            "in": "query",
+            "name": "home_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Home Version"
+            }
+          },
+          {
             "in": "header",
             "name": "X-Omi-App-Channel",
             "required": false,
@@ -58639,6 +58667,22 @@
                 }
               ],
               "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
             }
           },
           {
@@ -58688,6 +58732,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "304": {
+            "description": "Home unchanged"
           },
           "401": {
             "$ref": "#/components/responses/Error401"

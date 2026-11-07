@@ -60,6 +60,9 @@ class _DB:
 
 
 def _install_db(monkeypatch, data: dict | None):
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
     ref = _Ref(_Snapshot(data))
     monkeypatch.setattr(conversations_db, 'db', _DB(ref))
     monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)

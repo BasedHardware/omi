@@ -45,11 +45,13 @@ class GeneratedEpisodeMember {
 class GeneratedEpisodeListResponse {
   final bool enabled;
   final List<GeneratedEpisode>? episodes;
+  final String? homeVersion;
   final String? nextCursor;
 
   const GeneratedEpisodeListResponse({
     required this.enabled,
     this.episodes,
+    this.homeVersion,
     this.nextCursor,
   });
 
@@ -57,6 +59,7 @@ class GeneratedEpisodeListResponse {
     return GeneratedEpisodeListResponse(
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
       episodes: _readFieldValue<List<GeneratedEpisode>>(_readField(json, const ["episodes"]), "episodes", (value) => _readObjectList(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
+      homeVersion: _readFieldValue<String>(_readField(json, const ["home_version"]), "home_version", _readString, requiredField: false, nullable: true),
       nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString, requiredField: false, nullable: true),
     );
   }
@@ -65,6 +68,7 @@ class GeneratedEpisodeListResponse {
     return {
       'enabled': enabled,
       'episodes': episodes?.map((value) => value.toJson()).toList(),
+      'home_version': homeVersion,
       'next_cursor': nextCursor,
     };
   }

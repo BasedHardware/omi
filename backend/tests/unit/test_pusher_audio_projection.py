@@ -236,7 +236,9 @@ def test_exact_metadata_prefers_regional_copy_like_full_listing(world, monkeypat
 
 
 @pytest.mark.parametrize('failure', ['changed', 'raced', 'deleted'])
-def test_real_update_conversation_checks_cached_revision_and_write_precondition(monkeypatch, failure):
+def test_real_update_conversation_checks_cached_revision_and_write_precondition(
+    monkeypatch, failure, untracked_episode_log
+):
     # SDK boundary fake: force real read/compare/precondition/error handling.
     client = MagicMock()
     ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value

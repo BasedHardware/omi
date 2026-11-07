@@ -2259,7 +2259,7 @@ def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
     monkeypatch.setattr(service.composer, 'schedule', lambda uid, eid, **kw: scheduled.append((uid, eid)))
     monkeypatch.setattr(
         home_read,
-        '_read_members',
+        'read_members',
         lambda *a, **kw: {
             'c1': {
                 'status': 'completed',

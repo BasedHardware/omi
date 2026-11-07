@@ -1,0 +1,60 @@
+# Lead installs with the existing backend metrics scrape. No live alert changes here.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: omi-episode-log
+  labels:
+    release: prod-omi-kube-prometheus-stack
+spec:
+  groups:
+    - name: omi.episodes.log
+      rules:
+        - alert: OmiEpisodeFactsWithoutRetention
+          expr: max(omi_episode_facts_without_active_ttl) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode facts exist without verified ACTIVE TTL"
+            description: "Capture refuses writes. Verify retention through the approved operator path before capture on."
+        - alert: OmiEpisodeLogQueuedOverdue
+          expr: sum(increase(omi_episode_drain_deadline_total{phase="queued"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode projection queue exceeded its 25 minute entry deadline"
+            description: "Keep reads on legacy. Check sync scheduler, task dispatch and the episode log runbook."
+        - alert: OmiEpisodeLogRunningOverdue
+          expr: sum(increase(omi_episode_drain_deadline_total{phase="running"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode drain exceeded its ten minute owner lease"
+            description: "Sweep redrives with a new epoch. Stale publication is fenced. No paid operation runs under this lease."
+        - alert: OmiEpisodeLogRetryingOverdue
+          expr: sum(increase(omi_episode_drain_deadline_total{phase="retrying"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode drain missed its retry deadline"
+            description: "Inspect projection capacity and task dispatch. Disable log reads while recovering."
+        - alert: OmiEpisodeLogProjectionDrift
+          expr: sum(increase(omi_episode_view_drift_total{outcome!="match"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode projection differs from the legacy namespace"
+            description: "Stop the read ramp. Replay the affected development fixture; do not alter production records from an alert."
+        - alert: OmiEpisodeLogDrainErrors
+          expr: sum(increase(omi_episode_drain_total{outcome="error"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode drain is retrying after a fold or storage failure"
+            description: "Check capacity limits and the bounded-drain runbook. Legacy remains the fallback."
+        - alert: OmiEpisodeLogSweepErrors
+          expr: sum(increase(omi_episode_drain_sweep_total{outcome="error"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode shadow sweep could not redrive work"
+            description: "Inspect task dispatch and the episode log runbook. Sync sequencer status is independent."
+        - alert: OmiEpisodeLogSweepStale
+          expr: time() - max(omi_episode_drain_sweep_observed_at_seconds) > 300 or absent(omi_episode_drain_sweep_observed_at_seconds)
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode log sweep has no fresh observation"
+            description: "Inspect the existing two minute sync scheduler tick before trusting deadline or drift silence."

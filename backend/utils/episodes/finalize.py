@@ -48,10 +48,12 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
         if not client_gate.client_seen_cached(uid):
             return 'skipped_no_client'
         from utils.episodes.service import attach_synced_intake
+        from utils.episodes.log import worker as log_worker
 
         normalized = dict(row) if isinstance(row, Mapping) else {}
         raw_source = normalized.get('source')
         normalized['source'] = getattr(raw_source, 'value', raw_source)
+        log_worker.note_dirty(uid, conversation_id, normalized)
         return attach_synced_intake(uid, conversation_id, normalized)
     except Exception as error:
         logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
@@ -169,7 +171,9 @@ def _queue_retry(uid: str, hook, *args) -> None:
 def _after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:
     from database import conversations as conversations_db
     from utils.episodes.service import on_conversation_finalized
+    from utils.episodes.log import worker as log_worker
 
     row = conversations_db.get_conversation(uid, conversation_id)
     if row:
+        log_worker.note_dirty(uid, conversation_id, row)
         on_conversation_finalized(uid, conversation_id, row, trigger=trigger.value)

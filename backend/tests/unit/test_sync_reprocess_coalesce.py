@@ -359,9 +359,11 @@ def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_man
 @pytest.fixture(scope='module')
 def sync_router():
     import importlib
-    from testing.import_isolation import stub_modules
+    from testing.import_isolation import AutoMockModule, stub_modules
 
-    with stub_modules({}):
+    worker = AutoMockModule('utils.episodes.log.worker')
+    worker.sweep = Mock(return_value={'redriven': 0, 'error': 0})
+    with stub_modules({'utils.episodes.log.worker': worker}):
         yield importlib.import_module('routers.sync')
 
 
@@ -389,12 +391,17 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
     if repair_raises:
         repair.side_effect = RuntimeError('query failed')
     monkeypatch.setattr(reprocess, 'sweep', repair)
+    from utils.episodes.log import worker
+
+    monkeypatch.setattr(worker, 'sweep', Mock(return_value={'redriven': 0, 'error': 2}))
     response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
     assert response.status_code == status
     assert json.loads(response.body)['outcomes'] == {
         'error': sequencer_errors,
         'reprocess_repaired': 0 if repair_raises else 3,
         'reprocess_repair_errors': 1 if repair_raises else repair_errors,
+        'episode_redriven': 0,
+        'episode_errors': 2,
     }
 
 
@@ -1355,3 +1362,19 @@ def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, mon
     assert schedule.call_count == (0 if change in {'none', 'timestamps', 'disabled'} else 1)
 
     assert features.call_count == (0 if change == 'disabled' else 1)
+
+
+def test_disabled_episode_shadow_keeps_the_legacy_sequencer_response(sync_router, monkeypatch):
+    import asyncio
+    import json
+    from utils.episodes.log import worker
+
+    async def run(_executor, fn):
+        return fn()
+
+    monkeypatch.setattr(sync_router, 'run_blocking', run)
+    monkeypatch.setattr(sync_router.uid_sequencer, 'sweep', Mock(return_value={'error': 0}))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: False)
+    monkeypatch.setattr(worker, 'sweep', Mock(return_value={'disabled': 1}))
+    response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
+    assert response.status_code == 200 and json.loads(response.body) == {'outcomes': {'error': 0}}

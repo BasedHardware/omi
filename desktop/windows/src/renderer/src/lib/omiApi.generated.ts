@@ -2592,6 +2592,7 @@ export interface Episode {
 export interface EpisodeListResponse {
   enabled: boolean;
   episodes?: Array<Episode>;
+  home_version?: string | null;
   next_cursor?: string | null;
 }
 
@@ -9516,6 +9517,7 @@ export interface OmiApiPaths {
       operationId: "list_episodes_v1_episodes_get";
       responses: {
         "200": EpisodeListResponse;
+        "304": void;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -16878,7 +16880,7 @@ export async function get_entity_page_v1_entities__entity_id__page_get(path: { e
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_episodes_v1_episodes_get(query: { from: string, to: string, limit?: number, cursor?: string | null }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeListResponse> {
+export async function list_episodes_v1_episodes_get(query: { from: string, to: string, limit?: number, cursor?: string | null, home_version?: string | null }, header: { X_Omi_App_Channel?: string | null, If_None_Match?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeListResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes`;
   const _params = query ? Object.entries(query)
@@ -16891,6 +16893,7 @@ export async function list_episodes_v1_episodes_get(query: { from: string, to: s
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.If_None_Match !== undefined ? { "If-None-Match": String(header.If_None_Match) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),

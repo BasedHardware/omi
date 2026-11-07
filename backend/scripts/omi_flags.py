@@ -11,7 +11,7 @@
 
 Target: ``--project``/``--database`` or ``OMI_FLAGS_FIRESTORE_PROJECT``/``OMI_FLAGS_FIRESTORE_DATABASE``.
 Writes need the flag project's writer identity (``prod-operator`` tier for prod).
-Only ``kind: posthog`` registry keys can be written; registry ``surfaces`` are
+Only ``kind: posthog`` or ``kind: firestore`` registry keys can be written; registry ``surfaces`` are
 copied onto the rule. ``experiment`` rows stay on PostHog. ``--mirror-posthog``
 also patches the matching PostHog row (single unconditioned group only) so
 released clients that still read PostHog agree. Runbook:
@@ -58,13 +58,13 @@ def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict[str, Any]]:
         if getattr(yaml, '__with_libyaml__', False)
         else yaml.safe_load(source)
     )
-    return {row['key']: row for row in data.get('flags', []) if row.get('kind') == 'posthog'}
+    return {row['key']: row for row in data.get('flags', []) if row.get('kind') in {'posthog', 'firestore'}}
 
 
 def registry_entry(registry: dict[str, dict[str, Any]], key: str) -> dict[str, Any]:
     entry = registry.get(key)
     if entry is None:
-        raise FlagCliError(f'{key}: not a kind: posthog flag in config/feature-flags.yaml')
+        raise FlagCliError(f'{key}: not a remote flag (posthog or firestore) in config/feature-flags.yaml')
     if entry.get('lifecycle') == 'experiment':
         raise FlagCliError(f'{key}: experiments stay on PostHog until they conclude')
     return entry
@@ -186,6 +186,8 @@ def _print(value: Any) -> None:
 
 def cmd_set(args: argparse.Namespace) -> None:
     entry = registry_entry(load_registry(), args.key)
+    if args.mirror_posthog and entry.get('kind') == 'firestore':
+        raise FlagCliError('Firestore-only flags cannot be mirrored to PostHog')
     client = _client(args)
     _, docs = store.read_all(client)
     current = docs.get(args.key)
@@ -212,6 +214,17 @@ def cmd_set(args: argparse.Namespace) -> None:
             raise FlagCliError(f'{args.key}: no PostHog row to mirror')
         mirror = (row['id'], posthog_mirror_body(row, rule))
         _print({'posthog_patch': mirror[1]})
+    if args.key == 'EPISODES_LOG_ENABLED' and rule['active']:
+        if not args.episode_data_project:
+            raise FlagCliError('Capture requires --episode-data-project and verified ACTIVE episode_facts TTL')
+        from utils.episodes.log.retention import ttl_active
+
+        try:
+            active = ttl_active(args.episode_data_project, args.episode_data_database)
+        except Exception as error:
+            raise FlagCliError('Could not verify episode_facts TTL; capture flag was not written') from error
+        if not active:
+            raise FlagCliError('episode_facts.expires_at TTL must be ACTIVE before capture on')
     if not args.yes and input('write? [y/N] ').strip().lower() != 'y':
         print('aborted')
         return
@@ -241,7 +254,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     _, docs = store.read_all(client)
     planned = []
     for key in keys:
-        if key not in registry or key not in rows:
+        if key not in registry or key not in rows or registry[key].get('kind') == 'firestore':
             print(f'skip {key}: needs a registry kind: posthog row and a PostHog row')
             continue
         if key in docs:
@@ -285,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument('--mirror-posthog', action='store_true')
     p_set.add_argument('--reason', required=True)
     p_set.add_argument('--yes', action='store_true')
+    p_set.add_argument('--episode-data-project', help='Customer data project for the capture TTL precondition')
+    p_set.add_argument('--episode-data-database', default='(default)')
     p_del = sub.add_parser('delete')
     p_del.add_argument('key')
     p_del.add_argument('--reason', required=True)

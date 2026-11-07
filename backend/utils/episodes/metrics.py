@@ -231,6 +231,11 @@ def _label(value: str, allowed: frozenset[str]) -> str:
     return value if value in allowed else 'other'
 
 
+def bounded_label(value: str, allowed: frozenset[str]) -> str:
+    """Public entry point for episode families sharing the closed-label contract."""
+    return _label(value, allowed)
+
+
 def _prime() -> None:
     """Export every bounded series at zero from process start.
 

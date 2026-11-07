@@ -48,7 +48,7 @@ def client(monkeypatch):
     monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid, fresh=False: None)
     monkeypatch.setattr(
         router_module.home_read,
-        '_read_members',
+        'read_members',
         lambda uid, rows, **kwargs: {
             'c1': {
                 'structured': {'title': 'Member'},

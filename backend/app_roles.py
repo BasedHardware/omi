@@ -133,6 +133,7 @@ from routers import (
     conversation_finalization,
     pending_work,
     episodes,
+    episode_drain,
     boundary_evidence,
     public_shared_conversation_chat,
     screen_frames,
@@ -228,6 +229,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(conversation_finalization, roles=EVERY),  # Cloud Tasks; listen enqueues
     Mount(pending_work),
     Mount(boundary_evidence),
+    Mount(episode_drain, roles=API_WORKERS),
     Mount(episodes),  # main #22877 via sync 15 (same position as main.py)
     Mount(trends),
     Mount(other, roles=EVERY),  # health and readiness

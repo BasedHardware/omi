@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes, episode_attach_memo, episode_batch_pending
+from database import episodes, episode_attach_memo, episode_log, episode_batch_pending
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from config.episode_attach import content_gate_enabled, optimizations_enabled
 from utils.conversations.recorded_time import conversation_span
@@ -25,6 +25,9 @@ FIELDS = (
     'state_version',
     'recorded_merged_into',
     'recorded_members',
+    'conversation_ids',
+    'member_activity',
+    'sources',
     'discarded_conversation_ids',
 )
 
@@ -94,10 +97,12 @@ def _attach_recorded_window(
     candidates: Callable | None = None,
     fence_row: Any = None,
     pending_at: datetime | None = None,
+    log_capture: Any = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
     def attach(transaction):
+        capture = log_capture if log_capture is not None else episode_log.prepare(transaction, client, uid)
         root = client.collection('users').document(uid)
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
@@ -111,6 +116,9 @@ def _attach_recorded_window(
         rows = (candidates or recorded_candidates)(
             uid, started, finished, firestore_client=client, transaction=transaction
         )
+        # Candidate geometry is already read for serving placement. Capture must
+        # not add BatchGet/decryption to the serving transaction.
+        log_fixed = rows if capture is not None else []
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
         owner_id = member_row.get('episode_id')
@@ -216,6 +224,13 @@ def _attach_recorded_window(
         if pending_patch:
             transaction.update(root.collection('conversations').document(conversation_id), pending_patch)
         transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
+        episode_log.mutation(
+            capture,
+            before=[*log_fixed, *([existing] if existing else [])],
+            after=[result],
+            span={'cid': conversation_id, 'start': started, 'end': finished, 'source': source},
+            links={conversation_id: {'episode_id': result['id']}},
+        )
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}
 
@@ -271,14 +286,16 @@ def attach_recorded(
 
     @firestore.transactional
     def attach(transaction):
+        # One IO-free post-commit recorder per serving attempt.
+        log_capture = episode_log.prepare(transaction, client, uid)
         # Both attachment strategies share one read phase and one fence. Cache
         # only inside this callback: Firestore retries must issue fresh queries.
         fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
         revision = fence.get(transaction=transaction).to_dict() or {}
         # Metadata-only close attachment has not recovered/finalized transcript
-        # evidence. Do not stamp (or reset) its completed sync-attach memo.
+        # evidence. Never stamp or reset its completed sync-attach memo.
         key = (
-            content_key(attach_row)
+            content_key(dict(attach_row, id=conversation_id))
             if pending_at is None and content_gate_enabled() and attach_row and memo_eligible(attach_row)
             else None
         )
@@ -291,7 +308,12 @@ def attach_recorded(
             key = None
         if key:
             current = client.collection('users').document(uid).collection('conversations').document(conversation_id)
-            if episode_attach_memo.current_key(uid, current.get(transaction=transaction).to_dict()) != key:
+            if (
+                episode_attach_memo.current_key(
+                    uid, current.get(transaction=transaction).to_dict(), cid=conversation_id
+                )
+                != key
+            ):
                 key = None
         cached = []
 
@@ -323,6 +345,7 @@ def attach_recorded(
             transaction=transaction,
             fence_row=revision,
             pending_at=pending_at,
+            log_capture=log_capture,
         )
         if canonical is not None:
             episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
@@ -340,6 +363,7 @@ def attach_recorded(
             candidates=reuse_candidates,
             fence_row=revision,
             pending_at=pending_at,
+            log_capture=log_capture,
         )
         result.pop('_window_end')
         episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])
@@ -364,6 +388,7 @@ def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, 
 
     @firestore.transactional
     def resume(transaction):
+        log_capture = episode_log.prepare(transaction, client, uid)
         root = client.collection('users').document(uid)
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
@@ -397,6 +422,15 @@ def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, 
         if last_closed.get('episode_id') == episode_id:
             transaction.set(links.document('last_closed'), {'episode_id': None})
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        episode_log.mutation(
+            log_capture,
+            before=[owner],
+            after=[result],
+            links={
+                'current': {'episode_id': episode_id},
+                **({'last_closed': {'episode_id': None}} if last_closed.get('episode_id') == episode_id else {}),
+            },
+        )
         return result
 
     return run_transactional(client, resume, transient=True)

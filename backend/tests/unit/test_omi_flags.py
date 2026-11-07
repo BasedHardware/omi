@@ -291,3 +291,12 @@ def test_registry_safe_parsers_reject_python_constructor_tags(tmp_path, monkeypa
     path.write_text("!!python/object/apply:builtins.str ['unsafe']")
     with pytest.raises(yaml.constructor.ConstructorError):
         cli.load_registry(path)
+
+
+def test_firestore_only_episode_ramp_is_writable_by_existing_cli():
+    registry = cli.load_registry()
+    entry = cli.registry_entry(registry, 'EPISODES_LOG_READ_PERCENT')
+    assert entry['kind'] == 'firestore'
+    rule = cli.merge_rule(None, entry, {'active': True, 'rollout_percentage': 25})
+    assert rule['rollout_percentage'] == 25 and rule['surfaces'] == ['backend']
+    assert cli.merge_rule(rule, entry, {'active': False})['active'] is False

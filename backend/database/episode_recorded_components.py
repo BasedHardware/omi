@@ -15,7 +15,7 @@ from google.cloud import firestore
 from config.episode_attach import optimizations_enabled
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
-from database import episodes, episode_batch_pending
+from database import episodes, episode_log, episode_batch_pending
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
@@ -158,6 +158,7 @@ def attach(
     transaction=None,
     fence_row=None,
     pending_at=None,
+    log_capture=None,
 ):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
@@ -166,6 +167,7 @@ def attach(
     fence = root.collection('episode_links').document('recorded_timeline')
 
     def commit(transaction):
+        capture = log_capture if log_capture is not None else episode_log.prepare(transaction, client, uid)
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
         pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
@@ -212,6 +214,7 @@ def attach(
                     if full is not None:
                         if pending_patch:
                             transaction.update(root.collection('conversations').document(cid), pending_patch)
+                            episode_log.member_changed(capture, [cid])
                         return {**full, '_recorded_windows': [full]}
 
         facts = {cid: {'start': start, 'end': end, 'source': source}}
@@ -319,6 +322,26 @@ def attach(
         if pending_patch:
             transaction.update(root.collection('conversations').document(cid), pending_patch)
         transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
+        redirects = [
+            {
+                **row,
+                'recorded_merged_into': next(
+                    (w for w in result if w['started_at'] <= row['started_at'] < w['last_activity_at']), result[-1]
+                )['id'],
+            }
+            for row in previous.values()
+            if row['id'] not in new_ids
+        ]
+        episode_log.mutation(
+            capture,
+            before=list(previous.values()),
+            after=[*result, *redirects],
+            span={'cid': cid, 'start': start, 'end': end, 'source': source},
+            links={
+                member: {'episode_id': assigned[-1], 'episode_ids': assigned}
+                for member, assigned in assignments.items()
+            },
+        )
         incoming = [row for row in result if cid in row['conversation_ids']]
         return {**incoming[-1], '_recorded_windows': incoming}
 

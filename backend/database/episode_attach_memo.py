@@ -10,11 +10,13 @@ from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.observability.fallback import record_fallback
 
 
-def current_key(uid, row):
+def current_key(uid, row, *, cid=None):
     if not row or not memo_eligible(row) or is_relevance_discarded(row):
         return None
     try:
         decoded = dict(row)
+        if cid is not None:
+            decoded['id'] = cid
         decoded['transcript_segments'] = decode_transcript_segments_verified(
             uid, row.get('transcript_segments'), bool(row.get('transcript_segments_compressed'))
         )
@@ -25,7 +27,7 @@ def current_key(uid, row):
 
 
 def matches(uid, cid, row, *, firestore_client=None, finalized=False):
-    key = content_key(row) if content_gate_enabled() and memo_eligible(row) else None
+    key = content_key(dict(row, id=cid)) if content_gate_enabled() and memo_eligible(row) else None
     if key is None:
         return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -44,7 +46,7 @@ def matches(uid, cid, row, *, firestore_client=None, finalized=False):
         if finalized and link.get('attach_finalized') != key:
             return False
         current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
-        return current.get('episode_id') == link['episode_id'] and current_key(uid, current) == key
+        return current.get('episode_id') == link['episode_id'] and current_key(uid, current, cid=cid) == key
 
     try:
         return run_transactional(client, check, transient=True)
@@ -73,7 +75,7 @@ def stamp(transaction, client, uid, cid, key, owner_id):
 
 
 def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
-    key = content_key(row) if content_gate_enabled() and memo_eligible(row) else None
+    key = content_key(dict(row, id=cid)) if content_gate_enabled() and memo_eligible(row) else None
     if key is None:
         return
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -91,7 +93,7 @@ def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
             and link.get('episode_id') == owner_id == current.get('episode_id')
             and link.get('attach_owner_id') == owner_id
             and link.get('attach_revision') == key
-            and current_key(uid, current) == key
+            and current_key(uid, current, cid=cid) == key
             and (not finalized or link.get('attach_completed') == key)
             and link.get(marker) != key
         ):

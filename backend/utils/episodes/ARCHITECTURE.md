@@ -566,3 +566,12 @@ The unlabeled overdue-read counter counts observations, not unique members.
 Its info alert is staged beside the existing batch timeliness rules; idle
 members remain covered by queue timeliness monitoring. No production alert
 or runtime configuration is changed here.
+
+## Episode fact log and shadow views
+
+The batch-2 log and owner live below `users/{uid}` and publish separate sealed
+`episode_views` and Home payloads. Legacy transactions append facts atomically;
+the drain never writes legacy namespaces or performs paid work. The log is
+the input to the shared phase derivation, with no second status field.
+The [episode-log runbook](../../docs/runbooks/episode-log.md) owns replay, lease
+deadlines, kill switches, backfill, drift, conditional reads and the cohort ramp.

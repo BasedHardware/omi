@@ -201,7 +201,9 @@ BODY_DIGEST = {
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
-    'database.smart_merge.absorb_conversation': 'b8cbd9130ee1570309163a3300fcd90ecd953f58c4fc6e8f15849854104d3d81',
+    # Reviewed: episode-log member-change capture adds an owner get and dirty
+    # append only; summary-recovery rearm adds no query. No range-query shape changed.
+    'database.smart_merge.absorb_conversation': '4c07bb8e1848afab6466b6499e999fc101a70e2f280c46f04522c5d71cf9d2fe',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -1121,6 +1123,7 @@ _add(
             'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape'),
             'transaction': (None, 'reuse the enclosing transaction read phase; same query shape'),
             'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
+            'log_capture': (None, 'preloaded owner/capture state; document reads only, no query shape effect'),
             'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
         },
@@ -3886,6 +3889,24 @@ for _function in ('projected_stream_iter',):
         )
     )
 
+
+_add(DriverEntry('database.episode_log.due_owners', base={'now': T0}, neutrals={'limit': _PAGE}))
+
+_add(
+    DriverEntry(
+        'database.episode_log.fact_page', base={'uid': UID, 'after': 0, 'through': 64}, neutrals={'limit': _PAGE}
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.episode_log.read_batch',
+        base={
+            'uid': UID,
+            'claimed': {'state': {'cursor': 0, 'next_seq': 0}},
+        },
+    )
+)
 
 from database.batch_final_pass_retry import FinalPassRetries
 

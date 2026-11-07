@@ -12195,7 +12195,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func listEpisodesV1EpisodesGet(client: OmiApiClient, from: String, to: String, limit: Int? = nil, cursor: String? = nil, xOmiAppChannel: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func listEpisodesV1EpisodesGet(client: OmiApiClient, from: String, to: String, limit: Int? = nil, cursor: String? = nil, homeVersion: String? = nil, xOmiAppChannel: String? = nil, ifNoneMatch: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/episodes"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -12209,6 +12209,9 @@ public enum OmiAPI {
     if let cursor {
       queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
+    if let homeVersion {
+      queryItems.append(URLQueryItem(name: "home_version", value: String(homeVersion)))
+    }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
@@ -12218,6 +12221,7 @@ public enum OmiAPI {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
     if let xOmiAppChannel { req.setValue(String(xOmiAppChannel), forHTTPHeaderField: "X-Omi-App-Channel") }
+    if let ifNoneMatch { req.setValue(String(ifNoneMatch), forHTTPHeaderField: "If-None-Match") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }

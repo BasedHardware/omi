@@ -200,6 +200,18 @@ def test_parent_navigation_preserves_owner_store_and_read_ordering():
         sibling.get(transaction=transaction)
 
 
+def test_whole_document_batch_get_keeps_read_and_store_guards():
+    database = StrictFirestore({('records', 'one'): {'id': 'one', 'value': 3}})
+    transaction = database.transaction()
+    rows = database.get_all([database.document('records/one')], transaction=transaction)
+    assert rows[0].id == 'one' and rows[0].to_dict() == {'id': 'one', 'value': 3}
+    with pytest.raises(ForeignTransactionError):
+        database.get_all([StrictFirestore().document('records/one')], transaction=transaction)
+    transaction.update(database.document('records/one'), {'value': 4})
+    with pytest.raises(ReadAfterWriteError):
+        database.get_all([database.document('records/one')], transaction=transaction)
+
+
 @pytest.mark.parametrize('parent', [None, 42, {}, {'kept': 'old'}])
 def test_nested_update_matches_emulator_nonmap_replacement(parent):
     # Proven against the real emulator in the phase 2a integration proof.

@@ -71,6 +71,18 @@ def test_wal_revision_change_conservatively_falls_through(lane):
     assert service._attach_synced('u', 'same', updated, c) == 'recorded'
 
 
+def test_fact_identity_keeps_completed_memo_for_a_document_without_stored_id(lane, monkeypatch):
+    store, c, _ = lane
+    incoming = deepcopy(seed(store))
+    store.rows[('users', 'u', 'conversations', 'same')].pop('id')
+    assert service._attach_synced('u', 'same', incoming, c) == 'recorded'
+    link = store.rows[('users', 'u', 'episode_links', 'same')]
+    assert link['attach_completed'] == content_key(incoming)
+    monkeypatch.setattr(StrictFirestoreTransaction, 'set', unexpected)
+    monkeypatch.setattr(StrictFirestoreTransaction, 'update', unexpected)
+    assert service._attach_synced('u', 'same', incoming, c) == 'attached_unchanged'
+
+
 @pytest.mark.parametrize('change', ['span', 'text', 'new_member', 'discard', 'delete', 'donor'])
 def test_real_changes_bypass_the_memo(lane, monkeypatch, change):
     store, c, _ = lane

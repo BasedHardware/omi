@@ -429,6 +429,22 @@ def get_rollout_executor() -> MonitoredThreadPoolExecutor:
         return _rollout_executor
 
 
+_episode_capture_executor: MonitoredThreadPoolExecutor | None = None
+_episode_capture_executor_lock = threading.Lock()
+
+
+def get_episode_capture_executor() -> MonitoredThreadPoolExecutor:
+    """Optional episode facts: bounded leaves, drop rather than wait on capacity."""
+    global _episode_capture_executor
+    with _episode_capture_executor_lock:
+        if _episode_capture_executor is None:
+            _episode_capture_executor = MonitoredThreadPoolExecutor(
+                name='episode_capture', max_workers=4, max_queue_size=64, thread_name_prefix='episode-capture'
+            )
+            _ALL_EXECUTORS.append(_episode_capture_executor)
+        return _episode_capture_executor
+
+
 _after_db = contextvars.ContextVar[list[Callable[[], Coroutine[Any, Any, Any]]] | None]('after_db', default=None)
 
 

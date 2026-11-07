@@ -38,7 +38,7 @@ from config.episodes import (
 from utils.conversations.recorded_time import conversation_span, sync_recorded_end
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
-from database import episode_receipts, episode_timeline
+from database import episode_receipts, episode_timeline, episode_log
 from database._client import get_firestore_client, run_transactional
 from database.conversations import decode_transcript_segments_verified
 from utils.encryption import decrypt, encrypt
@@ -346,6 +346,7 @@ def _bounded_activity(episode, at):
 def _record_activity(
     transaction: Any, client: Any, uid: str, episode_id: str, conversation_id: str, at: datetime
 ) -> Optional[datetime]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -376,7 +377,7 @@ def _record_activity(
     prior_member = members.get(conversation_id)
     members[conversation_id] = max(prior_member, member_at) if isinstance(prior_member, datetime) else member_at
     if activity != last or members != raw.get('member_activity'):
-        if recorded_episodes_enabled() and activity != last:
+        if timeline_enabled and activity != last:
             fence = episode_timeline.check_window(
                 transaction, client, uid, {**raw, 'last_activity_at': activity}, fence_row=timeline_row
             )
@@ -384,6 +385,13 @@ def _record_activity(
                 transaction.set(fence[0], {'version': fence[1]})
         # This clock must not invalidate the notes state_version.
         transaction.update(ref, {'last_activity_at': activity, 'member_activity': members})
+        if log_capture is not None:
+            unsealed = raw
+            episode_log.mutation(
+                log_capture,
+                before=[unsealed],
+                after=[{**unsealed, 'last_activity_at': activity, 'member_activity': members}],
+            )
     return activity
 
 
@@ -539,6 +547,7 @@ def _commit(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     pointer = _links(client, uid).document(CURRENT)
     timeline_ref = _links(client, uid).document('recorded_timeline')
     timeline_enabled = recorded_episodes_enabled()
@@ -592,6 +601,24 @@ def _commit(
     if timeline_enabled:
         transaction.set(timeline_ref, {'version': int(timeline_row.get('version') or 0) + 1})
     write_memberships(transaction, client, uid, episode_id, members, now)
+    if log_capture is not None:
+        log_before = [current_raw] if current_raw else []
+        log_after = [result]
+        log_links = {cid: {'episode_id': episode_id} for cid in members}
+        if new_episode is not None:
+            log_links[CURRENT] = {'episode_id': episode_id}
+            if current_raw and current_raw.get('status') == 'live':
+                unsealed_current = current_raw
+                log_after.insert(0, {**unsealed_current, **_closed_fields(close_reason or 'gap', closed_at or now)})
+                log_links[LAST_CLOSED] = {'episode_id': current_id}
+        episode_log.mutation(
+            log_capture,
+            before=log_before,
+            after=log_after,
+            links=log_links,
+            receipts=segment_receipts,
+            changed_fields=updates if new_episode is None else None,
+        )
     return result
 
 
@@ -641,6 +668,7 @@ def _reopen(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
 ) -> Optional[dict[str, Any]]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -682,6 +710,17 @@ def _reopen(
     # The recap must not advertise a live episode as the last closed one.
     transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
     write_memberships(transaction, client, uid, episode_id, members, now)
+    if log_capture is not None:
+        episode_log.mutation(
+            log_capture,
+            before=[raw],
+            after=[merged],
+            links={
+                **{cid: {'episode_id': episode_id} for cid in members},
+                CURRENT: {'episode_id': episode_id},
+                LAST_CLOSED: {'episode_id': None},
+            },
+        )
     return merged
 
 
@@ -746,6 +785,7 @@ def _close(
     split_after: Optional[datetime] = None,
     retained_member_window: bool = False,
 ) -> Optional[dict[str, Any]]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -814,6 +854,11 @@ def _close(
     if current_id == episode_id:
         transaction.set(_links(client, uid).document(CURRENT), {'episode_id': None, 'updated_at': closed_at})
         transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': episode_id, 'updated_at': closed_at})
+    log_links = (
+        {CURRENT: {'episode_id': None}, LAST_CLOSED: {'episode_id': episode_id}} if current_id == episode_id else {}
+    )
+    if log_capture is not None:
+        episode_log.mutation(log_capture, before=[raw], after=[merged], links=log_links)
     return merged
 
 
@@ -875,6 +920,7 @@ def _update(
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     recovery_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -933,6 +979,15 @@ def _update(
     write_memberships(transaction, client, uid, episode_id, members, now)
     for link_ref in invalidated:
         transaction.update(link_ref, {'attach_revision': None, 'attach_completed': None, 'attach_finalized': None})
+    if log_capture is not None:
+        episode_log.mutation(
+            log_capture,
+            before=[raw],
+            after=[merged],
+            links={cid: {'episode_id': episode_id} for cid in members},
+            receipts=segment_receipts,
+            changed_fields=updates,
+        )
     return merged
 
 

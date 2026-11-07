@@ -509,7 +509,7 @@ _driver(
 _driver(
     'utils.episodes.home_read.list_episode_window',
     base={'uid': UID, 'start': T0},
-    domains={'end': (T0, T1)},
+    domains={'end': (T0, T1), 'namespace': ('episodes', 'episode_views')},
     neutrals={'limit': LIMIT, 'cursor': (None, 'snapshot continuation changes the position only')},
     profile='request-episode-home',
 )
@@ -545,5 +545,32 @@ _driver(
     neutrals={'now': (10000.0, 'hold-age/range operand only; same membership queries')},
     setup=_enrichment_redrive_rows,
     profile='operational-stalled-enrichment-redrive',
+    serving=False,
+)
+
+
+_driver(
+    'utils.episodes.log.reconcile.snapshot',
+    base={'uid': UID},
+    profile='maintenance-episode-gap-reconcile',
+    serving=False,
+)
+_driver(
+    'utils.episodes.log.reconcile.source_documents',
+    base={'uid': UID},
+    neutrals={'transaction': (None, 'transaction binding does not change source query shape')},
+    profile='maintenance-episode-gap-source-proof',
+    serving=False,
+)
+_driver(
+    'utils.episodes.log.retention.guard',
+    patchers=(
+        _stub('config.episode_log.capture_possible', True),
+        _stub('utils.episodes.log.retention.active', False),
+        lambda client: unittest.mock.patch.object(
+            importlib.import_module('utils.episodes.log.retention'), '_guard_until', {}
+        ),
+    ),
+    profile='maintenance-episode-retention-inspection',
     serving=False,
 )

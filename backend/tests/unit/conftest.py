@@ -329,3 +329,26 @@ def empty_rollout_cohorts(monkeypatch):
     monkeypatch.setattr(cohorts, '_members_resolver', members)
     monkeypatch.setattr(cohorts, '_load_resolver', lambda _uid: None)
     monkeypatch.setattr(cohorts, '_warm_resolver', warm)
+
+
+@pytest.fixture
+def untracked_episode_log(monkeypatch, isolated_episode_capture):
+    """Opt in only for partial legacy stores with no episode-log owner namespace."""
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
+
+
+@pytest.fixture
+def isolated_episode_capture(monkeypatch):
+    """Unit stores inject TTL and deterministic scheduling; latency proofs override submit."""
+    from concurrent.futures import Future
+    from utils.episodes.log import capture, retention
+
+    def immediate(fn):
+        future = Future()
+        future.set_result(fn())
+        return future
+
+    monkeypatch.setattr(capture, 'submit', immediate)
+    monkeypatch.setattr(retention, 'active', lambda client: True)

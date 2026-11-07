@@ -329,7 +329,7 @@ def test_idle_list_read_uses_the_winner_of_a_concurrent_close_or_activity_update
     monkeypatch.setattr(home_read.episodes, 'get_home_episode_snapshots', lambda *a, **kw: {'e': latest})
     monkeypatch.setattr(
         home_read,
-        '_read_members',
+        'read_members',
         lambda *a, **kw: {'a': floor(summary_blocked_reason=None), 'b': floor(summary_blocked_reason=None)},
     )
     checked = []
@@ -453,7 +453,7 @@ def test_episode_page_limits_idle_close_work_without_hiding_unsettled_members(mo
     rows = [episode(id=f'e{i}', status='live', conversation_ids=[f'c{i}']) for i in range(50)]
     settle = Mock(side_effect=lambda uid, row, c: dict(row, status='closed'))
     monkeypatch.setattr(service, 'settle_episode_for_read', settle)
-    monkeypatch.setattr(home_read, '_read_members', lambda *a, **kw: {})
+    monkeypatch.setattr(home_read, 'read_members', lambda *a, **kw: {})
     monkeypatch.setattr(
         home_read,
         'project_episode',

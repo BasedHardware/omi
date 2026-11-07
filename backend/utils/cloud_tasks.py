@@ -657,3 +657,18 @@ def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),
     )
+
+
+def enqueue_episode_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
+    """Reuse the sync queue and its exact OIDC audience; backend-sync alone drains."""
+    handler = _handler_url()
+    if not handler.endswith('/v2/sync-jobs/run'):
+        raise RuntimeError('sync task handler URL is not the expected v2 route')
+    enqueue_named_task(
+        os.getenv('SYNC_TASKS_QUEUE', ''),
+        handler.removesuffix('/v2/sync-jobs/run') + '/v2/episode-drain/run',
+        f'epd-{uid_hash}-{deadline}',
+        {'uid': uid},
+        audience=_oidc_audience(),
+        schedule_at=deadline,
+    )

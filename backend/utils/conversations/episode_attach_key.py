@@ -35,6 +35,9 @@ def content_key(row: Mapping[str, Any]) -> str | None:
         if span is None or not isinstance(row.get('transcript_segments'), list):
             return None
         fields = (
+            'id',  # The same digest is also a per-user fact key: distinct captures cannot collide.
+            'finalization_status',
+            'record_audio_closed',
             'started_at',
             'finished_at',
             'created_at',
@@ -127,9 +130,12 @@ def scheduling_key(row):
     span = conversation_span(row)
     if span is None:
         return None
-    # Processing clocks do not change episode input.
-    # Use the proven recorded span, even if finished_at advanced during reprocess.
+    # Use recorded placement clocks, even if processing advanced finished_at.
+    # Summary recovery below also covers builds without the settle composer.
     fields = (
+        'id',
+        'finalization_status',
+        'record_audio_closed',
         'status',
         'summary_blocked_reason',
         'record_lane_owner',

@@ -126,6 +126,15 @@ class _Snapshot:
         return self._data
 
 
+@pytest.fixture(autouse=True)
+def no_episode_log_owner(monkeypatch):
+    # These legacy single-document fakes have no episode-log owner. Do not
+    # mistake their catch-all MagicMock for an existing owner/deletion marker.
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
+
+
 @pytest.fixture
 def index_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("TYPESENSE_HOST", "localhost")
@@ -582,6 +591,28 @@ class TestConversationWriteWiring:
 
         conversations_db.update_conversation_title(UID, CONVERSATION_ID, "Renamed")
 
+        sync.assert_called_once_with(UID, CONVERSATION_ID)
+
+    def test_tracked_home_policy_keeps_search_sync_inside_the_fence(self, wired, monkeypatch):
+        from database import episode_log
+
+        sync, _, _ = wired
+        monkeypatch.setenv('EPISODES_ENABLED', 'on')
+        monkeypatch.setenv('EPISODES_PERCENT', '100')
+        monkeypatch.setenv('EPISODES_LOG_ENABLED', 'on')
+        monkeypatch.setenv('EPISODES_HOME_ROWS_ENABLED', 'on')
+        monkeypatch.setattr(episode_log, 'state', lambda *args, **kwargs: {'cursor': 0, 'next_seq': 0})
+        order = []
+        monkeypatch.setattr(
+            episode_log,
+            'policy_barrier',
+            lambda *args, entering, **kwargs: order.append('enter' if entering else 'exit'),
+        )
+        sync.side_effect = lambda *args: order.append('search')
+
+        conversations_db.update_conversation_title(UID, CONVERSATION_ID, 'Renamed')
+
+        assert order == ['enter', 'search', 'exit']
         sync.assert_called_once_with(UID, CONVERSATION_ID)
 
     def test_summary_overview_edit_syncs(self, wired):
