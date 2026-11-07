@@ -563,11 +563,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'Hindi available ang Offline Sync';
+  String get v2Undetected => 'Hindi Available ang Offline Sync';
 
   @override
   String get v2UndetectedMessage =>
-      'Kailangan ng Offline Sync ng nakakonektang Omi device na may SD-card storage. Hindi ito sinusuportahan ng kasalukuyan mong device.';
+      'Kailangan ng Offline Sync ng nakakonektang Omi device na may SD card storage. Hindi ito sinusuportahan ng iyong kasalukuyang device.';
 
   @override
   String get endConversation => 'Tapusin ang Pag-uusap';

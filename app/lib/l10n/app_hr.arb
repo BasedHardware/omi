@@ -721,7 +721,7 @@
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Offline sinkronizacija zahtijeva povezani Omi ure?aj s pohranom na SD kartici. Tvoj trenutni ure?aj to ne podr?ava.",
+    "v2UndetectedMessage": "Offline sinkronizacija zahtijeva povezani Omi uređaj s pohranom na SD kartici. Tvoj trenutni uređaj to ne podržava.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },

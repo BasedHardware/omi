@@ -560,11 +560,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get hardwareSection => 'Riistvara';
 
   @override
-  String get v2Undetected => 'V?rgu?henduseta s?nkroonimine pole saadaval';
+  String get v2Undetected => 'Võrguühenduseta sünkroonimine pole saadaval';
 
   @override
   String get v2UndetectedMessage =>
-      'V?rgu?henduseta s?nkroonimine vajab SD-kaardi salvestusruumiga ?hendatud Omi seadet. Teie praegune seade seda ei toeta.';
+      'Võrguühenduseta sünkroonimine vajab SD-kaardi salvestusruumiga ühendatud Omi seadet. Teie praegune seade seda ei toeta.';
 
   @override
   String get endConversation => 'Lõpeta vestlus';

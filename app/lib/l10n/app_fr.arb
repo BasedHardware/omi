@@ -179,7 +179,7 @@
     "customizationSection": "Personnalisation",
     "hardwareSection": "Matériel",
     "v2Undetected": "Synchronisation hors ligne indisponible",
-    "v2UndetectedMessage": "La synchronisation hors ligne n?cessite un appareil Omi connect? avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.",
+    "v2UndetectedMessage": "La synchronisation hors ligne nécessite un appareil Omi connecté avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.",
     "endConversation": "Terminer la conversation",
     "pauseResume": "Pause/Reprendre",
     "starConversation": "Marquer la conversation comme favorite",

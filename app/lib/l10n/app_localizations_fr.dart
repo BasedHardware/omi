@@ -569,7 +569,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get v2UndetectedMessage =>
-      'La synchronisation hors ligne n?cessite un appareil Omi connect? avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.';
+      'La synchronisation hors ligne nécessite un appareil Omi connecté avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.';
 
   @override
   String get endConversation => 'Terminer la conversation';

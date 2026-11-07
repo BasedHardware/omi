@@ -558,11 +558,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get hardwareSection => 'Laitteisto';
 
   @override
-  String get v2Undetected => 'Offline-synkronointi ei ole k?ytett?viss?';
+  String get v2Undetected => 'Offline-synkronointi ei ole käytettävissä';
 
   @override
   String get v2UndetectedMessage =>
-      'Offline-synkronointi tarvitsee yhdistetyn Omi-laitteen, jossa on SD-korttitallennustila. Nykyinen laitteesi ei tue sit?.';
+      'Offline-synkronointi tarvitsee yhdistetyn Omi-laitteen, jossa on SD-korttitallennustila. Nykyinen laitteesi ei tue sitä.';
 
   @override
   String get endConversation => 'Lopeta keskustelu';

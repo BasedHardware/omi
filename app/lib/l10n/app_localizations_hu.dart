@@ -563,11 +563,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get hardwareSection => 'Hardver';
 
   @override
-  String get v2Undetected => 'Offline szinkroniz?l?s nem ?rhet? el';
+  String get v2Undetected => 'Az offline szinkronizálás nem érhető el';
 
   @override
   String get v2UndetectedMessage =>
-      'Az offline szinkroniz?l?shoz SD-k?rty?s t?rhellyel rendelkez? csatlakoztatott Omi eszk?zre van sz?ks?g. A jelenlegi eszk?z?d ezt nem t?mogatja.';
+      'Az offline szinkronizáláshoz SD-kártyás tárhellyel rendelkező csatlakoztatott Omi eszközre van szükség. A jelenlegi eszközöd ezt nem támogatja.';
 
   @override
   String get endConversation => 'Beszélgetés befejezése';

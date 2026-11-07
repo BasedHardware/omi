@@ -551,10 +551,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get hardwareSection => '硬件';
 
   @override
-  String get v2Undetected => '???????';
+  String get v2Undetected => '离线同步不可用';
 
   @override
-  String get v2UndetectedMessage => '???????????? SD ???? Omi ????????????????';
+  String get v2UndetectedMessage => '离线同步需要已连接且配备 SD 卡存储的 Omi 设备。您当前的设备不支持此功能。';
 
   @override
   String get endConversation => '结束对话';

@@ -560,11 +560,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get hardwareSection => 'Perangkat Keras';
 
   @override
-  String get v2Undetected => 'Sinkronisasi luring tidak tersedia';
+  String get v2Undetected => 'Sinkronisasi Offline Tidak Tersedia';
 
   @override
   String get v2UndetectedMessage =>
-      'Sinkronisasi luring memerlukan perangkat Omi yang terhubung dengan penyimpanan kartu SD. Perangkat Anda saat ini tidak mendukungnya.';
+      'Sinkronisasi Offline memerlukan perangkat Omi yang terhubung dengan penyimpanan kartu SD. Perangkat Anda saat ini tidak mendukungnya.';
 
   @override
   String get endConversation => 'Akhiri Percakapan';

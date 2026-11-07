@@ -563,11 +563,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get hardwareSection => 'Maquinari';
 
   @override
-  String get v2Undetected => 'Sincronitzaci? fora de l?nia no disponible';
+  String get v2Undetected => 'La sincronització fora de línia no està disponible';
 
   @override
   String get v2UndetectedMessage =>
-      'La sincronitzaci? fora de l?nia necessita un dispositiu Omi connectat amb emmagatzematge de targeta SD. El vostre dispositiu actual no ho admet.';
+      'La sincronització fora de línia necessita un dispositiu Omi connectat amb emmagatzematge en targeta SD. El teu dispositiu actual no ho admet.';
 
   @override
   String get endConversation => 'Finalitzar conversa';

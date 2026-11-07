@@ -561,11 +561,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'Sincronizaci?n sin conexi?n no disponible';
+  String get v2Undetected => 'Sincronización sin conexión no disponible';
 
   @override
   String get v2UndetectedMessage =>
-      'La sincronizaci?n sin conexi?n necesita un dispositivo Omi conectado con almacenamiento en tarjeta SD. Tu dispositivo actual no es compatible.';
+      'La sincronización sin conexión necesita un dispositivo Omi conectado con almacenamiento en tarjeta SD. Tu dispositivo actual no es compatible.';
 
   @override
   String get endConversation => 'Terminar conversación';

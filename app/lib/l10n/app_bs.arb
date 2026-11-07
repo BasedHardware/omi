@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "Offline sinhronizovanje nije dostupno",
+    "v2Undetected": "Offline sinhronizacija nije dostupna",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Offline sinhronizovanje zahtijeva povezani Omi ure?aj sa SD-karticom. Va? trenutni ure?aj to ne podr?ava.",
+    "v2UndetectedMessage": "Offline sinhronizacija zahtijeva povezani Omi uređaj sa SD karticom za pohranu. Vaš trenutni uređaj to ne podržava.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },

@@ -568,7 +568,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get v2UndetectedMessage =>
-      'La sincronizzazione offline richiede un dispositivo Omi connesso con archiviazione su scheda SD. Il tuo dispositivo attuale non la supporta.';
+      'La sincronizzazione offline richiede un dispositivo Omi connesso con memoria su scheda SD. Il tuo dispositivo attuale non la supporta.';
 
   @override
   String get endConversation => 'Termina Conversazione';

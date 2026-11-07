@@ -565,7 +565,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get v2UndetectedMessage =>
-      'Sinchronizavimui neprisijungus reikalingas prijungtas Omi ?renginys su SD kortel?s atmintimi. J?s? dabartinis ?renginys to nepalaiko.';
+      'Sinchronizavimui neprisijungus reikalingas prijungtas Omi įrenginys su SD kortelės atmintimi. Jūsų dabartinis įrenginys to nepalaiko.';
 
   @override
   String get endConversation => 'Baigti pokalbį';

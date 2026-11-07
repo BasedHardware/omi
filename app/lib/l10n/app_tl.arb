@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "Hindi available ang Offline Sync",
+    "v2Undetected": "Hindi Available ang Offline Sync",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Kailangan ng Offline Sync ng nakakonektang Omi device na may SD-card storage. Hindi ito sinusuportahan ng kasalukuyan mong device.",
+    "v2UndetectedMessage": "Kailangan ng Offline Sync ng nakakonektang Omi device na may SD card storage. Hindi ito sinusuportahan ng iyong kasalukuyang device.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },

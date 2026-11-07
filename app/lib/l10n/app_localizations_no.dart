@@ -561,11 +561,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get hardwareSection => 'Maskinvare';
 
   @override
-  String get v2Undetected => 'Offline-synkronisering er ikke tilgjengelig';
+  String get v2Undetected => 'Frakoblet synkronisering er ikke tilgjengelig';
 
   @override
   String get v2UndetectedMessage =>
-      'Offline-synkronisering krever en tilkoblet Omi-enhet med SD-kortlagring. Din n?v?rende enhet st?tter ikke dette.';
+      'Frakoblet synkronisering krever en tilkoblet Omi-enhet med SD-kortlagring. Den nåværende enheten din støtter ikke dette.';
 
   @override
   String get endConversation => 'Avslutt samtale';

@@ -564,7 +564,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get v2UndetectedMessage =>
-      'Offline sinkronizacija zahtijeva povezani Omi ure?aj s pohranom na SD kartici. Tvoj trenutni ure?aj to ne podr?ava.';
+      'Offline sinkronizacija zahtijeva povezani Omi uređaj s pohranom na SD kartici. Tvoj trenutni uređaj to ne podržava.';
 
   @override
   String get endConversation => 'Završi razgovor';

@@ -562,11 +562,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get hardwareSection => 'Phần cứng';
 
   @override
-  String get v2Undetected => '??ng b? Ngo?i tuy?n kh?ng kh? d?ng';
+  String get v2Undetected => 'Đồng bộ ngoại tuyến không khả dụng';
 
   @override
   String get v2UndetectedMessage =>
-      '??ng b? Ngo?i tuy?n c?n thi?t b? Omi ?? k?t n?i c? b? nh? th? SD. Thi?t b? hi?n t?i c?a b?n kh?ng h? tr? t?nh n?ng n?y.';
+      'Đồng bộ ngoại tuyến cần thiết bị Omi đã kết nối có bộ nhớ thẻ SD. Thiết bị hiện tại của bạn không hỗ trợ tính năng này.';
 
   @override
   String get endConversation => 'Kết thúc cuộc trò chuyện';

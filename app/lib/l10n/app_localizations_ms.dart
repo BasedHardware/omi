@@ -560,11 +560,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get hardwareSection => 'Perkakasan';
 
   @override
-  String get v2Undetected => 'Penyegerakan luar talian tidak tersedia';
+  String get v2Undetected => 'Penyegerakan Luar Talian Tidak Tersedia';
 
   @override
   String get v2UndetectedMessage =>
-      'Penyegerakan luar talian memerlukan peranti Omi yang disambungkan dengan storan kad SD. Peranti semasa anda tidak menyokongnya.';
+      'Penyegerakan Luar Talian memerlukan peranti Omi yang disambungkan dengan storan kad SD. Peranti semasa anda tidak menyokongnya.';
 
   @override
   String get endConversation => 'Tamatkan Perbualan';

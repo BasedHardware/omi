@@ -560,11 +560,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'Offline-synkronisering er ikke tilg?ngelig';
+  String get v2Undetected => 'Offlinesynkronisering er ikke tilgængelig';
 
   @override
   String get v2UndetectedMessage =>
-      'Offline-synkronisering kr?ver en tilsluttet Omi-enhed med SD-kortlager. Din nuv?rende enhed underst?tter det ikke.';
+      'Offlinesynkronisering kræver en tilsluttet Omi-enhed med SD-kortlager. Din nuværende enhed understøtter det ikke.';
 
   @override
   String get endConversation => 'Afslut samtale';

@@ -562,11 +562,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get hardwareSection => 'Hardvér';
 
   @override
-  String get v2Undetected => 'Offline synchroniz?cia nie je k dispoz?cii';
+  String get v2Undetected => 'Offline synchronizácia nie je k dispozícii';
 
   @override
   String get v2UndetectedMessage =>
-      'Offline synchroniz?cia vy?aduje pripojen? zariadenie Omi s ?lo?iskom na SD karte. Va?e s??asn? zariadenie ju nepodporuje.';
+      'Offline synchronizácia vyžaduje pripojené zariadenie Omi s úložiskom na SD karte. Vaše súčasné zariadenie ju nepodporuje.';
 
   @override
   String get endConversation => 'Ukončiť konverzáciu';

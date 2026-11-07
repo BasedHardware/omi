@@ -561,11 +561,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get hardwareSection => 'Hårdvara';
 
   @override
-  String get v2Undetected => 'Offlinesynkronisering ?r inte tillg?nglig';
+  String get v2Undetected => 'Offlinesynkronisering är inte tillgänglig';
 
   @override
   String get v2UndetectedMessage =>
-      'Offlinesynkronisering kr?ver en ansluten Omi-enhet med SD-kortlagring. Din nuvarande enhet st?der inte det.';
+      'Offlinesynkronisering kräver en ansluten Omi-enhet med SD-kortlagring. Din nuvarande enhet stöder inte det.';
 
   @override
   String get endConversation => 'Avsluta konversation';

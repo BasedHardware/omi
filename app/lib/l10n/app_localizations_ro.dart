@@ -563,11 +563,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'Sincronizarea offline nu este disponibil?';
+  String get v2Undetected => 'Sincronizarea offline nu este disponibilă';
 
   @override
   String get v2UndetectedMessage =>
-      'Sincronizarea offline necesit? un dispozitiv Omi conectat cu stocare pe card SD. Dispozitivul t?u actual nu o accept?.';
+      'Sincronizarea offline necesită un dispozitiv Omi conectat cu stocare pe card SD. Dispozitivul tău actual nu o acceptă.';
 
   @override
   String get endConversation => 'Încheie conversația';

@@ -561,11 +561,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get hardwareSection => 'Aparatūra';
 
   @override
-  String get v2Undetected => 'Bezsaistes sinhroniz?cija nav pieejama';
+  String get v2Undetected => 'Bezsaistes sinhronizācija nav pieejama';
 
   @override
   String get v2UndetectedMessage =>
-      'Bezsaistes sinhroniz?cijai ir nepiecie?ama pievienota Omi ier?ce ar SD kartes kr?tuvi. J?su pa?reiz?j? ier?ce to neatbalsta.';
+      'Bezsaistes sinhronizācijai ir nepieciešama pievienota Omi ierīce ar SD kartes krātuvi. Jūsu pašreizējā ierīce to neatbalsta.';
 
   @override
   String get endConversation => 'Beigt sarunu';
