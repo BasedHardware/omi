@@ -15,10 +15,22 @@ int speaker_init();
  * @brief Endpoint function for streaming audio
  *
  * Call this function in the following way (Via ble)
- * 1. Send a 2 byte packet containing the audio data size
- * 2. Send to the ble notify id 400 byte packets (with notify), with each 2 bytes being the audio data
- * 3. Repeat step 2 until the audio data is sent. Then the speaker will automatically play the sound
- * when the audio data sent is equal to the audio data size sent in step 1
+ * 1. Send a 4 byte little-endian packet containing the audio data size in bytes
+ *    (16-bit signed mono, 8 kHz). A 4-byte packet arriving mid-stream is
+ *    treated as audio; it re-arms as a header only once the stream is idle or
+ *    the host has been quiet for ~2 s.
+ * 2. Send the PCM as writes of at most 400 bytes. The device notifies after
+ *    every write to pump the next one.
+ * 3. Every block of the stream is queued while the I2S peripheral is idle and
+ *    a single START fires when the bytes written reach the declared size, so
+ *    the clip plays without gaps. One stream must therefore fit the device
+ *    queue: at most ~7 blocks (~2.2 s of audio). Longer text should be split
+ *    into several step 1-3 transmissions at sentence boundaries, where the
+ *    inter-stream gap lands as a natural pause.
+ * 4. If the host stalls longer than the re-arm window mid-stream, the
+ *    unfinished stream is abandoned when the next header re-arms; the re-arm
+ *    also recovers the peripheral from any error state, so a stalled or
+ *    over-long transmission never poisons later audio.
  *
  * @return The amount of data successfully sent in bytes.
  */
@@ -32,6 +44,15 @@ uint16_t speak(uint16_t len, const void *buf);
  * @return 0 if successful, negative errno code if error
  */
 int play_boot_sound();
+
+/**
+ * @brief Play the "speak now" cue (two ascending blips)
+ *
+ * Called on double-tap so the user learns audibly that a voice-agent turn has
+ * been opened for the paired app. No-op when no speaker is initialized; skipped
+ * while a BLE audio stream owns the queue.
+ */
+void play_talk_cue(void);
 
 /**
  * @brief Initialize the Haptic Pin
