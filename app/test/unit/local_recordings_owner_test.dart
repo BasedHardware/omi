@@ -120,4 +120,39 @@ void main() {
     expect(view.isLoading, isFalse);
     view.dispose();
   });
+
+  test('waiting recordings survive pre-upgrade unstamped index, signed-out cold start, and same-account re-login',
+      () async {
+    await audio(name);
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    // Simulate a pre-upgrade wals.json entry whose ownerUid was not yet stamped on disk.
+    final wal = (await ledger.getAllWals()).single;
+    wal.ownerUid = null;
+    await ledger.persistRetryMetadata(wal);
+
+    // Cold-start a fresh ledger and provider while signed out (e.g. after app update cleared auth).
+    SharedPreferencesUtil().uid = '';
+    final coldLedger = await custodyLedger();
+    final coldView = LocalRecordingsProvider(ledger: coldLedger, initialize: false);
+    await coldView.refresh();
+    expect(coldView.recordings, isEmpty);
+
+    // Sign back into the same account on the cold-started singleton ledger/provider.
+    SharedPreferencesUtil().uid = 'owner';
+    await coldView.refresh();
+    expect(coldView.recordings.single.fileName, name);
+    expect((await coldLedger.getAllWals()).single.ownerUid, 'owner');
+
+    // Also verify in-session sign-out followed by same-account sign-in rehydrates from retired/foreign custody.
+    coldLedger.clearUserData();
+    coldView.clearUserData();
+    SharedPreferencesUtil().uid = '';
+    expect(coldView.recordings, isEmpty);
+
+    SharedPreferencesUtil().uid = 'owner';
+    await coldView.refresh();
+    expect(coldView.recordings.single.fileName, name);
+    coldView.dispose();
+  });
 }

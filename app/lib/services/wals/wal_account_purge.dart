@@ -66,4 +66,79 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     });
     return removed;
   }
+
+  /// Synchronously reconciles active (`_wals`), foreign (`_foreignWals`), and
+  /// retired (`_retiredWals`) buckets when a signed-in user is present.
+  bool _reconcileCurrentOwnerSync() {
+    final uid = SharedPreferencesUtil().uid;
+    if (uid.isEmpty) return false;
+    var changed = false;
+
+    bool belongsToCurrent(Wal wal) =>
+        wal.ownerUid == uid || wal.ownerUid == null || wal.ownerUid == 'legacy';
+
+    if (_wals.any((wal) => !belongsToCurrent(wal))) {
+      final retained = <Wal>[];
+      for (final wal in _wals) {
+        if (belongsToCurrent(wal)) {
+          retained.add(wal);
+        } else {
+          _foreignWals.add(wal);
+        }
+      }
+      _wals = retained;
+      changed = true;
+    }
+
+    final restored = <Wal>[];
+    _foreignWals.removeWhere((wal) {
+      if (belongsToCurrent(wal)) {
+        restored.add(wal);
+        return true;
+      }
+      return false;
+    });
+    _retiredWals.removeWhere((wal) {
+      if (belongsToCurrent(wal)) {
+        restored.add(wal);
+        return true;
+      }
+      return false;
+    });
+
+    if (restored.isNotEmpty) {
+      final existingKeys = _wals.map((w) => (w.id, w.codec, w.seconds, w.totalFrames, w.filePath)).toSet();
+      final nextActive = List<Wal>.from(_wals);
+      for (final wal in restored) {
+        wal.isSyncing = false;
+        wal.syncStartedAt = null;
+        wal.syncEtaSeconds = null;
+        if (existingKeys.add((wal.id, wal.codec, wal.seconds, wal.totalFrames, wal.filePath))) {
+          nextActive.add(wal);
+          changed = true;
+        }
+      }
+      if (changed) {
+        _wals = nextActive;
+      }
+    }
+
+    if (changed) {
+      heldRevision.value++;
+    }
+    return changed;
+  }
+
+  Future<void> _reconcileAndPersistCurrentOwner() async {
+    final generation = _sessionGeneration;
+    if (_reconcileCurrentOwnerSync() && _isCurrent(generation)) {
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
+    }
+  }
+
+  Future<void> _rehydrateForCurrentUser() async {
+    await walReady;
+    await _reconcileAndPersistCurrentOwner();
+  }
 }
