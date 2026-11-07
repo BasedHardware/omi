@@ -11,10 +11,10 @@ import asyncio
 import hashlib
 import os
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Literal, Optional
-from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.conversation_scan as conversation_scan_db
@@ -752,6 +752,8 @@ def get_conversation_finalization_status(
     return status
 
 
+MAX_REPROCESS_TEMPLATE_APPS = 5
+
 @router.post(
     '/v1/conversations/{conversation_id}/reprocess',
     response_model=Conversation,
@@ -771,23 +773,34 @@ def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
+    app_ids: Annotated[Optional[List[str]], Query()] = None,
     source: Optional[Literal['omi']] = None,
+    speaker_summary_refresh: bool = False,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
     response: Response = None,  # type: ignore[assignment]
     background_tasks: BackgroundTasks = None,
 ):
+    """Reprocess one conversation with the legacy default or explicit summary templates.
+
+    ``source=omi`` requests first-party Omi notes; omitting ``source`` preserves
+    the legacy default app selection. ``app_ids`` is a repeated query parameter
+    accepting up to five distinct IDs, mutually exclusive with ``app_id`` and
+    ``source=omi``. ``app_id`` remains the released-client single-template contract.
     """
-    Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
-    :param conversation_id: The ID of the conversation to reprocess
-    :param language_code: Optional language code to use for processing
-    :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
-    :param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested
-        app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).
-    :return: The updated conversation after reprocessing.
-    """
+    if app_id and app_ids:
+        raise HTTPException(status_code=400, detail='app_id and app_ids are mutually exclusive')
+    selected_app_ids = app_ids or ([app_id] if app_id else [])
+    if len(selected_app_ids) != len(set(selected_app_ids)) or any(not item for item in selected_app_ids):
+        raise HTTPException(status_code=400, detail='app_ids must contain distinct non-empty app IDs')
+    if len(selected_app_ids) > MAX_REPROCESS_TEMPLATE_APPS:
+        raise HTTPException(
+            status_code=400,
+            detail=f'app_ids may contain at most {MAX_REPROCESS_TEMPLATE_APPS} template IDs',
+        )
     first_party_only = source == FIRST_PARTY_SUMMARY_SOURCE
-    if first_party_only and app_id:
-        raise HTTPException(status_code=400, detail='app_id and source=omi are mutually exclusive')
+    if first_party_only and selected_app_ids:
+        detail = 'app_id and source=omi are mutually exclusive' if app_id else 'app_ids and source=omi are mutually exclusive'
+        raise HTTPException(status_code=400, detail=detail)
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Reprocess force-processes a *discarded* conversation to revive it, but a
     # soft-deleted tombstone is invisible to the user and must not be reprocessed:
@@ -800,6 +813,8 @@ def reprocess_conversation(
     from database import processing_attention as attention_db
 
     input_generation = attention_db.generation(conversation)
+    expected_document_revision = conversation.get('updated_at')
+    expected_user_lifecycle_revision = conversation.get(conversations_db.USER_LIFECYCLE_REVISION_FIELD, 0)
     was_discarded = bool(conversation.get('discarded'))
     user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
     # A hidden conversation's derived effects are not trusted to be current.
@@ -808,7 +823,9 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
+    explicit_apps = {selected_id: _validate_reprocess_app_selection(uid, selected_id) for selected_id in selected_app_ids}
+    explicit_app = explicit_apps.get(app_id) if app_id else None
+    batch_app_ids = selected_app_ids if app_ids else None
 
     # Reprocess is a new user intent once the prior writer finishes. Share the
     # active writer across app selections to avoid racing summary writes.
@@ -835,13 +852,23 @@ def reprocess_conversation(
             background_tasks,
             response,
             first_party_only=first_party_only,
+            speaker_summary_refresh=speaker_summary_refresh,
             user_kept=user_kept,
             derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
+            app_ids=batch_app_ids,
+            explicit_apps=explicit_apps if batch_app_ids else None,
+            expected_document_revision=expected_document_revision,
+            expected_user_lifecycle_revision=expected_user_lifecycle_revision,
         )
     except Exception:
         attention_db.finish(uid, operation, 'failed')
         raise
-    attention_db.finish(uid, operation, 'succeeded' if _reprocess_succeeded(result, app_id) else 'failed')
+    succeeded = (
+        all(_reprocess_succeeded(result, selected_id) for selected_id in selected_app_ids)
+        if batch_app_ids
+        else _reprocess_succeeded(result, app_id)
+    )
+    attention_db.finish(uid, operation, 'succeeded' if succeeded else 'failed')
     return result
 
 
@@ -878,8 +905,13 @@ def execute_reprocess(
     response,
     *,
     first_party_only: bool = False,
+    speaker_summary_refresh: bool = False,
     user_kept: bool = False,
     derived_effects_transcript_sha256: Optional[str] = None,
+    app_ids: Optional[List[str]] = None,
+    explicit_apps: Optional[Dict[str, App]] = None,
+    expected_document_revision: Optional[datetime] = None,
+    expected_user_lifecycle_revision: Optional[int] = None,
 ):
     receipt_applied: list = []
 
@@ -889,24 +921,27 @@ def execute_reprocess(
         conversation,
         trigger=ProcessingTrigger.USER_REPROCESS,
         user_kept=was_discarded or user_kept,
+        app_ids=app_ids,
+        explicit_apps=explicit_apps,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
-            AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
+            AppUsageAttribution.EXPLICIT_SELECTION
+            if explicit_app or app_ids
+            else AppUsageAttribution.NON_USER_REPROCESS
         ),
         speaker_receipt_observer=receipt_applied.append,
         first_party_only=first_party_only,
+        speaker_summary_refresh=speaker_summary_refresh,
         derived_effects_transcript_sha256=derived_effects_transcript_sha256,
+        defer_discarded_restore=was_discarded,
+        expected_document_revision=expected_document_revision,
+        expected_user_lifecycle_revision=expected_user_lifecycle_revision,
     )
 
-    # Reprocessing a hidden conversation is an explicit recovery: persist it as
-    # the user's choice (``restore_discarded``) so no later reassessment hides it
-    # again, including when the selected app supplies the summary.
-    if was_discarded and not processed_conversation.discarded:
-        restored = lifecycle_service.restore_discarded(uid, conversation_id)
-        if restored and processed_conversation.sync_relevance == 'review':
-            processed_conversation.sync_relevance = 'keep'
-
+    # Template-only batches do not schedule speaker-learning or other derived work.
+    if app_ids:
+        return processed_conversation
     return schedule_reprocessed_learning(
         uid,
         processed_conversation,

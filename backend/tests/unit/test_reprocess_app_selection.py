@@ -24,7 +24,12 @@ def _app(*, app_id='summary-app', summarizes=True, disabled=False):
 
 
 def _route_context(*, raw_app, available_app, enabled):
-    conversation = {'id': 'c1', 'status': 'completed'}
+    conversation = {
+        'id': 'c1',
+        'status': 'completed',
+        'updated_at': datetime(2026, 11, 6, tzinfo=timezone.utc),
+        conv_router.conversations_db.USER_LIFECYCLE_REVISION_FIELD: 0,
+    }
     model = SimpleNamespace(language='en')
     return (
         model,
@@ -39,6 +44,62 @@ def _route_context(*, raw_app, available_app, enabled):
         patch('utils.apps.is_user_app_enabled', return_value=enabled),
         patch.object(conv_router, 'process_conversation', return_value=model),
     )
+
+
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
+
+
+def test_reprocess_app_ids_are_repeated_query_parameters():
+    route = next(
+        route
+        for route in conv_router.router.routes
+        if isinstance(route, APIRoute) and route.path == '/v1/conversations/{conversation_id}/reprocess'
+    )
+    assert 'app_ids' in {field.name for field in route.dependant.query_params}
+    assert 'app_ids' not in {field.name for field in route.dependant.body_params}
+
+    app = FastAPI()
+    app.include_router(conv_router.router)
+    parameter = next(
+        parameter
+        for parameter in app.openapi()['paths'][route.path]['post']['parameters']
+        if parameter['name'] == 'app_ids'
+    )
+    assert any(schema.get('type') == 'array' for schema in parameter['schema']['anyOf'])
+
+
+def test_batch_reprocess_rejects_more_than_the_template_fanout_limit():
+    with pytest.raises(HTTPException) as exc:
+        conv_router.reprocess_conversation(
+            conversation_id='c1',
+            app_ids=[f'app-{index}' for index in range(conv_router.MAX_REPROCESS_TEMPLATE_APPS + 1)],
+            uid='u1',
+        )
+    assert exc.value.status_code == 400
+
+
+def test_batch_rejects_unavailable_template_before_processing(monkeypatch):
+    from database import processing_attention as attention
+
+    _, p1, p2, p3, _, _, _, process_patch = _route_context(raw_app=None, available_app=None, enabled=True)
+    monkeypatch.setattr(attention, 'generation', lambda _conversation: 1)
+    with (
+        p1,
+        p2,
+        p3,
+        patch('database.apps.get_app_by_id_db', return_value={}),
+        patch('utils.apps.get_available_app_model_by_id', side_effect=[_app(app_id='first'), None]),
+        patch('utils.apps.is_user_app_enabled', return_value=True),
+        patch.object(attention, 'claim') as claim,
+        process_patch as process,
+        pytest.raises(HTTPException) as error,
+    ):
+        conv_router.reprocess_conversation(conversation_id='c1', app_ids=['first', 'private'], uid='u1')
+
+    assert error.value.status_code == 403
+    claim.assert_not_called()
+    process.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -242,11 +303,25 @@ def test_source_omi_asks_processing_for_first_party_notes_only():
     assert process.call_args.kwargs['first_party_only'] is True
 
 
+def test_speaker_refresh_signal_is_forwarded_without_changing_omi_source():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None, available_app=None, enabled=False
+    )
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        assert conv_router.reprocess_conversation(
+            conversation_id='c1', speaker_summary_refresh=True, uid='u1'
+        ) is model
+
+    assert process.call_args.kwargs['first_party_only'] is False
+    assert process.call_args.kwargs['speaker_summary_refresh'] is True
+
+
 def test_legacy_plain_regenerate_keeps_the_preferred_app_path():
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
     with p1, p2, p3, p4, p5, p6, process_patch as process:
         conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
 
+    assert process.call_args.kwargs['speaker_summary_refresh'] is False
     assert process.call_args.kwargs['first_party_only'] is False
 
 
@@ -290,7 +365,15 @@ def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classifica
     discarded, stored_keep, expected, status
 ):
     model, _p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
-    row = {'id': 'c1', 'status': status, 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
+    revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    row = {
+        'id': 'c1',
+        'status': status,
+        'discarded': discarded,
+        'sync_relevance_user_kept': stored_keep,
+        'updated_at': revision,
+        conv_router.conversations_db.USER_LIFECYCLE_REVISION_FIELD: 0,
+    }
     model.discarded = False
     model.sync_relevance = 'review'
     with (
@@ -301,13 +384,119 @@ def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classifica
         p5,
         p6,
         process_patch as process,
-        patch.object(conv_router.lifecycle_service, 'restore_discarded', return_value=True) as restore,
+        patch.object(conv_router.lifecycle_service, 'restore_discarded') as restore,
     ):
         result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
     assert result is model
     assert process.call_args.kwargs['user_kept'] is expected
-    assert restore.call_count == int(discarded)
+    assert process.call_args.kwargs['defer_discarded_restore'] is discarded
+    assert process.call_args.kwargs['expected_document_revision'] == revision
+    assert process.call_args.kwargs['expected_user_lifecycle_revision'] == 0
+    restore.assert_not_called()
 
+
+
+def test_batch_reprocess_defers_discarded_restore_to_atomic_result_commit(monkeypatch):
+    from database import processing_attention as attention
+
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=True,
+    )
+    model.discarded = False
+    model.sync_relevance = 'keep'
+    revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    lifecycle_revision = 7
+    monkeypatch.setattr(
+        conv_router,
+        '_get_valid_conversation_by_id',
+        lambda *_args: {
+            'id': 'c1',
+            'status': 'completed',
+            'discarded': True,
+            'updated_at': revision,
+            conv_router.conversations_db.USER_LIFECYCLE_REVISION_FIELD: lifecycle_revision,
+        },
+    )
+    monkeypatch.setattr(conv_router, '_validate_reprocess_app_selection', lambda _uid, app_id: _app(app_id=app_id))
+    monkeypatch.setattr(attention, 'generation', lambda _conversation: 1)
+    monkeypatch.setattr(attention, 'claim', lambda *args, **kwargs: ({'operation_id': 'batch'}, True))
+    monkeypatch.setattr(attention, 'owns_live_claim', lambda *args: True)
+    monkeypatch.setattr(attention, 'finish', lambda *args: None)
+    with (
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        process_patch as process,
+        patch.object(conv_router.lifecycle_service, 'restore_discarded') as restore,
+    ):
+        result = conv_router.reprocess_conversation(conversation_id='c1', app_ids=['summary-app'], uid='u1')
+
+    assert result.discarded is False
+    assert result.sync_relevance == 'keep'
+    assert process.call_args.kwargs['defer_discarded_restore'] is True
+    assert process.call_args.kwargs['expected_document_revision'] == revision
+    assert process.call_args.kwargs['expected_user_lifecycle_revision'] == lifecycle_revision
+    restore.assert_not_called()
+
+@pytest.mark.parametrize('status_code', [404, 402, 409])
+def test_discarded_reprocess_propagates_atomic_restore_fence_failure(status_code):
+    revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    with (
+        patch.object(
+            conv_router,
+            'process_conversation',
+            side_effect=HTTPException(status_code=status_code, detail='current row changed'),
+        ) as process,
+        patch.object(conv_router.lifecycle_service, 'restore_discarded') as restore,
+    ):
+        with pytest.raises(HTTPException) as error:
+            conv_router.execute_reprocess(
+                'u1',
+                'c1',
+                {'id': 'c1'},
+                'en',
+                None,
+                None,
+                True,
+                None,
+                None,
+                app_ids=['selected'],
+                expected_document_revision=revision,
+                expected_user_lifecycle_revision=0,
+            )
+
+    assert error.value.status_code == status_code
+    assert process.call_args.kwargs['defer_discarded_restore'] is True
+    assert process.call_args.kwargs['expected_document_revision'] == revision
+    assert process.call_args.kwargs['expected_user_lifecycle_revision'] == 0
+    restore.assert_not_called()
+
+
+def test_budget_denied_plain_reprocess_keeps_discarded_conversation_hidden():
+    model = SimpleNamespace(discarded=True, sync_relevance='review')
+    with (
+        patch.object(conv_router, 'process_conversation', return_value=model),
+        patch.object(conv_router.lifecycle_service, 'restore_discarded') as restore,
+        patch.object(conv_router, 'schedule_reprocessed_learning', return_value=model),
+    ):
+        result = conv_router.execute_reprocess(
+            'u1',
+            'c1',
+            {'id': 'c1'},
+            'en',
+            None,
+            None,
+            True,
+            None,
+            None,
+        )
+
+    restore.assert_not_called()
+    assert result.discarded is True
 
 @pytest.mark.parametrize(
     ('app_id', 'overview', 'apps_results', 'expected'),

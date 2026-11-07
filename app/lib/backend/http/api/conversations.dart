@@ -216,21 +216,32 @@ const Duration reprocessRequestTimeout = Duration(seconds: 180);
 /// nothing for the legacy "regenerate" (Omi notes plus the user's server preferred template).
 /// A backend that predates `source` ignores the unknown parameter.
 @visibleForTesting
-String reprocessQuery({String? appId, bool forceOmi = false}) {
+String reprocessQuery({
+  String? appId,
+  List<String>? appIds,
+  bool forceOmi = false,
+  bool speakerSummaryRefresh = false,
+}) {
   if (appId != null) return '?app_id=${Uri.encodeQueryComponent(appId)}';
-  if (forceOmi) return '?source=omi';
+  if (appIds != null && appIds.isNotEmpty) {
+    return '?${appIds.map((id) => 'app_ids=${Uri.encodeQueryComponent(id)}').join('&')}';
+  }
+  if (forceOmi) return speakerSummaryRefresh ? '?source=omi&speaker_summary_refresh=true' : '?source=omi';
+  if (speakerSummaryRefresh) return '?speaker_summary_refresh=true';
   return '';
 }
 
 Future<ReprocessResult> reProcessConversationServer(
   String conversationId, {
   String? appId,
+  List<String>? appIds,
   bool requireSpeakerReceipt = false,
   bool forceOmi = false,
 }) async {
   final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
   final response = await makeApiCall(
-    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
+    url:
+        '$route${reprocessQuery(appId: appId, appIds: appIds, forceOmi: forceOmi, speakerSummaryRefresh: requireSpeakerReceipt)}',
     headers: {},
     method: 'POST',
     body: '',

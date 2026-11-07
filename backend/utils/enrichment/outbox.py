@@ -1108,18 +1108,16 @@ def due_rows(*, now: float, limit: int, client: Any = None) -> list[tuple[str, R
     return rows
 
 
-def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:
-    """Blind-write lazy debt: no extra Firestore read on visible completion.
-
-    Increment preserves concurrent dirtying; merge preserves an active worker's
-    lease. The existing CAS completion sees that increment and retains the debt.
-    Token changes fence older deliveries; all effects read the settled row.
-    """
+def _new_effects_row(
+    uid: str,
+    conversation_id: str,
+    language: str,
+    immediate: bool,
+    user_requested: bool = False,
+) -> Row:
     if not owns_runtime():
         raise RuntimeError('lazy enrichment requires production or a Firestore emulator')
     current = time.time()
-    # Preserve the daytime merge window as far as the hard completion ceiling
-    # permits; open/explicit demand still bypasses this closed-surface wait.
     quiet_seconds = 3540
     document_id = key(uid, conversation_id + '\0effects')
     row = dict(
@@ -1136,16 +1134,57 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         task_due_at=current + quiet_seconds,
         dispatch=_effects_binding(),
     )
-    get_firestore_client().collection(COLLECTION).document(document_id).set(
-        {**row, 'version': firestore.Increment(1)}, merge=True
+    if user_requested:
+        row.update(
+            user_requested_at=current,
+            latest_pending_at=current,
+            dormant=False,
+            age_gate_parked=False,
+            deferred_since=None,
+        )
+    return row
+
+
+def stage_effects_in_transaction(
+    transaction: Any,
+    client: Any,
+    uid: str,
+    conversation_id: str,
+    language: str,
+    *,
+    immediate: bool = False,
+    user_requested: bool = False,
+) -> Row:
+    """Stage lazy work atomically with its owning conversation update."""
+    row = _new_effects_row(uid, conversation_id, language, immediate, user_requested)
+    transaction.set(
+        client.collection(COLLECTION).document(row['document_id']),
+        {**row, 'version': firestore.Increment(1)},
+        merge=True,
     )
+    return row
+
+
+def enqueue_staged_effects(row: Row) -> None:
     if valid_effects_binding(row):
         _enqueue(row)
     else:
-        # Match the sync outbox's unbound-host contract: visible work survives,
-        # and the configured sweep CAS-rebinds the durable obligation later.
+        # The durable row is repaired by the configured sweep after an unbound write.
         UNBOUND.labels(action='mark').inc()
 
+
+def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:
+    """Blind-write lazy debt: no extra Firestore read on visible completion.
+
+    Increment preserves concurrent dirtying; merge preserves an active worker's
+    lease. The existing CAS completion sees that increment and retains the debt.
+    Token changes fence older deliveries; all effects read the settled row.
+    """
+    row = _new_effects_row(uid, conversation_id, language, immediate)
+    get_firestore_client().collection(COLLECTION).document(row['document_id']).set(
+        {**row, 'version': firestore.Increment(1)}, merge=True
+    )
+    enqueue_staged_effects(row)
 
 def _effects_binding() -> dict[str, str]:
     binding = dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)

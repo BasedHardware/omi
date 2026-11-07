@@ -225,11 +225,25 @@ def persist_processed_conversation(
     smart_merge_refresh: tuple[int, str] | None = None,
     expected_capture_group: tuple[str, int] | None = None,
     capture_group_notes_refresh: tuple[str, str] | None = None,
+    require_unlocked: bool = False,
+    preserve_app_results: bool = False,
+    allow_terminal_failure_recovery: bool = False,
+    defer_discarded_restore: bool = False,
+    expected_document_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
+    expected_notes_snapshot: Mapping[str, Any] | None = None,
 ) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
-    ``False`` means deletion or a newer sync transcript revision. Callers must stop before emitting
-    derived side effects such as webhooks or integration fanout.
+    ``False`` means a current-state fence refused the write, including deletion,
+    a newer sync transcript revision, a lock (when ``require_unlocked`` is set),
+    notes or capture-group changes, summary-fence changes, or disallowed terminal
+    failure recovery. Callers must stop before emitting derived side effects such
+    ``preserve_app_results`` keeps the transaction's latest app-result array.
+    ``allow_terminal_failure_recovery`` is reserved for explicit user reprocessing.
+    ``defer_discarded_restore`` keeps an initially discarded row hidden through
+    generation; the result writer must commit its restore atomically.
+    ``expected_notes_snapshot`` fences first-party overview/section edits during reprocessing.
     """
     _require_status(
         conversation_data,
@@ -247,11 +261,107 @@ def persist_processed_conversation(
         'on_first_completion': _observe_first_completion,
         'smart_merge_refresh': smart_merge_refresh,
     }
+    if require_unlocked:
+        kwargs['require_unlocked'] = True
+    if preserve_app_results:
+        kwargs['preserve_app_results'] = True
+    if allow_terminal_failure_recovery:
+        kwargs['allow_terminal_failure_recovery'] = True
+    if defer_discarded_restore:
+        kwargs['defer_discarded_restore'] = True
+        kwargs['expected_document_revision'] = expected_document_revision
+    if expected_user_lifecycle_revision is not None:
+        kwargs['expected_user_lifecycle_revision'] = expected_user_lifecycle_revision
+    if expected_notes_snapshot is not None:
+        kwargs['expected_notes_snapshot'] = expected_notes_snapshot
     if expected_capture_group is not None:
         kwargs['expected_capture_group'] = expected_capture_group
     if capture_group_notes_refresh is not None:
         kwargs['capture_group_notes_refresh'] = capture_group_notes_refresh
     return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data, **kwargs)
+
+
+@sync_phase('firestore')
+def commit_user_reprocess_app_results(
+    uid: str,
+    conversation_id: str,
+    suggested_summarization_apps: list[str],
+    *,
+    selected_app_ids: set[str],
+    expected_selected_results: Mapping[str, Mapping[str, Any] | None],
+    results: list[dict[str, Any]],
+    expected_transcript_fence_sha256: str,
+    expected_speaker_receipt_sha256: str,
+    restore_discarded: bool = False,
+    expected_lifecycle_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
+    schedule_lazy_effects: bool = False,
+    lazy_effects_language: str | None = None,
+) -> bool:
+    """Persist reprocessed app results and an eligible restore in one transaction."""
+    stage_lazy_effects = None
+    wake_staged_lazy_effects = None
+    if schedule_lazy_effects:
+        if not lazy_effects_language:
+            raise ValueError('lazy effects require a language')
+        from utils.enrichment import outbox
+
+        def stage(transaction, client):
+            return outbox.stage_effects_in_transaction(
+                transaction,
+                client,
+                uid,
+                conversation_id,
+                lazy_effects_language,
+                immediate=True,
+                user_requested=True,
+            )
+
+        stage_lazy_effects = stage
+        wake_staged_lazy_effects = outbox.enqueue_staged_effects
+    return conversations_db.persist_user_reprocess_app_results(
+        uid,
+        conversation_id,
+        suggested_summarization_apps,
+        selected_app_ids=selected_app_ids,
+        expected_selected_results=expected_selected_results,
+        results=results,
+        expected_transcript_fence_sha256=expected_transcript_fence_sha256,
+        expected_speaker_receipt_sha256=expected_speaker_receipt_sha256,
+        restore_discarded=restore_discarded,
+        expected_lifecycle_revision=expected_lifecycle_revision,
+        expected_user_lifecycle_revision=expected_user_lifecycle_revision,
+        schedule_lazy_effects=schedule_lazy_effects,
+        stage_lazy_effects=stage_lazy_effects,
+        wake_staged_lazy_effects=wake_staged_lazy_effects,
+    )
+
+
+@sync_phase('firestore')
+def commit_template_batch_results(
+    uid: str,
+    conversation_id: str,
+    results: list[dict[str, Any]],
+    *,
+    expected_transcript_fence_sha256: str,
+    expected_selected_results: Mapping[str, Any],
+    expected_speaker_receipt_sha256: str,
+    restore_discarded: bool = False,
+    expected_lifecycle_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
+) -> bool:
+    """Commit template results and an eligible restore through the lifecycle owner."""
+    return conversations_db.persist_template_batch_results(
+        uid,
+        conversation_id,
+        results,
+        expected_transcript_fence_sha256=expected_transcript_fence_sha256,
+        expected_selected_results=dict(expected_selected_results),
+        expected_speaker_receipt_sha256=expected_speaker_receipt_sha256,
+        restore_discarded=restore_discarded,
+        expected_lifecycle_revision=expected_lifecycle_revision,
+        expected_user_lifecycle_revision=expected_user_lifecycle_revision,
+    )
 
 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
@@ -627,6 +737,32 @@ def discard_by_relevance(
 def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
     return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+
+
+class ConversationLockedError(RuntimeError):
+    """The conversation became locked before a lifecycle-owned patch committed."""
+
+
+@sync_phase('firestore')
+def apply_user_conversation_patch(
+    uid: str,
+    conversation_id: str,
+    *,
+    title: str | None = None,
+    discarded: bool | None = None,
+) -> bool:
+    """Atomically apply a user title/discard patch behind the lifecycle owner."""
+    try:
+        return conversations_db.patch_user_conversation(
+            uid,
+            conversation_id,
+            title=title,
+            discarded=discarded,
+        )
+    except conversations_db.ConversationLockedError as error:
+        raise ConversationLockedError(str(error)) from error
+
+
 
 
 def open_recording_session(

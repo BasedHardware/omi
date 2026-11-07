@@ -130,7 +130,7 @@ void main() {
         conversation,
         fetches: fetches,
         catalog: [_pgApp],
-        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
+        reprocess: (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) {
           final result = _results[item.slug];
           return result == null ? gate.future : Future.value(result);
         },

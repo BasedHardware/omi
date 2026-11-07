@@ -87,7 +87,11 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
     if (provider.isReprocessingOpenConversation && !widget.summaryTabVisible) {
       // Not on the tab that owns the primary progress surface: keep a global indicator so a
       // request started from this tab never runs invisibly.
-      label = l10n.summarySummarizingWith(summarySourceName(provider, provider.reprocessingAppId, l10n));
+      final ids = provider.reprocessingAppIds;
+      final source = ids.isEmpty
+          ? summarySourceName(provider, provider.reprocessingAppId, l10n)
+          : summarySourceNames(provider, ids, l10n);
+      label = l10n.summarySummarizingWith(source);
     } else if (!provider.isReprocessingOpenConversation && conversation?.status == ConversationStatus.processing) {
       label = l10n.processingConversationProgress;
     } else {

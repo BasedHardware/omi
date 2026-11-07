@@ -91,7 +91,7 @@ void main() {
     Future<(ConversationDetailProvider, bool)> run(ReprocessResult result, {String? appId}) async {
       final provider = summaryProvider(
         summaryConversation(),
-        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => result,
+        reprocess: (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async => result,
         catalog: [summaryApp('pg', 'Paul Graham')],
       );
       addTearDown(provider.dispose);
@@ -158,7 +158,7 @@ void main() {
     test('a throwing reprocess settles the page even when crash reporting throws too', () async {
       final conversation = summaryConversation();
       final provider = _ThrowingReporterProvider(
-        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
+        reprocess: (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async =>
             throw StateError('transport'),
       )
         ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
@@ -177,7 +177,7 @@ void main() {
       final seen = <(String?, bool)>[];
       final provider = summaryProvider(
         summaryConversation(),
-        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
+        reprocess: (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async {
           seen.add((appId, forceOmi));
           return ReprocessSuccess(summaryConversation(overview: 'Done'));
         },
@@ -194,7 +194,7 @@ void main() {
       var calls = 0;
       final provider = summaryProvider(
         summaryConversation(),
-        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
+        reprocess: (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) {
           calls++;
           return gate.future;
         },
@@ -276,10 +276,12 @@ void main() {
     });
   });
 
-  test('reprocessQuery: a template sends app_id, Omi sends source=omi, legacy regenerate sends nothing', () {
+  test('reprocessQuery distinguishes speaker refresh, Omi, and legacy regenerate', () {
     expect(reprocessQuery(appId: 'pg'), '?app_id=pg');
     expect(reprocessQuery(appId: 'pg', forceOmi: true), '?app_id=pg');
     expect(reprocessQuery(forceOmi: true), '?source=omi');
+    expect(reprocessQuery(speakerSummaryRefresh: true), '?speaker_summary_refresh=true');
+    expect(reprocessQuery(forceOmi: true, speakerSummaryRefresh: true), '?source=omi&speaker_summary_refresh=true');
     expect(reprocessQuery(), '');
   });
 

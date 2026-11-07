@@ -74,6 +74,9 @@ from models.conversation import (
     CreateConversation,
     ExternalIntegrationCreateConversation,
 )
+from models.transcript_segment import TranscriptSegment
+from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.conversations.transcript_hash import transcript_fence_sha256
 from models.conversation_enums import (
     ConversationSource,
     ConversationStatus,
@@ -793,10 +796,13 @@ def trigger_conversation_apps(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
     explicit_app: Optional[App] = None,
+    app_ids: Optional[List[str]] = None,
+    explicit_apps: Optional[Mapping[str, App]] = None,
     usage_attribution: Optional[AppUsageAttribution] = None,
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
     preserve_existing_results: bool = False,
+    preserve_existing_results_if_no_app: bool = False,
     replace_selected_result: bool = False,
     resumable_result_commit: Optional[Callable[[str, Mapping[str, Any]], bool]] = None,
     resumable_usage_commit: Optional[Callable[[str, UsageHistoryType], bool]] = None,
@@ -807,7 +813,7 @@ def trigger_conversation_apps(
 
     ``first_party_only`` ("Summarize with Omi") skips preferred apps and suggestions.
     """
-    if is_server_minimum(conversation) and not (app_id or first_party_only):
+    if is_server_minimum(conversation) and not (app_id or app_ids or first_party_only):
         return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
         language_code = resolve_output_language(
@@ -818,7 +824,7 @@ def trigger_conversation_apps(
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
         language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
-    if first_party_only and app_id:
+    if first_party_only and (app_id or app_ids):
         raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:
         usage_attribution = (
@@ -832,58 +838,41 @@ def trigger_conversation_apps(
     # Dict for looking up preferred apps or specific app_id requests
     all_apps_dict = {app.id: app for app in conversation_apps}
 
-    app_to_run: Optional[App] = None
-
-    # If a specific app_id is provided (for reprocessing), find and use it.
-    if app_id:
+    if app_ids:
+        explicit_apps = explicit_apps or {}
+        if len(app_ids) != len(set(app_ids)) or set(explicit_apps) != set(app_ids):
+            raise ValueError('all explicit app IDs must be validated before conversation processing')
+        selected_apps = [explicit_apps[app_id] for app_id in app_ids]
+        if any(app.id != app_id for app_id, app in zip(app_ids, selected_apps)):
+            raise ValueError('validated app IDs do not match the requested selection')
+    elif app_id:
         if explicit_app is None or explicit_app.id != app_id:
             raise ValueError('explicit app selection must be validated before conversation processing')
-        app_to_run = explicit_app
+        selected_apps = [explicit_app]
     elif first_party_only:
         logger.info('First-party summary requested; skipping preferred and suggested apps')
+        selected_apps = []
     else:
-        # Summarization apps are opt-in: only a usable preferred app runs automatically.
+        app_to_run: Optional[App] = None
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id == DEFAULT_SUMMARY_APP_ID:
             app_to_run = default_summary_app()
         elif preferred_app_id and preferred_app_id in all_apps_dict:
-            app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
-            logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
+            app_to_run = cast(App, all_apps_dict[preferred_app_id])
         elif preferred_app_id:
-            # The set-preferred route admits any app `get_available_app_by_id`
-            # can see (routers/users.py); it never requires the enabled-installed
-            # slice this dict is built from. A default whose enablement never
-            # landed (e.g. the template create flow's enable call failed) was
-            # therefore accepted by the setter and silently ignored here (#10074).
-            # Resolve through the setter's own authority instead of re-deciding.
             candidate = get_available_app_model_by_id(preferred_app_id, uid)
             if candidate and candidate.works_with_memories():
                 app_to_run = candidate
-                logger.info(
-                    f"Using user's preferred app outside the installed slice: {candidate.name} (id: {preferred_app_id})"
-                )
-            else:
-                logger.warning(
-                    f"Preferred app {preferred_app_id} is set but unusable "
-                    f"(missing={candidate is None}); skipping automatic app selection {uid}"
-                )
-        if app_to_run is None:
-            logger.info('Summarization apps are opt-in only; skipping automatic app selection')
-
+        selected_apps = [app_to_run] if app_to_run else []
     completed_app_ids = {result.app_id for result in conversation.apps_results} if preserve_existing_results else set()
-    filtered_apps: List[App] = [app_to_run] if app_to_run and app_to_run.id not in completed_app_ids else []
-
+    filtered_apps = [app for app in selected_apps if app.id not in completed_app_ids]
     if not filtered_apps:
         logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
-    # ``replace_selected_result`` (every user reprocess): the run replaces
-    # only its own app's result and keeps every other app's
-    # result. Released clients display the first non-empty entry, so the fresh
-    # result is placed first. When no app runs (a plain "regenerate" with no
-    # preferred app) the user asked for the Omi summary; clearing keeps that
-    # summary on screen for released clients, exactly as before.
-    replace_mode = replace_selected_result and not preserve_existing_results
-    if not preserve_existing_results and not (replace_mode and filtered_apps):
+    replace_mode = replace_selected_result and not preserve_existing_results and bool(selected_apps)
+    batch_replace_mode = replace_mode and bool(app_ids)
+    preserve_no_app_results = preserve_existing_results_if_no_app and not selected_apps
+    if not preserve_existing_results and not replace_mode and not preserve_no_app_results:
         conversation.apps_results = []
     produced_results: Dict[str, str] = {}
 
@@ -922,8 +911,9 @@ def trigger_conversation_apps(
                 language_code=language_code,
                 prompt_prefix=prompt_prefix,
             ).strip()
-        if replace_mode:
-            # An empty answer must not evict the app's previous result.
+        if batch_replace_mode:
+            produced_results[app.id] = result
+        elif replace_mode:
             if result:
                 produced_results[app.id] = result
                 conversation.apps_results = [AppResult(app_id=app.id, content=result)] + [
@@ -947,7 +937,7 @@ def trigger_conversation_apps(
             )
             if not persisted:
                 raise RuntimeError('conversation disappeared while persisting app result')
-        if app.id != 'omi-default-summary' and usage_attribution in {
+        if not batch_replace_mode and app.id != 'omi-default-summary' and usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
         }:
@@ -968,6 +958,32 @@ def trigger_conversation_apps(
         except Exception as e:
             succeeded = False
             logger.error(f"Error executing app: {e}")
+
+    if batch_replace_mode:
+        missing = [app_id for app_id in app_ids or [] if not produced_results.get(app_id, '').strip()]
+        if not succeeded or missing:
+            failed = ', '.join(missing) if missing else 'one or more templates failed'
+            raise ExplicitAppSelectionFailedError(f'Selected apps did not all complete: {failed}')
+        requested_ids = set(app_ids or [])
+        conversation.apps_results = [
+            *(AppResult(app_id=app_id, content=produced_results[app_id]) for app_id in app_ids or []),
+            *(result for result in conversation.apps_results if result.app_id not in requested_ids),
+        ]
+        if usage_attribution in {
+            AppUsageAttribution.AUTOMATIC_PROCESSING,
+            AppUsageAttribution.EXPLICIT_SELECTION,
+        }:
+            for app_id in app_ids or []:
+                if app_id == 'omi-default-summary':
+                    continue
+                usage_type = UsageHistoryType.memory_created_prompt
+                if resumable_usage_commit is not None:
+                    recorded = resumable_usage_commit(app_id, usage_type)
+                else:
+                    record_app_usage(uid, app_id, usage_type, conversation_id=conversation.id)
+                    recorded = True
+                if not recorded:
+                    raise RuntimeError('first-open authority lost while recording app usage')
 
     if app_id:
         # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
@@ -2580,6 +2596,17 @@ def _preserve_capture_on_budget_denial(function):
     return preserve_capture
 
 
+def _current_user_reprocess_conversation(uid: str, conversation_id: str) -> dict[str, Any]:
+    current = conversations_db.get_conversation(uid, conversation_id)
+    if not current or current.get('deleted'):
+        raise HTTPException(status_code=404, detail='Conversation not found')
+    if current.get('is_locked'):
+        raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
+    if not conversations_db.is_visible_conversation(current, include_discarded=True):
+        raise HTTPException(status_code=404, detail='Conversation not found')
+    return current
+
+
 @_preserve_capture_on_budget_denial
 @funded_processing.scoped
 @spelling_context_run
@@ -2590,6 +2617,8 @@ def process_conversation(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     app_id: Optional[str] = None,
     explicit_app: Optional[App] = None,
+    app_ids: Optional[List[str]] = None,
+    explicit_apps: Optional[Mapping[str, App]] = None,
     app_usage_attribution: Optional[AppUsageAttribution] = None,
     persistence_observer: Callable[[bool], None] | None = None,
     defer_memory_extraction: bool = False,
@@ -2607,15 +2636,27 @@ def process_conversation(
     prior_relevance_decision: Mapping[str, Any] | None = None,
     created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
     first_party_only: bool = False,
+    speaker_summary_refresh: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    defer_discarded_restore: bool = False,
+    expected_document_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
-    the transcript last used for memories, tasks and goal progress.
+    the transcript last used for memories, tasks and goal progress. Discarded
+    user reprocesses can defer visibility restoration to the app-result commit.
     """
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    if defer_discarded_restore and (
+        trigger is not ProcessingTrigger.USER_REPROCESS
+        or expected_document_revision is None
+        or type(expected_user_lifecycle_revision) is not int
+        or expected_user_lifecycle_revision < 0
+    ):
+        raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
@@ -2683,12 +2724,25 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
             dispatch_primary_notes_refresh(uid, completed)
 
+    expected_user_notes_snapshot = None
+    if trigger is ProcessingTrigger.USER_REPROCESS and isinstance(
+        getattr(conversation, 'structured', None), Structured
+    ):
+        expected_user_notes_snapshot = {
+            'overview': conversation.structured.overview,
+            'sections': [
+                section.model_dump(mode='json', exclude_unset=True) for section in conversation.structured.sections
+            ],
+        }
     is_initial_creation = _is_ingress_create(conversation)
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
             if silent_backfill:
                 raise RecoveryStructureUnavailableError('silent backfill processing budget unavailable')
+            if app_ids or trigger is ProcessingTrigger.USER_REPROCESS:
+                defer_held_budget_denial()
+                raise HTTPException(status_code=402, detail='Summary processing budget unavailable')
             raw_capture = (
                 not is_initial_creation
                 and conversation.status == ConversationStatus.processing
@@ -2759,6 +2813,8 @@ def process_conversation(
         uses_custom_stt=custom_stt,
         source=source_token if isinstance(source_token, str) else None,
     ):
+        if app_ids or trigger is ProcessingTrigger.USER_REPROCESS:
+            raise HTTPException(status_code=402, detail='Summary processing budget unavailable')
         logger.info(
             "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
             uid,
@@ -2772,6 +2828,102 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
+    # A multi-template request asks only for alternate app summaries. Keep it
+    # outside canonical notes and derived-effect processing: the app outputs
+    # are committed together against current transcript/results after all LLMs
+    # succeed, while every other summary reprocess keeps the released pipeline.
+    if app_ids and is_reprocess and trigger is ProcessingTrigger.USER_REPROCESS:
+        app_snapshot = conversations_db.get_user_reprocess_app_snapshot(uid, conversation.id)
+        if app_snapshot is None:
+            _current_user_reprocess_conversation(uid, conversation.id)
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
+        (
+            app_segments,
+            speaker_receipt,
+            snapshot_update_time,
+            snapshot_user_lifecycle_revision,
+        ) = app_snapshot
+        if expected_user_lifecycle_revision is None and not defer_discarded_restore:
+            expected_user_lifecycle_revision = snapshot_user_lifecycle_revision
+        if (
+            type(expected_user_lifecycle_revision) is not int
+            or snapshot_user_lifecycle_revision != expected_user_lifecycle_revision
+            or (
+                defer_discarded_restore
+                and (
+                    expected_document_revision is None
+                    or snapshot_update_time != expected_document_revision
+                )
+            )
+        ):
+            _current_user_reprocess_conversation(uid, conversation.id)
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
+        conversation.transcript_segments = [TranscriptSegment(**segment) for segment in app_segments]
+        if speaker_receipt_observer is not None:
+            speaker_receipt_observer(True)
+
+        expected_transcript_fence_sha256 = transcript_fence_sha256(app_segments)
+        expected_speaker_receipt_sha256 = conversations_db.manual_speaker_receipt_sha256(speaker_receipt)
+        requested_ids = set(app_ids)
+        person_ids = conversation.get_person_ids()
+        people: List[Person] = []
+        if person_ids:
+            people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+            people = Person.deserialize_many_safe(people_data)
+        expected_selected_results = {
+            result.app_id: {'app_id': result.app_id, 'content': result.content}
+            for result in conversation.apps_results
+            if result.app_id in requested_ids
+        }
+        try:
+            trigger_conversation_apps(
+                uid,
+                conversation,
+                is_reprocess=True,
+                app_ids=app_ids,
+                explicit_apps=explicit_apps,
+                language_code=language_code,
+                people=people,
+                replace_selected_result=True,
+                usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+            )
+        except ExplicitAppSelectionFailedError as error:
+            raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from error
+        batch_results = [
+            result.dict() for result in conversation.apps_results if result.app_id in requested_ids
+        ]
+        persisted = lifecycle_service.commit_template_batch_results(
+            uid,
+            conversation.id,
+            batch_results,
+            expected_transcript_fence_sha256=expected_transcript_fence_sha256,
+            expected_selected_results=expected_selected_results,
+            expected_speaker_receipt_sha256=expected_speaker_receipt_sha256,
+            restore_discarded=defer_discarded_restore,
+            expected_lifecycle_revision=snapshot_update_time,
+            expected_user_lifecycle_revision=expected_user_lifecycle_revision,
+        )
+        if not persisted:
+            _current_user_reprocess_conversation(uid, conversation.id)
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
+        for app_id in app_ids:
+            if app_id != DEFAULT_SUMMARY_APP_ID:
+                try:
+                    record_app_usage(
+                        uid,
+                        app_id,
+                        UsageHistoryType.memory_created_prompt,
+                        conversation_id=conversation.id,
+                    )
+                except Exception:
+                    logger.exception(
+                        'failed to record batch app usage uid=%s conversation=%s app=%s',
+                        uid,
+                        conversation.id,
+                        app_id,
+                    )
+        stored = _current_user_reprocess_conversation(uid, conversation.id)
+        return deserialize_conversation(stored)
     meeting_context_override = None
     if not silent_backfill:
         meeting_context_override = _enrich_meeting_context(uid, conversation)
@@ -2891,7 +3043,7 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
-    if user_kept and not conversation.discarded:
+    if user_kept and not conversation.discarded and not defer_discarded_restore:
         # Commit restore authority with visibility, before derived work can fail.
         payload['sync_relevance_user_kept'] = True
         if conversation.sync_relevance == 'review':
@@ -2930,6 +3082,20 @@ def process_conversation(
         # not answer the stale pending state back to the client.
         conversation.processing_state = None
     conversation.summary_retryable = None  # merge-cleared by the payload the same way
+    user_reprocess_guard: dict[str, Any] = {}
+    if trigger is ProcessingTrigger.USER_REPROCESS:
+        user_reprocess_guard = {
+            'require_unlocked': True,
+            'preserve_app_results': True,
+            'allow_terminal_failure_recovery': True,
+        }
+        if defer_discarded_restore:
+            user_reprocess_guard['defer_discarded_restore'] = True
+            user_reprocess_guard['expected_document_revision'] = expected_document_revision
+        if expected_user_lifecycle_revision is not None:
+            user_reprocess_guard['expected_user_lifecycle_revision'] = expected_user_lifecycle_revision
+        if expected_user_notes_snapshot is not None:
+            user_reprocess_guard['expected_notes_snapshot'] = expected_user_notes_snapshot
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     elif capture_group_refresh_fence is not None:
@@ -2939,13 +3105,17 @@ def process_conversation(
             payload,
             expected_capture_group=(group_id, group_revision),
             capture_group_notes_refresh=(group_id, reservation_id),
+            **user_reprocess_guard,
         )
     elif smart_merge_refresh is not None:
         persisted = lifecycle_service.persist_processed_conversation(
-            uid, payload, smart_merge_refresh=smart_merge_refresh
+            uid,
+            payload,
+            smart_merge_refresh=smart_merge_refresh,
+            **user_reprocess_guard,
         )
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload, **user_reprocess_guard)
     if recovery_minimum_fallback or silent_backfill or content_excluded:
         report_persistence(
             persisted,
@@ -2955,6 +3125,8 @@ def process_conversation(
     else:
         report_persistence(persisted, completed=conversation)
     if not persisted:
+        if trigger is ProcessingTrigger.USER_REPROCESS:
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
         logger.info(
             'processing result fenced before canonical completion side effects uid=%s conversation=%s',
             uid,
@@ -2978,7 +3150,10 @@ def process_conversation(
     from utils.conversations.demand_processing import lazy_enrichment_enabled
 
     lazy_effects = lazy_enrichment_enabled(uid) and not discarded and not is_server_minimum(conversation)
-    if lazy_effects and not defer_derived_effects:
+    defer_lazy_user_reprocess_effects = (
+        trigger is ProcessingTrigger.USER_REPROCESS and bool(app_id or app_ids)
+    )
+    if lazy_effects and not defer_derived_effects and not defer_lazy_user_reprocess_effects:
         from utils.sync.reprocess import mark_effects
 
         mark_effects(
@@ -3052,7 +3227,42 @@ def process_conversation(
 
             if insights_gained > 0:
                 record_usage(uid, insights_gained=insights_gained)
+            expected_app_transcript_fence = None
+            expected_app_speaker_receipt_fence = None
+            expected_app_lifecycle_revision = None
+            expected_app_user_lifecycle_revision = None
+            if user_reprocess:
+                app_snapshot = conversations_db.get_user_reprocess_app_snapshot(uid, conversation.id)
+                if app_snapshot is None:
+                    _current_user_reprocess_conversation(uid, conversation.id)
+                    raise HTTPException(
+                        status_code=409, detail='Conversation changed during reprocessing. Please retry.'
+                    )
+                (
+                    app_segments,
+                    app_speaker_receipt,
+                    expected_app_lifecycle_revision,
+                    app_user_lifecycle_revision,
+                ) = app_snapshot
+                if (
+                    expected_user_lifecycle_revision is not None
+                    and app_user_lifecycle_revision != expected_user_lifecycle_revision
+                ) or (defer_discarded_restore and expected_app_lifecycle_revision is None):
+                    _current_user_reprocess_conversation(uid, conversation.id)
+                    raise HTTPException(
+                        status_code=409, detail='Conversation changed during reprocessing. Please retry.'
+                    )
+                expected_app_user_lifecycle_revision = app_user_lifecycle_revision
+                conversation.transcript_segments = [TranscriptSegment(**segment) for segment in app_segments]
+                expected_app_transcript_fence = transcript_fence_sha256(app_segments)
+                expected_app_speaker_receipt_fence = conversations_db.manual_speaker_receipt_sha256(
+                    app_speaker_receipt
+                )
 
+            prior_app_results = {
+                result.app_id: {'app_id': result.app_id, 'content': result.content}
+                for result in conversation.apps_results
+            }
             try:
                 trigger_conversation_apps(
                     uid,
@@ -3060,11 +3270,15 @@ def process_conversation(
                     is_reprocess=is_reprocess,
                     app_id=app_id,
                     explicit_app=explicit_app,
+                    app_ids=app_ids,
+                    explicit_apps=explicit_apps,
                     usage_attribution=app_usage_attribution,
                     language_code=language_code,
                     people=people,
+                    preserve_existing_results=first_party_only,
+                    preserve_existing_results_if_no_app=speaker_summary_refresh,
                     replace_selected_result=user_reprocess,
-                    first_party_only=first_party_only and not app_id,
+                    first_party_only=first_party_only and not app_id and not app_ids,
                 )
             except ExplicitAppSelectionFailedError as error:
                 # Fail closed without stranding the bundle: the write-back below still
@@ -3074,12 +3288,78 @@ def process_conversation(
                 # failure instead of success-with-notes (SCA-359).
                 logger.error('Explicit app selection failed: %s', error)
                 explicit_selection_failures.append(error)
-            # Persist app output after the canonical conversation write.
-            app_updates = {
-                'apps_results': [result.dict() for result in conversation.apps_results],
-                'suggested_summarization_apps': conversation.suggested_summarization_apps,
-            }
-            conversations_db.update_conversation(uid, conversation.id, app_updates)
+            generated_results = [result.dict() for result in conversation.apps_results]
+            app_updates = {'suggested_summarization_apps': conversation.suggested_summarization_apps}
+            if user_reprocess:
+                generated_by_id = {row['app_id']: row for row in generated_results}
+                if first_party_only:
+                    selected_app_ids = set()
+                elif app_id:
+                    selected_app_ids = {app_id}
+                else:
+                    selected_app_ids = {
+                        result_id
+                        for result_id in prior_app_results.keys() | generated_by_id.keys()
+                        if prior_app_results.get(result_id)
+                        != (
+                            {
+                                'app_id': result_id,
+                                'content': generated_by_id[result_id].get('content'),
+                            }
+                            if result_id in generated_by_id
+                            else None
+                        )
+                    }
+                expected_selected_results = {
+                    result_id: prior_app_results.get(result_id) for result_id in selected_app_ids
+                }
+                selected_results = [row for row in generated_results if row['app_id'] in selected_app_ids]
+                if app_id:
+                    generated_successfully = any(
+                        row.get('app_id') == app_id and (row.get('content') or '').strip()
+                        for row in generated_results
+                    )
+                elif app_ids:
+                    generated_successfully = all(
+                        any(
+                            row.get('app_id') == selected_id and (row.get('content') or '').strip()
+                            for row in generated_results
+                        )
+                        for selected_id in app_ids
+                    )
+                else:
+                    generated_successfully = bool(getattr(conversation.structured, 'overview', None))
+                if not lifecycle_service.commit_user_reprocess_app_results(
+                    uid,
+                    conversation.id,
+                    suggested_summarization_apps=app_updates['suggested_summarization_apps'],
+                    selected_app_ids=selected_app_ids,
+                    expected_selected_results=expected_selected_results,
+                    results=selected_results,
+                    expected_transcript_fence_sha256=expected_app_transcript_fence,
+                    expected_speaker_receipt_sha256=expected_app_speaker_receipt_fence,
+                    restore_discarded=(
+                        defer_discarded_restore and not explicit_selection_failures and generated_successfully
+                    ),
+                    expected_lifecycle_revision=expected_app_lifecycle_revision,
+                    expected_user_lifecycle_revision=expected_app_user_lifecycle_revision,
+                    schedule_lazy_effects=(
+                        lazy_effects
+                        and not defer_derived_effects
+                        and bool(app_id)
+                        and not explicit_selection_failures
+                        and generated_successfully
+                    ),
+                    lazy_effects_language=language_code,
+                ):
+                    _current_user_reprocess_conversation(uid, conversation.id)
+                    raise HTTPException(
+                        status_code=409, detail='Conversation changed during reprocessing. Please retry.'
+                    )
+            else:
+                app_updates['apps_results'] = generated_results
+                conversations_db.update_conversation(uid, conversation.id, app_updates)
+            app_failed = bool(explicit_selection_failures)
             # Durable finalization owns indexing for deferred work and replays.
             if (
                 not lazy_effects
@@ -3096,19 +3376,18 @@ def process_conversation(
             # progress: those already stand for this exact transcript.
             template_only = (
                 user_reprocess
-                and bool(app_id)
+                and bool(app_id or app_ids)
                 and derived_effects_transcript_sha256 is not None
                 and derived_effects_transcript_sha256 == effects_transcript
             )
-            # A selected template that failed must never rewrite the user's tasks
-            # or count goal progress again; the user will retry the template.
-            app_failed = bool(explicit_selection_failures)
+            # A selected template that failed must not rewrite tasks, extract
+            # memories, or count goal progress; the user will retry the template.
             if template_only:
                 logger.info(
                     'template-only reprocess: keeping derived effects uid=%s conversation=%s', uid, conversation.id
                 )
             memories_ran = False
-            if not lazy_effects and not defer_memory_extraction and not template_only:
+            if not lazy_effects and not defer_memory_extraction and not template_only and not app_failed:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
@@ -3174,6 +3453,8 @@ def process_conversation(
     if defer_derived_effects:
         if derived_effects_observer is not None:
             derived_effects_observer(_emit_derived_effects)
+        if trigger is ProcessingTrigger.USER_REPROCESS:
+            return deserialize_conversation(_current_user_reprocess_conversation(uid, conversation.id))
         return conversation
     _emit_derived_effects()
     if explicit_selection_failures:
@@ -3189,6 +3470,8 @@ def process_conversation(
         raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
+    if trigger is ProcessingTrigger.USER_REPROCESS:
+        return deserialize_conversation(_current_user_reprocess_conversation(uid, conversation.id))
     return conversation
 
 

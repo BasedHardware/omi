@@ -46,22 +46,32 @@ enum SummaryFailureKind {
 /// The last failed summary request, scoped to the conversation it was for.
 @immutable
 class SummaryFailure {
-  const SummaryFailure({required this.conversationId, required this.kind, this.appId});
+  SummaryFailure({
+    required this.conversationId,
+    required this.kind,
+    this.appId,
+    List<String> appIds = const [],
+  }) : appIds = List.unmodifiable(appIds);
 
   final String conversationId;
   final SummaryFailureKind kind;
 
-  /// The template that was asked for; null for Omi's own summary.
+  /// The first requested template, retained for display and legacy retry routes.
   final String? appId;
+
+  /// Every template requested by a failed batch, so Retry repeats that batch.
+  final List<String> appIds;
 }
 
 /// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty
 /// result when [appId] is set, otherwise a non-empty Omi summary — the compatibility overview or
 /// the rendered sections, which is exactly what [ConversationSummarySelection.firstParty] accepts.
 /// A template result never stands in for Omi's own: a stale stored one would read as success.
-bool conversationHasRequestedSummary(ServerConversation conversation, String? appId) {
-  if (appId != null) {
-    return conversation.appResults.any((result) => result.appId == appId && result.content.trim().isNotEmpty);
+bool conversationHasRequestedSummary(ServerConversation conversation, String? appId, {List<String>? appIds}) {
+  final selectedIds = appIds ?? (appId == null ? null : [appId]);
+  if (selectedIds != null) {
+    return selectedIds.every((id) =>
+        conversation.appResults.any((result) => result.appId == id && result.content.trim().isNotEmpty));
   }
   return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty;
 }
