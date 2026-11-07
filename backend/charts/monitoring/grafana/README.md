@@ -37,6 +37,17 @@ or failed refresh serves that last good body (at most 24 hours old, the admin's
 own stale-good bound) while one background refresh per path runs; the body carries
 its own "Data through"/`cacheStale` freshness. Only a path that has never answered
 blocks a panel, and its failure is shared for five seconds.
+
+The sidecar also serves GET `/api/omi/stats/uptime` itself, for the Health
+column's Uptime number (David, 2026-11-06). It runs fixed PromQL against the
+in-cluster Prometheus (`OMI_UPTIME_PROMETHEUS_URL`, default the prod
+`prod-omi-kube-prometheus-s-prometheus` service). No query text, label or range
+comes from the request, so the Business org still holds no Prometheus datasource.
+It returns aggregates only (7-day attempt-weighted success over live capture,
+conversation saved, chat answer and cloud push-to-talk, per journey and per day),
+caches 15 minutes and serves the last good body for up to six hours while
+Prometheus is unreachable. Deploying it is the same ConfigMap + SHA annotation
+roll as any `stats_proxy.py` change.
 The metadata access token is used only for IAM Credentials `generateIdToken`
 on `omi-stats-reader`, audience `https://admin.omi.me/api/omi/stats`, includeEmail.
 The ID token stays in memory and refreshes five minutes early, or once on 401.
