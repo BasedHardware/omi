@@ -9,6 +9,7 @@ import threading
 
 from config.firestore_read_levers import lever_enabled
 from database import chat_edits
+from database._client import get_firestore_client
 from database.people_generation import bump_people_generation, read_people_generation
 from typing import Any, Optional
 
@@ -122,9 +123,15 @@ def update_person_name_transaction(
     transaction: Any, person_ref: Any, name: str, expected_chat_state: dict | None = None
 ) -> bool:
     """Rename one stable person while retaining bounded exact aliases."""
+    if transaction is None or person_ref is None:
+        return False
+
+    normalized_name = normalized_person_alias(name)
+    if normalized_name is None:
+        return False
 
     snapshot = person_ref.get(transaction=transaction)
-    if not snapshot.exists:
+    if not getattr(snapshot, 'exists', False):
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
@@ -132,15 +139,12 @@ def update_person_name_transaction(
         fields = {key: data[key] for key in chat_edits.FIELDS['person'] if key in data}
         if chat_edits.encode(fields) != expected_chat_state['before']:
             raise PermissionError('Person changed before rename')
-    normalized_name = normalized_person_alias(name)
-    if normalized_name is None:
-        return False
 
     aliases: list[str] = []
     seen: set[str] = {normalized_name.casefold()}
     stored_aliases = data.get('aliases')
     if isinstance(stored_aliases, list):
-        for value in stored_aliases:
+        for value in stored_aliases[-48:]:
             alias = normalized_person_alias(value)
             if alias is None or alias.casefold() in seen:
                 continue
@@ -167,13 +171,23 @@ def rename_person_retaining_aliases(
     db_client: Any, uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None
 ) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
+    if not isinstance(uid, str) or not uid.strip():
+        return False
+    if not isinstance(person_id, str) or not person_id.strip():
+        return False
+    if normalized_person_alias(name) is None:
+        return False
 
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    client = db_client if db_client is not None else get_firestore_client()
+    clean_uid = uid.strip()
+    clean_person_id = person_id.strip()
+
+    person_ref = client.collection('users').document(clean_uid).collection('people').document(clean_person_id)
     with _people_write():
         try:
             if expected_chat_state is not None:
-                return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
-            return update_person_name_transaction(db_client.transaction(), person_ref, name)
+                return update_person_name_transaction(client.transaction(), person_ref, name, expected_chat_state)
+            return update_person_name_transaction(client.transaction(), person_ref, name)
         except NotFound:
             return False
 
