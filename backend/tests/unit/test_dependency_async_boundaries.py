@@ -14,6 +14,13 @@ from testing.import_isolation import load_module_fresh, stub_modules
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def directory_routing_enabled(monkeypatch):
+    # These witnesses exercise resolver offloading; off-mode bypass is covered
+    # separately by test_directory_router's auth dependency regressions.
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+
+
 def _module(name: str, **attributes: Any) -> ModuleType:
     module = ModuleType(name)
     for key, value in attributes.items():
