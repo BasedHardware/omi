@@ -690,6 +690,106 @@ def test_run_capture_wedge_check_first_seen_not_claimed(mock_state):
         assert counts['nudged'] == 1
 
 
+@patch('services.capture_wedge.account_deletion_blocks_user_work')
+@patch('services.capture_wedge.capture_wedge_state')
+def test_run_capture_wedge_check_account_deletion_errors(mock_state, mock_account_deletion):
+    def mock_reader_func(project_id, filter_string, **kwargs):
+        if 'bytes_received=0' in filter_string:
+            return {
+                'entries': [
+                    {
+                        'jsonPayload': {
+                            'uid': 'uid1',
+                            'transcription_source': 'omi',
+                            'bytes_received': 0,
+                            'chunks_total': 0,
+                            'session_duration_sec': 0,
+                        }
+                    },
+                    {
+                        'jsonPayload': {
+                            'uid': 'uid2',
+                            'transcription_source': 'omi',
+                            'bytes_received': 0,
+                            'chunks_total': 0,
+                            'session_duration_sec': 0,
+                        }
+                    },
+                ] * 3,
+                'truncated': False,
+                'errors': 0,
+            }
+        else:
+            return {'entries': [], 'truncated': False, 'errors': 0}
+
+    mock_push = MagicMock(return_value=1)
+    mock_state.claim_wedge_first_seen.return_value = True
+
+    # Simulating exception for uid1, success for uid2
+    def side_effect(uid):
+        if uid == 'uid1':
+            raise Exception("DB Error")
+        return True # Simulate account deletion for uid2 to hit the 'continue'
+    mock_account_deletion.side_effect = side_effect
+
+    with patch('services.capture_wedge.ZERO_STREAK_MIN', 3):
+        counts = run_capture_wedge_check(
+            mode="detect", project_id="test", entries_reader=mock_reader_func, send_push=mock_push, dry_run=False
+        )
+        assert counts['errors'] == 1
+        assert counts['candidates'] == 0  # uid2 is skipped due to account deletion block
+
+
+@patch('services.capture_wedge.account_deletion_blocks_user_work')
+@patch('services.capture_wedge.capture_wedge_state')
+def test_run_capture_wedge_check_account_deletion_errors(mock_state, mock_account_deletion):
+    def mock_reader_func(project_id, filter_string, **kwargs):
+        if 'bytes_received=0' in filter_string:
+            return {
+                'entries': [
+                    {
+                        'jsonPayload': {
+                            'uid': 'uid1',
+                            'transcription_source': 'omi',
+                            'bytes_received': 0,
+                            'chunks_total': 0,
+                            'session_duration_sec': 0,
+                        }
+                    },
+                    {
+                        'jsonPayload': {
+                            'uid': 'uid2',
+                            'transcription_source': 'omi',
+                            'bytes_received': 0,
+                            'chunks_total': 0,
+                            'session_duration_sec': 0,
+                        }
+                    },
+                ] * 3,
+                'truncated': False,
+                'errors': 0,
+            }
+        else:
+            return {'entries': [], 'truncated': False, 'errors': 0}
+
+    mock_push = MagicMock(return_value=1)
+    mock_state.claim_wedge_first_seen.return_value = True
+
+    # Simulating exception for uid1, success for uid2
+    def side_effect(uid):
+        if uid == 'uid1':
+            raise Exception("DB Error")
+        return True # Simulate account deletion for uid2 to hit the 'continue'
+    mock_account_deletion.side_effect = side_effect
+
+    with patch('services.capture_wedge.ZERO_STREAK_MIN', 3):
+        counts = run_capture_wedge_check(
+            mode="detect", project_id="test", entries_reader=mock_reader_func, send_push=mock_push, dry_run=False
+        )
+        assert counts['errors'] == 1
+        assert counts['candidates'] == 0  # uid2 is skipped due to account deletion block
+
+
 @patch('services.capture_wedge.capture_wedge_state')
 def test_run_capture_wedge_check_detect_only(mock_state):
     def mock_reader_func(project_id, filter_string, **kwargs):
