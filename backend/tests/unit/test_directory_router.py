@@ -1,6 +1,9 @@
 """Serving enrollment against isolated Postgres; no cloud identities or data."""
 
 import asyncio
+import dependencies
+import importlib.util
+import fakeredis
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -21,6 +24,8 @@ def isolated(monkeypatch):
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
     monkeypatch.setenv('DIRECTORY_ROUTING_NEW_OWNER_PERCENT', '0')
     monkeypatch.setattr(router, '_cache', {})
+    monkeypatch.setattr(router.redis_db, 'r', fakeredis.FakeRedis())
+    monkeypatch.setattr(router, 'cell_store', lambda: Mock())
     cache = {}
     monkeypatch.setattr(router.redis_db, 'get_generic_cache', lambda key: cache.get(key))
     monkeypatch.setattr(router.redis_db, 'set_generic_cache', lambda key, value, ttl: cache.update({key: value}))
@@ -95,26 +100,32 @@ def test_concurrent_first_requests_share_winner(harness, monkeypatch):
         assert conn.execute('SELECT count(*) FROM spaces WHERE space_id=%s', (uid,)).fetchone()[0] == 1
 
 
-def test_process_hit_does_not_touch_redis_or_pg(monkeypatch):
-    router._remember('owner', 'cell')
+def test_process_hit_checks_one_epoch_get_without_pg(monkeypatch):
+    router.redis_db.r.set(router._epoch_key('owner'), 'epoch')
+    router._remember('owner', 'cell', 'epoch')
+    get = Mock(wraps=router.redis_db.r.get)
+    monkeypatch.setattr(router.redis_db.r, 'get', get)
     monkeypatch.setattr(router.redis_db, 'get_generic_cache', fail)
     monkeypatch.setattr(router, 'directory_store', fail)
     assert router.resolve('owner') == router.cached_plane('owner') == 'cell'
+    get.assert_called_once_with(router._epoch_key('owner'))
 
 
 def test_redis_hit_skips_pg(isolated, monkeypatch):
-    isolated['plane:v1:owner'] = 'cell'
+    router.redis_db.r.set(router._epoch_key('owner'), 'epoch')
+    isolated['plane:v1:owner'] = {'plane': 'cell', 'epoch': 'epoch'}
     monkeypatch.setattr(router, 'directory_store', fail)
     assert router.resolve('owner') == 'cell'
     assert router.cached_plane('owner') == 'cell'
 
 
-def test_redis_outage_uses_pg(harness, monkeypatch):
+def test_redis_outage_fails_closed(harness, monkeypatch):
     uid = harness.uid()
     harness.store.get_or_create_personal_space(uid, cell='cell1', now=1)
-    monkeypatch.setattr(router.redis_db, 'get_generic_cache', Mock(side_effect=ConnectionError()))
-    monkeypatch.setattr(router.redis_db, 'set_generic_cache', Mock(side_effect=ConnectionError()))
-    assert router.resolve(uid) == 'cell'
+    monkeypatch.setattr(router.redis_db.r, 'get', Mock(side_effect=ConnectionError()))
+    monkeypatch.setattr(router, 'directory_store', fail)
+    with pytest.raises(router.DirectoryRoutingUnavailable):
+        router.resolve(uid)
 
 
 def test_pg_outage_is_retryable_at_http_and_ws_boundary(monkeypatch):
@@ -235,3 +246,149 @@ def test_invalid_mode_is_retryable_at_http_and_ws_boundary(monkeypatch):
         endpoints._resolve_request_plane_ws('owner')
     assert error.value.code == 1013
     assert error.value.reason == 'directory_routing_unavailable'
+
+
+@pytest.mark.parametrize('routing_on', [False, True])
+@pytest.mark.parametrize(
+    'name', ['get_current_user_id', 'get_uid_from_mcp_api_key', 'get_mcp_api_key_auth', 'get_api_key_auth']
+)
+def test_async_http_routing_submits_only_when_on(monkeypatch, routing_on, name):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
+    submitted = []
+
+    async def run(pool, fn, *args, **kwargs):
+        submitted.append(fn)
+        if fn is dependencies.auth.verify_id_token:
+            return {'uid': 'owner'}
+        if fn in (
+            dependencies.mcp_api_key_db.get_api_key_auth_result,
+            dependencies.dev_api_key_db.get_api_key_auth_result,
+        ):
+            return SimpleNamespace(context={'user_id': 'owner'}, repairs=())
+        return None
+
+    async def noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(dependencies, 'run_blocking', run)
+    for helper in (
+        '_enforce_account_deletion_access',
+        '_enforce_cutover_access',
+        '_enforce_ladder_api',
+        '_check_api_key_rate_limit_async',
+    ):
+        monkeypatch.setattr(dependencies, helper, noop)
+    monkeypatch.setattr(dependencies, 'wrong_key_family_detail', lambda *args: None)
+    monkeypatch.setattr(dependencies, 'malformed_api_key_detail', lambda *args: None)
+    monkeypatch.setattr(dependencies, 'record_api_key_repairs', lambda **kwargs: None)
+    kwargs = (
+        {'credentials': SimpleNamespace(credentials='synthetic')}
+        if name == 'get_current_user_id'
+        else {'api_key': 'Bearer synthetic'}
+    )
+    result = asyncio.run(getattr(dependencies, name)(**kwargs))
+    assert (result if isinstance(result, str) else result.uid) == 'owner'
+    resolver = endpoints._resolve_request_plane_or_503
+    assert submitted.count(resolver) == int(routing_on)
+    assert len(submitted) == 1 + int(routing_on)
+
+
+@pytest.mark.parametrize('routing_on', [False, True])
+@pytest.mark.parametrize('name', ['get_current_user_uid_ws_listen', 'get_current_user_uid_from_ws_message'])
+def test_async_ws_routing_submits_only_when_on(monkeypatch, routing_on, name):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
+    submitted = []
+
+    async def run(pool, fn, *args, **kwargs):
+        submitted.append(fn)
+        return None
+
+    async def verified(*args, **kwargs):
+        return 'owner'
+
+    monkeypatch.setattr(endpoints, 'run_blocking', run)
+    monkeypatch.setattr(endpoints, 'run_critical_ws', verified)
+    monkeypatch.setattr(endpoints, 'cutover_enforcement_enabled', lambda: False)
+    kwargs = (
+        {'message': {'type': 'auth', 'token': 'synthetic'}}
+        if name.endswith('message')
+        else {'authorization': 'Bearer synthetic'}
+    )
+    assert asyncio.run(getattr(endpoints, name)(**kwargs)) == 'owner'
+    assert submitted == [endpoints.enforce_account_deletion_ws_access] + (
+        [endpoints._resolve_request_plane_ws] if routing_on else []
+    )
+
+
+@pytest.fixture
+def peer_resolver(monkeypatch, harness):
+    # A second loaded resolver has its own globals/cache, like another worker.
+    spec = importlib.util.spec_from_file_location('peer_directory_router', router.__file__)
+    peer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(peer)
+    monkeypatch.setattr(peer, 'directory_store', lambda: harness.store)
+    monkeypatch.setattr(peer, 'cell_store', lambda: Mock())
+    return peer
+
+
+@pytest.mark.parametrize('destination', ['cell1', 'disabled'])
+def test_route_flip_reaches_two_warm_resolvers(harness, peer_resolver, destination):
+    uid = harness.uid()
+    harness.store.get_or_create_personal_space(uid, cell='firestore', now=1)
+    assert router.resolve(uid) == peer_resolver.resolve(uid) == 'firestore'
+    old_epoch = peer_resolver._cache[uid][2]
+    harness.store.set_routing(uid, cell=destination, bump_epoch=True, now=2)
+    router.invalidate(uid)
+    assert peer_resolver._cache[uid][2] == old_epoch
+    for resolver in (router, peer_resolver):
+        if destination == 'disabled':
+            with pytest.raises(resolver.DirectoryRoutingUnavailable):
+                resolver.resolve(uid)
+        else:
+            assert resolver.resolve(uid) == 'cell'
+            assert resolver._cache[uid][2] != old_epoch
+
+
+def test_stale_read_cannot_poison_post_flip_cache(harness, peer_resolver, monkeypatch):
+    uid = harness.uid()
+    harness.store.get_or_create_personal_space(uid, cell='firestore', now=1)
+    original = harness.store.get_space
+
+    def flip_after_read(owner):
+        stale = original(owner)
+        harness.store.set_routing(owner, cell='cell1', bump_epoch=True, now=2)
+        router.invalidate(owner)
+        return stale
+
+    with monkeypatch.context() as patch:
+        patch.setattr(harness.store, 'get_space', flip_after_read)
+        assert peer_resolver.resolve(uid) == 'firestore'  # Already-admitted request.
+    assert peer_resolver.resolve(uid) == router.resolve(uid) == 'cell'
+
+
+def test_epoch_loss_rejects_both_stale_cache_tiers(harness, isolated):
+    uid = harness.uid()
+    harness.store.get_or_create_personal_space(uid, cell='firestore', now=1)
+    assert router.resolve(uid) == 'firestore'
+    stale = isolated[f'plane:v1:{uid}']
+    harness.store.set_routing(uid, cell='cell1', bump_epoch=True, now=2)
+    router.redis_db.r.delete(router._epoch_key(uid))
+    assert router.resolve(uid) == 'cell'
+    assert isolated[f'plane:v1:{uid}']['epoch'] != stale['epoch']
+
+
+def test_warm_resolver_and_invalidation_fail_closed_on_redis_loss(monkeypatch):
+    router.redis_db.r.set(router._epoch_key('owner'), 'epoch')
+    router._remember('owner', 'cell', 'epoch')
+    monkeypatch.setattr(router.redis_db.r, 'get', Mock(side_effect=ConnectionError()))
+    with pytest.raises(router.DirectoryRoutingUnavailable):
+        router.resolve('owner')
+    with pytest.raises(HTTPException) as error:
+        endpoints._resolve_request_plane_or_503('owner')
+    assert error.value.status_code == 503
+    with pytest.raises(WebSocketException) as error:
+        endpoints._resolve_request_plane_ws('owner')
+    assert error.value.code == 1013
+    monkeypatch.setattr(router.redis_db.r, 'set', Mock(side_effect=ConnectionError()))
+    with pytest.raises(router.DirectoryRoutingUnavailable):
+        router.invalidate('owner')

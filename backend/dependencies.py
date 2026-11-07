@@ -1,3 +1,4 @@
+from config import directory_routing
 import logging
 from typing import Awaitable, Callable, List, Optional
 
@@ -81,7 +82,8 @@ async def get_current_user_id(
     uid = decoded_token["uid"]
     await _enforce_account_deletion_access(uid)
     await _enforce_cutover_access(uid, request)
-    await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, uid)
+    if directory_routing.routing_active():
+        await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, uid)
     return uid
 
 
@@ -114,7 +116,8 @@ async def get_uid_from_mcp_api_key(
     user_id = user_data["user_id"]
     await _enforce_account_deletion_access(user_id)
     await _enforce_cutover_access(user_id, request)
-    await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_id)
+    if directory_routing.routing_active():
+        await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_id)
     await _enforce_ladder_api(user_id, response)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
@@ -158,7 +161,8 @@ async def get_mcp_api_key_auth(
 
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
-    await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_data["user_id"])
+    if directory_routing.routing_active():
+        await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_data["user_id"])
     await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
@@ -291,7 +295,8 @@ async def get_api_key_auth(
 
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
-    await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_data["user_id"])
+    if directory_routing.routing_active():
+        await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_data["user_id"])
     await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(

@@ -491,7 +491,8 @@ async def get_current_user_uid_ws_listen(
             headers=websocket.headers,
         )
 
-    await run_blocking(db_executor, _resolve_request_plane_ws, uid)
+    if directory_router.routing_active():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
@@ -595,7 +596,8 @@ async def get_current_user_uid_from_ws_message(
             path=websocket.url.path,
             headers=websocket.headers,
         )
-    await run_blocking(db_executor, _resolve_request_plane_ws, uid)
+    if directory_router.routing_active():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
     return uid
 
 

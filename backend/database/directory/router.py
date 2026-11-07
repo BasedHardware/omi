@@ -8,6 +8,7 @@ import os
 from contextlib import suppress
 import threading
 import time
+import uuid
 from typing import Literal
 
 from config import directory_routing, rollout_cohorts
@@ -22,7 +23,7 @@ Plane = Literal['firestore', 'cell']
 PROCESS_TTL_SECONDS = 300
 PROCESS_MAX_ENTRIES = 10000
 REDIS_TTL_SECONDS = 3600
-_cache: dict[str, tuple[float, Plane]] = {}
+_cache: dict[str, tuple[float, Plane, str | None]] = {}
 _store: DirectoryStore | None = None
 _lock = threading.Lock()
 
@@ -66,12 +67,12 @@ def cached_plane(uid: str) -> Plane:
     return _cached(uid) or 'firestore'
 
 
-def _remember(uid: str, plane: Plane) -> None:
+def _remember(uid: str, plane: Plane, epoch: str | None = None) -> None:
     with _lock:
         # Insertion-order eviction bounds expired entries too (10,000 owners).
         if uid not in _cache and len(_cache) >= PROCESS_MAX_ENTRIES:
             _cache.pop(next(iter(_cache)))
-        _cache[uid] = (time.monotonic() + PROCESS_TTL_SECONDS, plane)
+        _cache[uid] = (time.monotonic() + PROCESS_TTL_SECONDS, plane, epoch)
 
 
 def _plane_of(space: Space) -> Plane:
@@ -83,10 +84,41 @@ def _plane_of(space: Space) -> Plane:
     return 'firestore' if cell == 'firestore' else 'cell'
 
 
+def _epoch_key(uid: str) -> str:
+    return f'plane:epoch:v1:{uid}'
+
+
+def _route_epoch(uid: str) -> str:
+    # Raw Redis operations deliberately bypass the generic cache's fail-open
+    # decorators. Missing/evicted epochs get fresh identities, never a reused 0.
+    raw = redis_db.r.get(_epoch_key(uid))
+    if raw is None:
+        epoch = uuid.uuid4().hex
+        if redis_db.r.set(_epoch_key(uid), epoch, nx=True):
+            return epoch
+        raw = redis_db.r.get(_epoch_key(uid))
+    if isinstance(raw, bytes):
+        raw = raw.decode('ascii')
+    if not isinstance(raw, str) or not raw:
+        raise DirectoryRoutingUnavailable('directory route epoch unavailable')
+    return raw
+
+
 def invalidate(uid: str) -> None:
-    """Required after every set_routing/purge, including W6 operator flips."""
+    """Publish a new epoch after every routing flip/purge; failures must retry.
+
+    A flip is not complete until this succeeds. Already-admitted requests still
+    need the cutover writer drain; all subsequent resolutions check this epoch.
+    """
     _cache.pop(uid, None)
-    with suppress(Exception):  # Optional cache; never block an authoritative fence/purge.
+    if not routing_active():
+        return
+    try:
+        if not redis_db.r.set(_epoch_key(uid), uuid.uuid4().hex):
+            raise DirectoryRoutingUnavailable('directory route epoch publication failed')
+    except Exception as exc:
+        raise DirectoryRoutingUnavailable('directory route invalidation unavailable') from exc
+    with suppress(Exception):
         redis_db.delete_generic_cache(f'plane:v1:{uid}')
 
 
@@ -94,16 +126,17 @@ def resolve(uid: str, *, signup_platform: str | None = None, signup_os: str | No
     if not routing_active():
         return 'firestore'
     try:
+        epoch = _route_epoch(uid)  # One GET even on a process-cache hit.
         plane = _cached(uid)
-        if plane is not None:
+        entry = _cache.get(uid)
+        if plane is not None and entry is not None and entry[2] == epoch:
             return plane
-        try:
-            cached = redis_db.get_generic_cache(f'plane:v1:{uid}')
-        except Exception:
-            cached = None  # Redis is optional; PG remains the authority.
-        if cached in ('firestore', 'cell'):
-            _remember(uid, cached)
-            return cached
+        _cache.pop(uid, None)
+        cached = redis_db.get_generic_cache(f'plane:v1:{uid}')
+        if isinstance(cached, dict) and cached.get('epoch') == epoch and cached.get('plane') in ('firestore', 'cell'):
+            plane = cached['plane']
+            _remember(uid, plane, epoch)
+            return plane
         store = directory_store()
         space = store.get_space(uid)
         if space is None:
@@ -133,9 +166,9 @@ def resolve(uid: str, *, signup_platform: str | None = None, signup_os: str | No
             # Explicit enrollment only. The durable cell tombstone rejects a
             # resolver that read the old directory row before a wipe fence.
             cell_store().enroll_space(uid, now=time.time())
-        _remember(uid, plane)
+        _remember(uid, plane, epoch)
         with suppress(Exception):
-            redis_db.set_generic_cache(f'plane:v1:{uid}', plane, REDIS_TTL_SECONDS)
+            redis_db.set_generic_cache(f'plane:v1:{uid}', {'plane': plane, 'epoch': epoch}, REDIS_TTL_SECONDS)
         return plane
     except DirectoryRoutingUnavailable:
         raise
