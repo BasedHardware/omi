@@ -215,7 +215,7 @@ void main() {
         live: true,
         startedAt: start,
         lastActivityAt: now,
-        conversationIds: ['current', ...members.map((m) => m.id)],
+        conversationIds: members.map((m) => m.id).toList(),
         members: members);
     final latest = full.copyWith(conversationIds: ['current'], members: []);
     final episodes = EpisodeProvider(

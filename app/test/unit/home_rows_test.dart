@@ -74,6 +74,24 @@ void main() {
     });
   }
 
+  test('live episode identity owns disjoint live and Home member snapshots', () {
+    final members = [for (var i = 0; i < 3; i++) waiting('closed-$i', i, status: ConversationStatus.processing)];
+    final e = Episode(
+        id: 'live',
+        live: true,
+        startedAt: start,
+        lastActivityAt: start.add(const Duration(minutes: 10)),
+        conversationIds: members.map((m) => m.id).toList(),
+        members: members);
+    final rows = buildHomeRows(members, [e],
+        enabled: true,
+        liveEpisodeId: 'live',
+        liveConversationIds: {'current'},
+        processingConversations: members,
+        groupAwaitingTranscript: true);
+    expect(rows, isEmpty);
+  });
+
   test('closed episode still composing keeps its Processing row', () {
     final members = [for (var i = 0; i < 3; i++) waiting('closed-$i', i, status: ConversationStatus.processing)];
     final e = Episode(

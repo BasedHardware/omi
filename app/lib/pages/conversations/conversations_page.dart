@@ -748,7 +748,9 @@ class _ConversationsPageState extends State<ConversationsPage>
           // Home and live snapshots can disagree about the latest membership.
           // The same live episode owns its closed members in both insertion paths.
           for (final episode in paintEpisodes) {
-            if (episode.live && episode.conversationIds.any(hiddenByLive.contains)) {
+            if (episode.live &&
+                (episodeLive && episode.id == episodes?.live?.id ||
+                    episode.conversationIds.any(hiddenByLive.contains))) {
               projectedMemberIds.addAll(episode.conversationIds);
             }
           }
@@ -767,6 +769,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
+            liveEpisodeId: episodeLive ? episodes?.live?.id : null,
             deletedIds: {...convoProvider.memoriesToDelete.keys, ...(episodes?.hiddenHomeMembers ?? const <String>{})},
             knownConversations: snapshot.conversations,
             processingConversations: snapshot.processingConversations,

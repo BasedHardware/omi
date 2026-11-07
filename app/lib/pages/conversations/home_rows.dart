@@ -84,6 +84,7 @@ class HomeEpisodeLayout {
 List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode> episodes,
     {required bool enabled,
     Set<String> liveConversationIds = const {},
+    String? liveEpisodeId,
     Set<String> deletedIds = const {},
     List<ServerConversation> knownConversations = const [],
     List<ServerConversation> processingConversations = const [],
@@ -110,7 +111,10 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     hidden.addAll(episode.conversationIds);
     // A closing episode may still be live in the last server snapshot. The
     // streaming capture owns its row until it stops; then processing owns it.
-    if (episode.live && (pending.isEmpty || episode.conversationIds.any(liveConversationIds.contains))) continue;
+    if (episode.live &&
+        (pending.isEmpty || episode.id == liveEpisodeId || episode.conversationIds.any(liveConversationIds.contains))) {
+      continue;
+    }
     final members = <ServerConversation>[];
     // Notes that already landed stay on Home: a member still processing (a late joiner, or a
     // stale local processing entry) never turns a composed episode back into "Finishing up…".
