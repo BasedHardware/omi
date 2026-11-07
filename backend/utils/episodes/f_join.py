@@ -30,6 +30,7 @@ from config.episodes import (
     f_join_enabled,
     f_join_env_admitted,
     EPISODE_F_JOIN_PERCENT_ENV,
+    F_JOIN_NEW_CHARS,
     F_JOIN_PREVIOUS_CHARS,
     F_JOIN_PEOPLE_READ_LIMIT,
 )
@@ -162,12 +163,20 @@ def mark_pending(
         logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
 
 
+def synced_failed(error: BaseException) -> None:
+    """A sync or late join's F decision raised: today's time-only join stands and the fallback is reported."""
+    _fallback('other')
+    logger.warning('event=episode_f_join outcome=synced_failed exception_type=%s', type(error).__name__)
+
+
 def previous_transcript(
     uid: str,
     episode: Mapping[str, Any],
     conversation_id: str,
     pending: Mapping[str, Any],
     c: Any,
+    *,
+    people_read_limit: int = F_JOIN_PEOPLE_READ_LIMIT,
 ) -> str:
     """Read one retained predecessor, rechecking processing visibility before decoding or naming.
 
@@ -193,7 +202,7 @@ def previous_transcript(
     selected = _transcript_tail(segments)
     person_ids = list(
         dict.fromkeys(str(s['person_id']) for s in selected if s.get('person_id') and not s.get('is_user'))
-    )[:F_JOIN_PEOPLE_READ_LIMIT]
+    )[:people_read_limit]
     names = {}
     if person_ids:
         if c.people_names is not None:
@@ -207,12 +216,20 @@ def previous_transcript(
     return incremental.render_f_transcript(moment_render.name_segments(selected, names))
 
 
-def _may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+def may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+    """The privacy gate for any conversation whose speech F may send to Jev, as predecessor or candidate.
+
+    Fail-closed: a missing required field is not permission (``is_locked`` and ``discarded`` must be False).
+    """
     # Reuse the episode composer/build visibility predicates. Missing required processing metadata
     # is unknown, not permission; optional tombstone/redirect fields retain their schema defaults.
     if row.get('owner_uid', uid) != uid or row.get('uid', uid) != uid:
         return False
     if row.get('data_protection_level') not in {'standard', 'enhanced'}:
+        return False
+    # Private cloud sync is the user's retention consent. Only an explicit True permits speech to reach Jev;
+    # an absent or false value keeps today's join (the same explicit-opt-in rule as the batch attach gate).
+    if row.get('private_cloud_sync_enabled') is not True:
         return False
     if row.get('is_locked') is not False or row.get('discarded') is not False:
         return False
@@ -234,6 +251,11 @@ def _may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
     return not hidden_member(dict(row)) and conversations_db.is_visible_conversation(row)
 
 
+# ``previous_transcript`` is a pinned People-reader body (backend/docs/people-generation-writers.json), so it keeps
+# calling the private name. Changing that call would invalidate the audit without changing what is checked.
+_may_feed_llm = may_feed_llm
+
+
 def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
     """Keep a bounded text tail before collecting any person ids for naming."""
     rows = sorted(
@@ -249,6 +271,54 @@ def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
         selected.append({**segment, 'text': text})
         remaining -= len(text) + 1
     return list(reversed(selected))
+
+
+def candidate_head(segments: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The candidate's first ``F_JOIN_NEW_CHARS`` of speech, naming at most ``F_JOIN_PEOPLE_READ_LIMIT`` voices.
+
+    Bounded before any name lookup, so a long transcript costs the spec's reads and not one per voice.
+    Only the head reaches Jev (``f_boundary_state``), so the rest is never needed for naming.
+    """
+    rows = sorted(
+        (s for s in segments if str(s.get('text') or '').strip()),
+        key=lambda s: float(s.get('start') or 0.0),
+    )
+    head: list[dict[str, Any]] = []
+    remaining = F_JOIN_NEW_CHARS
+    for segment in rows:
+        if remaining <= 0:
+            break
+        text = str(segment['text']).strip()[:remaining]
+        head.append({**segment, 'text': text})
+        remaining -= len(text) + 1
+    named_ids = list(dict.fromkeys(str(s['person_id']) for s in head if s.get('person_id')))
+    allowed = set(named_ids[:F_JOIN_PEOPLE_READ_LIMIT])
+    capped: list[dict[str, Any]] = []
+    for segment in head:
+        person = str(segment.get('person_id') or '')
+        if person and person not in allowed:
+            segment = {key: value for key, value in segment.items() if key != 'person_id'}
+        capped.append(segment)
+    return capped
+
+
+def _candidate_may_feed(uid: str, conversation_id: str, row: Optional[Mapping[str, Any]], c: Any) -> bool:
+    """The candidate's own privacy gate. A caller that holds the row passes it; otherwise one snapshot read."""
+    if row is None:
+        row = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+    return bool(row) and may_feed_llm(uid, row)
+
+
+def _user_consent_allows(uid: str, c: Any) -> bool:
+    """The user's current private cloud sync consent, read at the last step before Jev.
+
+    The conversation row carries a snapshot of the consent, so a toggle after the row was written is seen here.
+    A missing user document or field is not permission (fail closed).
+    """
+    client = c.firestore_client if c.firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).get(field_paths=['private_cloud_sync_enabled'])
+    data = snapshot.to_dict() or {}
+    return data.get('private_cloud_sync_enabled') is True
 
 
 def _fallback(reason: str) -> None:
@@ -279,7 +349,7 @@ def later_member(episode: Mapping[str, Any], conversation_id: str, started_at: d
 
 
 def _split_still_clear(
-    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any
+    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any, *, member: bool = True
 ) -> bool:
     """Re-reads the episode after Jev answered: a split is clear only while the episode is live and no
     member recorded past the candidate's start. An unreadable episode keeps today's join."""
@@ -297,7 +367,7 @@ def _split_still_clear(
         fresh
         and not fresh.get('recorded_merged_into')
         and isinstance(fresh.get('conversation_ids'), list)
-        and conversation_id in fresh['conversation_ids']
+        and (not member or conversation_id in fresh['conversation_ids'])
         and isinstance(fresh.get('member_activity'), Mapping)
         and policy.is_live(fresh)
         and not later_member(fresh, conversation_id, started_at)
@@ -313,8 +383,15 @@ def settle(
     c: Any,
     *,
     started_at: datetime,
+    member: bool = True,
+    candidate_row: Optional[Mapping[str, Any]] = None,
+    people_read_limit: int = F_JOIN_PEOPLE_READ_LIMIT,
 ) -> policy.Boundary:
-    """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join."""
+    """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join.
+
+    ``member=False`` answers for a candidate not yet in the episode (a sync or late conversation placed
+    after the answer); the split then needs only the episode still live and no later member.
+    """
     gap = float(pending.get('gap_seconds') or 0.0)
     source_changed = bool(pending.get('source_changed'))
     keep = policy.Boundary(policy.CONTINUE, gap_seconds=gap, source_changed=source_changed)
@@ -326,23 +403,40 @@ def settle(
         metrics.record_boundary('f_later_member')
         return keep
     try:
-        previous = previous_transcript(uid, episode, conversation_id, pending, c)
+        # Predecessor and name reads come first. The candidate's stored privacy is the last read before Jev,
+        # so a lock, deletion, discard or consent change during those reads still keeps today's join.
+        previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
         metrics.record_boundary('f_no_answer')
         _fallback('other')
         return keep
+    try:
+        # The candidate's stored privacy, then the user's current consent: the last reads before the question.
+        allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c) and _user_consent_allows(uid, c)
+    except Exception as error:
+        logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
+        metrics.record_boundary('f_no_answer')
+        _fallback('other')
+        return keep
+    if not allowed:
+        # Locked, deferred, local-only, held, opted out or another owner's conversation: its speech never reaches Jev.
+        metrics.record_boundary('f_no_answer')
+        return keep
     if not previous:
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
         return keep
+    # No read between the candidate gate above and this Jev question.
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
     if p_same is None:
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
         return keep
-    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(uid, episode, conversation_id, started_at, c):
+    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(
+        uid, episode, conversation_id, started_at, c, member=member
+    ):
         # A member attached while Jev was answering; the split would now overlap it.
         metrics.record_boundary('f_later_member')
         return keep
