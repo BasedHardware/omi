@@ -25651,6 +25651,11 @@
             "title": "Kind",
             "type": "string"
           },
+          "recording_count": {
+            "default": 1,
+            "title": "Recording Count",
+            "type": "integer"
+          },
           "started_at": {
             "anyOf": [
               {

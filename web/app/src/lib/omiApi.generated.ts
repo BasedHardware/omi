@@ -4107,6 +4107,7 @@ export interface PendingWorkItem {
   duration_seconds: number;
   id: string;
   kind: "conversation" | "sync_job";
+  recording_count?: number;
   started_at: string | null;
   state: "queued" | "transcribing" | "summarizing";
   updated_at: string | null;
