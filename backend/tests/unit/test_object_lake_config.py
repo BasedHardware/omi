@@ -15,6 +15,7 @@ def clean_env(monkeypatch):
         'OBJECT_LAKE_INLINE_MAX_BYTES',
         'OBJECT_LAKE_RELEASE',
         'OBJECT_LAKE_KEY_CACHE_TTL_SECONDS',
+        'OMI_ENV_STAGE',
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -40,6 +41,7 @@ def test_bad_percent_admits_nobody(monkeypatch, raw):
 
 def test_deterministic_separate_salt_and_master_gate(monkeypatch):
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'test-lake')
+    monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'test-key')
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '42.5')
     first = [object_lake.write_admitted(str(i)) for i in range(200)]
