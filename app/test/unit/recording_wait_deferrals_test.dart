@@ -46,7 +46,8 @@ void main() {
     );
     expect(syncUploadServerWaitSeconds(http.Response('{"code":"record_capture_pending"}', 503)), isNull);
     expect(
-        syncUploadServerWaitSeconds(http.Response('{"code":"sync_dispatch_unavailable","retry_after_seconds":30}', 503)),
+        syncUploadServerWaitSeconds(
+            http.Response('{"code":"sync_dispatch_unavailable","retry_after_seconds":30}', 503)),
         isNull);
     expect(syncUploadServerWaitSeconds(http.Response('Service Unavailable', 503)), isNull);
   });
