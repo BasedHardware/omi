@@ -94,6 +94,11 @@ def _cell_errors():
         raise HTTPException(503, detail={'code': error.code, 'retryable': True}) from error
     except CellContentionExhausted as error:
         raise HTTPException(503, detail={'code': 'cell_contention', 'retryable': True}) from error
+    except HTTPException:
+        raise
+    except Exception as error:
+        # Dial/configuration/pool failures can precede the store's typed fence.
+        raise HTTPException(503, detail={'code': 'cell_space_unavailable', 'retryable': True}) from error
 
 
 def _decode_page_token(token: str | None) -> tuple[str, str] | None:

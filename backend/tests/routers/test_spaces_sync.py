@@ -113,6 +113,7 @@ def no_io(*args, **kwargs):
         ('revoked', 404, None),
         ('firestore', 503, 'space_not_cell_served'),
         ('disabled', 503, 'directory_routing_unavailable'),
+        ('cell_outage', 503, 'cell_space_unavailable'),
         ('unenrolled', 503, 'cell_space_unavailable'),
         ('tombstoned', 503, 'cell_space_unavailable'),
         ('enrolled', 200, None),
@@ -140,6 +141,8 @@ def test_gate_matrix(api, monkeypatch, endpoint, gate, status, code):
             api.directory.revoke_member(api.sid, api.sid, now=time.time())
         elif gate == 'tombstoned':
             api.cell.purge_space(api.sid)
+        elif gate == 'cell_outage':
+            monkeypatch.setattr(serving, 'cell_store', Mock(side_effect=ConnectionError('synthetic cell outage')))
     response = request(api, endpoint)
     assert response.status_code == status, response.text
     if code:
