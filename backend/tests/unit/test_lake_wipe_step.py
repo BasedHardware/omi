@@ -296,6 +296,9 @@ def merge_modules():
     # the shared per-test CPU budget, just as module-level imports would be.
     from database import conversations as conversations_db, review_overlay_merge
     from utils.conversations import merge_conversations as merge
+
+    # Load the production merge's deferred pipeline dependency during setup.
+    import utils.conversations.process_conversation  # noqa: F401
     from utils import notification_dispatch
 
     return conversations_db, review_overlay_merge, merge, notification_dispatch
