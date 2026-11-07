@@ -12,6 +12,7 @@ from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, Inva
 import logging
 
 from database.directory import router as directory_router
+from config import directory_routing
 from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
@@ -491,7 +492,7 @@ async def get_current_user_uid_ws_listen(
             headers=websocket.headers,
         )
 
-    if directory_router.routing_active():
+    if not directory_routing.routing_off():
         await run_blocking(db_executor, _resolve_request_plane_ws, uid)
 
     # Extract BYOK headers from the WS upgrade request and validate.
@@ -596,7 +597,7 @@ async def get_current_user_uid_from_ws_message(
             path=websocket.url.path,
             headers=websocket.headers,
         )
-    if directory_router.routing_active():
+    if not directory_routing.routing_off():
         await run_blocking(db_executor, _resolve_request_plane_ws, uid)
     return uid
 

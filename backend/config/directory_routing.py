@@ -13,6 +13,11 @@ def mode() -> str:
     return value
 
 
+def routing_off() -> bool:
+    """Synchronous auth bypass; other values are validated at the transport boundary."""
+    return os.getenv('DIRECTORY_ROUTING_MODE', 'off') == 'off'
+
+
 def routing_active() -> bool:
     return mode() != 'off'
 

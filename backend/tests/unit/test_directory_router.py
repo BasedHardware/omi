@@ -248,12 +248,12 @@ def test_invalid_mode_is_retryable_at_http_and_ws_boundary(monkeypatch):
     assert error.value.reason == 'directory_routing_unavailable'
 
 
-@pytest.mark.parametrize('routing_on', [False, True])
+@pytest.mark.parametrize('routing_mode', ['off', 'new_owners', 'typo'])
 @pytest.mark.parametrize(
     'name', ['get_current_user_id', 'get_uid_from_mcp_api_key', 'get_mcp_api_key_auth', 'get_api_key_auth']
 )
-def test_async_http_routing_submits_only_when_on(monkeypatch, routing_on, name):
-    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
+def test_async_http_routing_submits_only_when_on(monkeypatch, routing_mode, name):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', routing_mode)
     submitted = []
 
     async def run(pool, fn, *args, **kwargs):
@@ -265,6 +265,8 @@ def test_async_http_routing_submits_only_when_on(monkeypatch, routing_on, name):
             dependencies.dev_api_key_db.get_api_key_auth_result,
         ):
             return SimpleNamespace(context={'user_id': 'owner'}, repairs=())
+        if fn is endpoints._resolve_request_plane_or_503 and routing_mode == 'typo':
+            return fn(*args, **kwargs)
         return None
 
     async def noop(*args, **kwargs):
@@ -286,21 +288,29 @@ def test_async_http_routing_submits_only_when_on(monkeypatch, routing_on, name):
         if name == 'get_current_user_id'
         else {'api_key': 'Bearer synthetic'}
     )
-    result = asyncio.run(getattr(dependencies, name)(**kwargs))
-    assert (result if isinstance(result, str) else result.uid) == 'owner'
+    if routing_mode == 'typo':
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(getattr(dependencies, name)(**kwargs))
+        assert error.value.status_code == 503
+        assert error.value.detail == {'code': 'directory_routing_unavailable', 'retryable': True}
+    else:
+        result = asyncio.run(getattr(dependencies, name)(**kwargs))
+        assert (result if isinstance(result, str) else result.uid) == 'owner'
     resolver = endpoints._resolve_request_plane_or_503
-    assert submitted.count(resolver) == int(routing_on)
-    assert len(submitted) == 1 + int(routing_on)
+    assert submitted.count(resolver) == int(routing_mode != 'off')
+    assert len(submitted) == 1 + int(routing_mode != 'off')
 
 
-@pytest.mark.parametrize('routing_on', [False, True])
+@pytest.mark.parametrize('routing_mode', ['off', 'new_owners', 'typo'])
 @pytest.mark.parametrize('name', ['get_current_user_uid_ws_listen', 'get_current_user_uid_from_ws_message'])
-def test_async_ws_routing_submits_only_when_on(monkeypatch, routing_on, name):
-    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
+def test_async_ws_routing_submits_only_when_on(monkeypatch, routing_mode, name):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', routing_mode)
     submitted = []
 
     async def run(pool, fn, *args, **kwargs):
         submitted.append(fn)
+        if fn is endpoints._resolve_request_plane_ws and routing_mode == 'typo':
+            return fn(*args, **kwargs)
         return None
 
     async def verified(*args, **kwargs):
@@ -314,9 +324,15 @@ def test_async_ws_routing_submits_only_when_on(monkeypatch, routing_on, name):
         if name.endswith('message')
         else {'authorization': 'Bearer synthetic'}
     )
-    assert asyncio.run(getattr(endpoints, name)(**kwargs)) == 'owner'
+    if routing_mode == 'typo':
+        with pytest.raises(WebSocketException) as error:
+            asyncio.run(getattr(endpoints, name)(**kwargs))
+        assert error.value.code == 1013
+        assert error.value.reason == 'directory_routing_unavailable'
+    else:
+        assert asyncio.run(getattr(endpoints, name)(**kwargs)) == 'owner'
     assert submitted == [endpoints.enforce_account_deletion_ws_access] + (
-        [endpoints._resolve_request_plane_ws] if routing_on else []
+        [endpoints._resolve_request_plane_ws] if routing_mode != 'off' else []
     )
 
 
