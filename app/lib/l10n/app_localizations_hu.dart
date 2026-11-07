@@ -15459,4 +15459,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Felosztás a kurzornál';
+  @override
+  String get splitSegmentEmptySideError => 'Helyezze a kurzort a szavak közé, hogy mindkét rész tartalmazzon szöveget.';
+  @override
+  String get splitSegmentMidWordError => 'Felosztás előtt helyezze a kurzort szóhatárra.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Ez a szakasz túl rövid a pontos felosztáshoz.';
 }

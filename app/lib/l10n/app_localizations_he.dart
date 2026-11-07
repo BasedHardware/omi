@@ -15289,4 +15289,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'פצל במיקום הסמן';
+  @override
+  String get splitSegmentEmptySideError => 'הצב את הסמן בין מילים כך שבשני החלקים יהיה טקסט.';
+  @override
+  String get splitSegmentMidWordError => 'הצב את הסמן בגבול מילה לפני הפיצול.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'מקטע זה קצר מדי לפיצול תקין.';
 }

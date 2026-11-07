@@ -18786,5 +18786,9 @@
     },
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "Split at cursor",
+    "splitSegmentEmptySideError": "Place the cursor between words so both parts have text.",
+    "splitSegmentMidWordError": "Place the cursor at a word boundary before splitting.",
+    "splitSegmentInsufficientTimingError": "This segment is too short to split cleanly."
 }

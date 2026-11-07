@@ -15415,4 +15415,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Pisahkan di kursor';
+  @override
+  String get splitSegmentEmptySideError => 'Tempatkan kursor di antara kata agar kedua bagian memiliki teks.';
+  @override
+  String get splitSegmentMidWordError => 'Tempatkan kursor pada batas kata sebelum memisahkan.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Segmen ini terlalu pendek untuk dipisahkan dengan rapi.';
 }

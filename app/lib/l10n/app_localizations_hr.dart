@@ -15437,4 +15437,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Podijeli na pokazivaču';
+  @override
+  String get splitSegmentEmptySideError => 'Postavite pokazivač između riječi tako da oba dijela sadrže tekst.';
+  @override
+  String get splitSegmentMidWordError => 'Postavite pokazivač na granicu riječi prije dijeljenja.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Ovaj je isječak prekratak za pravilno dijeljenje.';
 }

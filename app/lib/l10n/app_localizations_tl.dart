@@ -15522,4 +15522,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Hatiin sa cursor';
+  @override
+  String get splitSegmentEmptySideError =>
+      'Ilagay ang cursor sa pagitan ng mga salita para parehong may teksto ang dalawang bahagi.';
+  @override
+  String get splitSegmentMidWordError => 'Ilagay ang cursor sa hangganan ng salita bago hatiin.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Masyadong maikli ang bahaging ito para mahati nang maayos.';
 }

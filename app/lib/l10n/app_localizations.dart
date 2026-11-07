@@ -27044,6 +27044,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirming installation… This may take up to 3 minutes.'**
   String get firmwareVerifyingInstallation;
+
+  /// No description provided for @splitSegmentAtCursor.
+  ///
+  /// In en, this message translates to:
+  /// **'Split at cursor'**
+  String get splitSegmentAtCursor;
+
+  /// No description provided for @splitSegmentEmptySideError.
+  ///
+  /// In en, this message translates to:
+  /// **'Place the cursor between words so both parts have text.'**
+  String get splitSegmentEmptySideError;
+
+  /// No description provided for @splitSegmentMidWordError.
+  ///
+  /// In en, this message translates to:
+  /// **'Place the cursor at a word boundary before splitting.'**
+  String get splitSegmentMidWordError;
+
+  /// No description provided for @splitSegmentInsufficientTimingError.
+  ///
+  /// In en, this message translates to:
+  /// **'This segment is too short to split cleanly.'**
+  String get splitSegmentInsufficientTimingError;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

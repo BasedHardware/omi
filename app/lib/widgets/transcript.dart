@@ -1266,8 +1266,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
     final startsTurn = previous == null ||
-        previous.isUser != data.isUser ||
-        previous.speakerId != data.speakerId ||
+        data.id.contains('__split_') ||
+        (segmentIdx + 1 < widget.segments.length && widget.segments[segmentIdx + 1].id.startsWith('${data.id}__split_')) ||
+        previous.isUser != data.isUser || previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
         (data.speakerId == omiSpeakerId && !data.isUser);
     final selected = widget.selectedSegmentIds;
@@ -1275,12 +1276,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final selecting = selected != null && toggle != null;
     final confirm = widget.onConfirmSpeakerLabel;
     final reject = widget.onRejectSpeakerLabel;
-    final asksToConfirm = !selecting &&
-        person != null &&
-        confirm != null &&
-        reject != null &&
-        !isTagging &&
-        askSegmentIds.contains(data.id);
+    final asksToConfirm =
+        !selecting && person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
     final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;

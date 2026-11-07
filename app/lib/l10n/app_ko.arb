@@ -4642,5 +4642,9 @@
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "커서 위치에서 분할",
+    "splitSegmentEmptySideError": "양쪽 모두 텍스트가 포함되도록 단어 사이에 커서를 두세요.",
+    "splitSegmentMidWordError": "분할하기 전에 단어 경계에 커서를 두세요.",
+    "splitSegmentInsufficientTimingError": "이 구간은 너무 짧아 깔끔하게 분할할 수 없습니다."
 }

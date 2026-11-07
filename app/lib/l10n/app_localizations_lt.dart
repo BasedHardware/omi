@@ -15424,4 +15424,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Padalyti ties žymekliu';
+  @override
+  String get splitSegmentEmptySideError => 'Padėkite žymeklį tarp žodžių, kad abiejose dalyse būtų teksto.';
+  @override
+  String get splitSegmentMidWordError => 'Prieš padalydami padėkite žymeklį ties žodžio riba.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Ši atkarpa per trumpa, kad būtų galima tiksliai padalyti.';
 }

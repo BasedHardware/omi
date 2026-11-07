@@ -15409,4 +15409,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Dela vid markören';
+  @override
+  String get splitSegmentEmptySideError => 'Placera markören mellan ord så att båda delarna innehåller text.';
+  @override
+  String get splitSegmentMidWordError => 'Placera markören vid en ordgräns innan du delar.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Det här segmentet är för kort för att delas korrekt.';
 }

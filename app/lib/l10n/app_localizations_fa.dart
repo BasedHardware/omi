@@ -15394,4 +15394,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'تقسیم در محل نشانگر';
+  @override
+  String get splitSegmentEmptySideError => 'نشانگر را بین کلمات قرار دهید تا هر دو بخش دارای متن باشند.';
+  @override
+  String get splitSegmentMidWordError => 'پیش از تقسیم، نشانگر را در مرز کلمه قرار دهید.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'این بخش برای تقسیم دقیق بیش از حد کوتاه است.';
 }

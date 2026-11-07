@@ -227,6 +227,14 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         PlatformManager.instance.analytics.editSegmentTextSaved();
         provider.saveEditingSegmentText(segmentIndex, newText);
       },
+      onSplit: (splitOffset, currentText) async {
+        final result = await provider.splitEditingSegment(segmentIndex, splitOffset, editedText: currentText);
+        if (result.isSuccess) {
+          saved = true;
+          PlatformManager.instance.analytics.editSegmentTextSaved();
+        }
+        return result;
+      },
       onDismissed: () {
         if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
       },
@@ -236,21 +244,26 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   void _nameSpeaker(ConversationDetailProvider provider, String segmentId, int speakerId) {
     speakerId = provider.sourceSpeakerId(segmentId, speakerId);
     if (!_readyForTranscriptEdit(provider)) return;
+    final isSplitTurn = provider.isSplitTurnSegment(segmentId);
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
       segmentId: segmentId,
-      segments: provider.voiceSegmentsFor(segmentId, speakerId),
-      wholeRecording: true,
+      segments: isSplitTurn
+          ? provider.conversation.transcriptSegments.where((s) => s.id == segmentId).toList()
+          : provider.voiceSegmentsFor(segmentId, speakerId),
+      wholeRecording: !isSplitTurn,
       recordingCoverageComplete: () =>
-          provider.recordingCoverageComplete && provider.recordingVoiceFor(segmentId) != null,
-      loadRecordingLines: () async {
-        await provider.loadRecordingTranscript();
-        return provider.voiceSegmentsFor(segmentId, speakerId);
-      },
+          !isSplitTurn && provider.recordingCoverageComplete && provider.recordingVoiceFor(segmentId) != null,
+      loadRecordingLines: isSplitTurn
+          ? null
+          : () async {
+              await provider.loadRecordingTranscript();
+              return provider.voiceSegmentsFor(segmentId, speakerId);
+            },
       unresolvedSpeakers: provider.conversation.speakerResolution?.status == 'unavailable',
-      // The name heads a turn; naming it names that voice's lines, which the sheet lists to uncheck.
-      defaultApplyToSpeaker: true,
+      // The name heads a turn; naming it names that voice's lines unless this segment is part of a split turn.
+      defaultApplyToSpeaker: !isSplitTurn,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         return _startSpeakerAssignment(
           provider,

@@ -15326,4 +15326,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'แบ่งที่เคอร์เซอร์';
+  @override
+  String get splitSegmentEmptySideError => 'วางเคอร์เซอร์ระหว่างคำเพื่อให้ทั้งสองส่วนมีข้อความ';
+  @override
+  String get splitSegmentMidWordError => 'วางเคอร์เซอร์ที่ขอบเขตคำก่อนทำการแบ่ง';
+  @override
+  String get splitSegmentInsufficientTimingError => 'ส่วนนี้สั้นเกินไปที่จะแบ่งได้อย่างถูกต้อง';
 }

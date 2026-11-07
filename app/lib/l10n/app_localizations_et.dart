@@ -15393,4 +15393,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Poolita kursori kohalt';
+  @override
+  String get splitSegmentEmptySideError => 'Aseta kursor sõnade vahele, et mõlemas osas oleks tekst.';
+  @override
+  String get splitSegmentMidWordError => 'Aseta kursor enne poolitamist sõnapiirile.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'See lõik on puhtalt poolitamiseks liiga lühike.';
 }

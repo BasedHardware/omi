@@ -15452,4 +15452,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Раздели при курсора';
+  @override
+  String get splitSegmentEmptySideError => 'Поставете курсора между думите, така че и двете части да съдържат текст.';
+  @override
+  String get splitSegmentMidWordError => 'Поставете курсора на границата между думите преди разделяне.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Този сегмент е твърде кратък, за да бъде разделен коректно.';
 }

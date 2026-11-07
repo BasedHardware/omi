@@ -15527,4 +15527,14 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Scinder au curseur';
+  @override
+  String get splitSegmentEmptySideError =>
+      'Placez le curseur entre les mots pour que chaque partie contienne du texte.';
+  @override
+  String get splitSegmentMidWordError => 'Placez le curseur à la limite d\'un mot avant de scinder.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Ce segment est trop court pour être scindé proprement.';
 }

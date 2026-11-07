@@ -15402,4 +15402,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Tách tại con trỏ';
+  @override
+  String get splitSegmentEmptySideError => 'Đặt con trỏ giữa các từ để cả hai phần đều có nội dung.';
+  @override
+  String get splitSegmentMidWordError => 'Đặt con trỏ ở ranh giới từ trước khi tách.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Đoạn này quá ngắn để tách chính xác.';
 }

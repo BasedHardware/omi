@@ -15150,4 +15150,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => '在光标处拆分';
+  @override
+  String get splitSegmentEmptySideError => '请将光标放在词语之间，使拆分后的两部分都包含文本。';
+  @override
+  String get splitSegmentMidWordError => '拆分前请将光标放在词语边界处。';
+  @override
+  String get splitSegmentInsufficientTimingError => '此片段太短，无法准确拆分。';
 }

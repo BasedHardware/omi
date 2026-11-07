@@ -15477,4 +15477,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Divideix al cursor';
+  @override
+  String get splitSegmentEmptySideError =>
+      'Col·loca el cursor entre les paraules perquè totes dues parts tinguin text.';
+  @override
+  String get splitSegmentMidWordError => 'Col·loca el cursor al límit d\'una paraula abans de dividir.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Aquest segment és massa curt per dividir-lo correctament.';
 }

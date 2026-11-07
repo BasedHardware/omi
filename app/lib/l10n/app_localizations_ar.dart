@@ -15312,4 +15312,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'تقسيم عند المؤشر';
+  @override
+  String get splitSegmentEmptySideError => 'ضع المؤشر بين الكلمات حتى يحتوي كلا الجزأين على نص.';
+  @override
+  String get splitSegmentMidWordError => 'ضع المؤشر عند حدود الكلمة قبل التقسيم.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'هذا المقطع قصير جدًا بحيث لا يمكن تقسيمه بشكل سليم.';
 }

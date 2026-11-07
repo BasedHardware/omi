@@ -15392,4 +15392,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Opdel ved markøren';
+  @override
+  String get splitSegmentEmptySideError => 'Placer markøren mellem ord, så begge dele indeholder tekst.';
+  @override
+  String get splitSegmentMidWordError => 'Placer markøren ved en ordgrænse før opdeling.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Dette segment er for kort til at blive opdelt korrekt.';
 }

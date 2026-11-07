@@ -15451,4 +15451,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'ಕರ್ಸರ್ ಸ್ಥಳದಲ್ಲಿ ವಿಭಜಿಸಿ';
+  @override
+  String get splitSegmentEmptySideError => 'ಎರಡೂ ಭಾಗಗಳಲ್ಲಿ ಪಠ್ಯ ಇರುವಂತೆ ಪದಗಳ ನಡುವೆ ಕರ್ಸರ್ ಇರಿಸಿ.';
+  @override
+  String get splitSegmentMidWordError => 'ವಿಭಜಿಸುವ ಮೊದಲು ಪದದ ಗಡಿಯಲ್ಲಿ ಕರ್ಸರ್ ಇರಿಸಿ.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'ಈ ಭಾಗವು ಸರಿಯಾಗಿ ವಿಭಜಿಸಲು ತುಂಬಾ ಚಿಕ್ಕದಾಗಿದೆ.';
 }

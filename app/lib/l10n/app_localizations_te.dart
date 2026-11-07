@@ -15463,4 +15463,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'కర్సర్ వద్ద విభజించు';
+  @override
+  String get splitSegmentEmptySideError => 'రెండు భాగాల్లోనూ పాఠ్యం ఉండేలా పదాల మధ్య కర్సర్ ఉంచండి.';
+  @override
+  String get splitSegmentMidWordError => 'విభజించే ముందు పద సరిహద్దు వద్ద కర్సర్ ఉంచండి.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'ఈ విభాగం సరిగ్గా విభజించడానికి చాలా చిన్నదిగా ఉంది.';
 }

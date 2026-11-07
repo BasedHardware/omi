@@ -15434,4 +15434,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Розділити за курсором';
+  @override
+  String get splitSegmentEmptySideError => 'Помістіть курсор між словами, щоб обидві частини містили текст.';
+  @override
+  String get splitSegmentMidWordError => 'Перед розділенням помістіть курсор на межу слова.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Цей фрагмент занадто короткий для коректного розділення.';
 }
