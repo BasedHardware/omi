@@ -38,9 +38,9 @@ def pending_work(
 ):
     attention = store.list_items(uid, limit=store.LIMIT)
     owner = home_processing.live_owner(uid) if home_ownership == '1' and client_channel_admitted(channel) else None
-    represented = set((owner or {}).get('conversation_ids') or ())
+    represented: set[str] = set((owner or {}).get('conversation_ids') or ())
 
-    def excluded(row):
+    def excluded(row: dict[str, Any]) -> bool:
         if not home_processing.owns_recording(owner, row):
             return False
         represented.add(row['id'])  # Include temporal attach gaps in sync dedupe.
