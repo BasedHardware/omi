@@ -414,6 +414,6 @@ def test_pl102_malformed_capacity_response_remains_unobserved_never_fresh_zero(h
         lambda priority, now: malformed if priority == int(Priority.RECENT) else 0,
     )
     metrics.refresh(h.store, T0 + 10)
-    assert not registry.get_sample_value('omi_batch_pipeline_capacity_refreshed_at_seconds', scope)
+    assert registry.get_sample_value('omi_batch_pipeline_capacity_refreshed_at_seconds', scope) is None
     assert registry.get_sample_value('omi_batch_pipeline_admissible_ready_units', {**scope, 'priority': 'fresh'}) is None
     assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', scope) == T0 + 10
