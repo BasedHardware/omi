@@ -322,7 +322,7 @@ def test_encoded_empty_capture_has_visible_overdue_exit(monkeypatch, level):
 
 @pytest.mark.parametrize('indexed', [False, True])
 def test_stale_processing_list_projection_preserves_stored_state(monkeypatch, indexed):
-    raw = capture(status='processing', finished_at=NOW - timedelta(hours=7), updated_at=NOW)
+    raw = capture(status='processing', finished_at=NOW - timedelta(hours=7), updated_at=NOW, memory_id='capture')
     db = Db([raw])
     monkeypatch.setattr(conversations, 'db', db)
     monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: indexed)
