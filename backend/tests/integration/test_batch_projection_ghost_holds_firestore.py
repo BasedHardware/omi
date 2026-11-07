@@ -209,6 +209,7 @@ def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds):
 
 @pytest.mark.parametrize('recovery_state', [None, 'recovered'], ids=['recovery-none', 'recovery-recovered'])
 def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment(lane, monkeypatch, recovery_state):
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', raising=False)
     batch = lane.seed()
     lane.finish(batch)
     segment = batch.ids[0]
