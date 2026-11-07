@@ -26,6 +26,7 @@ from database.account_deletion_marker import (
     get_user_deletion_wipe_status,
 )
 import database.account_deletion_grace as account_deletion_grace_db
+from database.account_deletion_statusless import requeue_fields
 from database.account_deletion_policy import (
     ACCOUNT_DELETION_GRACE_STATUS,
     deletion_billing_error_is_already_gone,
@@ -959,28 +960,18 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 def _requeue_statusless_deletion_marker_txn(transaction, doc_ref, generated_job_id: str) -> str | None:
     """Move a status-less account-deletion marker to ``pending`` exactly once.
 
-    A marker whose ``wipe_status`` is absent or blank is invisible to the
-    reconciler (it queries on equality) and to the task claim (it returns
-    ``not_actionable``), so no wipe ever runs for it. This transition is the
-    only write that gives such a marker a status. It refuses any marker that
-    already has a status, so a concurrent writer's state is never overwritten.
-    Returns the wipe job id to enqueue, or ``None`` when nothing was changed.
+    The decision lives in ``database.account_deletion_statusless``. This wrapper
+    only performs the transactional read and the single update. A marker that
+    already has a status is never overwritten. Returns the job id to enqueue,
+    or ``None`` when nothing changed.
     """
     snapshot = doc_ref.get(transaction=transaction)
-    if not snapshot.exists:
+    data = snapshot.to_dict() if snapshot.exists else None
+    fields = requeue_fields(data, generated_job_id, datetime.now(timezone.utc))
+    if fields is None:
         return None
-    data = snapshot.to_dict() or {}
-    raw_status = data.get('wipe_status')
-    if isinstance(raw_status, str) and raw_status.strip():
-        return None
-    job_id = data.get('wipe_job_id')
-    if not isinstance(job_id, str) or not job_id:
-        job_id = generated_job_id
-    transaction.update(
-        doc_ref,
-        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc), 'wipe_job_id': job_id},
-    )
-    return job_id
+    transaction.update(doc_ref, fields)
+    return fields['wipe_job_id']
 
 
 def requeue_statusless_deletion_marker(uid: str) -> str | None:

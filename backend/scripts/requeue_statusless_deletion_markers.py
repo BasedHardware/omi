@@ -14,17 +14,30 @@ That wipe is destructive and irreversible, so the script never runs unattended.
 import argparse
 import os
 import sys
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import firebase_admin  # noqa: E402
 from firebase_admin import auth as firebase_auth  # noqa: E402
 
 from database import users as users_db  # noqa: E402
+from database.account_deletion_statusless import is_statusless_marker  # noqa: E402
 from utils.cloud_tasks import enqueue_account_deletion_wipe  # noqa: E402
 
 ENV_GATE = 'ACCOUNT_DELETION_STATUSLESS_REDRIVE'
+PROJECT_ENV = 'FIREBASE_PROJECT_ID'
+
+
+def _init_firebase() -> None:
+    """Initialize the default Admin app. Auth lookups fail without it."""
+    if firebase_admin._apps:  # type: ignore[attr-defined]
+        return
+    project = os.environ.get(PROJECT_ENV, '').strip()
+    if not project:
+        raise SystemExit(f'{PROJECT_ENV} must name the Firebase project; refusing to guess')
+    firebase_admin.initialize_app(options={'projectId': project})  # type: ignore[reportUnknownMemberType]
 
 
 def _auth_user_gone(uid: str) -> bool:
@@ -33,6 +46,15 @@ def _auth_user_gone(uid: str) -> bool:
     except firebase_auth.UserNotFoundError:
         return True
     return False
+
+
+def _marker_is_statusless(uid: str) -> tuple[bool, bool]:
+    """Read-only: (marker_exists, is_statusless). Mirrors the apply-time transaction."""
+    client = users_db.account_deletion_firestore_client()
+    snapshot = users_db.account_deletion_document(uid, firestore_client=client).get()
+    if not snapshot.exists:
+        return False, False
+    return True, is_statusless_marker(snapshot.to_dict())
 
 
 def _read_uids(path: str) -> list[str]:
@@ -49,6 +71,7 @@ def main() -> int:
     apply = args.apply and os.environ.get(ENV_GATE, '').strip().lower() == 'on'
     if args.apply and not apply:
         print(f'refusing to apply: {ENV_GATE} is not "on"; running as dry run')
+    _init_firebase()
 
     counts: Counter[str] = Counter()
     for uid in _read_uids(args.uid_file):
@@ -57,7 +80,13 @@ def main() -> int:
             counts['skipped_auth_present'] += 1
             continue
         if not apply:
-            counts['dry_run_would_requeue'] += 1
+            exists, statusless = _marker_is_statusless(uid)
+            if not exists:
+                counts['dry_run_missing_marker'] += 1
+            elif not statusless:
+                counts['dry_run_not_statusless'] += 1
+            else:
+                counts['dry_run_would_requeue'] += 1
             continue
         job_id = users_db.requeue_statusless_deletion_marker(uid)
         if not job_id:
