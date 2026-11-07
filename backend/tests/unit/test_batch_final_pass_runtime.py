@@ -15,6 +15,7 @@ from scripts.runtime_env_validation import manifest as validator
 from tests.unit.test_backend_runtime_env_validator import render_cloud_run_state
 
 ROOT = Path(__file__).resolve().parents[3]
+HOSTED_URL = 'HOSTED_DIARIZATION_API_URL'
 
 
 @pytest.fixture
@@ -69,3 +70,23 @@ def test_literal_chart_override_cannot_defeat_shared_configmap(config, monkeypat
 
     monkeypatch.setattr(validator, '_load_yaml', wrong)
     assert any(FLAG in error.message for error in validator._validate_gke(config, strict_provisional=False))
+
+
+def test_host_without_diarizer_url_can_be_switched_off_alone(config):
+    # backend-integration has no HOSTED_DIARIZATION_API_URL: its pass can only fall back.
+    assert HOSTED_URL not in config['cloud_run']['services']['backend-integration']['env']
+    config['cloud_run']['services']['backend-integration']['env'][FLAG]['value'] = 'false'
+    assert validate_batch_final_pass_hosts('prod', config) == []
+
+
+def test_host_with_diarizer_url_cannot_be_switched_off_alone(config):
+    assert HOSTED_URL in config['cloud_run']['services']['backend']['env']
+    config['cloud_run']['services']['backend']['env'][FLAG]['value'] = 'false'
+    errors = validate_batch_final_pass_hosts('prod', config)
+    assert any('cloud_run/backend' == error.scope and FLAG in error.message for error in errors)
+
+
+def test_shared_configmap_off_is_rejected_while_pusher_has_the_diarizer_url(config):
+    config['gke']['config_map']['entries'][FLAG]['value'] = 'false'
+    errors = validate_batch_final_pass_hosts('prod', config)
+    assert any(error.scope == 'gke/pusher' for error in errors)

@@ -58,11 +58,42 @@ BATCH_FINAL_PASS_HOSTS = (
 )
 
 
+HOSTED_DIARIZATION_URL_ENV = 'HOSTED_DIARIZATION_API_URL'
+
+
+def _host_env(platform: str, name: str, config: ConfigDict) -> ConfigDict:
+    services = config.get('gke', {}) if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+    return (services.get(name, {}) or {}).get('env', {}) or {}
+
+
+def _host_has_diarizer_url(platform: str, name: str, config: ConfigDict) -> bool:
+    """True when the host can call the batch diarizer.
+
+    An unknown source (environment or secret) counts as present, so the check
+    errs toward keeping the pass on.
+    """
+    env = _host_env(platform, name, config)
+    if HOSTED_DIARIZATION_URL_ENV in env:
+        entry = env[HOSTED_DIARIZATION_URL_ENV] or {}
+        value = entry.get('value') if isinstance(entry, dict) else None
+        return value is None or bool(str(value).strip())
+    if platform == 'gke':
+        shared = (config.get('gke', {}).get('config_map', {}) or {}).get('entries', {}) or {}
+        return HOSTED_DIARIZATION_URL_ENV in shared
+    return False
+
+
 def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
-    """Independent serving roster: deleting a binding cannot hide a runtime."""
+    """Independent serving roster: deleting a binding cannot hide a runtime.
+
+    Every production host needs an explicit true or false. A host without a
+    diarizer URL may be switched off on its own, since its pass can only fall
+    back. A host with the URL stays on unless every production host is off, which
+    keeps the full rollback valid.
+    """
     if env != 'prod':
         return []
-    errors, values = [], set()
+    errors, values = [], {}
     gke = config.get('gke', {})
     config_map = gke.get('config_map', {})
     flag = BATCH_FINAL_PASS_FLAG
@@ -79,9 +110,17 @@ def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[Valida
         if value not in {'true', 'false'}:
             errors.append(ValidationError(f'{platform}/{name}', f'{flag} needs an explicit true/false binding'))
         else:
-            values.add(value)
-    if len(values) > 1:
-        errors.append(ValidationError('batch_final_pass', f'{flag} must agree across all production hosts'))
+            values[(platform, name)] = value
+    if len(values) == len(BATCH_FINAL_PASS_HOSTS) and all(v == 'false' for v in values.values()):
+        return errors  # Full rollback: every production host is off.
+    for (platform, name), value in values.items():
+        if value == 'false' and _host_has_diarizer_url(platform, name, config):
+            errors.append(
+                ValidationError(
+                    f'{platform}/{name}',
+                    f'{flag} must stay true on a host with {HOSTED_DIARIZATION_URL_ENV} unless every production host is off',
+                )
+            )
     return errors
 
 
