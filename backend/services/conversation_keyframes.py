@@ -20,7 +20,10 @@ from database.firestore_index_registry import (
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
 )
 from database.frame_requests import enqueue_frame_request
-from utils.retrieval.keyframe_policy import KeyframeCandidate, select_conversation_keyframe
+from utils.retrieval.keyframe_policy import (
+    KeyframeCandidate,
+    select_conversation_keyframe,
+)
 from utils.integration_telemetry import emit_posthog_event
 from utils.retrieval.frame_request_policy import FRAME_REQUEST_MAX_TTL_SECONDS
 
@@ -48,7 +51,9 @@ def _select_screen_winner(screens: list[Any]) -> tuple[Any, str, int | None] | N
         if not local_id.isdigit():
             continue
         try:
-            captured = datetime.fromisoformat(str(data.get("timestamp")).replace(" ", "T")).replace(tzinfo=timezone.utc)
+            captured = datetime.fromisoformat(
+                str(data.get("timestamp")).replace(" ", "T")
+            ).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
         frame_id = str(screen.id)
@@ -58,11 +63,16 @@ def _select_screen_winner(screens: list[Any]) -> tuple[Any, str, int | None] | N
                 captured_at=captured,
                 app_name=str(data.get("appName") or ""),
                 window_title=str(data.get("windowTitle") or ""),
-                content_hash=hashlib.sha256(f"{frame_id}\0{data.get('timestamp')}".encode()).hexdigest(),
+                content_hash=hashlib.sha256(
+                    f"{frame_id}\0{data.get('timestamp')}".encode()
+                ).hexdigest(),
             )
         )
         retention = data.get("deviceRetentionSeconds")
-        metadata[frame_id] = (local_id, int(retention) if isinstance(retention, int) and retention > 0 else None)
+        metadata[frame_id] = (
+            local_id,
+            int(retention) if isinstance(retention, int) and retention > 0 else None,
+        )
     winner = select_conversation_keyframe(candidates)
     if winner is None:
         return None
@@ -86,18 +96,34 @@ def _select_screen_pages(
     return None, True
 
 
-def ensure_conversation_keyframe_job(uid: str, conversation: Any, *, firestore_client: Any | None = None) -> bool:
+def ensure_conversation_keyframe_job(
+    uid: str, conversation: Any, *, firestore_client: Any | None = None
+) -> bool:
     """Persist one idempotent desktop keyframe intent; return whether eligible."""
     if account_deletion_blocks_user_work(uid):
         return False
-    source = getattr(getattr(conversation, "source", None), "value", getattr(conversation, "source", None))
+    source = getattr(
+        getattr(conversation, "source", None),
+        "value",
+        getattr(conversation, "source", None),
+    )
     started = getattr(conversation, "started_at", None)
     finished = getattr(conversation, "finished_at", None)
     device_id = str(getattr(conversation, "client_device_id", None) or "").strip()
-    if source != "desktop" or not isinstance(started, datetime) or not isinstance(finished, datetime) or not device_id:
+    if (
+        source != "desktop"
+        or not isinstance(started, datetime)
+        or not isinstance(finished, datetime)
+        or not device_id
+    ):
         return False
     client = firestore_client or get_data_plane_firestore_client()
-    ref = client.collection("users").document(uid).collection(_COLLECTION).document(str(conversation.id))
+    ref = (
+        client.collection("users")
+        .document(uid)
+        .collection(_COLLECTION)
+        .document(str(conversation.id))
+    )
     transaction = client.transaction()
 
     @firestore.transactional
@@ -146,15 +172,21 @@ def reconcile_conversation_keyframe_jobs(
         row = snapshot.to_dict() or {}
         started, finished = row.get("started_at"), row.get("finished_at")
         if not isinstance(started, datetime) or not isinstance(finished, datetime):
-            snapshot.reference.update({"state": "pruned", "terminal_reason": "invalid_conversation_window"})
+            snapshot.reference.update(
+                {"state": "pruned", "terminal_reason": "invalid_conversation_window"}
+            )
             continue
         base_query = SCREEN_ACTIVITY_KEYFRAME_QUERY.build(
             user.collection("screen_activity"),
             {
                 "device_id": device_id,
                 "account_generation": account_generation,
-                "started_at": started.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23],
-                "finished_at": finished.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23],
+                "started_at": started.astimezone(timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M:%S.%f"
+                )[:23],
+                "finished_at": finished.astimezone(timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M:%S.%f"
+                )[:23],
             },
             field_filter_factory=firestore.FieldFilter,
         ).order_by("timestamp", direction=firestore.Query.DESCENDING)
@@ -178,14 +210,20 @@ def reconcile_conversation_keyframe_jobs(
                 emit_posthog_event(
                     uid,
                     "conversation_keyframe_terminal",
-                    {"outcome": "pruned", "reason": "candidate_scan_bound_exhausted", "scan_limit": 5000},
+                    {
+                        "outcome": "pruned",
+                        "reason": "candidate_scan_bound_exhausted",
+                        "scan_limit": 5000,
+                    },
                 )
                 continue
             retention = min(
                 device_retention_seconds or FRAME_REQUEST_MAX_TTL_SECONDS,
                 FRAME_REQUEST_MAX_TTL_SECONDS,
             )
-            if datetime.now(timezone.utc) >= _utc(finished) + timedelta(seconds=retention):
+            if datetime.now(timezone.utc) >= _utc(finished) + timedelta(
+                seconds=retention
+            ):
                 snapshot.reference.update(
                     {
                         "state": "pruned",
@@ -209,7 +247,9 @@ def reconcile_conversation_keyframe_jobs(
         except ValueError as exc:
             if "already has an active frame request" not in str(exc):
                 raise
-            snapshot.reference.update({"state": "requested", "updated_at": datetime.now(timezone.utc)})
+            snapshot.reference.update(
+                {"state": "requested", "updated_at": datetime.now(timezone.utc)}
+            )
             continue
         snapshot.reference.update(
             {
@@ -243,9 +283,9 @@ def prune_expired_conversation_keyframe_jobs(
     if account_deletion_blocks_user_work(uid):
         return 0
     current = _utc(now or datetime.now(timezone.utc))
+    client = firestore_client or get_data_plane_firestore_client()
     rows = (
-        (firestore_client or get_data_plane_firestore_client())
-        .collection("users")
+        client.collection("users")
         .document(uid)
         .collection(_COLLECTION)
         .where(filter=firestore.FieldFilter("expires_at", "<=", current))
@@ -253,9 +293,24 @@ def prune_expired_conversation_keyframe_jobs(
         .stream()
     )
     deleted = 0
+
+    # We fetch rows and create batches since limit could theoretically be large,
+    # but the bounded window constraint requires limit <= 128, which easily fits in a single batch (limit: 500).
+    # We'll batch them anyway just in case the limit requirement changes in the future.
+    batch = client.batch()
+    batch_count = 0
     for snapshot in rows:
-        snapshot.reference.delete()
+        batch.delete(snapshot.reference)
         deleted += 1
+        batch_count += 1
+
+        if batch_count >= 500:
+            batch.commit()
+            batch = client.batch()
+            batch_count = 0
+
+    if batch_count > 0:
+        batch.commit()
     return deleted
 
 
