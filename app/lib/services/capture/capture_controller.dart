@@ -4156,6 +4156,9 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _clearSessionLocation();
+    // _socket is null when stopStreamRecording() or a pre-finalize teardown
+    // closes the socket before forceProcessingCurrentConversation() runs; the
+    // prefs fallback remains bounded by verified transcript-span coverage.
     final (segmentArrivals, needsRepair, customStt) = (
       Map<String, int>.of(_segmentArrivals), _sessionTransportInterrupted, _socket?.customSttMode ?? _preferences.customSttConfig.isEnabled);
     _sessionTransportInterrupted = false;
