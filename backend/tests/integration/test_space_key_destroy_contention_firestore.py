@@ -50,6 +50,7 @@ def state(tmp_path, monkeypatch):
             blob.delete()
         client.collection('space_keys').document(uid).delete()
         client.collection('account_deletions').document(uid).delete()
+        client.collection('users').document(uid).collection('deleted_conversations').document('c').delete()
         space_keys.clear_space_key_cache()
         client.close()
 
@@ -139,5 +140,36 @@ def test_inflight_put_self_deletes_during_purge_drain(state, monkeypatch):
         assert uploading.wait(timeout=30)
         client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
         assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
+        writer.result(timeout=60)
+    assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
+
+
+def test_conversation_upload_after_purge_final_listing_self_deletes(state, monkeypatch):
+    client, uid, bucket = state
+    uploading, release = Event(), Event()
+    original = LocalBlob.upload_from_string
+
+    def paused_upload(blob, *args, **kwargs):
+        uploading.set()
+        assert release.wait(timeout=30)
+        return original(blob, *args, **kwargs)
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', paused_upload)
+
+    def put():
+        with pytest.raises(lake.LakeWriteFenced, match='Conversation'):
+            lake.put_space_object(uid, 'transcript', 'c', b'late transcript')
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        writer = pool.submit(put)
+        try:
+            assert uploading.wait(timeout=30)
+            assert lake_wipe.purge_conversation_lake_objects(uid, 'c') == 0
+            assert (
+                client.collection('users').document(uid).collection('deleted_conversations').document('c').get().exists
+            )
+            assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
+        finally:
+            release.set()
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))

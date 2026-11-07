@@ -69,8 +69,20 @@ Explicit conversation deletion synchronously purges every lake class for that
 conversation and its deduplicated `sync_merged_from` donors before document
 deletion, with verified absence. Storage unavailability returns retryable 503,
 retaining the durable conversation tombstone and primary documents; success
-remains 204. Merge targets encode their own objects; merge-internal donor cleanup
-and developer tooling still rely on C3's orphan janitor for abandoned objects.
+remains 204. Before any listing, each conversation and donor gets a durable
+`users/{uid}/deleted_conversations/{conversation_id}` fence, preserving any
+existing intent metadata. Writers read this authority fresh before and after
+upload, alongside the account marker and space key. A newly created late
+candidate removes only its own generation and refuses to return a pointer;
+a create-only retry never removes an existing referenced object. Verified-absence
+failure is a retryable `LakePurgeIncomplete` (a `LakeFetchError`) with HTTP 503.
+
+The developer delete endpoint calls the same orchestrator and therefore also
+purges lake content, adding a raw Firestore snapshot and a synchronous GCS purge
+when the bucket is configured. Its existing error handling returns HTTP 500 on
+lake outage, with durable intent and primary documents retained. Merge targets
+encode their own objects; merge-internal donor cleanup and abandoned candidates
+still rely on C3's orphan janitor.
 
 The O1 activation precondition is the green wipe-coverage test
 `backend/tests/unit/test_lake_wipe_step.py::test_o1_wipe_coverage_gate_and_crash_retry`,

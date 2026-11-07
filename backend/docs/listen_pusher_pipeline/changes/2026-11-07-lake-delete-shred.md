@@ -2,7 +2,11 @@
 
 Explicit conversation deletion now purges lake objects for the conversation and
 its sync merge donors before deleting Firestore metadata. Lake transport failure
-returns retryable 503 with deletion intent retained; success stays 204.
+returns retryable 503 with deletion intent retained; success stays 204. This
+includes a failed verified-absence check. Deletion durably fences every
+conversation and donor before listing. Writers check the fence before and after
+upload; a candidate finishing after the final listing self-deletes its new
+generation and refuses publication. Retries never delete reused objects.
 
 Account wipe purges the lake prefix after cell/directory purge and before the
 Firestore user subtree. It destroys wrapped space keys last, after Typesense and
