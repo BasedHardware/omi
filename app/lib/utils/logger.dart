@@ -1,8 +1,10 @@
 import 'package:omi/env/physical_qualification.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/components/omi_sheet.dart';
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/utils/debug_log_manager.dart';
@@ -84,9 +86,22 @@ class LoggerSnackbar extends StatelessWidget {
         ),
         trailing: IconButton(
           icon: const Icon(Icons.share, color: Colors.white),
-          onPressed: () async {
-            // TODO: Have a custom form which can be prefilled with the error stack trace instead of opening the Gleap Homepage
-            await Intercom.instance.displayMessenger();
+          onPressed: () {
+            showOmiSheet<void>(
+              context: context,
+              title: 'Error Details',
+              builder: (context) => SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Stack Trace', style: OmiType.headline),
+                    const SizedBox(height: OmiSpacing.sm),
+                    SelectableText(data.stackTrace?.toString() ?? 'No stack trace available'),
+                    const SizedBox(height: OmiSpacing.md),
+                  ],
+                ),
+              ),
+            );
           },
         ),
       ),
