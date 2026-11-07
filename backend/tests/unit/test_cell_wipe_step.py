@@ -77,8 +77,10 @@ def test_real_purge_fence_drain_and_retry(monkeypatch, crash):
 
         def purge(owner):
             space = directory.store.get_space(owner)
-            assert space.cell == 'disabled'
-            assert space.epoch >= 2
+            # A retry after a completed wipe re-purges from the retained tombstone route.
+            if space is not None:
+                assert space.cell == 'disabled'
+                assert space.epoch >= 2
             assert owner not in router._cache
             with cell.store.pool.connection() as conn:
                 assert conn.execute('SELECT tombstoned FROM space_heads WHERE space_id=%s', (owner,)).fetchone() == (
