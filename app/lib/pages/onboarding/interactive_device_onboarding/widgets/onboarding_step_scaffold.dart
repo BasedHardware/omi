@@ -57,28 +57,39 @@ class OnboardingStepScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: TextStyle(color: OmiColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              subtitle,
-              style: TextStyle(color: OmiColors.textSecondary, fontSize: 16, height: 1.4),
-              textAlign: TextAlign.center,
+    // Fills the screen like a plain Column when everything fits. With very large text the step is
+    // taller than the screen, so it scrolls instead of cutting off the instruction or the button.
+    return LayoutBuilder(
+      builder: (context, viewport) => SingleChildScrollView(
+        // Two steps overlap while the tour animates between them; each keeps its own scroll position.
+        primary: false,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: viewport.maxHeight),
+          child: IntrinsicHeight(
+            child: Column(
+              children: [
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  style: TextStyle(color: OmiColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: OmiColors.textSecondary, fontSize: 16, height: 1.4),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 40),
+                Expanded(child: content),
+                if (bottomAction != null) ...[bottomAction!, const SizedBox(height: 24)],
+              ],
             ),
-          ],
-          const SizedBox(height: 40),
-          Expanded(child: content),
-          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: 24)],
-        ],
+          ),
+        ),
       ),
     );
   }

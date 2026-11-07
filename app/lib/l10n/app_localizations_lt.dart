@@ -9285,8 +9285,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Kalbėkite į Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle =>
-      'Pasakykite kelis žodžius ir stebėkite, kaip jie atsiranda realiuoju laiku';
+  String get deviceOnboardingTranscriptionSubtitle => 'Pasakykite, pavyzdžiui,\n„Primink man rytoj paskambinti Semui.“';
 
   @override
   String get deviceOnboardingGoodJob => 'Šaunu!';
@@ -9367,16 +9366,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Baigti';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Susipažinkite su savo Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Išbandykite tiesioginį transkribavimą, klausimo uždavimą ir dvigubo palietimo spartųjį veiksmą.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Maždaug 1 minutė';
 
   @override
   String quoteJumpToTime(String duration) {

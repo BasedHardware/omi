@@ -9309,7 +9309,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Говорете към вашето Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Кажете няколко думи и ги вижте как се появяват в реално време';
+  String get deviceOnboardingTranscriptionSubtitle => 'Кажете нещо като\n„Напомни ми утре да се обадя на Сам.“';
 
   @override
   String get deviceOnboardingGoodJob => 'Браво!';
@@ -9389,16 +9389,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Готово';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Опознайте своя Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Опитайте живата транскрипция, задаването на въпрос и пряк път с двойно докосване.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Около 1 минута';
 
   @override
   String quoteJumpToTime(String duration) {

@@ -9320,7 +9320,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Vorbește în Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Spune câteva cuvinte și privește-le cum apar în timp real';
+  String get deviceOnboardingTranscriptionSubtitle => 'Spune ceva de genul\n„Amintește-mi să-l sun pe Sam mâine.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Bravo!';
@@ -9400,16 +9400,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Termină';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Cunoaște-ți Omi-ul';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Încearcă transcrierea live, adresarea unei întrebări și scurtătura cu dublu clic.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
 
   @override
   String quoteJumpToTime(String duration) {

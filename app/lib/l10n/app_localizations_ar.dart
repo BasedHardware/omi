@@ -9215,7 +9215,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'تحدّث إلى Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'قل بضع كلمات وشاهدها تظهر في الوقت الفعلي';
+  String get deviceOnboardingTranscriptionSubtitle => 'قل شيئًا مثل\n“ذكّرني بالاتصال بسام غدًا.”';
 
   @override
   String get deviceOnboardingGoodJob => 'أحسنت!';
@@ -9294,15 +9294,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'إنهاء';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'تعرّف على Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'جرّب النسخ المباشر، وطرح سؤال، واختصار النقر المزدوج.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
 
   @override
   String quoteJumpToTime(String duration) {

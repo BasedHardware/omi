@@ -9204,7 +9204,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'דברו אל ה-Omi שלכם';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'אמרו כמה מילים וצפו בהן מופיעות בזמן אמת';
+  String get deviceOnboardingTranscriptionSubtitle => 'אמרו משהו כמו\n“תזכיר לי להתקשר לסאם מחר.”';
 
   @override
   String get deviceOnboardingGoodJob => 'כל הכבוד!';
@@ -9283,15 +9283,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'סיום';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'הכירו את ה-Omi שלכם';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'נסו תמלול חי, שאלה אחת וקיצור הדרך של הקשה כפולה.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'כדקה אחת';
 
   @override
   String quoteJumpToTime(String duration) {

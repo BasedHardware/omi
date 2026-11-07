@@ -9275,7 +9275,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Puhu Omi-laitteeseesi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Sano muutama sana ja katso, miten ne ilmestyvät reaaliajassa';
+  String get deviceOnboardingTranscriptionSubtitle => 'Sano esimerkiksi\n“Muistuta minua soittamaan Samille huomenna.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Hienosti!';
@@ -9355,16 +9355,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Valmis';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Tutustu Omiisi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Kokeile live-litterointia, kysymyksen esittämistä ja kaksoisnapautuksen pikanäppäintä.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
 
   @override
   String quoteJumpToTime(String duration) {

@@ -89,9 +89,12 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
         children: [
           const Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24),
           const SizedBox(width: 12),
-          Text(
-            context.l10n.deviceOnboardingGoodJob,
-            style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600),
+          // Wraps instead of running off the card at large text sizes.
+          Flexible(
+            child: Text(
+              context.l10n.deviceOnboardingGoodJob,
+              style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),

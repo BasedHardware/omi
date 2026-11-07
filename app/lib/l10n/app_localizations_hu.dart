@@ -9315,7 +9315,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Mondj néhány szót, és nézd, ahogy valós időben megjelennek';
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Mondj például ilyet:\n„Emlékeztess, hogy holnap hívjam fel Samet.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Szép munka!';
@@ -9395,16 +9396,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Befejezés';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Próbáld ki az élő átírást, a kérdésfeltevést és a dupla koppintásos gyorsbillentyűt.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
 
   @override
   String quoteJumpToTime(String duration) {

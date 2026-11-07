@@ -103,7 +103,6 @@
   "app/lib/pages/onboarding/found_omi/found_omi_widget.dart": 4,
   "app/lib/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart": 1,
   "app/lib/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart": 1,
-  "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart": 2,
   "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart": 2,
   "app/lib/pages/onboarding/knowledge_graph_step.dart": 2,
   "app/lib/pages/onboarding/name/name_widget.dart": 3,

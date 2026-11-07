@@ -9284,8 +9284,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Omi\'nize Konuşun';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle =>
-      'Birkaç kelime söyleyin ve gerçek zamanlı olarak göründüklerini izleyin';
+  String get deviceOnboardingTranscriptionSubtitle => 'Örneğin şunu söyleyin:\n“Yarın Sam\'i aramamı hatırlat.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Aferin!';
@@ -9364,16 +9363,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Bitir';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Omi\'nizi Tanıyın';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Canlı transkripsiyonu, bir soru sormayı ve çift dokunma kısayolunu deneyin.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
 
   @override
   String quoteJumpToTime(String duration) {

@@ -9299,7 +9299,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Runā savā Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Pasaki dažus vārdus un vēro, kā tie parādās reāllaikā';
+  String get deviceOnboardingTranscriptionSubtitle => 'Pasaki, piemēram,\n„Atgādini man rīt piezvanīt Semam.“';
 
   @override
   String get deviceOnboardingGoodJob => 'Lieliski!';
@@ -9379,16 +9379,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Pabeigt';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Iepazīsti savu Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Izmēģiniet tiešraides transkribēšanu, jautājuma uzdošanu un divkāršā pieskiciena saīsni.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Apmēram 1 minūte';
 
   @override
   String quoteJumpToTime(String duration) {

@@ -9268,7 +9268,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Speak Into Your Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Say a few words and watch them appear in real-time';
+  String get deviceOnboardingTranscriptionSubtitle => 'Say something like\n“Remind me to call Sam tomorrow.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Good job!';
@@ -9348,15 +9348,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Finish';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Get to Know Your Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'Try live transcription, asking a question, and the double-tap shortcut.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'About 1 minute';
 
   @override
   String quoteJumpToTime(String duration) {

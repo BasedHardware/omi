@@ -9273,7 +9273,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Snakk til Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Si noen ord og se dem dukke opp i sanntid';
+  String get deviceOnboardingTranscriptionSubtitle => 'Si noe som\n«Minn meg på å ringe Sam i morgen.»';
 
   @override
   String get deviceOnboardingGoodJob => 'Bra jobbet!';
@@ -9353,16 +9353,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Fullfør';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Bli kjent med din Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Prøv live transkripsjon, å stille et spørsmål og snarveien med dobbelttrykk.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Cirka 1 minutt';
 
   @override
   String quoteJumpToTime(String duration) {

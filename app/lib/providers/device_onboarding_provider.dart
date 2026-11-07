@@ -1,6 +1,7 @@
 import 'package:omi/models/voice_question_result.dart';
 import 'dart:async';
 
+import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -16,7 +17,17 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   static const int doublePressStep = 4;
   static const int allSetStep = 5;
   static const int totalSteps = 6;
+  // Enough speech to see live transcription work, in any language: five different words, or four that
+  // hold 20 letters (Arabic and Tamil say the example in four long words). [Bracketed] and (parenthesized)
+  // non-speech and punctuation don't count; Chinese, Japanese and Thai, written without spaces, count one
+  // word per two characters, rounded down. Repeats and a bare greeting are not enough.
   static const int _wordThreshold = 5;
+  static const int _longWordsThreshold = 4;
+  static const int _longWordsLetters = 20;
+  static final RegExp _nonSpeech = RegExp(r'\[[^\]]*\]|\([^)]*\)');
+  static final RegExp _wordChar = RegExp(r'[\p{L}\p{M}\p{N}]', unicode: true);
+  static final RegExp _unspaced =
+      RegExp(r'[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\u30FC]', unicode: true);
 
   int currentStep = 0;
   bool isOnboardingActive = false;
@@ -135,16 +146,42 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     if (currentStep != transcriptionStep || transcriptionComplete) return;
 
     demoSegments = segments;
-    int count = 0;
-    for (final seg in segments) {
-      count += seg.text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-    }
-    wordCount = count;
-
-    if (wordCount >= _wordThreshold && !transcriptionComplete) {
+    final words = _distinctWords(segments.map((s) => s.text).join(' '));
+    wordCount = words.length;
+    final letters = words.fold<int>(0, (sum, w) => sum + _wordChar.allMatches(w).length);
+    if (wordCount >= _wordThreshold || (wordCount >= _longWordsThreshold && letters >= _longWordsLetters)) {
       transcriptionComplete = true;
     }
     notifyListeners();
+  }
+
+  static Set<String> _distinctWords(String text) {
+    final words = <String>{};
+    final run = <String>[];
+    var runUnspaced = false;
+    void flush() {
+      if (runUnspaced) {
+        for (var i = 0; i + 1 < run.length; i += 2) {
+          words.add(run[i] + run[i + 1]);
+        }
+      } else if (run.isNotEmpty) {
+        words.add(run.join().toLowerCase());
+      }
+      run.clear();
+    }
+
+    for (final grapheme in text.replaceAll(_nonSpeech, ' ').characters) {
+      if (!_wordChar.hasMatch(grapheme)) {
+        flush();
+        continue;
+      }
+      final unspaced = _unspaced.hasMatch(grapheme);
+      if (run.isNotEmpty && unspaced != runUnspaced) flush();
+      runUnspaced = unspaced;
+      run.add(grapheme);
+    }
+    flush();
+    return words;
   }
 
   // --- Step 1: Single press (ask question) ---

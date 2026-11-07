@@ -9137,7 +9137,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Omiに話しかけてみよう';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => '何か話して、リアルタイムで文字になる様子を見てみましょう';
+  String get deviceOnboardingTranscriptionSubtitle => 'たとえばこう話してみましょう\n「明日サムに電話するようリマインドして」';
 
   @override
   String get deviceOnboardingGoodJob => 'いいですね！';
@@ -9216,15 +9216,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '完了';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Omi を知ろう';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'リアルタイム文字起こし、質問、ダブルタップのショートカットを試してみましょう。';
-
-  @override
-  String get deviceOnboardingIntroDuration => '約1分';
 
   @override
   String quoteJumpToTime(String duration) {

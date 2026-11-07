@@ -9278,7 +9278,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Prata in i din Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Säg några ord och se dem visas i realtid';
+  String get deviceOnboardingTranscriptionSubtitle => 'Säg till exempel\n”Påminn mig om att ringa Sam i morgon.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Bra jobbat!';
@@ -9358,15 +9358,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Slutför';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Lär känna din Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'Testa liveinspelning, att ställa en fråga och genvägen med dubbeltryck.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
 
   @override
   String quoteJumpToTime(String duration) {
