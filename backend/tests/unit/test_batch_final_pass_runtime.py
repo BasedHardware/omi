@@ -9,6 +9,7 @@ import yaml
 from scripts.runtime_env_capability_contracts import (
     BATCH_FINAL_PASS_FLAG as FLAG,
     BATCH_FINAL_PASS_HOSTS as HOSTS,
+    _host_has_diarizer_url,
     validate_batch_final_pass_hosts,
 )
 from scripts.runtime_env_validation import manifest as validator
@@ -102,16 +103,20 @@ def test_secret_backed_diarizer_url_counts_as_present(config):
 
 
 def test_empty_shared_literal_diarizer_url_counts_as_absent(config):
-    from scripts.runtime_env_capability_contracts import _host_has_diarizer_url
-
     shared = config['gke']['config_map']['entries']
     shared[HOSTED_URL] = {'source': 'literal', 'value': ''}
     assert not _host_has_diarizer_url('gke', 'backend-listen', config)
 
 
 def test_unknown_shared_source_diarizer_url_counts_as_present(config):
-    from scripts.runtime_env_capability_contracts import _host_has_diarizer_url
-
     shared = config['gke']['config_map']['entries']
     shared[HOSTED_URL] = {'source': 'secret'}
     assert _host_has_diarizer_url('gke', 'backend-listen', config)
+
+
+def test_gke_host_cannot_be_switched_off_alone_even_without_manifest_url(config):
+    # The pusher manifest entry can drop its URL while the Helm values still carry it.
+    del config['gke']['pusher']['env'][HOSTED_URL]
+    config['gke']['config_map']['entries'][FLAG]['value'] = 'false'
+    errors = validate_batch_final_pass_hosts('prod', config)
+    assert any(error.scope == 'gke/pusher' for error in errors)

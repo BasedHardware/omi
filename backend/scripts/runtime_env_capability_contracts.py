@@ -128,7 +128,10 @@ def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[Valida
     if len(values) == len(BATCH_FINAL_PASS_HOSTS) and all(v == 'false' for v in values.values()):
         return errors  # Full rollback: every production host is off.
     for (platform, name), value in values.items():
-        if value == 'false' and _host_has_diarizer_url(platform, name, config):
+        # GKE hosts share one ConfigMap entry, and their Helm values can carry the
+        # URL outside the manifest, so a GKE host is never exempt from the rule.
+        has_url = platform == 'gke' or _host_has_diarizer_url(platform, name, config)
+        if value == 'false' and has_url:
             errors.append(
                 ValidationError(
                     f'{platform}/{name}',
