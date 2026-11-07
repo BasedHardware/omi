@@ -460,6 +460,39 @@ def test_noop_skip_and_escape_flag(domain_backend, monkeypatch):
     assert repo.get(tid).revision == 2
 
 
+@pytest.mark.parametrize('description', ['Concurrent edit', 'Chat edit'])
+def test_task_chat_state_rejects_stale_snapshot_and_returns_after(domain_backend, description):
+    h = domain_backend
+    sid = h.space('chat-state')
+    repo = h.action_items(sid)
+    original = {'description': 'Original', 'updated_at': NOW}
+    h.seed(sid, 'action_items', 'task', original)
+    before = {'description': 'Original', 'updated_at': {'__chat_datetime__': NOW.isoformat()}}
+    assert repo.update('task', {'description': 'Concurrent edit', 'updated_at': NOW})
+    current = h.read(sid, 'action_items', 'task')
+    stale_state = {'before': before}
+    patch = {'description': description}
+    with pytest.raises(PermissionError, match='Edit target changed before write'):
+        repo.update('task', patch, expected_chat_state=stale_state, mutation_id='chat-edit')
+    assert h.read(sid, 'action_items', 'task') == current
+    assert 'after' not in stale_state
+
+    state = {
+        'before': {
+            'description': current['description'],
+            'updated_at': {'__chat_datetime__': current['updated_at'].isoformat()},
+        }
+    }
+    assert repo.update('task', patch, expected_chat_state=state, mutation_id='chat-edit')
+    assert state['after'] == {**state['before'], **patch}
+    assert repo.get('task').description == description
+    saved = h.read(sid, 'action_items', 'task')
+    # Match Firestore replay ordering and fingerprint: the before snapshot is
+    # not part of the digest, and a successful receipt precedes the state check.
+    assert repo.update('task', patch, expected_chat_state=stale_state, mutation_id='chat-edit')
+    assert h.read(sid, 'action_items', 'task') == saved
+
+
 def test_sync_keyset_lookahead_and_soft_tombstones(domain_backend):
     h = domain_backend
     sid = h.space('sync')

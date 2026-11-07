@@ -103,6 +103,25 @@ def test_timestamp_decoder_excludes_parallel_workers(pg):
         assert rows == [(datetime(2026, 11, 7, tzinfo=timezone.utc),)] * 2
 
 
+@pytest.mark.parametrize('offset', ['+99:99', '+24:00', '-99:99', '-24:00'])
+@pytest.mark.parametrize('tagged', [False, True])
+def test_timestamp_decoder_invalid_offsets_yield_null(pg, offset, tagged):
+    sid = pg.space('invalid-offset')
+    pg.store(sid)
+    value = f'"2026-11-01T00:00:00{offset}"'
+    if tagged:
+        value = '{"$datetime":' + value + '}'
+    with configure(dial(cells_dsn())) as conn:
+        assert conn.execute('SELECT cell_query_timestamp(%s::jsonb)', (value,)).fetchone()[0] is None
+        # Exercise the STORED columns too: malformed legacy rows must be writable.
+        conn.execute(
+            "INSERT INTO cell_docs (space_id, entity, entity_id, doc, rev, author_id, updated_at) "
+            "VALUES (%s, 'action_items', 'legacy', jsonb_build_object('due_at', %s::jsonb), 1, %s, 0)",
+            (sid, value, sid),
+        )
+        assert conn.execute('SELECT q_due_at FROM cell_docs WHERE space_id=%s', (sid,)).fetchone()[0] is None
+
+
 def test_one_bump_per_uow_and_no_bump_for_reads_or_replay(pg, monkeypatch):
     sid = pg.space('bumps')
     store = pg.store(sid)
