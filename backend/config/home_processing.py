@@ -1,6 +1,6 @@
 """Home processing ownership, enabled by default with per-call kill switches.
 
-Lifecycle: rollout; owner home-overlap; review 2026-11-21.
+Lifecycle: ops_kill; owner home-overlap; permanent env kill switch.
 """
 
 import os

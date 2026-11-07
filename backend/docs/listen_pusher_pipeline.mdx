@@ -3065,12 +3065,12 @@ visibility. `EPISODE_OUTPUT_LANGUAGE_PIN=off` restores preference-then-capture
 resolution for conversation notes and episodes; valid capture tags also survive
 when no transcript segments were supplied.
 
-### Dark Home processing ownership
+### Home processing ownership (default on)
 
 `HOME_PROCESSING_OWNERSHIP_ENABLED` and `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED`
-both default false. `HOME_PROCESSING_OWNERSHIP_UIDS` optionally restricts either
-switch to named accounts; empty admits all only after the respective switch is
-true. Live Home/pending suppression requires an admitted `X-Omi-App-Channel` and
+both default true, including notes for closed members of a still-live episode.
+Set either to false as an independent kill switch. `HOME_PROCESSING_OWNERSHIP_UIDS`
+optionally restricts either switch to named accounts; empty admits all eligible accounts. Live Home/pending suppression requires an admitted `X-Omi-App-Channel` and
 `X-Omi-Home-Ownership: 1`. Filtered/date-scoped Home reads retain their recordings;
 version checks are bypassed for live-dependent lists. `X-Omi-Home-Suppressed-Ids`
 continues to name only acknowledged held snapshots. Pending-work fills past
@@ -3093,7 +3093,7 @@ wait. Recording detail queues its durable enrichment obligation before publishin
 a five-minute per-recording escalation lease; optional dependency failures preserve
 the detail read and fail eager for processing. Explicit Process Now carries
 `backlog_choice` intent. The [runbook](runbooks/home-processing-ownership.md)
-owns the ramp, Phase 2 integration requirement and rollback.
+owns default-on verification, Phase 2 integration checks and rollback.
 
 ### Home transcription presentation
 

@@ -1,6 +1,6 @@
-"""Dark live-member notes gate; explicit recording detail is a narrow escalation.
+"""Default-on live-member notes gate; explicit recording detail is a narrow escalation.
 
-Lifecycle: rollout; owner home-overlap; review 2026-11-21.
+Lifecycle: ops_kill; owner home-overlap; permanent env kill switch.
 """
 
 import logging
