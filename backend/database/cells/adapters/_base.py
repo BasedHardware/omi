@@ -1,0 +1,109 @@
+"""Transaction-bound domain helpers. No simulator or Firestore SDK dependency."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from copy import deepcopy
+from datetime import datetime
+from functools import wraps
+
+from database.ports.base import MutationConflict, RevisionConflict
+
+
+def _scalar_order(value):
+    if value is None:
+        return (0, 0)
+    if isinstance(value, bool):
+        return (1, value)
+    if isinstance(value, (int, float)):
+        return (2, value)
+    if isinstance(value, datetime):
+        return (3, value.timestamp())
+    if isinstance(value, str):
+        return (4, value.encode())
+    return (5, repr(value))
+
+
+def _atomic(fn):
+    @wraps(fn)
+    def call(self, *args, **kwargs):
+        if self.store.bound:
+            value = fn(self, *args, **kwargs)
+            return iter(list(value)) if fn.__name__ == 'iter_all' else value
+        return self.store.run(lambda tx: getattr(getattr(tx, self.domain), fn.__name__)(*args, **kwargs))
+
+    return call
+
+
+class _Repo:
+    def __init__(self, store):
+        self.store = store
+
+    def receipt(self, mutation_id, operation, data):
+        digest = hashlib.sha256(json.dumps([operation, data], sort_keys=True, default=str).encode()).hexdigest()
+        prior = self.store.state['receipts'].get(mutation_id) if mutation_id is not None else None
+        if prior is not None and prior['digest'] != digest:
+            raise MutationConflict(mutation_id)
+        return digest, prior['result'] if prior is not None else None
+
+    def save(self, mutation_id, digest, result):
+        if mutation_id is not None:
+            self.store.state['receipts'][mutation_id] = {
+                'digest': digest,
+                'result': deepcopy(result),
+                'domain': self.domain,
+            }
+
+    def check(self, entity, entity_id, data, expected_revision):
+        revision = data.get('revision', 1)
+        if expected_revision is not None and revision != expected_revision:
+            raise RevisionConflict(self.store.space_id, entity, entity_id, revision)
+        return revision
+
+
+class _WorkflowRepo(_Repo):
+    entity_type = None
+    collection = ''
+
+    def _entity(self, row):
+        return self.entity_type.model_construct(**deepcopy(row)) if row is not None else None
+
+    def _rows(self):
+        return self.store.state[self.collection]
+
+    def _read(self, entity_id):
+        return self._rows().get(entity_id)
+
+    def _write_task(self):
+        self.store._task_write()
+
+    def _generation(self, expected=None):
+        control = self.store.state['task_intelligence_control'].get('state', {})
+        generation = control.get('account_generation', 0)
+        if expected is not None and (generation != expected or control.get('writes_blocked')):
+            raise self.generation_error('account generation mismatch')
+        return generation
+
+    def _idempotent(self, operation, key, request, body):
+        digest, prior = self.receipt(key, operation, request)
+        if prior is not None:
+            return deepcopy(prior)
+        result = body()
+        self.save(key, digest, result)
+        return result
+
+    @_atomic
+    def purge(self, space_id: str) -> int:
+        if space_id != self.store.space_id:
+            raise ValueError('purge must belong to this space')
+        count = len(self._rows())
+        self._rows().clear()
+        for key, receipt in list(self.store.state['receipts'].items()):
+            if receipt['domain'] == self.collection:
+                del self.store.state['receipts'][key]
+                count += 1
+        if self.collection == 'action_items':
+            count += len(self.store.state['task_intelligence_control'])
+            self.store.state['task_intelligence_control'].clear()
+        return count
