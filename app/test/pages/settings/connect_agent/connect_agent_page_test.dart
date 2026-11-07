@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/pages/settings/connect_agent/chatgpt_connect_sheet.dart';
 import 'package:omi/pages/settings/connect_agent/chatgpt_page.dart';
 import 'package:omi/pages/settings/connect_agent/connect_agent_page.dart';
+import 'package:omi/services/agent_connect/agent_connections.dart';
 
 import 'connect_agent_fixture.dart';
 
@@ -204,5 +206,69 @@ void main() {
     // The unreceived replacement is revoked; the key the agent already has is untouched.
     expect(backend.revokedKeys, ['key-new-2']);
     expect(backend.keys.keys, ['key-new-1']);
+  });
+
+  testWidgets('ChatGPT sheet keeps setup open after URL handoff, offers Connectors fallback, and closes once connected',
+      (tester) async {
+    final launched = <Uri>[];
+    final backend = FakeAgentBackend();
+    usePhoneViewport(tester);
+    await tester.pumpWidget(
+      connectAgentHost(
+        Scaffold(
+          body: ChatGptConnectSheet(
+            service: backend.service(),
+            connections: const AgentConnections(chatGptGrantIds: [], agentKeys: {}),
+            urlLauncher: (url) async {
+              launched.add(url);
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_open')));
+    await settle(tester);
+    expect(launched, [chatGptDirectoryUrl]);
+    expect(find.byKey(const ValueKey('connect_chatgpt_handoff_status')), findsOneWidget);
+    expect(find.byKey(const ValueKey('connect_chatgpt_open_connectors')), findsOneWidget);
+    expect(find.byKey(const ValueKey('connect_chatgpt_check_status')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_open_connectors')));
+    await settle(tester);
+    expect(launched, [chatGptDirectoryUrl, chatGptConnectorsUrl]);
+
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_check_status')));
+    await settle(tester);
+    expect(find.textContaining('Not connected yet.'), findsOneWidget);
+  });
+
+  testWidgets('ChatGPT sheet falls back to Connectors URL when direct plugin link fails to open', (tester) async {
+    final launched = <Uri>[];
+    final backend = FakeAgentBackend();
+    usePhoneViewport(tester);
+    await tester.pumpWidget(
+      connectAgentHost(
+        Scaffold(
+          body: ChatGptConnectSheet(
+            service: backend.service(),
+            connections: const AgentConnections(chatGptGrantIds: [], agentKeys: {}),
+            urlLauncher: (url) async {
+              launched.add(url);
+              return url == chatGptConnectorsUrl;
+            },
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_open')));
+    await settle(tester);
+    expect(launched, [chatGptDirectoryUrl, chatGptConnectorsUrl]);
+    expect(find.textContaining('Opened ChatGPT Connectors because the direct plugin page was unavailable.'),
+        findsOneWidget);
   });
 }

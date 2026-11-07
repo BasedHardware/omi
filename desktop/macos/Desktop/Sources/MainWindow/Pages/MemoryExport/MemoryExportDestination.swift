@@ -104,6 +104,11 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   static let chatGPTDirectoryInstallURL = URL(
     string: "https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi")!
 
+  /// ChatGPT Connectors settings page used as a fallback when the direct plugin
+  /// deep link cannot be opened or renders a blank shell in the user's browser.
+  static let chatGPTConnectorsSettingsURL = URL(
+    string: "https://chatgpt.com/#settings/Connectors")!
+
   var cloudOAuthClientID: String? {
     switch self {
     case .chatgpt: return Self.chatgptOAuthClientID
@@ -300,6 +305,10 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var directoryInstallURL: URL? {
     self == .chatgpt ? Self.chatGPTDirectoryInstallURL : nil
+  }
+
+  var directoryFallbackURL: URL? {
+    self == .chatgpt ? Self.chatGPTConnectorsSettingsURL : nil
   }
 
   var manualPrompt: String {

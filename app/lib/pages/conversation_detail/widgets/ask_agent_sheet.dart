@@ -20,7 +20,9 @@ Future<void> showAskAgentSheet(BuildContext context, ServerConversation conversa
     builder: (context) => AskAgentSheet(conversation: conversation, service: service ?? AgentConnectService()),
   );
   // Connecting is its own sheet; it opens from the page once this one has closed.
-  if (connectFirst == true && context.mounted) await showChatGptConnectSheet(context);
+  if (connectFirst == true && context.mounted) {
+    await showChatGptConnectSheet(context, service: service ?? AgentConnectService());
+  }
 }
 
 class AskAgentSheet extends StatefulWidget {

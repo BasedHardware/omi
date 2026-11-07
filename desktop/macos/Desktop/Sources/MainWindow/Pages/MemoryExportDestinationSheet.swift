@@ -617,7 +617,16 @@ struct MemoryExportDestinationSheet: View {
   private func refreshCloudGrantConnectionIfNeeded() {
     guard destination.cloudOAuthClientID != nil else { return }
     Task {
-      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
+      let updated = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
+      statuses[destination] = updated
+      if destination.mcpExecuteKind == .directoryApp,
+        !updated.hasConnection,
+        model.statusMessage != nil
+      {
+        model.statusMessage =
+          "Not connected yet. If the ChatGPT plugin page opened blank, sign in to ChatGPT, search for Omi in Settings → Apps & Connectors, or use the Developer-mode fallback below."
+        showManualSetup = true
+      }
     }
   }
 
@@ -842,9 +851,11 @@ struct MemoryExportDestinationSheet: View {
             await model.executeWithOmi(destination: destination)
             statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(
               for: destination)
-            // Assisted flow: the user pastes values by hand, so surface the
-            // field-by-field steps instead of leaving them collapsed.
-            if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
+            // Assisted flow or failed directory handoff: surface the fallback steps
+            // instead of leaving them collapsed.
+            if (destination.mcpExecuteKind == .assisted && destination.assistedOverlayHint != nil)
+              || (destination.mcpExecuteKind == .directoryApp && model.errorMessage != nil)
+            {
               showManualSetup = true
             }
           }

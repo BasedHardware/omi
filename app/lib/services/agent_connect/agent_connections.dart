@@ -15,6 +15,10 @@ const chatGptBrandName = 'ChatGPT';
 final chatGptDirectoryUrl =
     Uri.parse('https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi');
 
+/// Fallback ChatGPT Connectors settings page when the direct plugin listing link cannot be opened
+/// or renders a blank shell in the user's browser or workspace.
+final chatGptConnectorsUrl = Uri.parse('https://chatgpt.com/#settings/Connectors');
+
 /// Opens ChatGPT with [prompt] typed in the composer.
 Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': prompt});
 

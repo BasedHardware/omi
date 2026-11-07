@@ -87,8 +87,8 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
       final disconnected = await showChatGptConnectSheet(context, service: _service, connections: connections);
       if (disconnected == true) {
         if (mounted) setState(() => _connections = _connections?.withoutChatGpt());
-        await _load();
       }
+      await _load();
     }
   }
 
