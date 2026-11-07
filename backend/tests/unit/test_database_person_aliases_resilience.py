@@ -43,7 +43,9 @@ def test_normalized_person_alias_normalizes_whitespace():
 
 
 def test_update_person_name_transaction_rejects_none_args():
-    # If transaction or person_ref is None, must return False safely
+    # Both the public entrypoint and the underlying callback must reject None safely
+    assert update_person_name_transaction(None, MagicMock(), "Alice") is False
+    assert update_person_name_transaction(MagicMock(), None, "Alice") is False
     assert update_person_name_transaction.to_wrap(None, MagicMock(), "Alice") is False
     assert update_person_name_transaction.to_wrap(MagicMock(), None, "Alice") is False
 
@@ -51,6 +53,8 @@ def test_update_person_name_transaction_rejects_none_args():
 def test_update_person_name_transaction_rejects_invalid_name():
     transaction = MagicMock()
     person_ref = MagicMock()
+    assert update_person_name_transaction(transaction, person_ref, "   ") is False
+    assert update_person_name_transaction(transaction, person_ref, None) is False
     assert update_person_name_transaction.to_wrap(transaction, person_ref, "   ") is False
     assert update_person_name_transaction.to_wrap(transaction, person_ref, None) is False
     person_ref.get.assert_not_called()
@@ -63,7 +67,27 @@ def test_update_person_name_transaction_returns_false_when_doc_missing():
     snapshot = person_ref.get.return_value
     snapshot.exists = False
     assert update_person_name_transaction.to_wrap(transaction, person_ref, "Alice") is False
+    # Also verify a snapshot object lacking an 'exists' attribute is handled safely
+    person_ref.get.return_value = object()
+    assert update_person_name_transaction.to_wrap(transaction, person_ref, "Alice") is False
     transaction.update.assert_not_called()
+
+
+class _BoundedLookbackList(list):
+    """Spy list that requires a [-48:] slice before iteration."""
+
+    def __init__(self, items):
+        super().__init__(items)
+        self.last_slice = None
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            self.last_slice = item
+            return list(super().__getitem__(item))
+        return super().__getitem__(item)
+
+    def __iter__(self):
+        raise AssertionError("stored_aliases must be sliced with [-48:] before iteration")
 
 
 def test_update_person_name_transaction_caps_stored_aliases_to_24():
@@ -71,8 +95,8 @@ def test_update_person_name_transaction_caps_stored_aliases_to_24():
     person_ref = MagicMock()
     snapshot = person_ref.get.return_value
     snapshot.exists = True
-    # 40 existing distinct aliases
-    existing_aliases = [f"Alias {i}" for i in range(40)]
+    # 60 existing distinct aliases wrapped in a spy that enforces [-48:] lookback
+    existing_aliases = _BoundedLookbackList([f"Alias {i}" for i in range(60)])
     snapshot.to_dict.return_value = {
         "name": "Old Name",
         "aliases": existing_aliases,
@@ -80,10 +104,12 @@ def test_update_person_name_transaction_caps_stored_aliases_to_24():
 
     result = update_person_name_transaction.to_wrap(transaction, person_ref, "New Name")
     assert result is True
+    assert existing_aliases.last_slice == slice(-48, None, None)
     payload = transaction.update.call_args.args[1]
     assert payload["name"] == "New Name"
     # Aliases must be capped at 24 entries maximum
-    assert len(payload["aliases"]) <= 24
+    assert len(payload["aliases"]) == 24
+    assert payload["aliases"][0] == "Alias 37"
     assert payload["aliases"][-1] == "Old Name"
 
 
@@ -129,17 +155,21 @@ def test_rename_person_retaining_aliases_rejects_invalid_name_before_txn(invalid
 
 def test_rename_person_retaining_aliases_falls_back_to_default_client():
     fake_default_client = MagicMock()
-    person_ref = (
-        fake_default_client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    )
+    users_collection = fake_default_client.collection.return_value
+    user_doc = users_collection.document.return_value
+    people_collection = user_doc.collection.return_value
+    person_ref = people_collection.document.return_value
     person_ref.get.return_value.exists = True
     person_ref.get.return_value.to_dict.return_value = {"name": "Old"}
 
     with patch("database.person_aliases.get_firestore_client", return_value=fake_default_client):
         with patch("database.person_aliases.update_person_name_transaction", return_value=True):
-            res = rename_person_retaining_aliases(None, "u1", "p1", "New")
+            res = rename_person_retaining_aliases(None, "  u1  ", "  p1  ", "New")
             assert res is True
-            fake_default_client.collection.assert_called_with("users")
+            fake_default_client.collection.assert_called_once_with("users")
+            users_collection.document.assert_called_once_with("u1")
+            user_doc.collection.assert_called_once_with("people")
+            people_collection.document.assert_called_once_with("p1")
 
 
 def test_rename_person_retaining_aliases_catches_not_found():

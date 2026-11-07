@@ -118,8 +118,7 @@ def normalized_person_alias(value: Any) -> str | None:
     return normalized
 
 
-@transactional
-def update_person_name_transaction(
+def _update_person_name_in_transaction(
     transaction: Any, person_ref: Any, name: str, expected_chat_state: dict | None = None
 ) -> bool:
     """Rename one stable person while retaining bounded exact aliases."""
@@ -165,6 +164,25 @@ def update_person_name_transaction(
     if expected_chat_state is not None:
         expected_chat_state['after'] = chat_edits.encode(patch)
     return True
+
+
+_transactional_update_person_name = transactional(_update_person_name_in_transaction)
+
+
+def update_person_name_transaction(
+    transaction: Any, person_ref: Any, name: str, expected_chat_state: dict | None = None
+) -> bool:
+    """Rename one stable person while retaining bounded exact aliases."""
+    if transaction is None or person_ref is None:
+        return False
+    if normalized_person_alias(name) is None:
+        return False
+    if expected_chat_state is not None:
+        return _transactional_update_person_name(transaction, person_ref, name, expected_chat_state)
+    return _transactional_update_person_name(transaction, person_ref, name)
+
+
+update_person_name_transaction.to_wrap = _update_person_name_in_transaction
 
 
 def rename_person_retaining_aliases(
