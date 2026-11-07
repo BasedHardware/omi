@@ -516,7 +516,10 @@ async def test_bounded_production_cleanup_cancellation_is_reported(monkeypatch, 
     original_wait = asyncio.wait_for
 
     async def short_wait(awaitable, timeout):
-        return await original_wait(awaitable, 0.01 if timeout == 10 else timeout)
+        # Shorten drain task waits only; startup/readiness coroutines retain
+        # their real budget so host scheduling cannot fake a connect failure.
+        cleanup_wait = timeout == 10 and isinstance(awaitable, asyncio.Task)
+        return await original_wait(awaitable, 0.01 if cleanup_wait else timeout)
 
     monkeypatch.setattr(asyncio, 'wait_for', short_wait)
 
