@@ -114,30 +114,6 @@ static int lsm6dsl_timestamp_enable(void)
     return 0;
 }
 
-static int lsm6dsl_timestamp_disable(void)
-{
-    if (!device_is_ready(lsm6dsl_i2c.bus)) {
-        LOG_WRN("lsm6dso i2c bus not ready");
-        return -ENODEV;
-    }
-
-    uint8_t ctrl10;
-    int err = i2c_reg_read_byte_dt(&lsm6dsl_i2c, LSM6DS_REG_CTRL10_C, &ctrl10);
-    if (err) {
-        return err;
-    }
-
-    ctrl10 &= (uint8_t) ~LSM6DS_CTRL10_TIMER_EN;
-    err = i2c_reg_write_byte_dt(&lsm6dsl_i2c, LSM6DS_REG_CTRL10_C, ctrl10);
-    if (err) {
-        LOG_WRN("Failed to write CTRL10_C timer_en=0 (err %d)", err);
-        return err;
-    }
-
-    LOG_DBG("Timestamp disabled (CTRL10_C=0x%02x)", ctrl10);
-    return 0;
-}
-
 static int lsm6dsl_timestamp_reset(void)
 {
     /* LSM6DS3TR-C datasheet: to reset the timestamp timer, store 0xAA in TIMESTAMP2 (0x42). */
