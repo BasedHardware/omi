@@ -319,8 +319,8 @@ class SimFolders(_Repo):
         self, folder_id: str, *, limit: int = 100, offset: int = 0, include_discarded: bool = False
     ) -> list[dict]:
         rows = [
-            row
-            for row in self.store.state['conversations'].values()
+            {**row, 'id': eid}
+            for eid, row in self.store.state['conversations'].items()
             if row.get('folder_id') == folder_id and (include_discarded or row.get('discarded') is False)
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)

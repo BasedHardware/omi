@@ -244,6 +244,7 @@ def test_assignment_count_and_offset_quirk(domain_backend):
         )
     assert repo.conversations_in_folder(first.id, limit=1) == []
     assert repo.conversations_in_folder(first.id, limit=1, offset=1)[0]['id'] == '1'
+    assert 'id' not in h.read(sid, 'conversations', '1')
     assert repo.refresh_conversation_count(first.id) == 3  # includes deleted: established count query
     assert repo.bulk_move_conversations(['0', '1', 'missing'], second.id) == 2
     assert repo.get(first.id).conversation_count == 1 and repo.get(second.id).conversation_count == 2
