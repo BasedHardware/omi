@@ -34,13 +34,16 @@ def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-    if not cfg:
+    if not isinstance(cfg, dict):
         return None
     try:
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id')
+            uid = raw_configurable.get('user_id')
+        else:
+            uid = cfg.get('user_id')
+        if isinstance(uid, str) and uid.strip():
+            return uid.strip()
         return None
     except (KeyError, TypeError):
         return None
@@ -73,8 +76,20 @@ def traverse_knowledge_graph_tool(
     if not uid:
         return "Error: User ID not found in configuration"
 
+    if not entity or not str(entity).strip():
+        return "Error: Entity name must not be empty"
+
+    clean_entity = str(entity).strip()
+
     try:
-        result = traverse_knowledge_graph(uid, entity, hops=hops)
+        clean_hops = int(hops)
+    except (TypeError, ValueError):
+        clean_hops = 1
+
+    bounded_hops = max(1, min(clean_hops, 2))
+
+    try:
+        result = traverse_knowledge_graph(uid, clean_entity, hops=bounded_hops)
         return format_traversal_result(result)
     except Exception as exc:
         logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, sanitize(str(exc)))
