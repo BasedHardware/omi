@@ -250,6 +250,89 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     assert any(error.startswith('missing-child:') and "'package.child'" in error for error in errors)
 
 
+def test_shared_staging_keeps_context_and_entrypoint_boundaries(contracts_module, tmp_path):
+    first = tmp_path / 'first'
+    second = tmp_path / 'second'
+    first.mkdir()
+    second.mkdir()
+    (first / 'main.py').write_text('import json\n')
+    (first / 'other.py').write_text('import json\n')
+    (second / 'main.py').write_text('import missing\n')
+    (second / 'missing.py').write_text('import json\n')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n')
+    template = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=first,
+        source_root=first,
+        entrypoint_source_root=first,
+        entrypoints=('main',),
+    )
+    contracts = [
+        replace(template, name='complete'),
+        replace(template, name='other-entrypoint', entrypoints=('other',)),
+        replace(
+            template, name='other-context', build_context=second, source_root=second, entrypoint_source_root=second
+        ),
+    ]
+
+    errors = contracts_module.check_source_closures(contracts)
+
+    assert not any(error.startswith('complete:') for error in errors)
+    assert any(error.startswith('other-entrypoint:') and "'other'" in error for error in errors)
+    assert any(error.startswith('other-context:') and "'missing'" in error for error in errors)
+    # The same COPY key must be restaged after a source edit, even after errors.
+    (first / 'main.py').write_text('def lazy():\n    import other\n')
+    errors = contracts_module.check_source_closures(contracts)
+    assert any(error.startswith('complete:') and "'other'" in error for error in errors)
+    (first / 'main.py').write_text('import json\n')
+    assert contracts_module.check_source_closures([contracts[0]]) == []
+
+
+def test_shared_staging_still_validates_each_workdir(contracts_module, tmp_path):
+    from pathlib import PurePosixPath
+
+    (tmp_path / 'main.py').write_text('import json\n')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py /app/main.py\n')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+        workdir=PurePosixPath('/app'),
+    )
+
+    with pytest.raises(contracts_module.ContractError, match='outside WORKDIR'):
+        contracts_module.check_source_closures([contract, replace(contract, workdir=PurePosixPath('/elsewhere'))])
+
+
+def test_shared_import_summary_observes_edits_and_invalid_syntax(contracts_module, tmp_path):
+    source = tmp_path / 'main.py'
+    source.write_text('import json\n')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+    )
+    trees = {}
+    assert 'added' not in contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+
+    source.write_text('class Nested:\n    def lazy(self):\n        from package import child\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'child.py').write_text('import json\n')
+    assert 'package.child' in contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+    source.write_text('def broken(:\n')
+    with pytest.raises(SyntaxError):
+        contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+
+
 def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     pusher = _contract(contracts_module, 'pusher')
     dependencies = contracts_module.third_party_dependency_modules(pusher)
