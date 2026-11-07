@@ -63,7 +63,10 @@ class _OnboardingKnowledgePreviewState extends State<OnboardingKnowledgePreview>
         borderRadius: OmiRadius.xlAll,
         child: ColoredBox(
           color: OmiColors.surface1,
-          child: ExcludeSemantics(
+          child: Semantics(
+            container: true,
+            label: '${widget.center}: ${widget.topics.join(', ')}',
+            excludeSemantics: true,
             child: LayoutBuilder(
               builder: (context, box) {
                 final size = box.biggest;

@@ -19,6 +19,8 @@ void main() {
   });
 
   testWidgets('the reader at the centre, four topics, and Continue (#19237)', (tester) async {
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     SharedPreferencesUtil().givenName = 'Ashwin';
     var continued = 0;
     for (final width in [320.0, 390.0, 440.0]) {
@@ -40,24 +42,31 @@ void main() {
         for (final topic in [en.categoryProductivity, en.people, en.categoryHealth, en.goals]) {
           expect(find.text(topic), findsOneWidget);
         }
+        expect(
+          find.bySemanticsLabel(
+            'Ashwin: ${[en.categoryProductivity, en.people, en.categoryHealth, en.goals].join(', ')}',
+          ),
+          findsOneWidget,
+        );
       }
     }
-    addTearDown(tester.view.reset);
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.tap(find.byKey(const Key('onboarding_knowledge_graph_continue')));
     expect(continued, 1);
   });
 
   testWidgets('falls back to localized You when givenName is blank (#19237)', (tester) async {
+    final es = lookupAppLocalizations(const Locale('es'));
+    expect(es.you, isNot(en.you));
     SharedPreferencesUtil().givenName = '   ';
     await tester.pumpWidget(MaterialApp(
       theme: buildOmiTheme(),
+      locale: const Locale('es'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [Locale('en')],
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: OnboardingKnowledgeGraphStep(onContinue: () {})),
     ));
     await tester.pumpAndSettle();
-    expect(find.text(en.you), findsOneWidget);
-    expect(find.text(en.noKnowledgeGraphYet), findsNothing);
+    expect(find.text(es.you), findsOneWidget);
+    expect(find.text(es.noKnowledgeGraphYet), findsNothing);
   });
 }

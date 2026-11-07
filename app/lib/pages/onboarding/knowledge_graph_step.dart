@@ -18,44 +18,41 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final name = SharedPreferencesUtil().givenName.trim();
-    return ColoredBox(
-      color: OmiColors.surface0,
-      child: OnboardingStep(
-        card: OnboardingCard(
-          content: [
-            Semantics(
-              header: true,
-              child: Text(
-                l10n.onboardingWhatIKnowAboutYouTitle,
-                textAlign: TextAlign.center,
-                style: OmiType.title1.copyWith(height: 1.2),
-              ),
-            ),
-            const SizedBox(height: OmiSpacing.lg),
-            OnboardingKnowledgePreview(
-              center: name.isEmpty ? l10n.you : name,
-              topics: [l10n.categoryProductivity, l10n.people, l10n.categoryHealth, l10n.goals],
-            ),
-            const SizedBox(height: OmiSpacing.lg),
-            Text(
-              l10n.onboardingWhatIKnowAboutYouDescription,
+    return OnboardingStep(
+      card: OnboardingCard(
+        content: [
+          Semantics(
+            header: true,
+            child: Text(
+              l10n.onboardingWhatIKnowAboutYouTitle,
               textAlign: TextAlign.center,
-              style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.35),
+              style: OmiType.title1.copyWith(height: 1.2),
             ),
-            const SizedBox(height: OmiSpacing.lg),
-          ],
-          footer: [
-            OmiButton(
-              key: const Key('onboarding_knowledge_graph_continue'),
-              label: l10n.continueButton,
-              expand: true,
-              onPressed: () {
-                OmiHaptics.selection();
-                onContinue();
-              },
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+          OnboardingKnowledgePreview(
+            center: name.isEmpty ? l10n.you : name,
+            topics: [l10n.categoryProductivity, l10n.people, l10n.categoryHealth, l10n.goals],
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+          Text(
+            l10n.onboardingWhatIKnowAboutYouDescription,
+            textAlign: TextAlign.center,
+            style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+        ],
+        footer: [
+          OmiButton(
+            key: const Key('onboarding_knowledge_graph_continue'),
+            label: l10n.continueButton,
+            expand: true,
+            onPressed: () {
+              OmiHaptics.selection();
+              onContinue();
+            },
+          ),
+        ],
       ),
     );
   }
