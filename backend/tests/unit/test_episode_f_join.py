@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from config import episodes as config
+from database.episode_timeline import recorded_candidates
 from database import episode_timeline
 from database import episodes as episodes_db
 from database.episodes import EpisodeConflict
@@ -462,12 +463,13 @@ def test_a_sync_attach_retried_after_lost_cas_asks_jev_once(store, monkeypatch, 
     assert len(asked) == 1, 'a retry must reuse the first answer, never ask Jev again'
 
 
-def test_a_synced_candidate_locked_after_intake_never_reaches_jev(store):
+def test_a_synced_candidate_locked_after_intake_never_reaches_jev(store, monkeypatch):
     # The intake snapshot was taken before the conversation was locked; the worker must ask the stored document.
     first = _first_episode(store)
     _store_row(store, 'c2', SECOND, minutes=12)
     row = store.rows[('users', UID, 'conversations', 'c2')]
     snapshot = dict(row)
+    monkeypatch.setattr(service, '_named_segments', lambda *a, **kw: pytest.fail('locked candidate was named'))
     row['is_locked'] = True
     span = conversation_span(snapshot)
     asked = []
@@ -657,8 +659,254 @@ def test_a_long_synced_candidate_names_at_most_the_people_read_limit(store):
     service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, c)
     assert asked, 'the candidate must reach Jev for the cap to matter'
     assert lookups and all(len(ids) <= config.F_JOIN_PEOPLE_READ_LIMIT for ids in lookups)
-    assert sorted(lookups[-1]) == sorted(f'p{i}' for i in range(config.F_JOIN_PEOPLE_READ_LIMIT))
+    # The complete synced/late decision reserves two name reads per side within its 24-read budget.
+    assert sorted(lookups[-1]) == ['p0', 'p1']
     new_speech = asked[0].split('NEW speech (full transcript):\n', 1)[1]
     assert len(new_speech) <= config.F_JOIN_NEW_CHARS
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['id'] == first['id'] and 'c2' in episode['conversation_ids']
+
+
+@pytest.mark.parametrize(
+    'changes,missing',
+    [
+        ({'is_locked': True}, None),
+        ({'deferred': True}, None),
+        ({'processing_deferred': True}, None),
+        ({'discarded': True}, None),
+        ({'deleted': True}, None),
+        ({'owner_uid': 'someone-else'}, None),
+        ({'uid': 'someone-else'}, None),
+        ({'data_protection_level': 'local'}, None),
+        ({'processing_state': 'local_pending'}, None),
+        ({'summary_blocked_reason': 'local_only'}, None),
+        ({'client_processing': True}, None),
+        ({'terminal_no_derived_effects': True}, None),
+        ({'sync_processing_hold': {'held': True}}, None),
+        ({}, 'is_locked'),
+        ({}, 'discarded'),
+        ({}, 'data_protection_level'),
+        ({}, 'status'),
+    ],
+)
+def test_synced_candidate_processing_exclusions_keep_control_before_naming(store, monkeypatch, changes, missing):
+    _store_row(store, 'candidate', SECOND, minutes=12)
+    row = dict(store.rows[('users', UID, 'conversations', 'candidate')], **changes)
+    if missing:
+        row.pop(missing)
+    control = []
+    monkeypatch.setattr(service, 'attach_recorded', lambda *a, **kw: control.append(kw) or {'id': 'control'})
+
+    def forbidden(*a, **kw):
+        pytest.fail('excluded candidate reached F lookup, naming or Jev')
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', forbidden)
+    monkeypatch.setattr(service, '_named_segments', forbidden)
+    monkeypatch.setattr(f_join, 'settle', forbidden)
+    result = service._attach_recorded_synced(UID, 'candidate', row, T0, T0, _c(store, minutes=13, ask=forbidden))
+    assert result == {'id': 'control'} and control == [{}]
+
+
+def _bounded_query_fake(store, monkeypatch, reads):
+    """Model only this single-field ordered range; count every returned document, including overflow."""
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreCollection
+
+    class Query:
+        def __init__(self, path):
+            self.path, self.filters, self.fields = path, [], ()
+            self.count, self.direction = None, None
+
+        def where(self, *, filter):
+            assert filter.field_path == 'started_at' and filter.op_string in {'>=', '<='}
+            self.filters.append(filter)
+            return self
+
+        def order_by(self, field, *, direction):
+            assert field == 'started_at'
+            self.direction = direction
+            return self
+
+        def select(self, fields):
+            assert fields == episode_timeline.FIELDS
+            self.fields = fields
+            return self
+
+        def limit(self, count):
+            assert count == episode_timeline.F_JOIN_CANDIDATE_LIMIT == 2
+            self.count = count
+            return self
+
+        def stream(self, transaction=None):
+            assert self.count is not None and self.direction == 'DESCENDING'
+            if transaction:
+                transaction._assert_read_allowed()
+            rows = [
+                (path, row)
+                for path, row in store.rows.items()
+                if path[:-1] == self.path
+                and all(
+                    row['started_at'] >= f.value if f.op_string == '>=' else row['started_at'] <= f.value
+                    for f in self.filters
+                )
+            ]
+            rows.sort(key=lambda item: item[1]['started_at'], reverse=True)
+            result = []
+            for path, row in rows[: self.count]:
+                reads.append(path)
+                data = {k: v for k, v in row.items() if k in self.fields}
+                result.append(SimpleNamespace(id=path[-1], to_dict=lambda data=data: dict(data)))
+            return iter(result)
+
+    monkeypatch.setattr(StrictFirestoreCollection, 'where', lambda ref, **kw: Query(ref._path).where(**kw))
+    # The store fixture replaces the ordinary query seam. Rebind the actual function under test.
+    original = episode_timeline.recorded_candidates
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', recorded_candidates)
+    return original
+
+
+@pytest.mark.parametrize('owner_reuse,optimizations', [('true', 'true'), ('false', 'true'), ('true', 'false')])
+@pytest.mark.parametrize('answer', [0.05, 0.9, None, TimeoutError('slow Jev')])
+def test_synced_f_read_and_jev_budget_includes_close_and_all_attach_retries(
+    store, monkeypatch, owner_reuse, optimizations, answer
+):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    first = _first_episode(store)
+    # Seed retained live members directly: recorded attachment marks members recovered,
+    # which intentionally takes the reconciliation/control branch instead of this F close.
+    owner = store.rows[('users', UID, 'episodes', first['id'])]
+    for cid, minute in [('c3', 2), ('c4', 3)]:
+        _store_row(store, cid, FIRST, minutes=minute)
+        owner['conversation_ids'].append(cid)
+        owner['member_activity'][cid] = T0 + timedelta(minutes=minute + 1)
+    owner['last_activity_at'] = T0 + timedelta(minutes=4)
+    assert not owner.get('recovered_conversation_ids')
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    for cid in ('c2', 'c4'):
+        store.rows[('users', UID, 'conversations', cid)]['transcript_segments'] = [
+            {'text': SECOND, 'start': i, 'end': i + 1, 'person_id': f'{cid}-p{i}', 'is_user': False} for i in range(12)
+        ]
+    reads, asked, name_reads, placements = [], [], [], []
+    read = StrictFirestoreDocument.get
+
+    def counted(ref, *a, **kw):
+        reads.append(ref.path)
+        if ref.path[2] == 'people':
+            assert kw.pop('field_paths') == ['name']
+            name_reads.append(ref.path[-1])
+        return read(ref, *a, **kw)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    _bounded_query_fake(store, monkeypatch, reads)
+    monkeypatch.setenv('EPISODE_ATTACH_OWNER_REUSE_ENABLED', owner_reuse)
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
+    monkeypatch.setattr(service.sync_attach, 'hidden_conversation', lambda *a, **kw: False)
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')  # Include a cold authority read, not a cached shadow.
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: False)
+    monkeypatch.setattr(service.episode_groups, 'canonical_row', lambda *a, **kw: None)
+    monkeypatch.setattr(service.episode_groups, 'join_duplicates', lambda *a, **kw: None)
+    monkeypatch.setattr(service.episode_attach_memo, 'matches', lambda *a, **kw: False)
+    monkeypatch.setattr(service, '_repoint_sync_donors', lambda *a, **kw: None)
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped')
+
+    # Only control placement/recovery is stubbed: F's queries, naming, predecessor, recheck,
+    # service close and the transaction (including member docs and its query) are real.
+    def place(*a, **kw):
+        placements.append(kw)
+        if len(placements) < 3:
+            raise EpisodeConflict('placement_lost_cas')
+        return {**first, 'recovered_conversation_ids': ['c2']}
+
+    monkeypatch.setattr(service, 'attach_recorded', place)
+
+    def ask(*a, **kw):
+        asked.append(kw)
+        if isinstance(answer, Exception):
+            raise answer
+        return None if answer is None else SimpleNamespace(noul=lambda name: answer)
+
+    c = _c(store, minutes=13, ask=ask)
+    c.people_names = None
+    monkeypatch.setattr(
+        service.users_db, 'get_people_by_ids', lambda *a, **kw: pytest.fail('F used unbounded People projections')
+    )
+    assert service._attach_synced(UID, 'c2', row, c) == 'recorded'
+    assert len(placements) == 3 and len(asked) == 1, reads
+    assert asked[0]['max_attempts'] == 1
+    assert len(name_reads) == 4
+    assert sum(pid.startswith('c2-') for pid in name_reads) == 2
+    assert sum(pid.startswith('c4-') for pid in name_reads) == 2
+    assert len(reads) <= 24, reads
+    if answer == 0.05:
+        assert store.rows[('users', UID, 'episodes', first['id'])]['status'] == 'closed'
+        assert store.transactions[-1]._max_attempts == 1
+        assert placements == [{'new_occasion': True}] * 3
+    # A separate decision with the same collaborators is not suppressed by the prior decision's cache.
+    assert c.extras == {}
+
+
+@pytest.mark.parametrize('case', ['crowded_timeline', 'many_members', 'recovered_owner', 'redirected_owner'])
+def test_synced_f_unbounded_owners_keep_control_without_jev(store, monkeypatch, case):
+    first = _first_episode(store)
+    owner = store.rows[('users', UID, 'episodes', first['id'])]
+    _store_row(store, 'c2', SECOND, minutes=12)
+    if case == 'crowded_timeline':
+        store.rows[('users', UID, 'episodes', 'other')] = {**owner, 'started_at': T0 + timedelta(minutes=1)}
+    elif case == 'many_members':
+        owner['conversation_ids'] = ['c1', 'a', 'b', 'c']
+    elif case == 'recovered_owner':
+        owner['recovered_conversation_ids'] = ['c1']
+    else:
+        owner['recorded_merged_into'] = 'redirect'
+    reads, control = [], []
+    _bounded_query_fake(store, monkeypatch, reads)
+    monkeypatch.setattr(service, 'attach_recorded', lambda *a, **kw: control.append(kw) or first)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    c = _c(store, minutes=13, ask=lambda *a, **kw: pytest.fail('unbounded decision asked Jev'))
+    service._attach_recorded_synced(UID, 'c2', row, row['started_at'], row['finished_at'], c)
+    assert control == [{}] and len(reads) <= 2
+
+
+@pytest.mark.parametrize('race', ['members', 'recovered'])
+def test_synced_f_close_rechecks_read_budget_inside_the_transaction(store, monkeypatch, race):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    first = _first_episode(store)
+    owner = store.rows[('users', UID, 'episodes', first['id'])]
+    if race == 'members':
+        owner['conversation_ids'] = ['c1', 'a', 'b', 'c']
+    else:
+        owner['recovered_conversation_ids'] = ['c1']
+    reads = []
+    read = StrictFirestoreDocument.get
+
+    def counted(ref, *a, **kw):
+        reads.append(ref.path)
+        return read(ref, *a, **kw)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    with pytest.raises(EpisodeConflict, match='f_close_read_budget'):
+        episodes_db.close_episode(
+            UID, first['id'], 'moved_on', closed_at=T0 + timedelta(minutes=12), firestore_client=store, synced_f=True
+        )
+    assert len(reads) == 3
+    assert not store.transactions[-1].has_written
+    assert store.transactions[-1]._max_attempts == 1
+
+
+def test_synced_f_owner_read_does_not_follow_a_racing_redirect(store, monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    first = _first_episode(store)
+    store.rows[('users', UID, 'episodes', first['id'])]['recorded_merged_into'] = 'other'
+    reads = []
+    read = StrictFirestoreDocument.get
+
+    def counted(ref, *a, **kw):
+        reads.append(ref.path)
+        return read(ref, *a, **kw)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    assert episodes_db.get_episode(UID, first['id'], firestore_client=store, follow_redirects=False) is None
+    assert len(reads) == 1

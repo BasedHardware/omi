@@ -1068,6 +1068,7 @@ _add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start':
 _add(
     DriverEntry(
         'database.episode_timeline.check_window',
+        domains={'candidate_limit': [128, 2]},
         base={
             'transaction': ref_transaction(),
             'uid': UID,
@@ -1082,6 +1083,7 @@ _add(
 _add(
     DriverEntry(
         'database.episode_timeline.recorded_candidates',
+        domains={'candidate_limit': [128, 2]},
         base={'uid': UID, 'started': T0, 'finished': T1},
         neutrals={'transaction': (None, 'same query shape inside or outside a transaction')},
     )

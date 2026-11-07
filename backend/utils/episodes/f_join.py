@@ -175,6 +175,8 @@ def previous_transcript(
     conversation_id: str,
     pending: Mapping[str, Any],
     c: Any,
+    *,
+    people_read_limit: int = F_JOIN_PEOPLE_READ_LIMIT,
 ) -> str:
     """Read one retained predecessor, rechecking processing visibility before decoding or naming.
 
@@ -200,7 +202,7 @@ def previous_transcript(
     selected = _transcript_tail(segments)
     person_ids = list(
         dict.fromkeys(str(s['person_id']) for s in selected if s.get('person_id') and not s.get('is_user'))
-    )[:F_JOIN_PEOPLE_READ_LIMIT]
+    )[:people_read_limit]
     names = {}
     if person_ids:
         if c.people_names is not None:
@@ -367,6 +369,7 @@ def settle(
     started_at: datetime,
     member: bool = True,
     candidate_row: Optional[Mapping[str, Any]] = None,
+    people_read_limit: int = F_JOIN_PEOPLE_READ_LIMIT,
 ) -> policy.Boundary:
     """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join.
 
@@ -395,7 +398,7 @@ def settle(
         metrics.record_boundary('f_no_answer')
         return keep
     try:
-        previous = previous_transcript(uid, episode, conversation_id, pending, c)
+        previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
         metrics.record_boundary('f_no_answer')

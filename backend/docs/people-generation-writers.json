@@ -76,7 +76,8 @@
   "backend/utils/conversations/meeting_context_pack.py:load_people_documents": "b47c34d777398cbf2e60965588eb4eae5a08547cdf729866eee87f1eecf61b37",
   "backend/utils/dream_prescan.py:scan_people": "cfc15bed7f732dc72f60efe1d0988db7fa68aa84d4db700ead8bfeba67a8d7cb",
   "backend/utils/dream_seed.py:load": "1cf9710ae0a0d0e1a33cdfcf88cac0e74da7178790ecc8afcca8cbea7d4dc828",
-  "backend/utils/episodes/f_join.py:previous_transcript": "188321dfa0f26578cc8e7d7a205473f97317aff1d418c06e6f3d5f74a2999c6c",
+  "backend/utils/episodes/f_join.py:previous_transcript": "c07dceea3b8d84105d50e477c09ce93de81ed737e1bd385ee7f9a6781aa141a3",
+  "backend/utils/episodes/service.py:_named_segments": "60ddfae9ffe73b9dbc8f1d16c6f5ee0551459c5cc3cb9360c3e2ff640fbd1c19",
   "backend/utils/person_evidence_backfill.py:backfill_person": "dc1cf034881b096a6697c9f4d3529644a95e6a32ea3ce03d10b59b1c5dd3f327",
   "backend/utils/person_evidence_backfill.py:backfill_person.merge": "f7c24335ff408ff637948f237f244e309579f97e9b914f75bd4af6bcf1a7fb9f"
 }
