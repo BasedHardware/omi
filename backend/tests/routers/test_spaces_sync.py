@@ -2,10 +2,14 @@
 
 import base64
 import json
+import os
+import subprocess
+import sys
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -343,12 +347,50 @@ def test_replay_survives_new_store_and_concurrent_duplicate(api):
         results = list(executor.map(lambda _: apply(), range(2)))
     assert sorted(replayed for _, replayed in results) == [False, True]
     assert api.cell.head(api.sid)[0] == 2
-    # Separate pool/store proves this is persisted replay state, not process memory.
+    # Recreate the pool/store, then cross a process boundary to exclude module caches too.
     replacement = CellStore(Pool(cells_dsn(), size=1))
     try:
         assert apply_space_mutation(replacement, api.sid, **kwargs)[1] is True
     finally:
         replacement.pool.close()
+    child_env = dict(
+        os.environ,
+        OMI_B3_REPLAY_DSN=cells_dsn(),
+        OMI_B3_REPLAY_SPACE=api.sid,
+        OMI_B3_REPLAY_MUTATION=json.dumps(kwargs),
+    )
+    replay = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            """
+import json
+import os
+from database.cells.store import CellStore
+from database.cells.mutations import apply_space_mutation
+from database.jobstore.connection import Pool
+pool = Pool(os.environ['OMI_B3_REPLAY_DSN'], size=1)
+try:
+    response, replayed = apply_space_mutation(
+        CellStore(pool), os.environ['OMI_B3_REPLAY_SPACE'],
+        **json.loads(os.environ['OMI_B3_REPLAY_MUTATION'])
+    )
+    assert replayed
+    print(json.dumps(response))
+finally:
+    pool.close()
+""",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert replay.returncode == 0, replay.stderr
+    assert json.loads(replay.stdout)['seq'] == 2
+    assert json.loads(replay.stdout)['replayed'] is True
+    assert api.cell.head(api.sid)[0] == 2
 
 
 def test_rate_limits_and_contention_mapping(api, monkeypatch):
