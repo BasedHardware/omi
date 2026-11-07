@@ -74,6 +74,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     List<(int, int)>? transcriptSpans,
     int? conversationStartSeconds,
     String? failClosedReason,
+    bool allowTranscriptCoverageFallback = false,
   }) async {
     final generation = _sessionGeneration;
     final useCommits = await ClientRefactorFlags.custodyRelease();
@@ -104,7 +105,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
       // refactor: superseded by CaptureCommittedJournal when custody_capture_committed_release=true
       // Live custom STT sends suggested_transcript segments from the client's primary STT socket
       // without server audio-frame receipts, so verified transcript span coverage still releases it.
-      final isCovered = committed || ((!useCommits || SharedPreferencesUtil().useCustomStt) && legacyCovered);
+      final isCovered = useCommits ? committed || (allowTranscriptCoverageFallback && legacyCovered) : legacyCovered;
       if (isCovered) {
         wal.status = WalStatus.synced;
         wal.syncedAt = nowSeconds;

@@ -111,22 +111,44 @@ void main() {
   });
   test('live custom STT releases covered phone backups without server frame receipts and keeps uncovered ones', () async {
     await setRefactorFlags({'custody_capture_committed_release': true});
-    await SharedPreferencesUtil().saveCustomSttConfig(
-      const CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'gemini-key'),
-    );
-    addTearDown(() => SharedPreferencesUtil().saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.omi)));
     final ledger = await custodyLedger();
     final covered = wal();
     final uncovered = wal()
       ..timerStart = 500
       ..filePath = 'audio_phone_pcm16_16000_1_500.bin';
     ledger.testWals = [covered, uncovered];
-    await ledger.confirmSessionTranscription(100, 'conversation', transcriptSpans: [(95, 105)]);
+    await ledger.confirmSessionTranscription(
+      100,
+      'conversation',
+      transcriptSpans: [(95, 105)],
+      allowTranscriptCoverageFallback: true,
+    );
     expect(covered.status, WalStatus.synced);
     expect(covered.syncedAt, greaterThan(0));
     expect(covered.keptForTranscriptRecovery, isFalse);
     expect(uncovered.status, WalStatus.miss);
     expect(uncovered.keptForTranscriptRecovery, isTrue);
+  });
+  test('delayed normal-STT confirmation ignores current custom STT preference and flag-off ignores receipts', () async {
+    await setRefactorFlags({'custody_capture_committed_release': true});
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'gemini-key'),
+    );
+    addTearDown(() => SharedPreferencesUtil().saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.omi)));
+    final ledger = await custodyLedger();
+    final normalSessionWal = wal();
+    ledger.testWals = [normalSessionWal];
+    await ledger.confirmSessionTranscription(100, 'conversation', transcriptSpans: [(95, 105)]);
+    expect(normalSessionWal.status, WalStatus.miss);
+    expect(normalSessionWal.keptForTranscriptRecovery, isTrue);
+
+    await setRefactorFlags({'custody_capture_committed_release': false});
+    final receiptOnlyWal = wal();
+    ledger.testWals = [receiptOnlyWal];
+    await ledger.captureCommits.record('owner', receipt(0, 100));
+    await ledger.confirmSessionTranscription(100, 'conversation', transcriptSpans: [(500, 600)]);
+    expect(receiptOnlyWal.status, WalStatus.miss);
+    expect(receiptOnlyWal.keptForTranscriptRecovery, isTrue);
   });
   for (final flush in [false, true]) {
     test('index save failure reverts committed release before retention (flush=$flush)', () async {

@@ -963,7 +963,7 @@ class CaptureController extends ChangeNotifier
   /// True when the just-finished session crossed a socket interruption. A
   /// later transcript proves the repaired socket worked, but not that audio
   /// from before the reconnect arrived, so its WAL must still drain.
-  bool _pendingAutoSyncNeedsRepair = false;
+  bool _pendingAutoSyncNeedsRepair = false, _pendingAutoSyncCustomStt = false;
 
   /// Future tracking the in-progress _finalizeAndStampSession(), so the next
   /// coordinated transfer wake cannot run before the durable stamp is ready.
@@ -3974,14 +3974,12 @@ class CaptureController extends ChangeNotifier
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
       _pendingAutoSyncConversationId = event.memory.id;
       _pendingAutoSyncNeedsRepair = _sessionTransportInterrupted;
+      _pendingAutoSyncCustomStt = _socket?.customSttMode == true;
       _sessionTransportInterrupted = false;
-
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
       // Store the future so the coordinated transfer wake waits for the stamp.
       _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
-
       _resetStateVariables();
-
       // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
       _autoSyncFallbackTimer?.cancel();
       _autoSyncFallbackTimer = _scheduling.once(const Duration(seconds: 30), () {
@@ -3991,7 +3989,7 @@ class CaptureController extends ChangeNotifier
           final needsRepair = _pendingAutoSyncNeedsRepair;
           _pendingAutoSyncSessionStart = 0;
           _pendingAutoSyncConversationId = null;
-          _pendingAutoSyncNeedsRepair = false;
+          _pendingAutoSyncNeedsRepair = _pendingAutoSyncCustomStt = false;
           Logger.debug(
             'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)',
           );
@@ -4017,12 +4015,13 @@ class CaptureController extends ChangeNotifier
       _autoSyncFallbackTimer?.cancel();
       if (_pendingAutoSyncSessionStart > 0) {
         final sessionStart = _pendingAutoSyncSessionStart;
-        final needsRepair = _pendingAutoSyncNeedsRepair;
+        final (needsRepair, customStt) = (_pendingAutoSyncNeedsRepair, _pendingAutoSyncCustomStt);
         _pendingAutoSyncSessionStart = 0;
         _pendingAutoSyncConversationId = null;
-        _pendingAutoSyncNeedsRepair = false;
+        _pendingAutoSyncNeedsRepair = _pendingAutoSyncCustomStt = false;
         Logger.debug('Conversation ${event.memory.id} closed — confirming WAL retention (needsRepair=$needsRepair)');
-        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals, needsRepair: needsRepair));
+        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals,
+            needsRepair: needsRepair, allowTranscriptCoverageFallback: customStt));
       }
       return;
     }
@@ -4157,21 +4156,17 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _clearSessionLocation();
-    final (segmentArrivals, needsRepair) = (Map<String, int>.of(_segmentArrivals), _sessionTransportInterrupted);
+    final (segmentArrivals, needsRepair, customStt) = (
+      Map<String, int>.of(_segmentArrivals), _sessionTransportInterrupted, _socket?.customSttMode ?? _preferences.customSttConfig.isEnabled);
     _sessionTransportInterrupted = false;
     _resetStateVariables();
     final confirmedProcessing = _firstCaptureProcess;
-    final Future<InProgressProcessOutcome> request;
-    if (_processInProgressOutcomeOverride != null) {
-      request = _processInProgressOutcomeOverride!();
-    } else if (_processInProgressConversationOverride != null) {
-      request = _processInProgressConversationOverride!().then(
-        (result) =>
-            InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null),
-      );
-    } else {
-      request = processInProgressConversationOutcome();
-    }
+    final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
+        ? _processInProgressOutcomeOverride!()
+        : _processInProgressConversationOverride != null
+            ? _processInProgressConversationOverride!().then(
+                (result) => InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
+            : processInProgressConversationOutcome();
     if (confirmedProcessing) _lastProcessRequest = request.then((outcome) => outcome.response);
     _processInFlight = request.then((_) {}, onError: (_) {});
     request.then<void>((outcome) async {
@@ -4188,7 +4183,8 @@ class CaptureController extends ChangeNotifier
         await phoneSync.stampConversationId(sessionStart, conversationId);
         final saved = outcome.response?.conversation;
         if (saved != null && phoneSync is LocalWalSyncImpl) {
-          await _confirmSessionTranscript(sessionStart, saved, segmentArrivals, needsRepair: needsRepair);
+          await _confirmSessionTranscript(sessionStart, saved, segmentArrivals,
+              needsRepair: needsRepair, allowTranscriptCoverageFallback: customStt);
         } else {
           _autoSyncSessionWals();
         }
@@ -4252,6 +4248,7 @@ class CaptureController extends ChangeNotifier
     ServerConversation conversation,
     Map<String, int> segmentArrivals, {
     bool needsRepair = false,
+    bool allowTranscriptCoverageFallback = false,
   }) {
     List<(int, int)>? spans;
     int? origin;
@@ -4287,13 +4284,11 @@ class CaptureController extends ChangeNotifier
         }
       }
     }
-    return _confirmSessionWalsRetained(
-      sessionStartSeconds,
-      conversation.id,
-      transcriptSpans: spans,
-      conversationStartSeconds: origin,
-      failClosedReason: failClosedReason,
-    );
+    return _confirmSessionWalsRetained(sessionStartSeconds, conversation.id,
+        transcriptSpans: spans,
+        conversationStartSeconds: origin,
+        failClosedReason: failClosedReason,
+        allowTranscriptCoverageFallback: allowTranscriptCoverageFallback);
   }
 
   Future<void> _confirmSessionWalsRetained(
@@ -4302,6 +4297,7 @@ class CaptureController extends ChangeNotifier
     List<(int, int)>? transcriptSpans,
     int? conversationStartSeconds,
     String? failClosedReason,
+    bool allowTranscriptCoverageFallback = false,
   }) async {
     final token = _sessionOwner?.token;
     final phone = _wal.getSyncs().phone;
@@ -4318,13 +4314,11 @@ class CaptureController extends ChangeNotifier
     var kept = 0;
     if (phone is LocalWalSyncImpl) {
       try {
-        final outcome = await phone.confirmSessionTranscription(
-          sessionStartSeconds,
-          conversationId,
-          transcriptSpans: transcriptSpans,
-          conversationStartSeconds: conversationStartSeconds,
-          failClosedReason: failClosedReason,
-        );
+        final outcome = await phone.confirmSessionTranscription(sessionStartSeconds, conversationId,
+            transcriptSpans: transcriptSpans,
+            conversationStartSeconds: conversationStartSeconds,
+            failClosedReason: failClosedReason,
+            allowTranscriptCoverageFallback: allowTranscriptCoverageFallback);
         kept = outcome.kept;
       } catch (e) {
         Logger.debug('_confirmSessionWalsRetained error: $e');

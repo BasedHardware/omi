@@ -574,8 +574,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 destructive: true,
               );
               if (!confirmed) return false;
+              final firmwareVersion = context.mounted ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+              final verifyDeviceListing = block.wals.any((w) => w.storage == WalStorage.sdcard);
               for (final item in List<Wal>.of(block.wals)) {
                 await syncProvider.deleteWal(item);
+              }
+              if (verifyDeviceListing) {
+                await syncProvider.discoverDeviceWals(firmwareVersion: firmwareVersion);
               }
               return !block.wals.any(
                 (item) => syncProvider.allWals.any((w) => w.id == item.id && w.storage == item.storage),
@@ -1036,7 +1041,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           if (confirmed && context.mounted) {
             final pendingBefore = provider.pendingDeletableWals.length;
             await clearActions.pending();
-            if (context.mounted && (pendingBefore == 0 || provider.pendingDeletableWals.length < pendingBefore)) {
+            if (context.mounted && provider.pendingDeletableWals.length < pendingBefore) {
               OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
             }
           }
@@ -1053,7 +1058,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           if (confirmed && context.mounted) {
             final totalBefore = provider.clearableWalsCount;
             await clearActions.all();
-            if (context.mounted && (totalBefore == 0 || provider.clearableWalsCount < totalBefore)) {
+            if (context.mounted && provider.clearableWalsCount < totalBefore) {
               OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }
