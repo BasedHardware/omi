@@ -183,6 +183,23 @@ void main() {
     expect(provider.conversations.map((c) => c.id), contains('c1'));
   });
 
+  test('in-progress placeholder outside the active date filter is not kept on the filtered list', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.in_progress), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.selectedStartDate = DateTime(2020, 1, 1);
+    provider.selectedEndDate = DateTime(2020, 1, 1);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.processingConversations, isEmpty);
+  });
+
   test('refresh clears the processing card when lifecycle rolls back to in progress', () async {
     final provider = ConversationProvider(
       conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),

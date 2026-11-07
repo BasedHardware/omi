@@ -132,7 +132,11 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       // The person just ended this conversation, and the server still reads it as in progress until
       // the Process Now request lands. Keep the placeholder through that gap, so the Home row shows at
       // once; its own timeout still expires it if the request never lands.
-      if (current != null && current.status == ConversationStatus.in_progress) return false;
+      if (current != null &&
+          current.status == ConversationStatus.in_progress &&
+          _matchesActiveConversationFilters(current)) {
+        return false;
+      }
       if (current != null && _isActiveProcessingStatus(current.status) && _matchesActiveConversationFilters(current)) {
         // A real row supersedes the local attempt, including off-page rows.
         reconciled.add(current);
