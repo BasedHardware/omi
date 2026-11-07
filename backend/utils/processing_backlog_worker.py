@@ -197,7 +197,8 @@ async def _process(uid, item) -> AttemptOutcome:
 async def _roll(uid: str, job: dict) -> dict:
     """An Unlimited owner's earlier-month tap continues on its own; anything else stays parked."""
     current = await run_blocking(db_executor, funded_processing.allowance, uid)
-    if not current.managed or not rolls(job, funded_processing.capacity(current)[0]):
+    remaining = funded_processing.capacity(current)[0]
+    if not current.managed or not rolls(job, remaining, allowance=current):
         return job
     rolled = await run_blocking(
         db_executor, partial(store.roll, uid, period=funded_processing.period_id(), cutoff=time.time())
@@ -511,7 +512,12 @@ async def subscription_changed_async(uid: str, event: dict, stripe_subscription:
     previous_status = ((event.get('data') or {}).get('previous_attributes') or {}).get('status')
     created = event.get('type') == 'customer.subscription.created'
     purchased = created and is_paid_plan(current.plan)
-    if previous_status == 'trialing' or purchased or allowance_increased(previous, current):
+    renewal_recovered = (
+        previous_status in ('past_due', 'unpaid', 'incomplete', 'paused')
+        and status == 'active'
+        and is_paid_plan(current.plan)
+    )
+    if previous_status == 'trialing' or purchased or renewal_recovered or allowance_increased(previous, current):
         await upgrade_async(
             uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'), status=status or ''
         )
