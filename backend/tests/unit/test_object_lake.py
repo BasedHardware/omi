@@ -6,10 +6,11 @@ import zlib
 from unittest.mock import patch
 
 import pytest
+from google.api_core.exceptions import AlreadyExists
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalStorageClient, LocalBlob
 
@@ -59,6 +60,74 @@ def test_roundtrip_and_unconditional_encryption(storage, monkeypatch):
 
 def test_empty_plaintext(storage):
     assert lake.get_space_object(put(b'')) == b''
+
+
+def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
+    bucket, store = storage
+    upload = LocalBlob.upload_from_string
+
+    def checked_upload(blob, *args, **kwargs):
+        candidate_id = hashlib.sha256(f'{bucket.name}/{blob.name}'.encode()).hexdigest()
+        row = store.rows[('lake_upload_candidates', candidate_id)]
+        assert set(row) == {'bucket', 'key', 'created_at'}
+        assert row['bucket'] == bucket.name and row['key'] == blob.name
+        assert row['created_at'].tzinfo is not None
+        return upload(blob, *args, **kwargs)
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', checked_upload)
+    first = put()
+    candidates = {path: row.copy() for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'}
+    assert put() == first
+    assert {path: row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'} == candidates
+
+
+@pytest.mark.parametrize('operation', ['get', 'create'])
+def test_candidate_record_failure_prevents_upload(storage, monkeypatch, operation):
+    bucket, _ = storage
+    original = getattr(StrictFirestoreDocument, operation)
+
+    def fail_candidate(document, *args, **kwargs):
+        if document.path[0] == 'lake_upload_candidates':
+            raise RuntimeError('synthetic candidate store failure')
+        return original(document, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, operation, fail_candidate)
+    with pytest.raises(lake.LakeFetchError, match='upload unavailable'):
+        put()
+    assert not list(bucket.list_blobs(prefix='v1/spaces/'))
+
+
+def test_concurrent_candidate_create_is_idempotent(storage, monkeypatch):
+    _, store = storage
+    original = StrictFirestoreDocument.create
+
+    def concurrent_create(document, data):
+        original(document, data)
+        if document.path[0] == 'lake_upload_candidates':
+            raise AlreadyExists('concurrent intent already committed')
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'create', concurrent_create)
+    ref = put()
+    assert lake.get_space_object(ref)
+    assert len([path for path in store.rows if path[0] == 'lake_upload_candidates']) == 1
+
+
+def test_ambiguous_upload_retains_durable_candidate(storage, monkeypatch):
+    bucket, store = storage
+    upload = LocalBlob.upload_from_string
+
+    def lost_response(blob, *args, **kwargs):
+        upload(blob, *args, **kwargs)
+        raise RuntimeError('response lost after upload')
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', lost_response)
+    with pytest.raises(lake.LakeFetchError):
+        put()
+    blobs = list(bucket.list_blobs(prefix='v1/spaces/'))
+    assert len(blobs) == 1
+    assert any(
+        row.get('key') == blobs[0].name for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'
+    )
 
 
 def legacy_object(bucket, plaintext=b'legacy transcript'):

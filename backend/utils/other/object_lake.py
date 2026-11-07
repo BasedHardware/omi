@@ -18,7 +18,7 @@ import zlib
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap, aes_key_wrap
-from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
 
 from config import object_lake as config
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -217,6 +217,10 @@ def put_space_object(
     try:
         blob = _lake_bucket().blob(key)
         blob.metadata = stamp
+        # Write-ahead intent survives a refused replay, an ambiguous upload
+        # result or worker loss before the pointer commits. Never self-delete:
+        # another writer may already reference this content-addressed name.
+        _record_upload_candidate(config.bucket(), key)
         try:
             blob.upload_from_string(payload, content_type=content_type, if_generation_match=0)
         except PreconditionFailed:
@@ -242,6 +246,24 @@ def put_space_object(
     except Exception:
         raise LakeFetchError('Lake upload unavailable') from None
     return LakeObjectRef(config.bucket(), key, digest, len(payload), data_class, keys.active_version)
+
+
+def _record_upload_candidate(bucket: str, key: str) -> None:
+    """Durable discovery for C3's janitor, not authorization to delete an object.
+
+    Entries deliberately survive successful commits too: the janitor must
+    establish absence of live AND historical references under a writer fence
+    before removing any object. No TTL may discard an unresolved candidate.
+    """
+    candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
+    candidate = space_keys.space_key_firestore_client().collection('lake_upload_candidates').document(candidate_id)
+    if candidate.get().exists:
+        return
+    try:
+        candidate.create({'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
+    except AlreadyExists:
+        # A concurrent writer has already made the same intent durable.
+        pass
 
 
 def _assert_owner_write_allowed(space_id):
