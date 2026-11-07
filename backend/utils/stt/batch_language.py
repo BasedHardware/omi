@@ -399,16 +399,17 @@ def resolve_language(
     return decision
 
 
-def select_decision(language, decision, selector, *, user_language=None):
+def user_language_forces_multilingual(user_language: str | None) -> bool:
     norm_user_lang = normalized_stt_language(user_language) if user_language else ''
-    if norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang):
-        selected = selector(language)
-        from utils.batch_pipeline.language_metrics import record_route
+    return bool(norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang))
 
-        record_route('prerecorded', decision.language, 'parakeet' if selected[0] == 'parakeet' else 'multilingual')
-        return selected
 
-    resolved = decision.language if decision.parakeet_safe else language
+def select_decision(language, decision, selector, *, user_language=None):
+    resolved = (
+        decision.language
+        if decision.parakeet_safe and not user_language_forces_multilingual(user_language)
+        else language
+    )
     selected = selector(resolved)
     from utils.batch_pipeline.language_metrics import record_route
 
@@ -420,9 +421,10 @@ def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None
     """Return the final provider before a sync segment's dispatch/accounting."""
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
-    norm_user_lang = normalized_stt_language(user_language) if user_language else ''
-    if norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang):
-        return selector(language)
+    if user_language_forces_multilingual(user_language):
+        return select_decision(
+            language, LanguageDecision('und', 0.0, 'unavailable'), selector, user_language=user_language
+        )
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
@@ -445,9 +447,10 @@ def probe_wav_from_reader(source):
 def resolve_url(language, url, *, selector, user_language=None):
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
-    norm_user_lang = normalized_stt_language(user_language) if user_language else ''
-    if norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang):
-        return selector(language)
+    if user_language_forces_multilingual(user_language):
+        return select_decision(
+            language, LanguageDecision('und', 0.0, 'unavailable'), selector, user_language=user_language
+        )
     try:
         chunks, size = [], 0
         with httpx.Client(timeout=httpx.Timeout(10, connect=2)) as client:

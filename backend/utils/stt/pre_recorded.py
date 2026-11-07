@@ -1314,10 +1314,9 @@ def prerecorded_from_bytes(
     user_language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    from utils.stt.batch_language import LanguageDecision, resolve_language, select_decision
+    from utils.stt.batch_language import LanguageDecision, resolve_language, select_decision, user_language_forces_multilingual
 
-    norm_user_lang = normalized_stt_language(user_language) if user_language else ''
-    if norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang):
+    if user_language_forces_multilingual(user_language):
         decision = LanguageDecision('und', 0.0, 'unavailable')
         resolved = language
     else:
