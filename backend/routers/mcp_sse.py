@@ -10,11 +10,13 @@ public seams existing tests and integrations rely on.
 """
 
 import logging
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional, cast
 
 import firebase_admin.auth
 from fastapi import APIRouter, Form, Header, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 import database.action_items as action_items_db
 import database.chat as chat_db
@@ -49,10 +51,13 @@ from utils.mcp_server.errors import (  # noqa: F401 — compat re-exports
     authorization_denied_error,
 )
 from utils.mcp_server.errors import _authorization_denied_error  # noqa: F401
+from utils.executors import critical_executor, db_executor, run_blocking
+from utils.other.endpoints import check_rate_limit_inline_fail_closed
 from utils.mcp_server.metadata import (  # noqa: F401 — compat re-exports
     MCP_AUTHORIZATION_ENDPOINT,
     MCP_AUTHORIZATION_SERVER_URL,
     MCP_PROTECTED_RESOURCE_METADATA_URL,
+    MCP_REGISTRATION_ENDPOINT,
     MCP_SCOPES_SUPPORTED,
     MCP_TOKEN_ENDPOINT,
     OPENAI_APPS_CHALLENGE_TOKEN,
@@ -96,6 +101,24 @@ from utils.mcp_server.versions import SUPPORTED_PROTOCOL_VERSIONS  # noqa: F401
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class McpClientRegistrationRequest(BaseModel):
+    redirect_uris: List[str] = Field(min_length=1, max_length=mcp_oauth_db.DYNAMIC_CLIENT_REDIRECT_URI_LIMIT)
+    client_name: Optional[str] = Field(default=None, max_length=100)
+    token_endpoint_auth_method: str = "none"
+    grant_types: List[str] = Field(default_factory=lambda: ["authorization_code"])
+    response_types: List[str] = Field(default_factory=lambda: ["code"])
+
+
+class McpClientRegistrationResponse(BaseModel):
+    client_id: str
+    client_id_issued_at: int
+    redirect_uris: List[str]
+    client_name: Optional[str]
+    token_endpoint_auth_method: str
+    grant_types: List[str]
+    response_types: List[str]
 
 
 def _path_kind(request: Request) -> str:
@@ -245,6 +268,69 @@ async def mcp_authorize_consent(
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     return await _oauth.mcp_token(request)
+
+
+@router.post("/api/oauth/register", tags=["mcp"], response_model=McpClientRegistrationResponse)
+async def mcp_register_client(request: Request, registration: McpClientRegistrationRequest):
+    """Register an exact-redirect public PKCE client per RFC 7591."""
+    source = request.client.host if request.client else "unknown"
+    await run_blocking(
+        critical_executor,
+        check_rate_limit_inline_fail_closed,
+        source,
+        "mcp:client_registration",
+    )
+    if registration.token_endpoint_auth_method != "none":
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_client_metadata", "error_description": "Only public PKCE clients are supported"},
+        )
+    grant_types = set(registration.grant_types)
+    if "authorization_code" not in grant_types or not grant_types.issubset({"authorization_code", "refresh_token"}):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "invalid_client_metadata",
+                "error_description": "grant_types must include authorization_code and may include refresh_token",
+            },
+        )
+    if registration.response_types != ["code"]:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_client_metadata", "error_description": "response_types must be code"},
+        )
+    try:
+        client = await run_blocking(
+            db_executor,
+            mcp_oauth_db.register_dynamic_public_client,
+            registration.client_name,
+            registration.redirect_uris,
+        )
+    except ValueError as exc:
+        logger.warning(f"Dynamic client registration failed: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_redirect_uri", "error_description": "Invalid redirect URI configuration"},
+        )
+    except Exception as exc:
+        logger.error(f"Unexpected error during client registration: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": "server_error", "error_description": "An error occurred during client registration"},
+        )
+    created_at = cast(datetime, client["created_at"])
+    return JSONResponse(
+        status_code=201,
+        content={
+            "client_id": client["id"],
+            "client_id_issued_at": int(created_at.timestamp()),
+            "redirect_uris": client["allowed_redirect_uris"],
+            "client_name": client["name"],
+            "token_endpoint_auth_method": "none",
+            "grant_types": registration.grant_types,
+            "response_types": ["code"],
+        },
+    )
 
 
 @router.get("/v1/mcp/sse/info", tags=["mcp"], response_model=McpSseInfoResponse)
