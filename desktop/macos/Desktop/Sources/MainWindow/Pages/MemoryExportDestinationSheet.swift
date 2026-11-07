@@ -535,6 +535,7 @@ struct MemoryExportDestinationSheet: View {
 
   @StateObject private var model = MemoryExportDestinationSheetModel()
   @State private var showManualSetup = false
+  @State private var awaitingDirectoryHandoff = false
   @State private var permissionRefreshID = 0
   @State private var isDisconnecting = false
 
@@ -617,7 +618,17 @@ struct MemoryExportDestinationSheet: View {
   private func refreshCloudGrantConnectionIfNeeded() {
     guard destination.cloudOAuthClientID != nil else { return }
     Task {
-      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
+      let updated = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
+      statuses[destination] = updated
+      if updated.hasConnection {
+        awaitingDirectoryHandoff = false
+      } else if destination.mcpExecuteKind == .directoryApp, awaitingDirectoryHandoff {
+        awaitingDirectoryHandoff = false
+        model.statusMessage = nil
+        model.errorMessage =
+          "Not connected yet. If the ChatGPT plugin page opened blank, sign in to ChatGPT, search for Omi in Settings → Apps & Connectors, or use the Developer-mode fallback below."
+        showManualSetup = true
+      }
     }
   }
 
@@ -840,11 +851,17 @@ struct MemoryExportDestinationSheet: View {
         Button {
           Task {
             await model.executeWithOmi(destination: destination)
-            statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(
+            let updated = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(
               for: destination)
-            // Assisted flow: the user pastes values by hand, so surface the
-            // field-by-field steps instead of leaving them collapsed.
-            if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
+            statuses[destination] = updated
+            if destination.mcpExecuteKind == .directoryApp {
+              awaitingDirectoryHandoff = model.errorMessage == nil && !updated.hasConnection
+            }
+            // Assisted flow or failed directory handoff: surface the fallback steps
+            // instead of leaving them collapsed.
+            if (destination.mcpExecuteKind == .assisted && destination.assistedOverlayHint != nil)
+              || (destination.mcpExecuteKind == .directoryApp && model.errorMessage != nil)
+            {
               showManualSetup = true
             }
           }

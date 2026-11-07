@@ -29,6 +29,7 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
   late final AgentConnectService _service = widget.service ?? AgentConnectService();
   AgentConnections? _connections;
   bool _failed = false;
+  bool _chatGptSheetOpen = false;
   int _loadGeneration = 0;
 
   @override
@@ -46,7 +47,7 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state == AppLifecycleState.resumed && !_chatGptSheetOpen) _load();
   }
 
   /// Reloads from the server. A failed reload after the first load keeps the list but says so,
@@ -84,9 +85,28 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
       }
     } else {
       // A partial grant (needs reconnect) is still live: the sheet offers Disconnect for it.
-      final disconnected = await showChatGptConnectSheet(context, service: _service, connections: connections);
+      _chatGptSheetOpen = true;
+      final bool? disconnected;
+      try {
+        disconnected = await showChatGptConnectSheet(
+          context,
+          service: _service,
+          connections: connections,
+          onConnectionsLoaded: (latest) {
+            if (!mounted) return;
+            setState(() {
+              _connections = latest;
+              _failed = false;
+            });
+          },
+        );
+      } finally {
+        _chatGptSheetOpen = false;
+      }
       if (disconnected == true) {
         if (mounted) setState(() => _connections = _connections?.withoutChatGpt());
+        await _load();
+      } else if (disconnected == null) {
         await _load();
       }
     }

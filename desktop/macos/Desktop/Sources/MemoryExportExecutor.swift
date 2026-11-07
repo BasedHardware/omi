@@ -29,13 +29,7 @@ enum MemoryExportExecutor {
 
   static func run(_ destination: MemoryExportDestination) async throws -> Outcome {
     if case .directoryApp = destination.mcpExecuteKind {
-      guard let directoryURL = destination.directoryInstallURL else {
-        throw ExecutorError.unsupported(destination.title)
-      }
-      NSWorkspace.shared.open(directoryURL)
-      return Outcome(
-        taskTitle: "Opened Omi in ChatGPT. Add Omi and authorize it there, then return to Omi.",
-        mode: .assisted)
+      return try runDirectoryApp(destination)
     }
 
     if requiresAccessibilityPreflight(destination), !isAccessibilityReadyForBrowserSetup() {
@@ -86,6 +80,30 @@ enum MemoryExportExecutor {
     case .notion, .obsidian, .chatgpt, .claude, .gemini, .agents:
       return false
     }
+  }
+
+  static func runDirectoryApp(
+    _ destination: MemoryExportDestination,
+    openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+  ) throws -> Outcome {
+    guard let directoryURL = destination.directoryInstallURL else {
+      throw ExecutorError.unsupported(destination.title)
+    }
+    if openURL(directoryURL) {
+      return Outcome(
+        taskTitle:
+          "Opened Omi in ChatGPT. Add Omi and authorize it there, then return to Omi. If the plugin page opens blank, sign in to ChatGPT or search for Omi in Settings → Apps & Connectors.",
+        mode: .assisted)
+    }
+    if let fallbackURL = destination.directoryFallbackURL, openURL(fallbackURL) {
+      return Outcome(
+        taskTitle:
+          "Opened ChatGPT Connectors settings because the direct plugin page could not be opened. Search for Omi or use Developer-mode fallback below, then return to Omi.",
+        mode: .assisted)
+    }
+    throw ExecutorError.browserSetupRequired(
+      "Couldn't open ChatGPT in your browser. Open \(MemoryExportDestination.chatGPTConnectorsSettingsURL.absoluteString), search for Omi, or use the Developer-mode fallback below."
+    )
   }
 
   private static func hostedMCPKey(for destination: MemoryExportDestination) async throws -> String {

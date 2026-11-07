@@ -56,4 +56,34 @@ final class MemoryExportSetupTests: XCTestCase {
     XCTAssertTrue(setup.steps.joined(separator: " ").contains("Reload OpenClaw MCP"))
     XCTAssertTrue(setup.steps.joined(separator: " ").contains("SOUL.md"))
   }
+
+  @MainActor
+  func testChatGPTDirectoryRunFallsBackToConnectorsSettingsOrThrowsActionableError() throws {
+    var openedURLs: [URL] = []
+    let primaryOutcome = try MemoryExportExecutor.runDirectoryApp(.chatgpt) { url in
+      openedURLs.append(url)
+      return true
+    }
+    XCTAssertEqual(openedURLs, [MemoryExportDestination.chatGPTDirectoryInstallURL])
+    XCTAssertTrue(primaryOutcome.taskTitle.contains("Settings → Apps & Connectors"))
+
+    openedURLs.removeAll()
+    let fallbackOutcome = try MemoryExportExecutor.runDirectoryApp(.chatgpt) { url in
+      openedURLs.append(url)
+      return url == MemoryExportDestination.chatGPTConnectorsSettingsURL
+    }
+    XCTAssertEqual(
+      openedURLs,
+      [
+        MemoryExportDestination.chatGPTDirectoryInstallURL,
+        MemoryExportDestination.chatGPTConnectorsSettingsURL,
+      ])
+    XCTAssertTrue(fallbackOutcome.taskTitle.contains("Opened ChatGPT Connectors settings"))
+
+    XCTAssertThrowsError(
+      try MemoryExportExecutor.runDirectoryApp(.chatgpt) { _ in false }
+    ) { error in
+      XCTAssertTrue(error.localizedDescription.contains("https://chatgpt.com/#settings/Connectors"))
+    }
+  }
 }
