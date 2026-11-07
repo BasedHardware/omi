@@ -140,21 +140,28 @@ def _covered(paths, jobs, artifacts):
                 continue
             offset = round((cursor - item.capture_at) * 16000) * 2
             if offset < 0:
-                return False
+                # The WAL has audio before (or between) the record's units.
+                return _unproven('wal_audio_outside_record')
             source = _pcm(artifacts.fetch_audio(item))
             length = min(len(source) - offset, len(pcm) - consumed)
-            if (
-                length <= 0
-                or memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]
-            ):
-                return False
+            if length <= 0:
+                return _unproven('record_unit_exhausted')
+            if memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]:
+                return _unproven('audio_bytes_differ')
             consumed += length
             del source
             if consumed == len(pcm):
                 break
         if consumed != len(pcm):
-            return False
+            # The record ends (or has no unit) before this WAL unit does.
+            return _unproven('wal_audio_past_record')
     return True
+
+
+def _unproven(cause: str) -> bool:
+    # Static vocabulary only: says which way the WAL and record disagree.
+    logger.info('event=sync_record_coverage outcome=unproven cause=%s', cause)
+    return False
 
 
 async def _legacy_mode(legacy_mode, uid):
