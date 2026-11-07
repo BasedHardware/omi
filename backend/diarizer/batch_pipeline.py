@@ -21,7 +21,7 @@ from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_en
 from utils.batch_pipeline.worker_silence import inspect_worker_silence, inspect_worker_vad
 from utils.batch_pipeline.recovery_disposition import silence_payload
 from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech, empty_retry_audio
-from config.batch_pipeline_empty_asr import safety_net_enabled
+from config.batch_pipeline_empty_asr import empty_ladder_handoff, safety_net_enabled
 from config.batch_language_recovery import below_silence_threshold
 from config.batch_pipeline import (
     LONG_SPEECH_HANDOFF_SECONDS,
@@ -738,11 +738,11 @@ class PipelineWorker:
                 if reason == 'empty_asr' and not item.shadow:
                     record_correctness('empty_asr_attempt', source='gpu_worker', seconds=item.duration_seconds)
                 if (
-                    (
-                        reason == 'empty_asr'
-                        and (empty_asr_recovery_enabled() or safety_net_enabled())
-                        or reason in {'empty_asr', 'no_owned_words'}
-                        and (empty_asr_disposition_enabled() or safety_net_enabled())
+                    empty_ladder_handoff(
+                        reason,
+                        recovery_enabled=empty_asr_recovery_enabled(),
+                        disposition_enabled=empty_asr_disposition_enabled(),
+                        safety_enabled=safety_net_enabled(),
                     )
                     and stage == 'assemble_words'
                     and self.recover_words is not None
@@ -1172,11 +1172,11 @@ class PipelineWorker:
                                 )
                                 if recovered is None and (
                                     fits_retry
-                                    or not (
-                                        reason == 'empty_asr'
-                                        and (empty_asr_recovery_enabled() or safety)
-                                        or reason in {'empty_asr', 'no_owned_words'}
-                                        and (empty_asr_disposition_enabled() or safety)
+                                    or not empty_ladder_handoff(
+                                        reason,
+                                        recovery_enabled=empty_asr_recovery_enabled(),
+                                        disposition_enabled=empty_asr_disposition_enabled(),
+                                        safety_enabled=safety,
                                     )
                                 ):
                                     held.add(item.segment_id)
