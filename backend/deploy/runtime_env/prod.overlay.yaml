@@ -45,6 +45,7 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         BATCH_FINAL_PASS_ENABLED:
@@ -1685,6 +1686,7 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
