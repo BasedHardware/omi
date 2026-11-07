@@ -193,9 +193,15 @@ export function MemoryList({
 
       {/* End of list indicator */}
       {!loading && !loadingMore && !hasMore && memories.length > 0 && (
-        <p className="py-4 text-center text-sm text-text-quaternary">
-          You&apos;ve reached the end
-        </p>
+        truncated ? (
+          <p className="py-4 text-center text-sm text-amber-400/90" role="status">
+            Incomplete memory history: more memories may exist on the server
+          </p>
+        ) : (
+          <p className="py-4 text-center text-sm text-text-quaternary">
+            You&apos;ve reached the end
+          </p>
+        )
       )}
     </div>
   );

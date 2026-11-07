@@ -269,7 +269,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Whether the last loaded memory page was truncated by server scan budget.
   /// When true, 0 rows is an honest partial result, not a complete-empty account.
-  @Published private(set) var isTruncated = false
+  @Published internal(set) var isTruncated = false
 
   /// A cache-first initial load can clear `isLoading` while its authoritative
   /// API projection is still syncing. Automation search must wait for that
@@ -637,14 +637,27 @@ class MemoriesViewModel: ObservableObject {
       }
       hasAuthoritativeServerProjection = !truncated
       isTruncated = truncated
-      memories = MemoryPageProjection.visibleMemories(
-        cachedMemories: [],
-        serverMemories: allFetched,
-        source: .authoritativeServer,
-        lifecycleExposed: canonicalLifecycleExposed
-      )
-      currentOffset = allFetched.count
-      rawBackendOffset = allFetched.count
+      if truncated {
+        // A truncated cascade refresh must preserve existing projection, merging in partial rows
+        var merged = memories
+        for item in allFetched {
+          if let idx = merged.firstIndex(where: { $0.id == item.id }) {
+            merged[idx] = item
+          } else {
+            merged.append(item)
+          }
+        }
+        memories = merged
+      } else {
+        memories = MemoryPageProjection.visibleMemories(
+          cachedMemories: [],
+          serverMemories: allFetched,
+          source: .authoritativeServer,
+          lifecycleExposed: canonicalLifecycleExposed
+        )
+      }
+      currentOffset = memories.count
+      rawBackendOffset = memories.count
       hasMoreMemories = false
       recomputeFilteredMemories()
       await loadTagCountsFromDatabase()
@@ -777,7 +790,7 @@ class MemoriesViewModel: ObservableObject {
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
       hasMoreMemories = Self.hasMoreAfterPage(page, received: apiMemories.count)
-      backendCursor = page.nextCursor
+      backendCursor = page.truncated ? nil : page.nextCursor
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -823,7 +836,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Whether another page is worth asking for. A truncated page is an honest
   /// partial response with no resumable cursor, so callers must not continue.
-  private static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
+  static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
     if page.truncated { return false }
     if page.nextCursor != nil { return true }
     return ServerPaging.hasMore(received: received)
@@ -1256,7 +1269,7 @@ class MemoriesViewModel: ObservableObject {
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
         hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
-        backendCursor = page.nextCursor
+        backendCursor = page.truncated ? nil : page.nextCursor
         log(
           "MemoriesViewModel: Showing \(memories.count) memories (raw: \(fetchedMemories.count), truncated: \(page.truncated))"
         )
@@ -1274,7 +1287,7 @@ class MemoriesViewModel: ObservableObject {
         }
         rawBackendOffset = fetchedMemories.count
         hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
-        backendCursor = page.nextCursor
+        backendCursor = page.truncated ? nil : page.nextCursor
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1622,7 +1635,7 @@ class MemoriesViewModel: ObservableObject {
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
       hasMoreMemories = Self.hasMoreAfterPage(page, received: newMemories.count)
-      backendCursor = page.nextCursor
+      backendCursor = page.truncated ? nil : page.nextCursor
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )
@@ -2153,6 +2166,9 @@ struct MemoriesPage: View {
       } else if let error = viewModel.errorMessage {
         errorView(error)
       } else if hasActiveMemoryQueryScope && viewModel.filteredMemories.isEmpty {
+        if viewModel.isTruncated {
+          truncatedBanner
+        }
         noResultsView
       } else if viewModel.memories.isEmpty {
         if viewModel.isTruncated {
@@ -2161,6 +2177,9 @@ struct MemoriesPage: View {
           emptyState
         }
       } else if viewModel.filteredMemories.isEmpty {
+        if viewModel.isTruncated {
+          truncatedBanner
+        }
         noResultsView
       } else {
         if viewModel.isTruncated {

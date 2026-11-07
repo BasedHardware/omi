@@ -91,7 +91,7 @@ export async function cacheMemories(
         cachedAt: now,
       });
     }
-    if (options?.prune !== false || memories.length > 0) {
+    if (options?.prune !== false) {
       await tx.objectStore('metadata').put(now, metadataKey(scope));
     }
     await tx.done;

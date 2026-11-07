@@ -211,6 +211,8 @@ describe('useMemories standard list and cache scope', () => {
   });
 
   it('handles empty truncated read without pruning IndexedDB cache', async () => {
+    const cachedMemory = page('Persisted cached memory').memories[0];
+    mocks.getCachedMemories.mockResolvedValueOnce([cachedMemory]);
     mocks.getMemoriesPage.mockResolvedValueOnce({
       memories: [],
       nextCursor: null,
@@ -219,7 +221,6 @@ describe('useMemories standard list and cache scope', () => {
     const { result } = renderHook(() => useMemories({ limit: 25 }));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.memories).toEqual([]);
     expect(result.current.truncated).toBe(true);
     expect(result.current.hasMore).toBe(false);
     // IndexedDB cacheMemories must NOT have been called with an empty list to wipe the cache

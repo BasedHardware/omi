@@ -316,25 +316,34 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           // Keep already-loaded memories if backend timed out returning 0 rows
           setTruncated(true);
           setHasMore(false);
+          setToCache(
+            key,
+            memoriesRef.current,
+            memoriesRef.current.length,
+            null,
+            false,
+            true,
+          );
         } else {
           setMemories(page.memories);
           offsetRef.current = page.memories.length;
-          cursorRef.current = page.nextCursor;
-          setHasMore(pageHasMore);
+          cursorRef.current = page.truncated ? null : page.nextCursor;
+          setHasMore(page.truncated ? false : pageHasMore);
           setTruncated(page.truncated);
           // Update both caches
           setToCache(
             key,
             page.memories,
             page.memories.length,
-            page.nextCursor,
-            pageHasMore,
+            page.truncated ? null : page.nextCursor,
+            page.truncated ? false : pageHasMore,
             page.truncated,
           );
         }
 
-        // Do not prune local records on a truncated read
-        if (!page.truncated) {
+        // Enable pruning only when the response has neither truncated nor nextCursor;
+        // otherwise upsert the page without deleting existing cached rows.
+        if (!page.truncated && !page.nextCursor) {
           await cacheMemories(page.memories, memoryCacheScope);
         } else if (page.memories.length > 0) {
           await cacheMemories(page.memories, memoryCacheScope, { prune: false });
