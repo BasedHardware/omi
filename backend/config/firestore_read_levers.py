@@ -23,6 +23,7 @@ ENV_KEY = 'FIRESTORE_READ_LEVERS'
 # Every lever the code consults. Unknown names in the env are ignored (and logged once).
 KNOWN_LEVERS = frozenset(
     {
+        'batch_timeliness_leader',  # ship-on election and capped backlog counts; 0 restores legacy sampling
         'batch_metrics_oldest_leader',  # ship-on queue sample election; 0 restores per-instance reads
         'singleton_loops',
         'listen_poll',
@@ -59,11 +60,16 @@ KNOWN_LEVERS = frozenset(
         'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
         'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
+        'admission_frontier_hint',  # ship-on: owner activation reads the service frontier outside the txn; 0 restores the txn query
     }
 )
 
 
-DEFAULT_PERCENTAGES = {'batch_metrics_oldest_leader': 100}
+DEFAULT_PERCENTAGES = {
+    'batch_metrics_oldest_leader': 100,
+    'batch_timeliness_leader': 100,
+    'admission_frontier_hint': 100,
+}
 
 
 @lru_cache(maxsize=4)

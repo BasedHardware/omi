@@ -297,4 +297,9 @@ def test_direct_transaction_reads_are_named(monkeypatch):
     view.first_pending('owner')
     view.service_frontier(0)
     view.check_privacy('uid')
+    # Default: the frontier is a hint read outside the transaction, so it is not a contended read.
+    assert batch_pipeline_store.contention_tables(view) == ('jobs_query,privacy', 'none')
+    # With admission_frontier_hint off, the transactional frontier query is named again.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"admission_frontier_hint": 0}')
+    view.service_frontier(0)
     assert batch_pipeline_store.contention_tables(view) == ('control_query,jobs_query,privacy', 'none')

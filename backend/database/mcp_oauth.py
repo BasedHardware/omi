@@ -443,6 +443,20 @@ def client_id_is_first_party_chatgpt(client_id: object) -> bool:
     return isinstance(client_id, str) and client_id in PUBLIC_CHATGPT_CLIENT_IDS
 
 
+def implied_client_scopes(client_id: object) -> frozenset[str]:
+    """Scopes every grant held by ``client_id`` carries, regardless of what it requested.
+
+    First-party ChatGPT grants carry the standard read floor. Grants approved
+    before the floor existed (memories.read only) are upgraded on their next
+    refresh by ``rotate_refresh_token``, so raising the floor here upgrades
+    every live ChatGPT grant within one access-token lifetime, with no
+    reconnect. Write and opt-in scopes are never implied.
+    """
+    if client_id_is_first_party_chatgpt(client_id):
+        return CHATGPT_READ_SCOPE_FLOOR.intersection(SUPPORTED_SCOPES)
+    return frozenset()
+
+
 def normalize_scopes(scope: Optional[str], client: Optional[Dict[str, Any]] = None) -> List[str]:
     allowed = set((client or {}).get("allowed_scopes") or SUPPORTED_SCOPES).intersection(SUPPORTED_SCOPES)
     requested = [item for item in (scope or "").split(" ") if item]
@@ -1136,14 +1150,26 @@ def rotate_refresh_token(
                 # so an outage cannot leave a cached token on a revoked grant.
                 transaction.set(ref, {"replay_detected_at": now}, merge=True)
                 return None
+        # Server-side scope upgrade: a grant from a client with implied scopes
+        # (first-party ChatGPT's read floor) that predates them gains them here,
+        # on the grant and on the rotated token family, so older narrow grants
+        # get the full read set without the user reconnecting.
+        implied = implied_client_scopes(client_id)
+        family_scopes = set(data.get("scopes") or []) | implied
+        grant_scopes = set(grant.get("scopes") or [])
         try:
             requested_scopes: List[str] = (
-                normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
+                normalize_scopes(scope, {"allowed_scopes": sorted(family_scopes)}) if scope else sorted(family_scopes)
             )
         except ValueError:
             return None
-        if not set(requested_scopes).issubset(set(data.get("scopes") or [])):
+        requested_scopes = sorted(set(requested_scopes) | implied)
+        if not set(requested_scopes).issubset(family_scopes):
             return None
+        if not implied.issubset(grant_scopes):
+            upgraded_grant_scopes = sorted(grant_scopes | implied)
+            grant["scopes"] = upgraded_grant_scopes
+            transaction.set(grant_ref, {"scopes": upgraded_grant_scopes, "scopes_upgraded_at": now}, merge=True)
         (
             access_token,
             new_refresh_token,

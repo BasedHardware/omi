@@ -96,7 +96,9 @@ def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any
     return episode
 
 
-def get_episode(uid: str, episode_id: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
+def get_episode(
+    uid: str, episode_id: str, *, firestore_client: Any = None, follow_redirects: bool = True
+) -> Optional[dict[str, Any]]:
     client = _client(firestore_client)
     visited = set()
     while episode_id not in visited and len(visited) < 128:
@@ -108,6 +110,8 @@ def get_episode(uid: str, episode_id: str, *, firestore_client: Any = None) -> O
         redirect = raw.get('recorded_merged_into')
         if not redirect:
             return unseal(uid, raw)
+        if not follow_redirects:
+            return None
         episode_id = str(redirect)
     raise EpisodeConflict('recorded_redirect_cycle')
 
@@ -129,6 +133,29 @@ def get_home_episode_snapshots(
             if row is not None:
                 result[snapshot.id] = row
     return result
+
+
+def get_episode_membership_snapshot(
+    uid: str, episode_id: str, *, firestore_client: Any = None
+) -> Optional[dict[str, Any]]:
+    """One exact metadata read for bounded safety checks; never decode content or follow redirects."""
+    snapshot = _episodes(_client(firestore_client), uid).document(episode_id).get()
+    raw = snapshot.to_dict() if snapshot.exists else None
+    if raw is None:
+        return None
+    return {
+        'id': episode_id,
+        **{key: raw.get(key) for key in ('status', 'conversation_ids', 'member_activity', 'recorded_merged_into')},
+    }
+
+
+def get_episode_owner_snapshot(
+    uid: str, conversation_id: str, *, firestore_client: Any = None
+) -> Optional[dict[str, Any]]:
+    """At most two exact owner-link/episode reads; a redirect stays explicit for the caller."""
+    client = _client(firestore_client)
+    episode_id = _link_target(client, uid, conversation_id)
+    return get_episode_membership_snapshot(uid, episode_id, firestore_client=client) if episode_id else None
 
 
 def _link_target(client: Any, uid: str, key: str, transaction: Any = None) -> Optional[str]:
@@ -691,6 +718,27 @@ def reopen_episode(
     )
 
 
+def _member_recorded_after(raw: Mapping[str, Any], extra: Mapping[str, Any], split_after: datetime) -> bool:
+    """Whether a member that stays in the episode after this split recorded past ``split_after``.
+
+    Read from the transaction's own snapshot, so a member that attached between the split's planning
+    and this close is seen rather than erased.
+    """
+    activity = raw.get('member_activity') or {}
+    remaining = extra['conversation_ids'] if 'conversation_ids' in extra else raw.get('conversation_ids') or []
+    limit = split_after if split_after.tzinfo else split_after.replace(tzinfo=timezone.utc)
+    for cid in remaining:
+        at = activity.get(cid)
+        if isinstance(at, datetime):
+            at = at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+            if at > limit:
+                return True
+    return False
+
+
+SYNCED_F_MEMBER_LIMIT = 3
+
+
 @firestore.transactional
 def _close(
     transaction: Any,
@@ -701,6 +749,10 @@ def _close(
     closed_at: datetime,
     extra: Mapping[str, Any],
     expected_activity_at: Optional[datetime],
+    expected_conversation_ids: Optional[Sequence[str]] = None,
+    split_after: Optional[datetime] = None,
+    retained_member_window: bool = False,
+    synced_f: bool = False,
 ) -> Optional[dict[str, Any]]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -714,11 +766,28 @@ def _close(
         return None
     if reason == 'idle' and expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
         return None  # Speech won the race with a lazy reader's stale idle decision.
+    if expected_conversation_ids is not None and set(raw.get('conversation_ids') or []) != set(
+        expected_conversation_ids
+    ):
+        # The split was planned from an older read; the membership it would write is stale.
+        raise EpisodeConflict('split_membership_changed')
+    if split_after is not None and _member_recorded_after(raw, extra, split_after):
+        # A member that stays would keep this episode's window past the successor's start.
+        raise EpisodeConflict('split_member_recorded_later')
+    if synced_f and (
+        not isinstance(raw.get('conversation_ids'), list)
+        or len(raw['conversation_ids']) > SYNCED_F_MEMBER_LIMIT
+        or raw.get('recovered_conversation_ids')
+    ):
+        raise EpisodeConflict('f_close_read_budget')
     merged = {**(unseal(uid, raw) or {}), **extra, **_closed_fields(reason, closed_at)}
     # Finalize arrival is bookkeeping. Recorded ownership ends at retained member evidence.
+    # Only an admitted F split opts into the post-detach window; ordinary/flag-off closes
+    # retain main's exact membership reads and recorded-end evidence.
+    window = merged if retained_member_window else raw
     ends = []
     hidden = set(raw.get('discarded_conversation_ids') or []) | set(raw.get('duplicate_conversation_ids') or [])
-    for cid in raw.get('conversation_ids') or []:
+    for cid in window.get('conversation_ids') or []:
         member = (
             client.collection('users')
             .document(uid)
@@ -735,20 +804,33 @@ def _close(
         ):
             continue
         span = conversation_span(member)
-        end = span.recorded_end if span else (raw.get('member_activity') or {}).get(cid)
+        end = span.recorded_end if span else (window.get('member_activity') or {}).get(cid)
         if isinstance(end, datetime):
             ends.append(end)
-    end = max(ends, default=raw.get('last_activity_at') or raw['started_at'])
+    end = max(ends, default=window.get('last_activity_at') or raw['started_at'])
     end = max(raw['started_at'], _bounded_activity(raw, end))
     if timeline_enabled:
         rows = episode_timeline.recorded_candidates(
-            uid, raw['started_at'], end, firestore_client=client, transaction=transaction
+            uid,
+            raw['started_at'],
+            end,
+            firestore_client=client,
+            transaction=transaction,
+            **({'candidate_limit': episode_timeline.F_JOIN_CANDIDATE_LIMIT} if synced_f else {}),
         )
         following = [r['started_at'] for r in rows if r['id'] != episode_id and r['started_at'] > raw['started_at']]
         if following:
             end = min(end, min(following))
         merged['recorded_end'] = end
-        fence = episode_timeline.check_window(transaction, client, uid, merged, rows=rows, fence_row=timeline_row)
+        fence = episode_timeline.check_window(
+            transaction,
+            client,
+            uid,
+            merged,
+            rows=rows,
+            fence_row=timeline_row,
+            **({'candidate_limit': episode_timeline.F_JOIN_CANDIDATE_LIMIT} if synced_f else {}),
+        )
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
     else:
@@ -770,10 +852,22 @@ def close_episode(
     closed_at: Optional[datetime] = None,
     extra: Optional[Mapping[str, Any]] = None,
     expected_activity_at: Optional[datetime] = None,
+    expected_conversation_ids: Optional[Sequence[str]] = None,
+    split_after: Optional[datetime] = None,
     firestore_client: Any = None,
+    retained_member_window: bool = False,
+    synced_f: bool = False,
 ) -> Optional[dict[str, Any]]:
-    """Close a live episode once. Returns the closed state, or None when it was not live."""
+    """Close a live episode once. Returns the closed state, or None when it was not live.
+
+    ``expected_conversation_ids`` and ``split_after`` guard a split (``extra`` removes a member): the close
+    raises ``EpisodeConflict`` unless the membership is still the one planned and no remaining member
+    recorded past ``split_after``. The caller then decides again from a fresh read.
+    """
     client = _client(firestore_client)
+    transaction_options: dict[str, Any] = (
+        {'attempts': 1, 'initial_transaction': client.transaction(max_attempts=1)} if synced_f else {}
+    )
     return run_transactional(
         client,
         _close,
@@ -784,6 +878,11 @@ def close_episode(
         closed_at or datetime.now(timezone.utc),
         dict(extra or {}),
         expected_activity_at,
+        expected_conversation_ids,
+        split_after,
+        retained_member_window,
+        synced_f,
+        **transaction_options,
     )
 
 

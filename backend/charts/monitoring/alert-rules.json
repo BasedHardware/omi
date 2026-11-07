@@ -8604,6 +8604,119 @@
     "record": null
   },
   {
+    "uid": "omi-kube-state-metrics-empty",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "kube-state-metrics serving empty scrapes (kube_* series blind)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(min(min_over_time(scrape_samples_scraped{job=\"kube-state-metrics\"}[15m])) or vector(0)) < bool 1",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "kube-state-metrics returned 0 samples on at least one scrape in every 15m window for 30m (restart loop or outage), so kube_* series are gapped or absent",
+      "threshold": "min scrape_samples_scraped{job=\"kube-state-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "No direct user impact; the backend-listen HPA custom metric, capacity and replica alerts, and the margin meter read kube_* series and go blind.",
+      "scope": "kube-state-metrics in prod-omi-monitoring (kube-prometheus-stack subchart).",
+      "verification": "kubectl -n prod-omi-monitoring get pod -l app.kubernetes.io/name=kube-state-metrics (RESTARTS) and its events (liveness timeouts); up stays 1 during this failure.",
+      "safe_next_action": "Check the pod restart count and liveness events; if CPU-starved, raise its requests in prod_omi_monitoring_values.yaml and run the documented helm upgrade."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-kube-state-metrics-empty",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
     "uid": "omi-llm-gateway-client-reachability",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -28954,8 +29067,8 @@
       "threshold": "More than 256 queued storage tasks per pusher target for 10m (2x the 128 workers).",
       "summary": "Pusher storage work is queuing persistently.",
       "user_impact": "Storage delays can postpone durable audio ACKs; memory exhaustion can disconnect live capture sessions and force client replay.",
-      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. No refusal signal or byte admission is implemented.",
-      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. omi_pusher_storage_pcm_budget_limit_bytes is zero (no budget). Attribute pressure to the running release.",
+      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. Byte admission is optional and off when the configured limit is zero.",
+      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. Read omi_pusher_storage_pcm_budget_limit_bytes (zero means off) and refusal stages. Attribute pressure to the running release.",
       "safe_next_action": "Escalate to the lifecycle lead with the affected pod and release. Inspect GCS latency and queued work; preserve unacknowledged audio and custody objects. Use an approved rollback if the release caused the pressure.",
       "evaluated_bad": "Synthetic: a fresh pusher target has 257 queued storage tasks continuously for 10m.",
       "evaluated_good": "Synthetic: current queue depth is at most 256, or a high sample is older than 120s or absent."
@@ -29089,8 +29202,8 @@
       "threshold": "More than 512 queued storage tasks per pusher target for 10m (4x the 128 workers).",
       "summary": "Pusher storage work is queuing persistently.",
       "user_impact": "Storage delays can postpone durable audio ACKs; memory exhaustion can disconnect live capture sessions and force client replay.",
-      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. No refusal signal or byte admission is implemented.",
-      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. omi_pusher_storage_pcm_budget_limit_bytes is zero (no budget). Attribute pressure to the running release.",
+      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. Byte admission is optional and off when the configured limit is zero.",
+      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. Read omi_pusher_storage_pcm_budget_limit_bytes (zero means off) and refusal stages. Attribute pressure to the running release.",
       "safe_next_action": "Escalate to the lifecycle lead with the affected pod and release. Inspect GCS latency and queued work; preserve unacknowledged audio and custody objects. Use an approved rollback if the release caused the pressure.",
       "evaluated_bad": "Synthetic: a fresh pusher target has 513 queued storage tasks continuously for 10m.",
       "evaluated_good": "Synthetic: current queue depth is at most 512, or a high sample is older than 120s or absent."
@@ -29221,8 +29334,8 @@
       "threshold": "Working set above 75% of the 3.5 GiB pusher limit for 15m (2.625 GiB).",
       "summary": "Pusher memory is approaching its container limit.",
       "user_impact": "Storage delays can postpone durable audio ACKs; memory exhaustion can disconnect live capture sessions and force client replay.",
-      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. No refusal signal or byte admission is implemented.",
-      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. omi_pusher_storage_pcm_budget_limit_bytes is zero (no budget). Attribute pressure to the running release.",
+      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. Byte admission is optional and off when the configured limit is zero.",
+      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. Read omi_pusher_storage_pcm_budget_limit_bytes (zero means off) and refusal stages. Attribute pressure to the running release.",
       "safe_next_action": "Escalate to the lifecycle lead with the affected pod and release. Inspect GCS latency and queued work; preserve unacknowledged audio and custody objects. Use an approved rollback if the release caused the pressure.",
       "evaluated_bad": "Synthetic: a fresh pusher pod working set is 80% of 3.5 GiB continuously for 15m.",
       "evaluated_good": "Synthetic: current working set is at most 75%, or a high memory/owner sample is older than 120s or absent."
@@ -29248,5 +29361,1416 @@
       "audience": "human",
       "owner": "omi-lifecycle"
     }
+  },
+  {
+    "uid": "omi-batch-held-backlog-growing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Critical pipeline failures",
+    "title": "Held batch backlog is growing or at least 10000 units",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.5
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T19:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Held batch backlog is growing or at least 10000 units",
+      "user_impact": "Recorded audio is accumulating without reaching its owner.",
+      "scope": "Fleet-max pre-epoch assignment_held stock: growth below the 10000 count cap, or stock at/above it; fresh samples only.",
+      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
+      "safe_next_action": "Inspect assignment/projection recovery and the aggregate batch custody census. At 10000 the bounded count means at least 10000, not measured growth; repair the held leg and drain below the cap without deleting audio.",
+      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <900s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
+      "runbook": "backend/charts/monitoring/critical-failures.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-batch-held-backlog-growing",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-enrichment-queue-depth-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Critical pipeline failures",
+    "title": "Enrichment queue is beyond its recent operating range",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "300s",
+            "crossSeriesReducer": "REDUCE_MAX",
+            "filters": [
+              "metric.type",
+              "=",
+              "cloudtasks.googleapis.com/queue/depth",
+              "AND",
+              "resource.type",
+              "=",
+              "cloud_tasks_queue",
+              "AND",
+              "resource.label.queue_id",
+              "=",
+              "enrichment"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_MAX",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          },
+          "promQLQuery": {
+            "expr": "max(max_over_time({\"cloudtasks.googleapis.com/queue/depth\",monitored_resource=\"cloud_tasks_queue\",queue_id=\"enrichment\"}[5m]))",
+            "projectName": "based-hardware",
+            "step": "1m"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  6000
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T19:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Enrichment queue is beyond its recent operating range",
+      "user_impact": "Transcripts can wait hours for titles, summaries and memory enrichment.",
+      "scope": "Cloud Tasks enrichment queue, project based-hardware; native Cloud Monitoring gauge, not an exported DELTA.",
+      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
+      "safe_next_action": "Inspect dispatch health, worker responses and drain rate before changing capacity. Repair errors or scheduling limits and retain queued tasks.",
+      "threshold": ">6000 tasks for 15m using the 5m maximum. Retained Nov1 max 1216, Nov2 max 5261, Nov3 max 22552; 6000 clears both reference-day maxima.",
+      "runbook": "backend/charts/monitoring/critical-failures.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-enrichment-queue-depth-page",
+      "component": "enrichment",
+      "impact": "product",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-vendor-benched-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Critical pipeline failures",
+    "title": "A serving STT vendor remains at a low routing stage",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\",target=~\"modulate-velma-2|soniox\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  25
+                ],
+                "type": "lte"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T19:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A serving STT vendor remains at a low routing stage",
+      "user_impact": "Live transcription has lost a vendor or routes very little audio to it, reducing fallback availability.",
+      "scope": "Minimum routing stage across serving listen pods, paid live targets Soniox and Modulate only; NaN pristine state does not satisfy <=25.",
+      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
+      "safe_next_action": "Inspect the named target GateState and provider errors. Resolve the vendor problem first; reset a bench only with the documented recovery approval.",
+      "threshold": "Stage <=25 for 15m. Seven-day replay includes long Modulate stage 5..25 intervals and Nov3 benches. Fifteen minutes excludes short restarts; healthy stage 100 is quiet.",
+      "runbook": "backend/charts/monitoring/critical-failures.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-stt-vendor-benched-page",
+      "component": "live-transcription",
+      "impact": "product",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-incluster-guard-unsafe-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Critical pipeline failures",
+    "title": "An in-cluster safety guard reports TRIP or BLIND",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "900s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/omi_incluster_guard_unsafe",
+              "AND",
+              "resource.type",
+              "=",
+              "k8s_container"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          },
+          "promQLQuery": {
+            "expr": "sum(increase({\"logging.googleapis.com/user/omi_incluster_guard_unsafe\",monitored_resource=\"k8s_container\"}[15m]))",
+            "projectName": "based-hardware",
+            "step": "1m"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T19:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "1m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "An in-cluster safety guard reports TRIP or BLIND",
+      "user_impact": "A production safety guard has tripped or cannot measure its safety conditions.",
+      "scope": "Bounded log-based counter from prod-omi-backend guard containers, page_signal=true; no raw-log Grafana scans.",
+      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
+      "safe_next_action": "Read the aggregate guard verdict and reason, identify whether automatic rollback completed, and coordinate the documented rollback or recovery with the rollout lead.",
+      "threshold": "Any unsafe verdict log in 15m for 1m. Guard schedule is 5m; 15m retains a single verdict through delivery delay. New counter has no historical series: legacy guard-log aggregate replay and synthetic signal checks are required.",
+      "runbook": "backend/charts/monitoring/critical-failures.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "observability",
+      "alert_identity": "omi-incluster-guard-unsafe-page",
+      "component": "monitoring",
+      "impact": "product",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-modulate-credit-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Critical pipeline failures",
+    "title": "Modulate has rejected company credit",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"modulate\",reason=\"provider_budget_exhausted\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T19:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "1m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Modulate has rejected company credit",
+      "user_impact": "A serving transcription provider cannot accept paid work; fallback capacity may be exhausted next.",
+      "scope": "Company-paid live STT closes classified provider_budget_exhausted (HTTP 402); grouped by closed provider label.",
+      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
+      "safe_next_action": "Check the named vendor balance and billing console and ask the billing owner to top up or restore credits. Do not reset account circuits before credits are confirmed.",
+      "threshold": "Any Modulate 402-classified close in 15m, sustained 1m. Seven-day local Modulate count is zero; synthetic single-close control fires. Soniox is already covered by omi-soniox-budget-exhausted, separately replayed to avoid duplicate pages.",
+      "runbook": "backend/charts/monitoring/critical-failures.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-modulate-credit-page",
+      "component": "live-transcription",
+      "impact": "product",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-error-class-firing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Error Classes",
+    "title": "Error classes - a new or surging error class is firing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-29T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A prod error class fired a new (>=20/h) or surge (>=50/h and >=5x 7-day baseline) alert in the last 15 minutes",
+      "threshold": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900 for 2m; new >=20/h, surge >=50/h and >=5x baseline mean; warning-level classes at doubled thresholds",
+      "user_impact": "An error family is accumulating unwatched; left alone it can grow into the next ramp-blocking batch failure or user-visible processing gap.",
+      "scope": "backend, backend-sync, backend-sync-backfill, backend-integration, backend-listen, and prod-omi-gke batch-pipeline-worker / pusher / backend-listen pods.",
+      "verification": "Open the backend-sync logs for the firing service and filter severity>=ERROR; the matching error_class_alert line names the class fingerprint, hourly count, baseline mean, and first-seen epoch. Compare against the 7-day baseline in Redis key errclass:baseline. A stale firing timestamp ages out of the window on its own.",
+      "safe_next_action": "Read the firing class fingerprint (exception type + file:line + logger) and inspect that code path before changing retry budgets or scaling. Suppress a known class by pausing the error-class-alerts-sweep scheduler job, not by muting the rule.",
+      "runbook": "backend/docs/runbooks/error-class-alerts.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-error-class-firing",
+      "component": "api",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-error-class-sweep-silent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Error Classes",
+    "title": "Error classes - sentinel sweep is silent or failing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max((sum(increase(omi_error_class_sweep_total{outcome!=\"ok\"}[1h])) > bool 0) + (sum(increase(omi_error_class_sweep_total[1h])) < bool 4))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-29T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The error-class sentinel stopped completing ok sweeps: fewer than 4 ticks in the last hour, any non-ok outcome, or the metric is absent",
+      "threshold": "non-ok sweep outcomes > 0 in 1h, or fewer than 4 ticks in 1h (boolean modifiers; zero-valued counters still trip it), or metric absent/no data, for 10m",
+      "user_impact": "New or surging error classes go undetected while the sentinel is down, which is how batch failures previously ran unwatched for a day or more.",
+      "scope": "The error-class-alerts-sweep Cloud Scheduler job POSTing the backend-sync sweep route every 15 minutes.",
+      "verification": "Check the omi_error_class_sweep_total outcome label: permission_denied means backend-runtime lacks logging.read; error means the Cloud Logging read failed; truncated means one pass hit its entry cap. Then inspect backend-sync logs for the sweep POST and the scheduler job history.",
+      "safe_next_action": "Grant the missing logging.read role or fix the read error, then confirm omi_error_class_sweep_total{outcome=\"ok\"} resumes incrementing four times an hour. Do not unpause extra capacity or change alert thresholds while the sentinel is blind.",
+      "runbook": "backend/docs/runbooks/error-class-alerts.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-error-class-sweep-silent",
+      "component": "api",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-pusher-storage-pcm-refusals",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - Storage PCM admission refused",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (stage) (rate(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}[5m]) and (time() - timestamp(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}) < 120))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-06T12:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/audio-durable-outbox.md",
+      "threshold": "Refusal rate >0 continuously for 30m.",
+      "summary": "Pusher custody storage admission remains saturated.",
+      "user_impact": "Refused PCM has no receipt or opcode-203 ACK. Client WAL stays retained for replay; live socket is not closed by refusal.",
+      "scope": "Production pusher byte-admission refusals only, by live/tail stage; stale samples older than120s are excluded. No signal proves playback or client replay cadence.",
+      "verification": "Compare the running release, configured budget limit, in-flight bytes, refusal stages, storage queued/active work and GCS errors. Confirm socket kills and pod memory separately.",
+      "safe_next_action": "Escalate to omi-lifecycle. Preserve source WALs and custody objects. Approved rollback sets PUSHER_STORAGE_PCM_BUDGET_MB chart value to0; do not clear producer fences or delete audio.",
+      "evaluated_bad": "Synthetic: fresh live-stage refusal counter increases every five-minute window for30m.",
+      "evaluated_good": "Synthetic: zero refusal rate, an isolated short burst, absent data or stale samples older than120s."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-storage-pcm-refusals",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-lifecycle"
+    }
+  },
+  {
+    "uid": "omi-batch-retry-age-over-24h",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch queue safety",
+    "title": "Batch retry item has been failing for over 24 hours",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 86400",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A batch audio item has been in compute retry for more than 24 hours.",
+      "user_impact": "That audio is delayed for its user until a retry succeeds or the item is terminalized.",
+      "scope": "Oldest retry item across all priorities and workers, from omi_batch_pipeline_retry_age_seconds (time since first compute failure). Alert-only; it changes no queue state.",
+      "verification": "Compare the max against the retry age series per priority on the omi-core-features dashboard. A stale or NaN series belongs to the metrics-blind alert, not this one.",
+      "safe_next_action": "Identify the priority and failing stage in the batch runbook. Do not delete audio, rows or custody, and do not reset attempts. This alert authorizes no runtime change.",
+      "evaluated_bad": "Synthetic: one priority with retry age 86401 sustained for ten minutes.",
+      "evaluated_good": "Synthetic: oldest retry age 86400 or below, or no retry series.",
+      "runbook": "backend/docs/runbooks/batch-queue-safety.md",
+      "threshold": "$A > 86400 for 10m"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-retry-age-over-24h",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-capture-retry-cap-shadow-7d",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch queue safety",
+    "title": "Capture retry cap has counted would-quarantine for seven days",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_retry_cap_total{outcome=\"would_quarantine\"}[7d]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "1h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The shadow retry cap counted retries it would have terminalized in the last seven days.",
+      "user_impact": "Capture retries are not bounded by the cap yet, so failing capture work can keep retrying instead of stopping.",
+      "scope": "Sum of omi_capture_retry_cap_total with outcome would_quarantine over seven days. In shadow mode the cap never terminalizes work, so this measures exposure, not a stop.",
+      "verification": "Confirm CAPTURE_COVERAGE_MODE on the serving revision and compare the counter increase against the same window for each check label.",
+      "safe_next_action": "Decide with the pipeline owner whether to serve the retry cap or retire the shadow counter. Do not change the mode from this alert. This alert authorizes no runtime change.",
+      "evaluated_bad": "Synthetic: one would_quarantine increment inside the seven-day window sustained for one hour.",
+      "evaluated_good": "Synthetic: no would_quarantine increase in the seven-day window.",
+      "runbook": "backend/docs/runbooks/batch-queue-safety.md",
+      "threshold": "$A > 0 for 1h"
+    },
+    "labels": {
+      "alert_identity": "omi-capture-retry-cap-shadow-7d",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
   }
 ]

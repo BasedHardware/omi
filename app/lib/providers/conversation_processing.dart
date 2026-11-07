@@ -39,6 +39,9 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     return status == ConversationStatus.processing || status == ConversationStatus.merging;
   }
 
+  String _processingTargetId(ServerConversation row) =>
+      row is OptimisticProcessingConversation ? row.targetConversationId ?? row.id : row.id;
+
   Map<String, ServerConversation> _realProcessingConversationsById() => {
         for (final conversation in processingConversations.whereType<OptimisticProcessingConversation>())
           if (conversation.targetConversationId != null && conversation.targetConversationId != '0')
@@ -126,6 +129,14 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       final result = lifecycleResults[targetId];
       if (result == null || !result.ok) return false;
       final current = result.item;
+      // The person just ended this conversation, and the server still reads it as in progress until
+      // the Process Now request lands. Keep the placeholder through that gap, so the Home row shows at
+      // once; its own timeout still expires it if the request never lands.
+      if (current != null &&
+          current.status == ConversationStatus.in_progress &&
+          _matchesActiveConversationFilters(current)) {
+        return false;
+      }
       if (current != null && _isActiveProcessingStatus(current.status) && _matchesActiveConversationFilters(current)) {
         // A real row supersedes the local attempt, including off-page rows.
         reconciled.add(current);
@@ -181,7 +192,11 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       }
     }
 
-    processingConversations = [...localPlaceholder, ...reconciled];
+    final prefs = SharedPreferencesUtil();
+    processingConversations = [
+      for (final row in [...localPlaceholder, ...reconciled])
+        if (!prefs.isConversationDeleteConfirmed(_processingTargetId(row))) row,
+    ];
     _syncProcessingReconcileTimer();
   }
 }

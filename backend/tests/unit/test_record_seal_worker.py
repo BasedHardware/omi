@@ -17,6 +17,30 @@ from utils.batch_pipeline import record_seal_repair as repair
 from tests.unit.test_record_seal_repair import source, plan, PATH, JOB_PATH, FINISH
 
 
+def test_served_metrics_registry_exports_both_firestore_probe_collectors():
+    import urllib.request
+    from prometheus_client import start_http_server
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+
+    metrics = worker.Metrics('test-release', 'test-namespace')
+    assert FIRESTORE_BILLED_READS in metrics.registry._collector_to_names
+    assert FIRESTORE_BILLED_READS_BY_CALLER in metrics.registry._collector_to_names
+    billed = FIRESTORE_BILLED_READS.labels('other', 'lookup', 'unattributed')
+    caller = FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'lookup', 'tests:seal_export')
+    billed.inc(5)
+    caller.inc(5)
+    server, thread = start_http_server(0, addr='127.0.0.1', registry=metrics.registry)
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+            body = response.read().decode()
+        assert 'omi_firestore_billed_reads_total{collection="other",kind="lookup",tier="unattributed"}' in body
+        assert 'omi_firestore_billed_reads_by_caller_total{caller="tests:seal_export"' in body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 @pytest.fixture
 def claimed(source):
     client = source[1]

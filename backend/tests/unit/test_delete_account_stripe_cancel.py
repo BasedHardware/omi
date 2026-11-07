@@ -29,6 +29,8 @@ def users_service():
     """Load a fresh services.users.account_deletion against stubbed database/utils namespaces."""
     fakes = {
         "database": _pkg("database"),
+        "database.directory": _pkg("database.directory"),
+        "database.directory.wipe": AutoMockModule("database.directory.wipe"),
         "database.sync_jobs": AutoMockModule("database.sync_jobs"),
         "database._client": AutoMockModule("database._client"),
         "database.legal_holds": AutoMockModule("database.legal_holds"),

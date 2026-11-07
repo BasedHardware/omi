@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
-from utils.batch_pipeline.leader import PUMP_RECOVERY, SERVING_MAINTENANCE, TABLE, LeaderLease
+from utils.batch_pipeline.leader import PUMP_RECOVERY, SERVING_MAINTENANCE, TIMELINESS_METRICS, TABLE, LeaderLease
 
 
 class Clock:
@@ -132,3 +132,30 @@ def test_overlapping_acquires_on_one_lease_never_leave_a_stall():
     assert not LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, clock=clock).acquire()
     clock.now += 1
     assert lease.acquire()  # Still the holder on the next tick; no full-TTL stall.
+
+
+@pytest.mark.parametrize('interval', [60, 300, 600])
+def test_timeliness_role_allows_only_the_bounded_interval_plus_refresh_grace(interval):
+    ttl = interval + 60
+    assert LeaderLease(MemoryStore(), TIMELINESS_METRICS, ttl_seconds=ttl).ttl_seconds == ttl
+
+
+@pytest.mark.parametrize('ttl', [661, 3660, 3661])
+def test_timeliness_role_rejects_new_leases_above_the_reduced_bound(ttl):
+    with pytest.raises(ValueError):
+        LeaderLease(MemoryStore(), TIMELINESS_METRICS, ttl_seconds=ttl)
+
+
+def test_shorter_timeliness_interval_does_not_revoke_an_old_long_lease():
+    store, clock = MemoryStore(), Clock()
+    old_row = {'holder': 'old-replica', 'token': 'old-token', 'expires_at': clock.now + 3660}
+    store.rows[TABLE, TIMELINESS_METRICS] = old_row.copy()
+    follower = LeaderLease(store, TIMELINESS_METRICS, ttl_seconds=660, clock=clock)
+    assert not follower.acquire()
+    clock.now = old_row['expires_at'] - 1
+    assert not follower.acquire()
+    assert store.rows[TABLE, TIMELINESS_METRICS] == old_row
+    clock.now += 1
+    assert follower.acquire()
+    assert store.rows[TABLE, TIMELINESS_METRICS]['expires_at'] == clock.now + 660
+    assert follower.token != old_row['token']

@@ -43,6 +43,10 @@
       "days": null,
       "note": "Capture audio of record is retained indefinitely except authorized privacy deletion (David 2026-10-15, storage-lifecycle/FORWARD.md)."
     },
+    "lake_space_content": {
+      "days": null,
+      "note": "Space lake content is removed only by explicit conversation/account deletion; no time-based expiry."
+    },
     "speech_profile": {
       "days": null,
       "note": "A user's speech profile lives until the user or account deletion removes it."
@@ -51,6 +55,7 @@
   "ceiling_sources": {
     "erasure_immediate": "docs/runbooks/audio-cleanup-custody.md: privacy erasure must remain possible immediately (no retention lock, holds, or soft-deleted copies)",
     "voice_evidence": "utils/batch_pipeline/artifacts.py verify_voice_retention: soft delete must be 0",
+    "lake_forward": "storage-lifecycle/lake-forward.json: versioning disabled and soft delete 0 at creation; data-access audit logs required.",
     "canonical_forward": "storage-lifecycle/FORWARD.md: versioning disabled and soft delete 0 at creation",
     "declared_caches": "storage-lifecycle/prod.json: merged/ Delete 3 d, playback/ Delete 30 d"
   },
@@ -101,6 +106,13 @@
       "protected_prefixes": [""],
       "holds": ["speech_profile"],
       "ceiling": {"soft_delete_seconds_max": 0, "ruling": "pending", "source": ["erasure_immediate"]}
+    },
+    "object-lake (BUCKET_OBJECT_LAKE, not provisioned)": {
+      "env": "BUCKET_OBJECT_LAKE",
+      "provisioned": false,
+      "protected_prefixes": ["v1/spaces/"],
+      "holds": ["lake_space_content"],
+      "ceiling": {"soft_delete_seconds_max": 0, "versioning": false, "source": ["lake_forward"]}
     },
     "canonical-audio (BUCKET_CANONICAL_AUDIO, not provisioned)": {
       "env": "BUCKET_CANONICAL_AUDIO",

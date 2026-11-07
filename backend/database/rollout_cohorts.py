@@ -77,7 +77,14 @@ RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
 # A reader older than a name rejects the whole document (it serves last-known-good), so a new
 # name is written only after every `_ramp` reader runs a build that knows it.
-RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire', 'legacy-sync', 'batch-vendor-routing')
+RAMP_NAMES = (
+    'batch-pipeline',
+    'first-summary',
+    'batch-live-stt-retire',
+    'legacy-sync',
+    'batch-vendor-routing',
+    'new-owner-cell1',
+)
 # Names whose percent is a subset of the batch-pipeline bucket (same empty salt).
 BATCH_NESTED_RAMP_NAMES = ('batch-live-stt-retire', 'batch-vendor-routing')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')

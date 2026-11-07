@@ -13,6 +13,8 @@ import pytest
 import yaml
 
 from scripts.verify_pusher_cohost_env_diff import parse_env_entries
+from scripts.runtime_env_validation import manifest as manifest_validation
+from scripts.runtime_env_validation.manifest import _validate_directory_routing_bindings
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
@@ -22,6 +24,126 @@ READINESS_PROPOSAL_ARGS = (
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
     ' --proposal-ttl-seconds 3600'
 )
+
+
+@pytest.fixture
+def directory_manifest():
+    """Synthetic provisioning only; B2 intentionally ships no real PG bindings."""
+    bindings = {'DIRECTORY_ROUTING_MODE': {'value': 'new_owners'}}
+    for prefix in ('DIRECTORY', 'CELLS'):
+        for suffix, value in (
+            ('HOST', 'localhost'),
+            ('DATABASE', 'synthetic'),
+            ('USER', 'synthetic'),
+            ('POOL_SIZE', '2'),
+        ):
+            bindings[f'{prefix}_PG_{suffix}'] = {'value': value}
+    return {
+        'cloud_run': {
+            'services': {
+                name: {'env': copy.deepcopy(bindings)} for name in ('backend', 'backend-sync', 'backend-sync-backfill')
+            }
+        },
+        'gke': {name: {'env': copy.deepcopy(bindings)} for name in ('backend-listen', 'pusher')},
+    }
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('binding_kind', ['iam', 'dsn', 'config_map'])
+def test_directory_enablement_requires_complete_fleet_bindings(directory_manifest, environment, binding_kind):
+    if binding_kind == 'dsn':
+        hosts = list(directory_manifest['cloud_run']['services'].values()) + list(directory_manifest['gke'].values())
+        for host in hosts:
+            for prefix in ('DIRECTORY', 'CELLS'):
+                for suffix in ('HOST', 'DATABASE', 'USER'):
+                    host['env'].pop(f'{prefix}_PG_{suffix}')
+                host['env'][f'{prefix}_PG_DSN'] = {'value': 'host=localhost dbname=synthetic'}
+    elif binding_kind == 'config_map':
+        entries = {}
+        for name in ('backend-listen', 'pusher'):
+            for key, entry in directory_manifest['gke'][name]['env'].items():
+                entries[key] = entry['value']
+                directory_manifest['gke'][name]['env'][key] = {'config_map': {'name': 'synthetic-config', 'key': key}}
+        directory_manifest['gke']['config_map'] = {'name': 'synthetic-config', 'entries': entries}
+    assert _validate_directory_routing_bindings(environment, directory_manifest) == []
+
+
+@pytest.mark.parametrize('surface', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-listen', 'pusher'])
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'DIRECTORY_PG_HOST',
+        'DIRECTORY_PG_DATABASE',
+        'DIRECTORY_PG_USER',
+        'DIRECTORY_PG_POOL_SIZE',
+        'CELLS_PG_HOST',
+        'DIRECTORY_ROUTING_MODE',
+    ],
+)
+def test_directory_enablement_rejects_partial_bindings(directory_manifest, surface, missing):
+    hosts = (
+        directory_manifest['cloud_run']['services']
+        if surface.startswith('backend') and surface != 'backend-listen'
+        else directory_manifest['gke']
+    )
+    hosts[surface]['env'].pop(missing)
+    errors = _validate_directory_routing_bindings('prod', directory_manifest)
+    assert any(surface in error.scope and missing.split('_PG_')[0] in error.message for error in errors)
+
+
+@pytest.mark.parametrize('mode', ['typo', '', None])
+def test_directory_enablement_rejects_invalid_or_unresolved_mode(directory_manifest, mode):
+    directory_manifest['cloud_run']['services']['backend']['env']['DIRECTORY_ROUTING_MODE'] = {'value': mode}
+    assert _validate_directory_routing_bindings('dev', directory_manifest)
+
+
+@pytest.mark.parametrize('mode', [None, 'off'])
+def test_directory_dark_manifest_needs_no_pg_bindings(mode):
+    bindings = {} if mode is None else {'DIRECTORY_ROUTING_MODE': {'value': mode}}
+    manifest = {'cloud_run': {'services': {'backend': {'env': bindings}}}}
+    assert _validate_directory_routing_bindings('prod', manifest) == []
+
+
+def test_directory_mode_inherited_from_shared_config_map_cannot_bypass_guard():
+    manifest = {
+        'gke': {'config_map': {'name': 'synthetic-config', 'entries': {'DIRECTORY_ROUTING_MODE': 'new_owners'}}}
+    }
+    errors = _validate_directory_routing_bindings('prod', manifest)
+    assert any(error.scope == 'prod/gke/pusher' and 'DIRECTORY_PG_*' in error.message for error in errors)
+    assert any(
+        error.scope == 'prod/cloud_run/backend' and 'DIRECTORY_ROUTING_MODE' in error.message for error in errors
+    )
+
+
+@pytest.mark.parametrize('surface', ['integration', 'job', 'desktop'])
+def test_directory_activation_elsewhere_still_requires_all_five_surfaces(surface):
+    host = {'env': {'DIRECTORY_ROUTING_MODE': {'value': 'new_owners'}}}
+    if surface == 'integration':
+        manifest = {'cloud_run': {'services': {'backend-integration': host}}}
+    elif surface == 'job':
+        manifest = {'cloud_run': {'jobs': {'notifications-job': host}}}
+    else:
+        manifest = {'desktop_backend': host}
+    errors = _validate_directory_routing_bindings('prod', manifest)
+    assert len({error.scope for error in errors}) == 5
+    assert any('DIRECTORY_PG_*' in error.message for error in errors)
+
+
+def test_directory_mode_off_elsewhere_does_not_require_bindings():
+    manifest = {'desktop_backend': {'env': {'DIRECTORY_ROUTING_MODE': {'value': 'off'}}}}
+    assert _validate_directory_routing_bindings('prod', manifest) == []
+
+
+def test_directory_binding_guard_is_in_deploy_validator(directory_manifest, monkeypatch):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    manifest['environments']['prod']['cloud_run']['services']['backend']['env']['DIRECTORY_ROUTING_MODE'] = {
+        'value': 'new_owners'
+    }
+    monkeypatch.setattr(manifest_validation, '_load_yaml', lambda path: manifest)
+    # The manifest guard rejects this before consulting charts or live state.
+    errors = validator.validate_runtime_env(env='prod')
+    assert any('DIRECTORY_PG_*' in error.message for error in errors)
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +213,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED", "value": "true"},
         {"name": "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT", "value": "g1"},
         {"name": "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
         {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
@@ -374,6 +497,32 @@ def with_backend_storage_env(payload: str) -> str:
     )
 
 
+def with_object_lake_env(payload: str) -> str:
+    """Complete synthetic revisions with the six inert C1 lake bindings."""
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    names = (
+        'BUCKET_OBJECT_LAKE',
+        'OBJECT_LAKE_KMS_KEY',
+        'OBJECT_LAKE_WRITE_ENABLED',
+        'OBJECT_LAKE_WRITE_PERCENT',
+        'OBJECT_LAKE_READ_ENABLED',
+        'OBJECT_LAKE_INLINE_MAX_BYTES',
+    )
+    for service in ('backend', 'backend-sync'):
+        entries = ',\n'.join(
+            json.dumps({'name': name, 'value': services[service]['env'][name]['value']}) for name in names
+        )
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep integration snapshots complete while tests remove unrelated fields.
     payload = re.sub(
@@ -393,7 +542,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_wake_word_adjudication_env(payload)
     payload = with_backend_public_shared_chat_auth_env(payload)
     payload = with_audio_timeline_span_env(payload)
-    payload = payload
     payload = with_backend_storage_env(payload)
     payload = with_firestore_read_ledger_env(payload).replace(
         '"FIRESTORE_READ_LEDGER", "value": "1"},',
@@ -569,7 +717,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
-    return with_firestore_read_runtime_env(payload)
+    # Prepending lake entries earlier hides the leading GOOGLE_CLOUD_PROJECT
+    # anchor used by the translation and sync fixture helpers above.
+    return with_object_lake_env(with_firestore_read_runtime_env(payload))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):

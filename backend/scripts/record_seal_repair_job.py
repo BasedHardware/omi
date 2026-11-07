@@ -17,6 +17,7 @@ from omi_logging import configure_logging
 configure_logging('record-seal-repair', default_format='json')
 
 from utils.batch_pipeline import record_seal_cluster_repair as repair
+from utils.observability.firestore_probe_export import CHILD_FD_ENV, terminal_probe_totals
 
 
 def emit(payload):
@@ -110,7 +111,10 @@ def main():
     # native diagnostics for the whole lifetime, including SDK background threads.
     with os.fdopen(os.dup(1), 'w') as output:
         configure_logging('record-seal-repair', default_format='json', stdout=output, stderr=output)
-        with repair.silent_dependencies():
+        # Flush while the explicit aggregate logging fd is still open.
+        with terminal_probe_totals(
+            'record-seal-repair', fd=os.environ.get(CHILD_FD_ENV), log_empty=False
+        ), repair.silent_dependencies():
             try:
                 if sys.argv[1:] == ['--row']:
                     payload = json.loads(sys.stdin.buffer.read(8193))

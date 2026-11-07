@@ -69,6 +69,7 @@ environment_shared:
         BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
         BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
         BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+        BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
@@ -462,6 +463,22 @@ environment_shared:
         SONIOX_ORDERED_FINALIZE:
           value: 'false'
           category: rollout
+        BUCKET_OBJECT_LAKE:
+          category: storage_retention
+        OBJECT_LAKE_KMS_KEY:
+          category: storage_retention
+        OBJECT_LAKE_WRITE_ENABLED:
+          value: 'false'
+          category: rollout
+        OBJECT_LAKE_WRITE_PERCENT:
+          value: '0'
+          category: rollout
+        OBJECT_LAKE_READ_ENABLED:
+          value: 'true'
+          category: rollout
+        OBJECT_LAKE_INLINE_MAX_BYTES:
+          value: '4096'
+          category: rollout
         BUCKET_SCREEN_FRAMES:
           category: storage_retention
         CONVERSATION_RELEVANCE_JEV_PERCENT:
@@ -521,6 +538,8 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+        PUSHER_STORAGE_PCM_BUDGET_MB: {value: '0', category: ops_kill}
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
@@ -670,6 +689,22 @@ environment_shared:
           category: rollout
         SONIOX_ORDERED_FINALIZE:
           value: 'false'
+          category: rollout
+        BUCKET_OBJECT_LAKE:
+          category: storage_retention
+        OBJECT_LAKE_KMS_KEY:
+          category: storage_retention
+        OBJECT_LAKE_WRITE_ENABLED:
+          value: 'false'
+          category: rollout
+        OBJECT_LAKE_WRITE_PERCENT:
+          value: '0'
+          category: rollout
+        OBJECT_LAKE_READ_ENABLED:
+          value: 'true'
+          category: rollout
+        OBJECT_LAKE_INLINE_MAX_BYTES:
+          value: '4096'
           category: rollout
         BUCKET_SCREEN_FRAMES:
           category: storage_retention
@@ -932,6 +967,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1230,6 +1266,22 @@ environment_shared:
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+          OBJECT_LAKE_WRITE_ENABLED:
+            value: 'false'
+            category: rollout
+          OBJECT_LAKE_WRITE_PERCENT:
+            value: '0'
+            category: rollout
+          OBJECT_LAKE_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          OBJECT_LAKE_INLINE_MAX_BYTES:
+            value: '4096'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_PERCENT:
@@ -1312,6 +1364,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1599,6 +1652,22 @@ environment_shared:
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+          OBJECT_LAKE_WRITE_ENABLED:
+            value: 'false'
+            category: rollout
+          OBJECT_LAKE_WRITE_PERCENT:
+            value: '0'
+            category: rollout
+          OBJECT_LAKE_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          OBJECT_LAKE_INLINE_MAX_BYTES:
+            value: '4096'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_PERCENT:
@@ -1669,6 +1738,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2017,6 +2087,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
