@@ -1,7 +1,9 @@
 """Admission diagnostics distinguish custody waits without releasing client audio."""
 
+import io
 import json
 import logging
+import wave
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -11,6 +13,7 @@ from config.policy import BatchUnitPolicy
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake, live_upload
+from utils.batch_pipeline.contracts import Priority
 
 
 @pytest.fixture(autouse=True)
@@ -187,9 +190,6 @@ async def test_intake_contention_logs_phase_and_monotonic_elapsed_without_error_
 
 
 def _wav(pcm: bytes) -> bytes:
-    import io
-    import wave
-
     buffer = io.BytesIO()
     with wave.open(buffer, 'wb') as stream:
         stream.setnchannels(1)
@@ -209,10 +209,6 @@ def _wav(pcm: bytes) -> bytes:
     ],
 )
 def test_coverage_failure_logs_which_way_the_wal_and_record_disagree(monkeypatch, caplog, wal_start, wal_pcm, cause):
-    from types import SimpleNamespace
-
-    from utils.batch_pipeline.contracts import Priority
-
     record_pcm = b'\x01\x00' * 16000  # one second of the record at t=0
     unit = SimpleNamespace(wav=_wav(wal_pcm), capture_at=wal_start, duration_seconds=1.0)
     monkeypatch.setattr(live_upload, 'decode_units', lambda paths: iter([unit]))

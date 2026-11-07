@@ -1,6 +1,7 @@
 """Barrier-blocked record_pending rows back off by age instead of re-reading every 60 s."""
 
 import asyncio
+import logging
 
 import pytest
 
@@ -76,8 +77,6 @@ def test_barrier_text_matches_the_raise_site():
 
 
 def test_retry_line_carries_the_record_key_without_owner(drained, caplog):
-    import logging
-
     run, live = drained
     with caplog.at_level(logging.WARNING, logger=live.__name__):
         run(100000.0 - 30, ValueError(live.BARRIER_NOT_CLOSED))
