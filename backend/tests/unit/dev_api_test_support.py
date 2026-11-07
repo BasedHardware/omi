@@ -142,4 +142,3 @@ def isolated_developer_api(monkeypatch) -> Iterator[SimpleNamespace]:
             dependencies=dependencies,
             developer=developer,
         )
-
