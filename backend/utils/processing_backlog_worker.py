@@ -502,7 +502,9 @@ async def subscription_changed_async(uid: str, event: dict, stripe_subscription:
     A trial's conversion to a real charge, or an allowance increase on an active subscription,
     releases within the plan's allowance. So does a new paid subscription created active (a
     purchase): its status rides in the payload, so this retries a checkout whose Stripe lookup
-    failed, and creation happens once per subscription, never at renewal. Only the creation of a
+    failed, and creation happens once per subscription, never at renewal. A recovered renewal
+    transitioning from past_due, unpaid, incomplete, or paused back to active releases held
+    backlog without requiring a plan or price increase. Only the creation of a
     trialing subscription grants the trial; a later update such as a plan change never does.
     """
     from utils.processing_backlog import allowance_increased

@@ -168,7 +168,7 @@ def _is_unlimited_transcription_plan(plan: Any) -> bool:
 
         plan_type = plan if isinstance(plan, PlanType) else PlanType(plan)
         return plan_type in UNLIMITED_TRANSCRIPTION_PLAN_TYPES
-    except (ValueError, TypeError):
+    except (ImportError, ValueError, TypeError):
         return False
 
 
@@ -188,7 +188,11 @@ def rolls(
     """
     is_unlimited = (
         remaining is None
-        or (allowance is not None and getattr(allowance, 'limit_seconds', 0) is None)
+        or (
+            allowance is not None
+            and getattr(allowance, 'managed', True)
+            and getattr(allowance, 'limit_seconds', 0) is None
+        )
         or (plan is not None and _is_unlimited_transcription_plan(plan))
     )
 

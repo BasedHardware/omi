@@ -216,8 +216,9 @@ async def test_pro_ladder_v1_october_choice_resumes_in_november_without_a_tap(vi
     assert visit.calls == [('roll', '2026-11'), ('claim', 'november', '2026-11')]
 
 
-async def test_pro_renewal_recovery_triggers_upgrade_release(monkeypatch):
-    """A past_due -> active transition on a paid plan (renewal recovery) triggers upgrade_async."""
+@pytest.mark.parametrize('prev_status', ['past_due', 'unpaid', 'incomplete', 'paused'])
+async def test_pro_renewal_recovery_triggers_upgrade_release(monkeypatch, prev_status):
+    """A (past_due/unpaid/incomplete/paused) -> active transition on a paid plan triggers upgrade_async."""
     upgrades = []
 
     async def fake_upgrade_async(uid, key, *, intent_at, status=''):
@@ -225,14 +226,48 @@ async def test_pro_renewal_recovery_triggers_upgrade_release(monkeypatch):
 
     monkeypatch.setattr(worker, 'upgrade_async', fake_upgrade_async)
     event = {
-        'id': 'evt_recovered_123',
+        'id': f'evt_recovered_{prev_status}',
         'type': 'customer.subscription.updated',
         'created': NOW,
-        'data': {'previous_attributes': {'status': 'past_due'}},
+        'data': {'previous_attributes': {'status': prev_status}},
     }
     stripe_sub = {'id': 'sub_123', 'status': 'active'}
     previous = SimpleNamespace(plan='operator', current_price_id='price_pro')
     current = SimpleNamespace(plan='operator', current_price_id='price_pro')
 
     await worker.subscription_changed_async(UID, event, stripe_sub, previous, current)
-    assert upgrades == [(UID, 'subscription-upgrade:evt_recovered_123', 'active')]
+    assert upgrades == [(UID, f'subscription-upgrade:evt_recovered_{prev_status}', 'active')]
+
+
+def test_snapshot_exhausted_ladder_pro_does_not_roll_processing(monkeypatch):
+    """A units-exhausted Pro account (managed=False, mode='on_device', limit_seconds=None) must not report active rolls or 'processing'."""
+    from utils.processing_backlog import snapshot, rolls
+
+    monkeypatch.setattr(funded, 'enabled', lambda _uid: True)
+    monkeypatch.setattr(funded, 'capacity', lambda _allowance: (0.0, 44090.0))
+
+    allowance = SimpleNamespace(
+        managed=False,
+        limit_seconds=None,
+        remaining_units=0.0,
+        budget_units=44090.0,
+        reason='usage_budget_exhausted',
+        mode='on_device',
+    )
+    summary = {
+        'state': 'processing',
+        'period': '2026-10',
+        'count': 1,
+        'seconds': 60,
+        'units': 1.0,
+    }
+    audio = {'count': 0, 'seconds': 0}
+
+    # Verify rolls() directly refuses when managed=False
+    assert not rolls(summary, remaining=0.0, allowance=allowance)
+
+    # Verify snapshot() reports capped rather than processing
+    result = snapshot(UID, allowance=allowance, summary=summary, audio=audio, paid=True)
+    assert result is not None
+    assert result.state == 'capped'
+    assert result.budget_exhausted is True
