@@ -1,4 +1,4 @@
-"""Home processing ownership rollout, default off.
+"""Home processing ownership, enabled by default with per-call kill switches.
 
 Lifecycle: rollout; owner home-overlap; review 2026-11-21.
 """
@@ -12,8 +12,8 @@ def in_cohort(uid: str | None) -> bool:
 
 
 def ownership_enabled(uid: str | None = None) -> bool:
-    return os.getenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'false').strip().lower() == 'true' and in_cohort(uid)
+    return os.getenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true').strip().lower() == 'true' and in_cohort(uid)
 
 
 def live_member_notes_enabled(uid: str | None = None) -> bool:
-    return os.getenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'false').strip().lower() == 'true' and in_cohort(uid)
+    return os.getenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true').strip().lower() == 'true' and in_cohort(uid)

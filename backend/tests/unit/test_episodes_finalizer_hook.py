@@ -113,7 +113,7 @@ def test_absorb_hook_reads_nothing_when_disabled(monkeypatch):
     assert calls == []
 
 
-@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('enabled', [None, False, True])
 def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabled):
     from unittest.mock import Mock
     from utils.episodes import member_notes
@@ -123,7 +123,11 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
     from types import SimpleNamespace
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', str(enabled).lower())
+    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_UIDS', raising=False)
+    if enabled is None:
+        monkeypatch.delenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', str(enabled).lower())
     owner = {'id': 'e', 'status': 'live', 'conversation_ids': ['c1']}
     read = Mock(return_value=owner)
     monkeypatch.setattr(member_notes.episodes, 'get_episode_owner_snapshot', read)
@@ -133,9 +137,9 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
     mark = Mock()
     monkeypatch.setattr(outbox, 'mark', mark)
     row = {'id': 'c1'}
-    assert member_notes.waits('u', row) is enabled
+    assert member_notes.waits('u', row) is (enabled is not False)
     assert not member_notes.waits('u', row, ProcessingTrigger.FIRST_OPEN)
-    if enabled:
+    if enabled is not False:
         with pytest.raises(ProcessingDeferred, match='live_episode_notes'):
             member_notes.before_notes('u', SimpleNamespace(id='c1'), ProcessingTrigger.SYNC_UPDATE)
         mark.assert_called_once_with('u', 'c1', 'en', sync_hold=True)

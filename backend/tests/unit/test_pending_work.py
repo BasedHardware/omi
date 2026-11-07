@@ -491,12 +491,16 @@ def test_recovery_openapi_has_typed_success_and_bodyless_204(http_client):
     }
 
 
-@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('enabled', [None, False, True])
 def test_pending_sync_dedupes_only_fully_listed_recordings(monkeypatch, enabled):
     from database import sync_jobs
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', str(enabled).lower())
+    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_UIDS', raising=False)
+    if enabled is None:
+        monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', str(enabled).lower())
     redis = Mock()
     from utils.episodes import home_processing
 
@@ -517,9 +521,9 @@ def test_pending_sync_dedupes_only_fully_listed_recordings(monkeypatch, enabled)
     monkeypatch.setattr(sync_jobs, 'get_sync_job', jobs.get)
     items = sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'a', 'b'})
     # The partial job represents c; its later chunk job must not count c twice.
-    expected = ['partial', 'unknown'] if enabled else list(jobs)
+    expected = ['partial', 'unknown'] if enabled is not False else list(jobs)
     assert [item['id'] for item in items] == ['sync:' + key for key in expected]
-    if enabled:
+    if enabled is not False:
         assert items[0]['conversation_ids'] == ['c']
         assert items[0]['recording_count'] == 1
     # Hidden work is still pending, so its index entry must survive.
@@ -552,11 +556,46 @@ def test_live_owner_hides_recordings_and_observes_attach_gap(caplog, attached):
 def test_live_owner_flag_off_does_not_read_episode(monkeypatch):
     from utils.episodes import home_processing
 
-    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_ENABLED', raising=False)
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'false')
     read = Mock(side_effect=AssertionError('flag off must not read Firestore'))
     monkeypatch.setattr(home_processing.episodes, 'get_current_episode', read)
     assert home_processing.live_owner(UID) is None
     read.assert_not_called()
+
+
+def test_live_owner_enabled_by_default(monkeypatch):
+    from utils.episodes import home_processing
+
+    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_ENABLED', raising=False)
+    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_UIDS', raising=False)
+    monkeypatch.setattr(home_processing, 'episodes_enabled_for', lambda uid: True)
+    monkeypatch.setattr(home_processing.client_gate, 'client_seen_cached', lambda uid: True)
+    owner = {'id': 'live', 'status': 'live', 'conversation_ids': ['c1']}
+    read = Mock(return_value=owner)
+    monkeypatch.setattr(home_processing.episodes, 'get_current_episode', read)
+    assert home_processing.live_owner(UID) == owner
+    read.assert_called_once_with(UID, firestore_client=None)
+
+
+@pytest.mark.parametrize('flag', ['HOME_PROCESSING_OWNERSHIP_ENABLED', 'HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED'])
+def test_home_kill_switches_are_independent_and_keep_optional_cohort(monkeypatch, flag):
+    from config.home_processing import ownership_enabled, live_member_notes_enabled
+
+    readers = {
+        'HOME_PROCESSING_OWNERSHIP_ENABLED': ownership_enabled,
+        'HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED': live_member_notes_enabled,
+    }
+    for key in readers:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_UIDS', raising=False)
+    assert all(read(UID) for read in readers.values())
+    monkeypatch.setenv(flag, 'false')
+    assert not readers[flag](UID)
+    assert all(read(UID) for key, read in readers.items() if key != flag)
+    monkeypatch.setenv(flag, ' TRUE ')
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_UIDS', ' owner, internal ')
+    assert all(read(UID) for read in readers.values())
+    assert not any(read('outside') for read in readers.values())
 
 
 def test_pending_work_endpoint_dedupes_live_and_listed_owners(http_client, monkeypatch):

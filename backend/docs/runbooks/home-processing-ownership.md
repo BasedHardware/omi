@@ -1,10 +1,13 @@
-# Home processing ownership (dark)
+# Home processing ownership (default on)
 
 A live episode owns its Home members. The Flutter fix always hides membership
 before skipping a row owned by active Listening and excludes the same members from local processing
 insertion. Closed episodes still composing keep their Processing row.
 
-Backend switches, all evaluated per call and both defaulting to false. The behavior below applies when enabled:
+Both backend switches default to true and are evaluated per call. Each is an independent
+kill switch: an explicit false disables that behavior. Env overrides remain supported.
+The Flutter rendering fix and its `X-Omi-Home-Ownership: 1` capability header are always on;
+the app does not read these server environment switches.
 
 - `HOME_PROCESSING_OWNERSHIP_ENABLED=true`: read-only Home/pending-work suppression
   of live members and jobs whose full target set is already represented. Partially
@@ -25,7 +28,9 @@ The notes switch narrows Phase 2's watched-Home behavior: a Home/watch lease or
 owner-wide promotion cannot override it. Recording detail can. Phase 2 retains
 its own seal, patient deadline, close and composer controls. The finalizer hook is
 after `_episode_at_finalization_start` and batch registration, so automatic boundary closure cannot wait on notes.
-Never enable this switch until both owners review the combined scheduling policy.
+Both switches ship on by default per David's 2026-11-07 ruling, including the
+closed-member notes gate. Review the combined scheduling policy with Phase 2's owner
+using the verification below.
 
 `create_sync_job` persists supplied `recording_ids` and `target_conversation_id`
 with its original Redis TTL before any transcript result. Live WAL upload already
@@ -48,22 +53,22 @@ logs `event=episode_attach_gap outcome=home_suppressed`. Another explicit episod
 owner wins. Temporal hiding does not attach, move or delete a recording. Filtered
 lists and detail reads preserve access; ordinary attachment repair remains owner.
 
-## Ramp and rollback
+## Default-on verification and rollback
 
-No merge, deployment, production flag or IAM change is part of this PR. The project
-coordinator owns expansion; the Infra Rollout Coordinator alone applies runtime
-changes. Within 48 hours of merge, run staging fixtures with both flags off, then
-on; verify live overlap, attach-gap telemetry, detail escalation, and close-to-notes.
-Next enable the named internal allowlist for 24 hours, then 25 named beta accounts
-for 24 hours. The coordinator reviews each clean receipt within 48 hours and either
-expands to all episode-capable accounts or records a dated hold by 2026-11-21.
+This PR sets the code defaults on for all admitted episode-capable accounts; no
+staged allowlist expansion is required. Existing explicit false env values still
+turn the respective behavior off and must be accounted for by the Infra Rollout
+Coordinator when shipping. No merge, deployment, production flag or IAM change
+is part of this PR. Only the Infra Rollout Coordinator applies runtime changes.
 
-Require zero duplicate live Home rows, no missing closed/unowned recordings,
-no automatic live-member notes without detail intent, no spent retry budget on
-settlement waits, and no regression of transcript/custody completion or oldest
-notes debt. Attach-gap observations must be investigated before expanding. Verify
-close/compose progress and detail readiness against the Phase 2 owner before
-activating the notes flag; missing telemetry blocks expansion.
+Verify staging fixtures with both flags unset, then explicitly false: live overlap,
+attach-gap telemetry, detail escalation, and close-to-notes. Require zero duplicate
+live Home rows, no missing closed/unowned recordings, no automatic live-member
+notes without detail intent, no spent retry budget on settlement waits, and no
+regression of transcript/custody completion or oldest notes debt. Investigate
+attach-gap observations. Verify close/compose progress and detail readiness with
+Phase 2's owner. Missing telemetry or regressions require investigation and use
+of the applicable kill switch.
 
 Rollback: set both backend switches false. Existing durable obligations resume
 ordinary processing on their next wake; all raw data remains unchanged. Revert the
