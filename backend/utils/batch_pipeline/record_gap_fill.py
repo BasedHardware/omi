@@ -52,6 +52,7 @@ from utils.batch_pipeline.live import retained_record_units
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, owner_storage_write_gate, private_cloud_sync_bucket
+from utils.sync.files import get_timestamp_from_path
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,17 @@ def retained_end(uid, conversation_id, chunks, client, key) -> float | None:
     return end
 
 
+def _source_units(paths):
+    """Decode each WAL file on its own, in capture order.
+
+    ``decode_units`` joins files up to 30 s apart with zero PCM. Here that
+    silence would hide a real hole from the contiguity check, so the fill
+    sees every source-file gap.
+    """
+    for path in sorted(paths, key=lambda value: (get_timestamp_from_path(value), value)):
+        yield from decode_units([path])
+
+
 def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, protection_level, metadata, bucket):
     """Write WAL PCM inside [lower, upper) create-only, contiguous from ``anchor``.
 
@@ -186,7 +198,7 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
     budget = MAX_FILL_SECONDS * RATE
     expected = anchor
     gapped = False
-    for unit in decode_units(paths):
+    for unit in _source_units(paths):
         if budget <= 0:
             break
         pcm = _pcm(unit.wav)

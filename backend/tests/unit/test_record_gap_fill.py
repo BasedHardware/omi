@@ -23,6 +23,7 @@ from utils.batch_pipeline.source_audio import MAGIC, decode_source, materialize
 from utils.other import storage
 
 UID, CID = 'synthetic-owner', 'synthetic-conversation'
+REAL_SOURCE_UNITS = record_gap_fill._source_units
 RATE = 16000
 NOW = 10_000.0
 PRIMARY = storage.private_cloud_sync_bucket
@@ -118,7 +119,7 @@ def world(monkeypatch):
 
     monkeypatch.setattr(record_gap_fill, 'claim_gap_fill_marker', claim)
     monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', lambda *a, **kw: bucket.listing())
-    monkeypatch.setattr(record_gap_fill, 'decode_units', lambda paths: iter(wal['units']))
+    monkeypatch.setattr(record_gap_fill, '_source_units', lambda paths: iter(wal['units']))
     monkeypatch.setattr(live, 'read_reference', read)
     store = MemoryStore()
     content, segment = live.record_identity(UID, CID)
@@ -366,6 +367,39 @@ def test_fill_stops_at_a_hole_inside_the_wal_and_resumes_on_a_later_upload(world
     assert fill(world, wal_content_id='next-wal') == 'written'
     _, units = admitted_units(world)
     validate_record_tail(units, closed_row()['finished_at'])
+
+
+def wal_file(tmp_path, capture, pcm):
+    path = tmp_path / f'audio_omi_pcm16_16000_{capture}.bin'
+    path.write_bytes(b''.join(len(pcm[i : i + 320]).to_bytes(4, 'little') + pcm[i : i + 320] for i in range(0, len(pcm), 320)))
+    return str(path)
+
+
+def test_real_decoder_keeps_a_hole_between_wal_files(world, tmp_path, monkeypatch):
+    # decode_units joins files up to 30 s apart with silence; the fill must
+    # still see the 107..108 hole and stop there, not admit across it.
+    monkeypatch.setattr(record_gap_fill, '_source_units', REAL_SOURCE_UNITS)
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    early, late = ramp(2), ramp(3, offset=7)
+    paths = [wal_file(tmp_path, 108, late), wal_file(tmp_path, 105, early)]
+    assert fill(world, paths=paths) == 'written'
+    written = fills(world)
+    assert list(written) == [f'chunks/{UID}/{CID}/105.000000.bin']
+    assert written[f'chunks/{UID}/{CID}/105.000000.bin']['data'] == early
+    with pytest.raises(ValueError, match='tail not durable'):
+        validate_record_tail(admitted_units(world)[1], closed_row()['finished_at'])
+    # A later upload carrying the real 107..108 file completes the record.
+    later = [wal_file(tmp_path, 107, ramp(1, offset=3)), wal_file(tmp_path, 108, late)]
+    assert fill(world, paths=later, wal_content_id='next-wal') == 'written'
+    validate_record_tail(admitted_units(world)[1], closed_row()['finished_at'])
+
+
+def test_real_decoder_fills_contiguous_wal_files(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(record_gap_fill, '_source_units', REAL_SOURCE_UNITS)
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    paths = [wal_file(tmp_path, 105, ramp(2)), wal_file(tmp_path, 107, ramp(4, offset=5))]
+    assert fill(world, paths=paths) == 'written'
+    validate_record_tail(admitted_units(world)[1], closed_row()['finished_at'])
 
 
 def test_overlapping_wal_units_in_one_upload_never_overlap_each_other(world):

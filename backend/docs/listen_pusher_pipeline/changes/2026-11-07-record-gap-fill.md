@@ -36,7 +36,9 @@ Written: the decoded WAL PCM inside `[retained end, finished_at + 1 s]`, or from
 `started_at - 1 s` when nothing is retained (no `started_at`, no fill). The fill
 must be contiguous with the audio already held: its first sample within 0.1 s of
 the retained end (1 s of `started_at` when nothing is retained), and it stops at
-the first WAL hole longer than 0.1 s. Admission checks only the final end, so a
+the first WAL hole longer than 0.1 s. Each WAL file is decoded on its own,
+because the shared decoder joins files up to 30 s apart with silence, which
+would hide a hole. Admission checks only the final end, so a
 fill that skipped ahead (the phone uploads newest first) would let a record
 admit with a hole; a later upload continues from the new held end. At most
 3600 s per request, in
