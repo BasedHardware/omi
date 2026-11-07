@@ -304,5 +304,35 @@ class NoneKindFragmentIOTests(unittest.TestCase):
             self.assertEqual(changelog.read_unreleased_fragment(path), [])
 
 
+class BundledNodeRuntimeReleaseNoteTests(unittest.TestCase):
+    def test_reads_pinned_bundled_node_runtime_version_from_prepare_script(self) -> None:
+        self.assertEqual(changelog.bundled_node_runtime_version(), "v22.23.4")
+
+    def test_with_bundled_runtime_note_replaces_stale_runtime_note(self) -> None:
+        notes = changelog.with_bundled_runtime_note(
+            ["Fixed audio routing", "Bundled Node.js runtime: v22.19.0"],
+            runtime_version="v22.23.4",
+        )
+        self.assertEqual(
+            notes,
+            ["Fixed audio routing", "Bundled Node.js runtime: v22.23.4"],
+        )
+        self.assertEqual(
+            changelog.with_bundled_runtime_note(notes, runtime_version="v22.23.4"),
+            notes,
+        )
+
+    def test_latest_release_changes_publishes_bundled_runtime_version(self) -> None:
+        with unittest.mock.patch.object(
+            changelog,
+            "release_entries",
+            return_value=[{"version": "0.12.99", "date": "2026-11-06", "changes": ["Improved desktop stability"]}],
+        ):
+            self.assertEqual(
+                changelog.latest_release_changes(),
+                ["Improved desktop stability", "Bundled Node.js runtime: v22.23.4"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
