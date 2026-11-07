@@ -16,7 +16,7 @@ Custody rules:
   ``finished_at + FINISH_SLACK_SECONDS`` is written, so a fill never overlaps
   retained audio and retained audio stays authoritative for every span it has.
 - Writes are create-only at keys no other writer produces
-  (``storage.gap_fill_chunk_path``); nothing is ever overwritten or deleted.
+  (``gap_fill_chunk_path``); nothing is ever overwritten or deleted.
 - Logs and metrics carry only hashed keys and closed vocabularies.
 """
 
