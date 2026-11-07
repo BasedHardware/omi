@@ -573,11 +573,11 @@ _ORIGINAL_REQUIREMENTS = tuple(
 def test_frozen_inventory_fake_patches_exactly_the_four_missing_fields():
     production_project = 'based-hardware'
     production_database = '(default)'
-    missing_groups = {
-        'candidate_integration_outbox',
-        'chat_first_proactive_intents',
-        'memory_outbox',
-        'task_recurrence_inbox',
+    missing_fields = {
+        ('candidate_integration_outbox', 'status'),
+        ('chat_first_proactive_intents', 'delivery_state'),
+        ('memory_outbox', 'status'),
+        ('task_recurrence_inbox', 'status'),
     }
     narrow_collection_modes = {
         ('conversations', 'source'): ('ASCENDING',),
@@ -599,7 +599,7 @@ def test_frozen_inventory_fake_patches_exactly_the_four_missing_fields():
             collection_group=requirement.collection_group,
             field_path=requirement.field_path,
         )
-        if requirement.collection_group in missing_groups:
+        if (requirement.collection_group, requirement.field_path) in missing_fields:
             live[name] = {
                 'name': name,
                 'indexConfig': {'usesAncestorConfig': True, 'ancestorField': ancestor_name},
@@ -626,9 +626,9 @@ def test_frozen_inventory_fake_patches_exactly_the_four_missing_fields():
     applied = {}
 
     def payload(method, url, body):
-        if 'operations/' in url:
-            return {'done': True}
         name = url.split('?')[0].split('/v1/', 1)[-1]
+        if name.startswith(f'projects/{production_project}/databases/{production_database}/operations/'):
+            return {'done': True}
         if method == 'PATCH':
             applied[name] = body
             live[name] = {
@@ -655,18 +655,17 @@ def test_frozen_inventory_fake_patches_exactly_the_four_missing_fields():
         monotonic=lambda: 0,
     )
 
-    assert patched == {
-        (requirement.collection_group, requirement.field_path)
-        for requirement in _ORIGINAL_REQUIREMENTS
-        if requirement.collection_group in missing_groups
-    }
+    assert patched == missing_fields
     assert len(applied) == 4
+    reference_fields = {name for name in before if name.endswith('/fields/privacy_reference_tokens')}
+    assert len(reference_fields) == 8
+    assert reference_fields.isdisjoint(applied)
     for name, config in before.items():
         if name not in applied:
             assert live[name] == config
     for name, body in applied.items():
         key = tuple(name.split('collectionGroups/')[1].split('/fields/'))
-        assert key[0] in missing_groups
+        assert key in missing_fields
         indexes = body['indexConfig']['indexes']
         modes = {
             (index['queryScope'], index['fields'][0].get('order') or index['fields'][0].get('arrayConfig'))
