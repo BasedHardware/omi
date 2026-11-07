@@ -2133,7 +2133,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * (sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2151,7 +2151,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "(100 * (sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "expression": "(100 * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2169,7 +2169,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * (sum(rate(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__range]))) / sum(rate(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * (sum(rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2184,10 +2184,10 @@
         "title": "Chat answer"
       },
       "pointer": "/panels/9/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "(100 * (sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "expression": "(100 * (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2202,10 +2202,10 @@
         "title": ""
       },
       "pointer": "/panels/10/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "100 * (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range]))) / sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range]))) / (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2223,7 +2223,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2277,7 +2277,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"stale\"}[3h]))",
+      "expression": "sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"stale\"}[3h]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2293,7 +2293,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"stale\"}[3h])) / sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[3h]))",
+      "expression": "100 * sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"stale\"}[3h])) / (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[3h])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2309,7 +2309,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "count(count by (journey) (increase(omi_journey_accepted_total[$__range]) > 0)) or vector(0)",
+      "expression": "count(count by (journey) ((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[$__range])) > 0)) or (0 * sum((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[$__range]))))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2324,10 +2324,10 @@
         "title": "Journeys (of 3)"
       },
       "pointer": "/panels/23/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range]))) or vector(0)",
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2345,7 +2345,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_requested\"}[$__range]))) or vector(0)",
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_requested\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2363,7 +2363,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_reverted\"}[$__range]))) or vector(0)",
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_reverted\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2381,7 +2381,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range])) or vector(0)) - round(sum(increase(omi_subscription_events_total{event=\"ended\"}[$__range])) or vector(0))",
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total[$__range])))) - round(sum(increase(omi_subscription_events_total{event=\"ended\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total[$__range]))))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2418,7 +2418,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum by (journey,outcome) (rate(omi_journey_terminal_total[5m]))",
+      "expression": "sum by (journey,outcome) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2431,10 +2431,10 @@
         "title": "Terminal outcomes by journey"
       },
       "pointer": "/panels/31/panels/0/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "sum by (journey) (rate(omi_journey_accepted_total[5m]))",
+      "expression": "sum by (journey) ((rate(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2447,10 +2447,10 @@
         "title": "Accepted vs settled"
       },
       "pointer": "/panels/31/panels/1/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "sum by (journey) (rate(omi_journey_terminal_total[5m]))",
+      "expression": "sum by (journey) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2463,10 +2463,10 @@
         "title": "Accepted vs settled"
       },
       "pointer": "/panels/31/panels/1/targets/1/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "sum by (journey) (rate(omi_journey_terminal_total{outcome=\"stale\"}[5m]))",
+      "expression": "sum by (journey) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"stale\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=\"stale\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"stale\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2479,10 +2479,10 @@
         "title": "Stale terminal events by journey"
       },
       "pointer": "/panels/31/panels/2/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "histogram_quantile(0.95, sum by (le,journey) (rate(omi_journey_latency_seconds_bucket[5m])))",
+      "expression": "histogram_quantile(0.95, sum by (le,journey) ((rate(omi_journey_latency_seconds_bucket{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_latency_seconds_bucket{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_latency_seconds_bucket{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m]))))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -2495,7 +2495,7 @@
         "title": "Journey latency p95"
       },
       "pointer": "/panels/31/panels/3/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
       "expression": "sum by (outcome) (rate(omi_capture_finalization_reconciliations_total[5m]))",
@@ -2815,7 +2815,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2833,7 +2833,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2851,7 +2851,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2869,7 +2869,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2887,7 +2887,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=~\"success|failure\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2905,7 +2905,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"degraded\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"degraded\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2941,7 +2941,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "count(count by (journey) (increase(omi_client_journey_accepted_total[$__range]) > 0)) or vector(0)",
+      "expression": "count(count by (journey) (increase(omi_client_journey_accepted_total[$__range]) > 0)) or (0 * sum(increase(omi_client_journey_accepted_total[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2959,7 +2959,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\",client_kind=\"unknown\"}[$__range])) / sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\"}[$__range]))",
+      "expression": "100 * sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\",client_kind=\"unknown\"}[$__range])) / (sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -3882,7 +3882,7 @@
     }
   ],
   "counts": {
-    "explicit_bridge": 25,
+    "explicit_bridge": 33,
     "query_consumers": 259
   },
   "schema_version": 1,
