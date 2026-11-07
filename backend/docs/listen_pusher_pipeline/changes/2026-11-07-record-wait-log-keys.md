@@ -6,8 +6,9 @@ Log-only change; no status, body, retention or admission behavior changes.
   the record content hash `sha256("record-v1:{uid}:{cid}")`, which is also the
   intake key `bp_<content>`. Waits raised before the record identity is known
   (owner context mismatch, target unresolved, owner claim raced) log `record=-`.
-- `event=batch_live_admission outcome=retry` adds `segment=<16 hex>`: a prefix
-  of the record_pending segment id, itself a content hash.
+- `event=batch_live_admission outcome=retry` adds the same `record=<16 hex>`
+  key, from the record_pending job's `record_content_id`, so a pending upload
+  joins its drain retry reason.
 - New `event=sync_record_coverage outcome=unproven cause=<cause>` before an
   `audio_coverage_unproven` wait, with a static cause:
   `wal_audio_outside_record` (WAL audio before or between record units),
