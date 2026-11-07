@@ -1,3 +1,4 @@
 {
-  "change": "Fix Android BLE connection and reconnect to public-address peripherals such as OMI Glass by preserving scanned device context and persisting verified address types."
+  "change": "Android can now pair with and reconnect to BLE devices such as OMI Glass more reliably.",
+  "platforms": ["android"]
 }
