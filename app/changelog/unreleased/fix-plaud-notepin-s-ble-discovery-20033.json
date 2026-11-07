@@ -1,0 +1,5 @@
+{
+  "title": "Fix PLAUD NotePin S BLE discovery when advertising service UUID 1910 without a local name",
+  "pr": 20033,
+  "area": "device"
+}

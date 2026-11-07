@@ -35,10 +35,11 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     final previousCallback = BleBridge.instance.peripheralDiscoveredCallback;
 
     BleBridge.instance.peripheralDiscoveredCallback = (BlePeripheral peripheral) {
-      if (peripheral.name.isNotEmpty) {
+      final candidate = normalizeScannedPeripheral(peripheral);
+      if (candidate != null) {
         // Deduplicate by UUID
-        results.removeWhere((p) => p.uuid == peripheral.uuid);
-        results.add(peripheral);
+        results.removeWhere((p) => p.uuid == candidate.uuid);
+        results.add(candidate);
       }
     };
 
@@ -85,6 +86,20 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   // MARK: - Device type detection (mirrors BtDevice.isSupportedDevice without ScanResult)
 
   @visibleForTesting
+  static BlePeripheral? normalizeScannedPeripheral(BlePeripheral peripheral) {
+    var candidate = peripheral;
+    if (candidate.name.isEmpty && _isPlaud(candidate)) {
+      candidate = BlePeripheral(
+        uuid: candidate.uuid,
+        name: 'NotePin',
+        rssi: candidate.rssi,
+        serviceUuids: candidate.serviceUuids,
+      );
+    }
+    return candidate.name.isNotEmpty ? candidate : null;
+  }
+
+  @visibleForTesting
   static bool isSupportedPeripheral(BlePeripheral p) => _isSupportedPeripheral(p);
 
   @visibleForTesting
@@ -101,9 +116,14 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     return p.name.toLowerCase().contains('bee');
   }
 
+  static const String _plaudShortServiceUuid = '1910';
+
   static bool _isPlaud(BlePeripheral p) {
     final name = p.name.toLowerCase();
-    return name.startsWith('plaud') || name.contains('notepin') || _hasService(p, plaudServiceUuid);
+    return name.startsWith('plaud') ||
+        name.contains('notepin') ||
+        _hasService(p, plaudServiceUuid) ||
+        _hasService(p, _plaudShortServiceUuid);
   }
 
   static bool _isFieldy(BlePeripheral p) {
@@ -147,8 +167,10 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
       type = DeviceType.omi;
     }
 
+    final displayName = p.name.isNotEmpty ? p.name : (_isPlaud(p) ? 'NotePin' : p.name);
+
     return BtDevice(
-      name: p.name,
+      name: displayName,
       id: p.uuid,
       type: type,
       rssi: p.rssi,
