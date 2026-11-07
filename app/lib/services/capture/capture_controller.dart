@@ -1431,15 +1431,16 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Drains a closing conversation's tail, on both closing paths. The drain runs before finalize's first
-  /// await, so the WALs that exist right after it hold everything recorded up to the close; they fence
-  /// the conversation's stamp. [closedAt] then opens the next conversation's window, once the caller
-  /// has reset the session.
-  ({Future<void> drained, Set<Wal>? walsAtClose, int closedAt}) _drainClosingConversation() {
+  /// Drains a closing conversation's tail, on both closing paths. The serialized drain snapshots the
+  /// WALs that exist right after the tail WAL is added (before disk flush awaits); they fence the
+  /// conversation's stamp. [closedAt] then opens the next conversation's window, once the caller has
+  /// reset the session.
+  ({Future<Set<Wal>?> drained, int closedAt}) _drainClosingConversation() {
     final phoneSync = _wal.getSyncs().phone;
-    final drained = phoneSync.finalizeCurrentSession();
-    final walsAtClose = phoneSync is LocalWalSyncImpl ? phoneSync.walsNow() : null;
-    return (drained: drained, walsAtClose: walsAtClose, closedAt: _nowSeconds);
+    final drained = phoneSync is LocalWalSyncImpl
+        ? phoneSync.finalizeAndSnapshotSession().then<Set<Wal>?>((wals) => wals)
+        : phoneSync.finalizeCurrentSession().then<Set<Wal>?>((_) => null);
+    return (drained: drained, closedAt: _nowSeconds);
   }
 
   /// Whether capture goes on into the next conversation when one closes: the socket outlives the close,
@@ -4022,7 +4023,6 @@ class CaptureController extends ChangeNotifier
         close.drained,
         sessionStart,
         conversationId,
-        close.walsAtClose,
         after: _pendingFinalizeAndStamp,
         keepLocation: _captureOutlivesClose,
       );
@@ -4204,7 +4204,7 @@ class CaptureController extends ChangeNotifier
     externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
 
     final close = _drainClosingConversation();
-    await close.drained;
+    final walsAtClose = await close.drained;
     if (lifetime.isClosed ||
         recordingSessionId != activeRecordingId ||
         conversationRevision != _systemSurfaceConversationRevision) {
@@ -4252,7 +4252,7 @@ class CaptureController extends ChangeNotifier
       await earlierStamps;
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId, walsAtClose: close.walsAtClose);
+          phoneSync.prepareConversationStamp(recordingSessionId, walsAtClose: walsAtClose);
         }
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
@@ -4288,16 +4288,15 @@ class CaptureController extends ChangeNotifier
     phone.setActiveRecordingSessionId(activeRecordingId);
   }
 
-  /// [drained] is the finalize that drained the closing conversation's tail. [walsAtClose], the WALs
-  /// that existed right after that drain, fences the stamp to the audio recorded before the close. The
+  /// [drained] is the finalize that drained the closing conversation's tail and snapshotted the WALs
+  /// that existed right after that drain, fencing the stamp to the audio recorded before the close. The
   /// stamp goes [after] the earlier closes' stamps, and the returned future never completes before them.
   /// The location snapshot belongs to the recording: [keepLocation] keeps it when capture goes on into
   /// the next conversation.
   Future<void> _finalizeAndStampSession(
-    Future<void> drained,
+    Future<Set<Wal>?> drained,
     int sessionStartSeconds,
-    String conversationId,
-    Set<Wal>? walsAtClose, {
+    String conversationId, {
     Future<void>? after,
     required bool keepLocation,
   }) async {
@@ -4312,6 +4311,7 @@ class CaptureController extends ChangeNotifier
       final walGeneration = phoneSync is LocalWalSync ? phoneSync.sessionGeneration : null;
       // Waits for both even when the drain fails, so no later close stamps before an earlier one.
       await Future.wait([drained, if (after != null) after]);
+      final walsAtClose = await drained;
       if (sessionStartSeconds > 0 &&
           (walGeneration == null || (phoneSync is LocalWalSync && phoneSync.sessionGeneration == walGeneration))) {
         if (phoneSync is LocalWalSyncImpl) {

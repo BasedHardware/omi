@@ -375,8 +375,13 @@ void main() {
     final secondSeconds = secondStart.millisecondsSinceEpoch ~/ 1000;
     await streamPendant(link, 140);
     await expectCopies('c2 streamed into a copy before it closed', fromSeconds: secondSeconds);
-    await serverCloses(conversation('c2', secondStart, 140));
+    final c2 = conversation('c2', secondStart, 140);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: c2));
+    await settleFiles();
+    world.controller.onMessageEventReceived(ConversationEvent(memory: c2, messages: []));
     processed.complete(CreateConversationResponse(messages: [], conversation: conversation('p1', origin, 140)));
+    await world.controller.transcriptConfirmationForTesting.timeout(const Duration(seconds: 2));
+    await settleFiles();
 
     await walsReach(
       "c2's copies released by its own event",

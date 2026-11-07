@@ -1634,15 +1634,19 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// keeps in memory) and flush everything to disk. Call this when a capture session ends
   /// to ensure no audio is lost in memory.
   Future<void> finalizeCurrentSession() async {
-    final generation = _sessionGeneration;
-    await _enqueueBuffer(() => _finalizeCurrentSession(generation));
+    await finalizeAndSnapshotSession();
   }
 
-  Future<void> _finalizeCurrentSession(int generation) async {
-    if (_frames.isEmpty) return;
+  Future<Set<Wal>> finalizeAndSnapshotSession() {
+    final generation = _sessionGeneration;
+    return _enqueueBuffer(() => _finalizeCurrentSession(generation));
+  }
+
+  Future<Set<Wal>> _finalizeCurrentSession(int generation) async {
+    if (_frames.isEmpty) return walsNow();
 
     final high = _frames.length;
-    if (high <= 0) return;
+    if (high <= 0) return walsNow();
 
     final now = _now();
     var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
@@ -1705,11 +1709,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames = [];
     _pendingPhoneOnly = false;
     _frameSynced = [];
+    final walsAtClose = walsNow();
 
     // Flush all in-memory WALs to disk immediately
     await _flush(generation);
     _notifyUpdated(generation);
     Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames (stored=$shouldStored), flushed to disk');
+    return walsAtClose;
   }
 
   /// Stamp all session WALs with the given conversationId and persist to disk.

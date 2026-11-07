@@ -113,9 +113,7 @@ void main() {
       for (var i = 0; i < 50; i++) {
         sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
       }
-      final drained = sync.finalizeCurrentSession();
-      final walsAtClose = sync.walsNow();
-      await drained;
+      final walsAtClose = await sync.finalizeAndSnapshotSession();
       final tail = sync.testWals.single;
       expect(tail.timerStart, 10000, reason: "half a second rounds to the close's own second, so time can't fence it");
 
