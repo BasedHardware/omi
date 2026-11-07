@@ -158,6 +158,12 @@ Final receipt/body metadata revalidation: `scripts/pr-preflight --pr-body-file .
 
 Only the original two app files are left dirty. Frozen gate preservation object: `626f815882e621e6c3809b55af4c88dfd457caf9`. Restored app patch SHA-256: `24ea1309984dd69b44cb9c08cd0d6ad04f121eeb768f7d66d2bb2314ab39f0ee`. The tracked `.agent-artifacts/pgf-result.md` has no diff. Owned command process groups and configured loopback emulators have stopped. The heartbeat is stopped before handoff.
 
+## Cleanup incident for the lead
+
+I mistakenly sent SIGTERM to heartbeat PID `45829` while identifying the timer by command and an assumed parent, rather than verifying this lane's ancestry first. It belonged to Codex PID `40642`, cwd `/Volumes/Ephemeral/scratch/worktrees/omi-rollout-tools`, heartbeat key `pg-short`. Its receipt records `event=killed`, signal 15, at Unix time `1794015769.576229` (`~/.cache/agent-heartbeat/pg-short.45829:1794006964054994000.json`). That lane's Codex work process remains running; I did not stop a work process or alter its files. **Lead follow-up: ensure that lane re-arms its heartbeat.** I did not contact David or another lane.
+
+This lane's actual Codex parent is `46005`; I verified its heartbeat PID `93397` against both parent and exact command before stopping it. Its owned tool session exited 143 as expected. No C2 test, emulator, gate or waiter remains running. This incident changes no implementation or verification result.
+
 ## Local commits
 
 - `b937e5183f5` test(storage): record complete round three regression results (frozen gate HEAD)
