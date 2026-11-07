@@ -239,3 +239,34 @@ def test_reserved_task_create_records_noop_mutation_without_cache_bump(pg, monke
         repo.create(ActionItemDraft(data={'description': 'Changed'}), document_id='reserved', mutation_id='occupied')
     assert repo.get('reserved').description == 'Original'
     assert bumps == []
+
+
+def test_scalar_type_updates_are_not_lost_to_python_equality(pg):
+    repo = pg.action_items(pg.space('scalar-types'))
+    tid = repo.create(ActionItemDraft(data={'description': 'Typed', 'extension': 1}))
+    for value in (True, 1, 1.0):
+        assert repo.update(tid, {'extension': value})
+        saved = repo.get(tid).model_extra['extension']
+        assert type(saved) is type(value) and saved == value
+
+
+def test_related_domain_task_patches_pass_the_codec(pg, monkeypatch):
+    sid = pg.space('link-codec')
+    goal = pg.goals(sid).create(GoalCreate(data={'title': 'Goal'}))
+    tid = pg.action_items(sid).create(ActionItemDraft(data={'description': 'Linked', 'goal_id': goal.id}))
+    before = pg.action_items(sid).get(tid).updated_at
+    calls = []
+    original = space_store.prepare_action_item_for_write
+
+    def prepare(data, *, partial=False):
+        calls.append((data.copy(), partial))
+        return original(data, partial=partial)
+
+    monkeypatch.setattr(space_store, 'prepare_action_item_for_write', prepare)
+    pg.goals(sid).transition_lifecycle(
+        goal.id, status='abandoned', relationship_disposition='detach', idempotency_key='detach', account_generation=0
+    )
+    assert any(partial and data.get('goal_id', 'missing') is None for data, partial in calls)
+    saved = pg.action_items(sid).get(tid)
+    assert saved.goal_id is None and saved.updated_at > before
+    assert pg.goals(sid).get(goal.id).model_extra['ended_at'] is not None

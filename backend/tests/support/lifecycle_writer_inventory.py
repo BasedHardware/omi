@@ -38,7 +38,7 @@ FIELD_SITES = {
             'CellGoals.transition_lifecycle.build',
             'status',
             'status',
-            ('focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
         ),
         ('CellGoals.unfocus.build', 'status', "'background'", ('focus_rank', 'status', 'updated_at')),
     ],

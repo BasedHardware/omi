@@ -368,7 +368,9 @@ class CellWorkstreams(WorkflowRepo):
                     )
                 else:
                     self._write_task()
-                    task.update(workstream_id=wid, account_generation=account_generation)
+                    task.update(
+                        workstream_id=wid, account_generation=account_generation, updated_at=datetime.now(timezone.utc)
+                    )
                 self._event(wid, {'kind': 'system', 'summary': 'Work initiated'})
                 created = True
             return {
@@ -414,7 +416,7 @@ class CellWorkstreams(WorkflowRepo):
                     unchanged += 1
                     if task.get('account_generation', 0) == 0:
                         self._write_task()
-                        task['account_generation'] = account_generation
+                        task.update(account_generation=account_generation, updated_at=datetime.now(timezone.utc))
                 else:
                     imported += 1
                     self._write_task()

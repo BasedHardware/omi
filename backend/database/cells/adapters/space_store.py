@@ -19,7 +19,8 @@ from database.cells.adapters import AdapterRegistry
 from database.cells.errors import BaseRevisionMismatch, MutationIdReused
 from database.cells.store import CellStore
 from database.ports.base import MutationConflict, RevisionConflict, SpaceTx
-from database.jobstore.codec import dumps
+from database.jobstore.codec import canonical, dumps
+from database.action_item_codec import prepare_action_item_for_write
 from .action_items import CellActionItems
 from .folders import CellFolders
 from .goals import CellGoals
@@ -69,10 +70,16 @@ class _Rows(MutableMapping):
     def __len__(self):
         return sum(1 for _ in self)
 
+    def changed(self, key):
+        row, before = self.rows[key], self.before[key]
+        if row is before:
+            return False
+        return row is _MISSING or before is _MISSING or canonical(row) != canonical(before)
+
     def stage(self):
         for key, row in self.rows.items():
             before = self.before[key]
-            if row is before or row == before:
+            if not self.changed(key):
                 continue
             cached = self.owner.raw.cache[(self.entity, key)]
             expected = cached[0] if cached is not None else None
@@ -86,6 +93,16 @@ class _Rows(MutableMapping):
                     )
                 self.owner.raw.delete(self.entity, key, expected_rev=expected)
             else:
+                if self.entity == 'action_items':
+                    # Related-domain operations edit task links too. Normalize
+                    # only their patch so untouched legacy fields stay verbatim.
+                    if before is _MISSING:
+                        row = prepare_action_item_for_write(row)
+                    else:
+                        patch = {
+                            k: v for k, v in row.items() if k not in before or canonical(v) != canonical(before[k])
+                        }
+                        row = {**row, **prepare_action_item_for_write(patch, partial=True)}
                 receipt = self.entity == 'workflow_mutation_receipts'
                 self.owner.raw.put(
                     self.entity,
@@ -144,15 +161,7 @@ class CellSpaceTx:
     def query(self, entity, where='', params=(), order='entity_id COLLATE "C"', limit=None, offset=0):
         """Internal SQL fragments are constants owned by domain adapters."""
         identity = self.state.maps.get(entity)
-        edits = (
-            {}
-            if identity is None
-            else {
-                key: row
-                for key, row in identity.rows.items()
-                if row is not identity.before[key] and row != identity.before[key]
-            }
-        )
+        edits = {} if identity is None else {key: row for key, row in identity.rows.items() if identity.changed(key)}
         args = [self.space_id, entity]
         sql = 'SELECT entity_id, doc FROM cell_docs WHERE space_id=%s AND entity=%s'
         if edits:
