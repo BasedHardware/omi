@@ -20,6 +20,7 @@ from config.batch_pipeline import contention_retry_enabled, control_candidate_fa
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
@@ -122,6 +123,12 @@ class FirestoreTransaction:
         # Reads that go through the raw transaction instead of the cache (queries, privacy state):
         # their kind only, so contention logs can name them.
         self.direct_reads: set[str] = set()
+        # (control key, priority) activated from a non-transactional frontier hint; the store
+        # re-seeds each one after this transaction commits (reseed_hinted_activation).
+        self.hinted_activations: set[tuple[str, int]] = set()
+
+    def _note_hinted_activation(self, key: str, priority: int) -> None:
+        self.hinted_activations.add((key, int(priority)))
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -178,6 +185,15 @@ class FirestoreTransaction:
         )
 
     def service_frontier(self, priority: int) -> float:
+        # A transactional query locks the top control doc, which workers advance constantly,
+        # so every owner (re)activation conflicted with worker control writes and admission
+        # exhausted its retries (sync uploads 503 sync_batch_unavailable, 2026-11-07). The
+        # frontier only seeds a rejoining owner's credit via max(own, frontier), so a
+        # non-transactional hint is enough. Lever 'admission_frontier_hint' 0 restores the query.
+        if lever_enabled('admission_frontier_hint'):
+            # Outside the transaction: do not report it as a contended transactional read.
+            self.direct_reads.discard('control_query')
+            return service_frontier(self.client, self.namespace, priority)
         return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
@@ -264,6 +280,19 @@ class FirestoreStore:
             view.flush()
             return result
 
+        result = self._run_committed(client, commit, last_view)
+        for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
+            try:
+                reseed_hinted_activation(client, self.namespace, key, priority)
+            except Exception as error:  # Best effort: the admission already committed.
+                logger.warning(
+                    'event=batch_frontier_reseed outcome=failed priority=%s exception_type=%s',
+                    priority,
+                    type(error).__name__,
+                )
+        return result
+
+    def _run_committed(self, client, commit, last_view):
         if not contention_retry_enabled():
             return commit(client.transaction())
         # The outer budget owns fresh transaction IDs and all retries. The
@@ -924,14 +953,48 @@ def timeliness_sample(
     }
 
 
-def service_frontier(client: Any, namespace: str, priority: int, *, transaction: Any = None) -> float:
+def reseed_hinted_activation(client: Any, namespace: str, key: str, priority: int) -> bool:
+    """Lift a just-activated shard to the frontier as of now, if no pull has reached it yet.
+
+    Admission seeded the shard from a frontier read outside its transaction (lever
+    admission_frontier_hint); pulls that committed meanwhile were unseen. This re-reads the
+    frontier after that commit, again without a transaction, and lifts only while the
+    activation marker is still set, in a transaction on this shard's own control doc. A pull
+    that got there first consumed the marker, so waiting is never charged to the joiner.
+    """
+    service_key, marker = f'p{priority}_service', f'p{priority}_frontier_hint'
+    # Runs before the upload is acknowledged: one attempt, short RPC deadlines, no retries.
+    frontier = service_frontier(client, namespace, priority, timeout=RESEED_RPC_TIMEOUT_SECONDS)
+    reference = client.collection(f'{namespace}_control').document(key)
+
+    @firestore.transactional
+    def lift(transaction):
+        snapshot = reference.get(transaction=transaction, timeout=RESEED_RPC_TIMEOUT_SECONDS, retry=None)
+        control = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        if not control.get(marker):
+            return False
+        transaction.update(
+            reference, {service_key: max(control.get(service_key, 0.0), frontier), marker: firestore.DELETE_FIELD}
+        )
+        return True
+
+    return lift(client.transaction(max_attempts=1))
+
+
+RESEED_RPC_TIMEOUT_SECONDS = 1.5
+
+
+def service_frontier(
+    client: Any, namespace: str, priority: int, *, transaction: Any = None, timeout: float | None = None
+) -> float:
     if priority not in (0, 1, 2):
         raise ValueError('bounded priority required')
     name = f'p{priority}_service'
+    bounded = {'timeout': timeout, 'retry': None} if timeout is not None else {}
     docs = list(
         client.collection(f'{namespace}_control')
         .order_by(name, direction=firestore.Query.DESCENDING)
         .limit(1)
-        .stream(transaction=transaction)
+        .stream(transaction=transaction, **bounded)
     )
     return docs[0].to_dict()[name] if docs else 0.0

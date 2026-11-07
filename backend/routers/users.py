@@ -634,7 +634,7 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    return people_db.get_or_create_person_by_name(uid, person_data)
+    return people_db.get_or_create_person_by_name(uid, person_data).model_dump(exclude_unset=True)
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
