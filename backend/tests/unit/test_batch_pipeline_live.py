@@ -471,6 +471,17 @@ def test_concurrent_finalize_registration_and_replay_create_one_pending_obligati
     assert next(iter(store.rows.values()))['state'] == 'record_pending'
 
 
+def test_registration_replay_rebuilds_hints_from_durable_original_age(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    ages = []
+    monkeypatch.setattr(live.record_attention, 'register', lambda uid, cid, age: ages.append(age))
+    assert register_recording('synthetic', recording(), store=store, now=100)
+    assert register_recording('synthetic', recording(), store=store, now=1000)
+    assert ages == [100, 100]  # A lost Redis hint cannot rejuvenate existing debt.
+
+
 @pytest.mark.parametrize('recorded_enabled', [True, False])
 def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypatch, recorded_enabled):
     store = MemoryStore()

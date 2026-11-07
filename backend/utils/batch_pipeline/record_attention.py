@@ -69,13 +69,14 @@ def sealed(uid, conversation_id, row, *, store=None, now=None):
         ):
             pending['available_at'] = min(pending.get('available_at', now), now)
         tx.put('jobs', segment, pending)
-        return pending.get('enqueued_at', now), pending['available_at']
+        return pending.get('enqueued_at'), pending['available_at']
 
     try:
         result = store.run(wake)
         if result is not None:
             enqueued, available = result
-            register(uid, conversation_id, enqueued)
+            if enqueued is not None:
+                register(uid, conversation_id, enqueued)
             defer(segment, available)
             r = attention.client()
             p = r.pipeline()

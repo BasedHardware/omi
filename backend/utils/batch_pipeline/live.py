@@ -162,9 +162,13 @@ def register_recording(
     if (conversation.get('external_data') or {}).get('server_batch_only') is True:
         snapshot['server_batch_only'] = True
 
+    enqueued_at = now
+
     def commit(tx):
+        nonlocal enqueued_at
         previous = tx.get('jobs', segment)
         if previous:
+            enqueued_at = previous.get('enqueued_at')
             return True
         generation = tx.check_privacy(uid, (conversation['id'],))
         tx.put(
@@ -196,7 +200,8 @@ def register_recording(
     assert store is not None
     registered = store.run(commit)
     if registered:
-        record_attention.register(uid, conversation['id'], now)
+        if enqueued_at is not None:
+            record_attention.register(uid, conversation['id'], enqueued_at)
         if pipeline_policy.seal_snapshot(conversation, require_content_revision=False) is not None:
             record_attention.sealed(uid, conversation['id'], conversation, store=store, now=now)
     return registered
