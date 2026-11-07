@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from database import (
     entities,
     memory_ledger,
+    transcript_pointer,
     review_memory_hygiene,
     review_queries,
     review_store as store,
@@ -196,9 +197,17 @@ def record_agent_change(
         return {'mutations': mutations, 'projection_writer': write}
 
     try:
-        memory_ledger.append_commit_with_builder(
-            uid, None, build, use_current_head=True, firestore_client=store.client()
-        )
+        try:
+            transcript_pointer.run_preloaded_operation(
+                memory_ledger.append_commit_with_builder,
+                uid,
+                None,
+                build,
+                use_current_head=True,
+                firestore_client=store.client(),
+            )
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            raise store.ReviewConflict('Transcript unavailable') from None
     except _Unchanged:
         pass
     sync_conversations(uid, edits, firestore_client=store.client())
@@ -461,9 +470,17 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         return {'mutations': mutations, 'projection_writer': write}
 
     try:
-        memory_ledger.append_commit_with_builder(
-            uid, None, build, use_current_head=True, firestore_client=store.client()
-        )
+        try:
+            transcript_pointer.run_preloaded_operation(
+                memory_ledger.append_commit_with_builder,
+                uid,
+                None,
+                build,
+                use_current_head=True,
+                firestore_client=store.client(),
+            )
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            raise store.ReviewConflict('Transcript unavailable') from None
     except _Unchanged:
         return _wire(result)
     sync_conversations(uid, result['edits'], firestore_client=store.client())

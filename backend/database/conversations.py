@@ -72,6 +72,13 @@ from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, apply_user_titl
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
+from database import transcript_pointer
+from database.transcript_pointer import (
+    TranscriptSegmentsDecodeError,
+    decode_stored_transcript as decode_transcript_segments_blob,
+    run_preloaded_transactional,
+)
+
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import (
     SyncAssignmentClock,
@@ -149,8 +156,19 @@ def get_conversation_ids(uid: str) -> List[str]:
 # *********************************
 
 
-def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str, *, firestore_client=None) -> Dict[str, Any]:
+def _decrypt_conversation_data(
+    conversation_data: Dict[str, Any], uid: str, *, firestore_client=None
+) -> Optional[Dict[str, Any]]:
     data = copy.deepcopy(conversation_data)
+    if isinstance(data.get('transcript_segments'), dict):
+        try:
+            data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
+        except transcript_pointer.TranscriptBlobAbsent:
+            return None
+        except TranscriptSegmentsDecodeError:
+            if current_portability_read() is not None:
+                raise
+            data['transcript_segments'] = []
     _reveal_match_scores_for_read(data, uid)
 
     if 'transcript_segments' not in data:
@@ -339,7 +357,12 @@ def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnos
 
 
 def _prepare_conversation_for_write(
-    data: Dict[str, Any], uid: str, level: str, *, preserve_transcript_identity: bool = False
+    data: Dict[str, Any],
+    uid: str,
+    level: str,
+    *,
+    preserve_transcript_identity: bool = False,
+    conversation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
@@ -382,8 +405,13 @@ def _prepare_conversation_for_write(
             data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         from utils.conversations.speaker_grouping_storage import protect_segments
 
-        protect_segments(data['transcript_segments'], uid)
-        data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
+        data['transcript_segments'] = transcript_pointer.offload_or_inline(
+            uid,
+            conversation_id or data.get('id'),
+            data['transcript_segments'],
+            lambda value: _protect_json_value(value, uid, level),
+            prepare_segments=lambda value: protect_segments(value, uid),
+        )
         data['transcript_segments_compressed'] = True
     if match_scores.FIELD in data:
         try:
@@ -442,16 +470,6 @@ def encode_conversation_for_write(
     return _prepare_conversation_for_write(conversation_data, uid, level)
 
 
-class TranscriptSegmentsDecodeError(ValueError):
-    """The stored transcript field cannot safely authorize a segment merge."""
-
-
-def _require_segment_list(parsed: Any) -> List[Any]:
-    if not isinstance(parsed, list):
-        raise TranscriptSegmentsDecodeError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
-    return parsed
-
-
 def _decode_transcript_segments_strict(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
@@ -460,40 +478,6 @@ def _decode_transcript_segments_strict(
     segments = decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
     reveal_segments(segments, uid)
     return segments
-
-
-def decode_transcript_segments_blob(
-    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
-) -> List[Any]:
-    """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
-
-    The read path swallows decode failures into an empty list, which is safe for
-    rendering but unsafe for a caller deciding whether a conversation is empty
-    or whether a client projection may bind to it. Binding is authorization,
-    not display: an unreadable blob must not become ``[]``.
-    """
-    if isinstance(raw_segments, list):
-        return raw_segments
-    try:
-        if isinstance(raw_segments, str):
-            payload = encryption.decrypt(raw_segments, uid)
-            if require_decryption and payload == raw_segments:
-                # A display fallback is not proof of successful decryption.
-                raise TranscriptSegmentsDecodeError('undecodable transcript_segments: decryption failed')
-            if compressed:
-                parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
-            else:
-                parsed = json.loads(payload)
-            return _require_segment_list(parsed)
-        if isinstance(raw_segments, bytes) and compressed:
-            return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
-    except TranscriptSegmentsDecodeError:
-        raise
-    except (ValueError, TypeError, RecursionError, zlib.error) as error:
-        raise TranscriptSegmentsDecodeError('undecodable transcript_segments: invalid encoding') from error
-    raise TranscriptSegmentsDecodeError(
-        f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}'
-    )
 
 
 def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
@@ -606,19 +590,24 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     Only the decoded value distinguishes an empty recording from a real one.
     Undecodable segments count as content: never delete data we cannot read.
     """
-    if conversation.get('has_content') or conversation.get('photos'):
-        return True
     raw_segments = conversation.get('transcript_segments')
-    if not raw_segments:
+    other_content = bool(conversation.get('has_content')) or bool(conversation.get('photos'))
+    if not isinstance(raw_segments, dict) and other_content:
+        return True
+    if not raw_segments and not isinstance(raw_segments, dict):
         return False
     try:
         segments = _decode_transcript_segments_strict(
             uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
         )
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        # Only the transcript signal disappeared. Photos and the durable
+        # content marker still forbid empty-recording deletion.
+        return other_content
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
         logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
         return True
-    return bool(segments)
+    return bool(segments) or other_content
 
 
 def effective_user_title(user_title: Any) -> Optional[str]:
@@ -678,6 +667,15 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    if isinstance(data.get('transcript_segments'), dict):
+        try:
+            data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
+        except transcript_pointer.TranscriptBlobAbsent:
+            return None
+        except TranscriptSegmentsDecodeError:
+            if current_portability_read() is not None:
+                raise
+            data['transcript_segments'] = []
     data.pop('live_transcript_replay_receipt', None)
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
@@ -686,11 +684,12 @@ def prepare_conversation_for_read(
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
+        decrypted = _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
+        if decrypted is None:
+            return None
         return project_home(
             uid,
-            conversation_recorded_time.hydrate(
-                _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
-            ),
+            conversation_recorded_time.hydrate(decrypted),
             firestore_client=firestore_client,
             read_budget=read_budget,
         )
@@ -871,7 +870,7 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     if owner_diagnostics.FIELD in write_data:
         payload[owner_diagnostics.FIELD] = write_data.pop(owner_diagnostics.FIELD)
         _merge_owner_diagnostics(payload, existing)
-    write_data.update(_prepare_conversation_for_write(payload, uid, level))
+    write_data.update(_prepare_conversation_for_write(payload, uid, level, conversation_id=write_data.get('id')))
     write_data['data_protection_level'] = level
 
 
@@ -883,7 +882,9 @@ def _stage_notes_identity(transaction, user_ref, write_data, existing):
         existing,
         decode_segments=_decode_transcript_segments_strict,
         decode_receipt=decode_manual_speaker_assignments,
-        encode=_prepare_conversation_for_write,
+        encode=lambda data, owner, level: _prepare_conversation_for_write(
+            data, owner, level, conversation_id=write_data.get('id')
+        ),
     )
 
 
@@ -1264,7 +1265,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         )
         transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
-    run_transactional(db, _write_processing_result)
+    run_preloaded_transactional(db, _write_processing_result)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
@@ -1554,7 +1555,10 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
-    persisted = run_transactional(db, _persist)
+    try:
+        persisted = run_preloaded_transactional(db, _persist)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
     if persisted and terminal_refusal is not None:
         _record_terminal_claim_refusal(*terminal_refusal)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
@@ -1595,7 +1599,8 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
-    created, summary_changed = conversation_recorded_time.create_if_absent(
+    created, summary_changed = transcript_pointer.run_preloaded_operation(
+        conversation_recorded_time.create_if_absent,
         uid,
         conversation_data,
         firestore_client=db,
@@ -2210,7 +2215,9 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         for doc in snapshots:
             check_portability_read()
             conv = doc.to_dict()
-            conv = prepare_conversation_for_read(conv, uid) or conv
+            conv = prepare_conversation_for_read(conv, uid)
+            if conv is None:
+                continue
             if not is_visible_conversation(conv, include_discarded=include_discarded):
                 continue
             batch.append(conv)
@@ -2279,7 +2286,7 @@ def update_conversation(
             **update_data,
             'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
         }
-    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
+    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level, conversation_id=conversation_id)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
         if expected_audio_files is None:
@@ -2345,7 +2352,9 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
     raw = get_conversation_raw_snapshot(uid, conversation_id)
     if raw is None:
         raise PermissionError('Conversation removed')
-    prepared = _prepare_conversation_for_write(update_data, uid, raw.get('data_protection_level', 'standard'))
+    prepared = _prepare_conversation_for_write(
+        update_data, uid, raw.get('data_protection_level', 'standard'), conversation_id=conversation_id
+    )
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
     refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
@@ -2701,7 +2710,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 return False
             payload = {'data_protection_level': target_level}
             had_match_scores = match_scores.FIELD in current
-            if 'transcript_segments' in current:
+            if 'transcript_segments' in current and not isinstance(current['transcript_segments'], dict):
                 payload['transcript_segments'] = _decode_transcript_segments_strict(
                     uid, current['transcript_segments'], bool(current.get('transcript_segments_compressed'))
                 )
@@ -2722,7 +2731,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                     bool(current.get('manual_speaker_assignments_compressed')),
                 )
             prepared = _prepare_conversation_for_write(
-                payload, uid, target_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+                payload,
+                uid,
+                target_level,
+                preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+                conversation_id=doc_snapshot.reference.id,
             )
             guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
             if had_match_scores and match_scores.FIELD not in prepared:
@@ -2735,7 +2748,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             transaction.update(doc_snapshot.reference, prepared)
             return True
 
-        if not run_transactional(db, _migrate):
+        if not run_preloaded_transactional(db, _migrate):
             continue
 
         # Photos retain their separate batched migration path.
@@ -3530,7 +3543,15 @@ def extra_updates_with_bound_client_processing(
             if transcript_corrections is None:
                 raise ValueError('Transcript corrections must be read in the binding transaction')
             segments = apply_entries(segments, transcript_corrections)
-    except (json.JSONDecodeError, TypeError, zlib.error, ValueError, RecursionError):
+    except (
+        json.JSONDecodeError,
+        TypeError,
+        zlib.error,
+        ValueError,
+        RecursionError,
+        transcript_pointer.TranscriptBlobAbsent,
+        transcript_pointer.TranscriptShredded,
+    ):
         for field in PROJECTION_FAMILY_FIELDS:
             if field not in updates:
                 continue
@@ -3595,7 +3616,7 @@ def bind_client_processing(
         transaction.update(doc_ref, bound_updates)
         return True
 
-    return run_transactional(client, _bind)
+    return run_preloaded_transactional(client, _bind)
 
 
 def assign_conversation_speaker(
@@ -3753,6 +3774,7 @@ def assign_conversation_speaker(
             uid,
             raw.get('data_protection_level', 'standard'),
             preserve_transcript_identity=bool(raw.get('has_transcript_corrections')),
+            conversation_id=current_id,
         )
         clear_client_processing(payload)
         guard_match_score_size(payload, raw, getattr(ref, 'path', None))
@@ -3766,7 +3788,10 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_assignment_transaction(client, assign, uid=uid)
+    try:
+        result = run_assignment_transaction(client, assign, uid=uid)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        raise LookupError('Conversation not found') from None
     record_assignment_commit(uid, result, logger)
     current = result[0]
     try:
@@ -3973,7 +3998,11 @@ def update_conversation_segments(
 
         update_payload.update(write_span({**current, **update_payload}, arrival_at=datetime.now(timezone.utc)))
         prepared_payload = _prepare_conversation_for_write(
-            update_payload, uid, doc_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+            update_payload,
+            uid,
+            doc_level,
+            preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
         )
         if invalidate_client_processing:
             clear_client_processing(prepared_payload)
@@ -3989,7 +4018,10 @@ def update_conversation_segments(
             return planned.with_segments(accepted)
         return accepted if return_segments else True
 
-    result = run_transactional(client, _write_segments)
+    try:
+        result = run_preloaded_transactional(client, _write_segments)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
     if result is not False:
         invalidate_people_stats_cache(uid)
     return result
@@ -4132,6 +4164,7 @@ def materialize_translation(
             uid,
             level,
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
         )
         payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
         payload['translation_materializations_compressed'] = True
@@ -4145,7 +4178,10 @@ def materialize_translation(
             **({'original_text': selected['text']} if current.get('has_transcript_corrections') else {}),
         }
 
-    return run_transactional(client, _write)
+    try:
+        return run_preloaded_transactional(client, _write)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return None
 
 
 # ***********************************
@@ -4800,12 +4836,16 @@ def promote_final_pass_if_current(
             uid,
             current.get('data_protection_level') or 'standard',
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
         )
         guard_match_score_size(prepared, current, getattr(parent, 'path', None))
         transaction.update(parent, prepared)
         return True
 
-    written = run_transactional(client, commit)
+    try:
+        written = run_preloaded_transactional(client, commit)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
     if written:
         invalidate_people_stats_cache(uid)
     return bool(written)
