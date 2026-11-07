@@ -462,6 +462,44 @@ def test_a_sync_attach_retried_after_lost_cas_asks_jev_once(store, monkeypatch, 
     assert len(asked) == 1, 'a retry must reuse the first answer, never ask Jev again'
 
 
+def test_a_synced_candidate_locked_after_intake_never_reaches_jev(store):
+    # The intake snapshot was taken before the conversation was locked; the worker must ask the stored document.
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    snapshot = dict(row)
+    row['is_locked'] = True
+    span = conversation_span(snapshot)
+    asked = []
+    ask = lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    service._attach_recorded_synced(
+        UID, 'c2', snapshot, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+    )
+    assert asked == [], 'a conversation locked after intake must never be sent to Jev'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+def test_an_unexpected_failure_closing_the_owner_keeps_todays_join(store, monkeypatch):
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    span = conversation_span(row)
+
+    def close_fails(*args, **kwargs):
+        raise RuntimeError('close failed')
+
+    monkeypatch.setattr(service, '_close', close_fails)
+    asked = []
+    ask = lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    service._attach_recorded_synced(
+        UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+    )
+    assert asked, 'F decided moved-on, so the close is the step that failed'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
 @pytest.mark.parametrize('case', ['killed', 'outside_cohort', 'short_speech', 'short_gap', 'member_later'])
 def test_a_synced_join_that_f_does_not_decide_keeps_todays_join_without_a_question(store, monkeypatch, case):
     first = _first_episode(store)

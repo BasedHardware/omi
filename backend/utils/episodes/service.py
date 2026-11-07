@@ -1475,7 +1475,12 @@ def _synced_f_verdict(
     if sum(len(str(s.get('text') or '').split()) for s in segments) < MOMENT_MIN_WORDS:
         # Too little speech to ask about: the join stays as today's, as a short moment keeps it.
         return None
-    owner = episode_owning_recorded_time(uid, started, ended_at=finished, firestore_client=c.firestore_client)
+    # The owner is the episode the attach itself would choose: the candidate's start point, over the same window.
+    rows = episode_timeline.recorded_candidates(uid, started, finished, firestore_client=c.firestore_client)
+    chosen = choose_recorded_episode(rows, started, started)
+    if chosen is None:
+        return None
+    owner = episodes_db.get_episode(uid, chosen['id'], firestore_client=c.firestore_client)
     if owner is None:
         return None
     source = getattr(row.get('source'), 'value', row.get('source')) or None
@@ -1494,9 +1499,9 @@ def _synced_f_verdict(
     }
     # Only the spec's head of speech and at most its people reads are looked up; the gate above saw the whole row.
     named = _named_segments(uid, f_join.candidate_head(segments), c)
-    return owner, f_join.settle(
-        uid, owner, conversation_id, pending, named, c, started_at=started, member=False, candidate_row=row
-    )
+    # No candidate_row: settle re-reads the stored document, so a conversation deleted, discarded or locked after
+    # intake scheduled this attach never reaches Jev on the stale snapshot.
+    return owner, f_join.settle(uid, owner, conversation_id, pending, named, c, started_at=started, member=False)
 
 
 def _attach_recorded_synced(
@@ -1535,6 +1540,10 @@ def _attach_recorded_synced(
         except episodes_db.EpisodeConflict:
             closed = None
             metrics.record_boundary('f_later_member')
+        except Exception as error:
+            # Any other failure closing the owner keeps today's placement, as every F failure does.
+            f_join.synced_failed(error)
+            closed = None
         if closed is None:
             # The owner changed while F answered: the join stays as today's, on every retry too.
             state['keep'] = True
