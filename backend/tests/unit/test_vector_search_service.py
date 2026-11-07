@@ -1173,3 +1173,135 @@ def test_hydration_bounds_stale_index_deletes_and_ignores_deleter_failures():
     assert failed['items'] == []
     assert failed['stale_index_deleted_count'] == 0
     assert failed['decisions']['missing-0'] == 'missing_authoritative_item'
+
+
+def test_stale_cleanup_holds_exclusive_claim_through_provider_delete(monkeypatch):
+    events = []
+
+    class _Claim:
+        def __enter__(self):
+            events.append('claim')
+            return 'token'
+
+        def __exit__(self, exc_type, exc, tb):
+            assert exc_type is None
+            events.append('exit')
+            return False
+
+    class _Index:
+        def delete(self, *, filter, namespace):
+            assert events == ['claim']
+            assert namespace == 'ns2'
+            events.append('delete')
+
+    def claim(uid, *, kind):
+        assert (uid, kind) == ('u1', 'stale_vector_index_cleanup')
+        return _Claim()
+
+    def unexpected_fence(*args, **kwargs):
+        raise AssertionError('cleanup must claim exclusive admission')
+
+    monkeypatch.setattr(vector_db, 'index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
+    monkeypatch.setattr(vector_db, 'destructive_operation_gate', claim)
+    monkeypatch.setattr(vector_db, 'external_write_fence', unexpected_fence)
+    monkeypatch.setattr(
+        vector_db, 'finish_destructive_operation', lambda *args, **kwargs: events.append('extra_finish')
+    )
+
+    assert vector_db.delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')]) == 1
+    assert events == ['claim', 'delete', 'exit']
+
+
+def test_stale_cleanup_busy_claim_cannot_reach_provider(monkeypatch):
+    class _Index:
+        def delete(self, **kwargs):
+            raise AssertionError('busy admission must not reach the provider')
+
+    def blocked(uid, *, kind):
+        raise vector_db.DestructiveOperationInProgress('busy')
+
+    def unexpected_finish(*args, **kwargs):
+        raise AssertionError('an unclaimed gate must not be finished')
+
+    monkeypatch.setattr(vector_db, 'index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
+    monkeypatch.setattr(vector_db, 'destructive_operation_gate', blocked)
+    monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: _AllowGate())
+    monkeypatch.setattr(vector_db, 'finish_destructive_operation', unexpected_finish)
+
+    assert vector_db.delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')]) == 0
+
+
+def test_stale_cleanup_provider_failure_exits_claim_and_preserves_error(monkeypatch):
+    events = []
+    original = RuntimeError('synthetic provider unavailable')
+
+    class _Claim:
+        def __enter__(self):
+            events.append('claim')
+            return 'token'
+
+        def __exit__(self, exc_type, exc, tb):
+            assert exc is original
+            events.append('exit')
+            return False
+
+    class _Index:
+        def delete(self, **kwargs):
+            events.append('delete')
+            raise original
+
+    def finish(uid, *, kind, token, outcome):
+        assert (uid, kind, token, outcome) == ('u1', 'stale_vector_index_cleanup', 'token', 'failed')
+        events.append('finish_retry')
+
+    monkeypatch.setattr(vector_db, 'index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
+    monkeypatch.setattr(vector_db, 'destructive_operation_gate', lambda *args, **kwargs: _Claim())
+    monkeypatch.setattr(vector_db, 'finish_destructive_operation', finish)
+
+    try:
+        vector_db.delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
+    except RuntimeError as error:
+        assert error is original
+    else:
+        raise AssertionError('provider failure must propagate')
+    assert events == ['claim', 'delete', 'exit', 'finish_retry']
+
+
+def test_hydration_default_stale_cleanup_claims_exclusive_admission(monkeypatch):
+    now = datetime.now(timezone.utc)
+    missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
+    claims = []
+    deleted = []
+
+    class _Index:
+        def delete(self, *, filter, namespace):
+            assert claims == [('u1', 'stale_vector_index_cleanup')]
+            assert namespace == 'ns2'
+            deleted.append(filter)
+
+    def claim(uid, *, kind):
+        claims.append((uid, kind))
+        return _AllowGate()
+
+    monkeypatch.setattr(vector_db, 'index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
+    monkeypatch.setattr(vector_db, 'destructive_operation_gate', claim)
+    monkeypatch.setattr(vector_db, 'finish_destructive_operation', lambda *args, **kwargs: None)
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=_FirestoreFake({}),
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(hits=[_hit(missing, score=0.9)]),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert response['stale_index_deleted_count'] == 1
+    assert response['items'] == []
+    assert len(deleted) == 1
