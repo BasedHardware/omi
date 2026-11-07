@@ -385,6 +385,77 @@ def test_datetime_revision_history_ties_and_compaction(api):
     assert request(api, 'mutations', json=payload).status_code == 422
 
 
+def test_datetime_revision_conflicts_after_contended_out_of_order_caller_times(api):
+    enroll(api)
+    locked, release_first, entered_second, release_second = [threading.Event() for _ in range(4)]
+    caller_now = time.time()
+
+    def first_body(tx):
+        tx.get('notes', 'a')
+        locked.set()
+        assert release_first.wait(timeout=10)
+        tx.put('notes', 'a', {'text': 'first'})
+
+    def second_body(tx):
+        entered_second.set()
+        tx.get('notes', 'a')  # Waits behind the first writer's row lock.
+        assert release_second.wait(timeout=10)
+        tx.put('notes', 'a', {'text': 'second'})
+
+    observer = Pool(cells_dsn(), size=1)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(api.cell.run, api.sid, first_body, actor_uid=api.sid, now=caller_now)
+            try:
+                assert locked.wait(timeout=5)
+                second = executor.submit(api.cell.run, api.sid, second_body, actor_uid=api.sid, now=caller_now - 10)
+                assert entered_second.wait(timeout=5)
+                deadline = time.monotonic() + 5
+                with observer.connection() as conn:
+                    while not conn.execute(
+                        "SELECT 1 FROM pg_stat_activity WHERE datname=current_database() "
+                        "AND wait_event_type='Lock' AND query LIKE 'SELECT rev, doc FROM cell_docs%'"
+                    ).fetchone():
+                        assert time.monotonic() < deadline, 'second writer never contended on the row'
+                        time.sleep(0.01)
+                        conn.execute('SELECT pg_stat_clear_snapshot()')
+                release_first.set()
+                first.result(timeout=10)
+                stale_token = datetime.now(timezone.utc).isoformat()
+            finally:
+                release_first.set()
+                release_second.set()
+            second.result(timeout=10)
+    finally:
+        observer.close()
+
+    with api.cell.pool.connection() as conn:
+        history = conn.execute(
+            'SELECT seq, ts, committed_at FROM change_log WHERE space_id=%s ORDER BY seq', (api.sid,)
+        ).fetchall()
+    assert history[1][1] > history[2][1]  # Caller timestamps run backwards.
+    assert history[1][2] < history[2][2]  # Server revision times follow commits.
+    payload = mutation()
+    payload.update(base_revision=stale_token, client_mutation_id='stale-datetime-contention')
+    response = request(api, 'mutations', json=payload)
+    assert response.status_code == 409, response.text
+    assert response.json()['code'] == 'base_revision_mismatch'
+    assert response.json()['row']['rev'] == 3
+    assert api.cell.read_doc(api.sid, 'notes', 'a') == {'text': 'second'}
+
+
+def test_datetime_revision_does_not_trust_pre_migration_timestamps(api):
+    enroll(api)
+    with api.cell.pool.connection() as conn:
+        conn.execute('UPDATE change_log SET committed_at=NULL WHERE space_id=%s', (api.sid,))
+    payload = mutation()
+    payload['base_revision'] = datetime.now(timezone.utc).isoformat()
+    response = request(api, 'mutations', json=payload)
+    assert response.status_code == 409
+    assert response.json()['code'] == 'revision_unavailable'
+    assert request(api, 'mutations').status_code == 200  # Integer revisions remain usable.
+
+
 @pytest.mark.parametrize(
     'change',
     [

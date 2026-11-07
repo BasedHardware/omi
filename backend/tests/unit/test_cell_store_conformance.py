@@ -489,7 +489,7 @@ def test_head_epoch_and_migrations(harness, space):
         path = Path(store_module.__file__).parent / 'migrations'
         assert migrate(conn, directory=path) == []
         assert migrate(conn, directory=path) == []
-        assert current_version(conn) == 2
+        assert current_version(conn) == 3
 
 
 def test_validation_and_adapter_registration(harness, space, monkeypatch):
@@ -674,6 +674,13 @@ def test_protocol_transaction_reads(harness, space):
     write(store, space, 'a', now=NOW - 2, client_mutation_id='read-mid', fingerprint='fp')
     write(store, space, 'a', now=NOW - 1)
     write(store, space, 'a', now=NOW - 1, feed=False)
+    with store.pool.connection() as conn:
+        stamps = [
+            r[0]
+            for r in conn.execute(
+                'SELECT committed_at FROM change_log WHERE space_id=%s ORDER BY seq', (space,)
+            ).fetchall()
+        ]
 
     def read(tx):
         assert tx.get_with_rev('notes', 'absent') is None
@@ -683,16 +690,17 @@ def test_protocol_transaction_reads(harness, space):
         assert tx.get_with_rev('notes', 'a') == (3, {'key': 'a'})
         assert tx.receipt_seq('missing') is None
         assert tx.receipt_seq('read-mid') == 1
-        assert tx.seq_as_of('notes', 'a', NOW - 3) is None
-        assert tx.seq_as_of('notes', 'a', NOW - 2) == 1
-        assert tx.seq_as_of('notes', 'a', NOW - 1) == 3  # max seq across tied timestamps, including feed=false
+        assert tx.seq_as_of('notes', 'a', stamps[0] - 1) is None
+        assert tx.seq_as_of('notes', 'a', stamps[0]) == 1
+        assert tx.seq_as_of('notes', 'a', stamps[1]) == 2
+        assert tx.seq_as_of('notes', 'a', stamps[2]) == 3  # includes feed=false
         for invalid in ['', 'bad\x00']:
             with pytest.raises(ValueError):
                 tx.receipt_seq(invalid)
 
     store.run(space, read, actor_uid=space, now=NOW)
     store.compact(space, now=NOW + FEED_RETENTION_S + 1)
-    assert store.run(space, lambda tx: tx.seq_as_of('notes', 'a', NOW - 2), actor_uid=space, now=NOW).value is None
+    assert store.run(space, lambda tx: tx.seq_as_of('notes', 'a', stamps[0]), actor_uid=space, now=NOW).value is None
 
 
 @pytest.mark.parametrize('read_kind', ['pull', 'snapshot'])

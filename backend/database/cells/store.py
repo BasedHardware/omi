@@ -104,7 +104,7 @@ class CellTransaction:
     def seq_as_of(self, entity: str, entity_id: str, ts: float) -> int | None:
         validate_address(entity, entity_id)
         return self.conn.execute(
-            'SELECT max(seq) FROM change_log WHERE space_id=%s AND entity=%s AND entity_id=%s AND ts<=%s',
+            'SELECT max(seq) FROM change_log ' 'WHERE space_id=%s AND entity=%s AND entity_id=%s AND committed_at<=%s',
             (self.space_id, entity, entity_id, ts),
         ).fetchone()[0]
 
@@ -230,9 +230,13 @@ class CellTransaction:
         if not pending:
             return replayed
         count = len(pending)
-        head, _epoch = self.conn.execute(
-            'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s '
-            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch',
+        # flush already owns the space-head lock. Sample the database clock here,
+        # after contention, and advance monotonically even if that clock recedes.
+        # Caller `now` remains event/retention time, never revision authority.
+        head, _epoch, committed_at = self.conn.execute(
+            'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s, '
+            'revision_ts=greatest(extract(epoch FROM clock_timestamp())::float8, revision_ts+0.000001) '
+            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch, revision_ts',
             (count, self.now, self.space_id),
         ).fetchone()
         for seq, address in enumerate(sorted(pending), head - count + 1):
@@ -251,7 +255,8 @@ class CellTransaction:
                 )
             self.conn.execute(
                 'INSERT INTO change_log (space_id, seq, entity, entity_id, op, rev, actor_uid, '
-                'client_mutation_id, fingerprint, feed, ts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                'client_mutation_id, fingerprint, feed, ts, committed_at) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                 (
                     self.space_id,
                     seq,
@@ -263,6 +268,7 @@ class CellTransaction:
                     mutation.fingerprint,
                     mutation.feed,
                     self.now,
+                    committed_at,
                 ),
             )
             if mutation.client_mutation_id is not None:
