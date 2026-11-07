@@ -15,6 +15,10 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import live
 from utils.batch_pipeline.intake import _terminally_held
 
+# Imported at collection: the router's cold import (~2.5 s) must not count against the
+# first parametrized case's 1 s unit budget.
+from routers import batch_pipeline as _requeue_router  # noqa: E402
+
 NOW = 2_000_000.0
 BARRIER = 'capture upload/finalization barrier not closed'
 
@@ -289,7 +293,8 @@ def test_private_requeue_http_boundary(monkeypatch, outcome):
     from types import SimpleNamespace
     from fastapi import FastAPI, HTTPException
     from fastapi.testclient import TestClient
-    from routers import batch_pipeline as router
+
+    router = _requeue_router
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
