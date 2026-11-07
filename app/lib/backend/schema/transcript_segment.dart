@@ -14,6 +14,7 @@ enum TranscriptSegmentSplitFailure {
   emptySide,
   midWordBoundary,
   insufficientTiming,
+  persistenceFailed,
 }
 
 class TranscriptSegmentSplitResult {
@@ -79,7 +80,7 @@ class TranscriptSegment {
     final firstTurn = TranscriptSegment(
       id: id,
       text: firstText,
-      originalText: originalText ?? text,
+      originalText: firstText,
       speaker: speaker,
       speakerId: speakerId,
       isUser: isUser,

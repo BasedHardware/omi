@@ -15502,4 +15502,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Διαχωρισμός στον δρομέα';
+  @override
+  String get splitSegmentEmptySideError =>
+      'Τοποθετήστε τον δρομέα ανάμεσα στις λέξεις ώστε και τα δύο μέρη να έχουν κείμενο.';
+  @override
+  String get splitSegmentMidWordError => 'Τοποθετήστε τον δρομέα σε όριο λέξης πριν από τον διαχωρισμό.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Αυτό το τμήμα είναι πολύ σύντομο για να διαχωριστεί σωστά.';
 }

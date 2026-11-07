@@ -15400,4 +15400,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Rozdělit u kurzoru';
+  @override
+  String get splitSegmentEmptySideError => 'Umístěte kurzor mezi slova, aby obě části obsahovaly text.';
+  @override
+  String get splitSegmentMidWordError => 'Před rozdělením umístěte kurzor na hranici slova.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Tento úsek je příliš krátký na to, aby šel správně rozdělit.';
 }

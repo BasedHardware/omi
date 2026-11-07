@@ -15430,4 +15430,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Razdeli pri kazalcu';
+  @override
+  String get splitSegmentEmptySideError => 'Postavite kazalec med besede, tako da bosta oba dela vsebovala besedilo.';
+  @override
+  String get splitSegmentMidWordError => 'Pred razdelitvijo postavite kazalec na mejo besede.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Ta odsek je prekratek za pravilno razdelitev.';
 }

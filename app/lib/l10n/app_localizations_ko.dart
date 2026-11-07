@@ -15180,4 +15180,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => '커서 위치에서 분할';
+  @override
+  String get splitSegmentEmptySideError => '양쪽 모두 텍스트가 포함되도록 단어 사이에 커서를 두세요.';
+  @override
+  String get splitSegmentMidWordError => '분할하기 전에 단어 경계에 커서를 두세요.';
+  @override
+  String get splitSegmentInsufficientTimingError => '이 구간은 너무 짧아 깔끔하게 분할할 수 없습니다.';
 }

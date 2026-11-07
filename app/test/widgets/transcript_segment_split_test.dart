@@ -61,6 +61,7 @@ void main() {
       expect(result.failure, isNull);
       expect(result.first!.id, 'seg-1');
       expect(result.first!.text, 'Hello there.');
+      expect(result.first!.originalText, 'Hello there.');
       expect(result.first!.start, 10.0);
       expect(result.first!.end, greaterThan(10.0));
       expect(result.first!.end, lessThan(20.0));
@@ -69,6 +70,7 @@ void main() {
 
       expect(result.second!.id, 'seg-1__split_1');
       expect(result.second!.text, 'General Kenobi.');
+      expect(result.second!.originalText, 'General Kenobi.');
       expect(result.second!.start, result.first!.end);
       expect(result.second!.end, 20.0);
       expect(result.second!.personId, 'person-1');
@@ -148,21 +150,9 @@ void main() {
           home: Scaffold(
             body: EditSegmentSheet(
               segment: unTimedSegment,
-              speakerLabel: 'Speaker 1',
-              onSave: (_) async => true,
-              onSplit: (offset, editedText) async {
-                final split = unTimedSegment.splitAtOffset(offset, editedText: editedText);
-                if (!split.isSuccess) {
-                  return switch (split.failure!) {
-                    TranscriptSegmentSplitFailure.emptySide =>
-                      'Place the cursor between words so both parts contain text.',
-                    TranscriptSegmentSplitFailure.midWordBoundary => 'Place the cursor at a word boundary to split.',
-                    TranscriptSegmentSplitFailure.insufficientTiming =>
-                      'This segment does not have enough timing data to split safely.',
-                  };
-                }
-                return null;
-              },
+              onSave: (_) {},
+              onSplit: (offset, editedText) async =>
+                  unTimedSegment.splitAtOffset(offset, editedText: editedText),
             ),
           ),
         ),
@@ -175,13 +165,13 @@ void main() {
       await tester.tap(find.byKey(const Key('split_segment_button')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('split_segment_error')), findsOneWidget);
-      expect(find.text('Place the cursor at a word boundary to split.'), findsOneWidget);
+      expect(find.text('Place the cursor at a word boundary before splitting.'), findsOneWidget);
 
       // Place cursor at word boundary on short-timing segment to test insufficientTiming
       textField.controller!.selection = const TextSelection.collapsed(offset: 5);
       await tester.tap(find.byKey(const Key('split_segment_button')));
       await tester.pumpAndSettle();
-      expect(find.text('This segment does not have enough timing data to split safely.'), findsOneWidget);
+      expect(find.text('This segment is too short to split cleanly.'), findsOneWidget);
     });
 
     testWidgets('splits saved mixed-speaker segment into two turns and assigns each turn independently',
@@ -222,6 +212,7 @@ void main() {
 
       final detail = ConversationDetailProvider(
         fetchConversation: (_) async => conversation,
+        reprocess: (_) async => conversation,
         fetchRecording: (_) async => RecordingTranscript(
           [RecordingLine('conv-1', mixedSegment, scope: 'scope', label: 'SPEAKER_01')],
           episodeId: 'ep-1',
@@ -286,8 +277,8 @@ void main() {
 
       // Split the mixed segment at the boundary between sentences
       final splitOffset = 'First speaker part. '.length;
-      final splitError = await detail.splitEditingSegment(0, splitOffset);
-      expect(splitError, isNull);
+      final splitResult = await detail.splitEditingSegment(0, splitOffset);
+      expect(splitResult.isSuccess, isTrue);
       await tester.pumpAndSettle();
 
       expect(splitCalls, hasLength(1));
@@ -361,8 +352,9 @@ void main() {
       )..selectedDate = now;
       detail.setCachedConversation(conversation);
 
-      final err = await detail.splitEditingSegment(0, 'Part one. '.length);
-      expect(err, 'Failed to split segment. Please try again.');
+      final result = await detail.splitEditingSegment(0, 'Part one. '.length);
+      expect(result.isSuccess, isFalse);
+      expect(result.failure, TranscriptSegmentSplitFailure.persistenceFailed);
       expect(detail.conversation.transcriptSegments, hasLength(1));
       expect(detail.conversation.transcriptSegments.single.id, 'seg-rollback');
       expect(detail.conversation.transcriptSegments.single.text, 'Part one. Part two.');

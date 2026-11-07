@@ -840,20 +840,21 @@ class ConversationDetailProvider extends ChangeNotifier
     final result = original.splitAtOffset(splitOffset, editedText: editedText);
     if (!result.isSuccess) return result;
     final (first, second) = (result.first!, result.second!);
-    final previousSegments = List<TranscriptSegment>.of(segments);
     segments.replaceRange(segmentIndex, segmentIndex + 1, [first, second]);
     replaceRecordingSegmentWithSplit(original.id, first, second);
     conversationProvider?.updateConversation(target);
     notifyListeners();
     final saved = await _splitSegment(target.id, original.id, first, second);
     if (!saved && !_isDisposed && identical(conversationOrNull, target)) {
-      segments
-        ..clear()
-        ..addAll(previousSegments);
+      final idx = segments.indexWhere((s) => s.id == first.id);
+      if (idx >= 0 && idx + 1 < segments.length && segments[idx + 1].id == second.id) {
+        segments.replaceRange(idx, idx + 2, [original]);
+      }
       resetRecordingTranscript();
       conversationProvider?.updateConversation(target);
       notifyError('SEGMENT_EDIT_FAILED');
       notifyListeners();
+      return const TranscriptSegmentSplitResult.failure(TranscriptSegmentSplitFailure.persistenceFailed);
     }
     return result;
   }

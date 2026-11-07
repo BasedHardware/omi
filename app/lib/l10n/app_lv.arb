@@ -4642,5 +4642,9 @@
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "Sadalīt pie kursora",
+    "splitSegmentEmptySideError": "Novietojiet kursoru starp vārdiem, lai abās daļās būtu teksts.",
+    "splitSegmentMidWordError": "Pirms sadalīšanas novietojiet kursoru pie vārda robežas.",
+    "splitSegmentInsufficientTimingError": "Šis posms ir pārāk īss, lai to precīzi sadalītu."
 }

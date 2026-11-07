@@ -4677,5 +4677,9 @@
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "İmleçten böl",
+    "splitSegmentEmptySideError": "Her iki kısmın da metin içermesi için imleci kelimelerin arasına yerleştirin.",
+    "splitSegmentMidWordError": "Bölmeden önce imleci kelime sınırına yerleştirin.",
+    "splitSegmentInsufficientTimingError": "Bu bölüm düzgün şekilde bölünemeyecek kadar kısa."
 }

@@ -4642,5 +4642,9 @@
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "在光标处拆分",
+    "splitSegmentEmptySideError": "请将光标放在词语之间，使拆分后的两部分都包含文本。",
+    "splitSegmentMidWordError": "拆分前请将光标放在词语边界处。",
+    "splitSegmentInsufficientTimingError": "此片段太短，无法准确拆分。"
 }

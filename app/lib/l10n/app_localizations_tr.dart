@@ -15412,4 +15412,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'İmleçten böl';
+  @override
+  String get splitSegmentEmptySideError =>
+      'Her iki kısmın da metin içermesi için imleci kelimelerin arasına yerleştirin.';
+  @override
+  String get splitSegmentMidWordError => 'Bölmeden önce imleci kelime sınırına yerleştirin.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Bu bölüm düzgün şekilde bölünemeyecek kadar kısa.';
 }

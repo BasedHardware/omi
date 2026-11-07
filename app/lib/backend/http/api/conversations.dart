@@ -628,9 +628,6 @@ Future<bool> splitConversationSegment(
     method: 'PATCH',
     body: jsonEncode({'segment_id': segmentId, 'first': first.toJson(), 'second': second.toJson()}),
   );
-  if (response != null && (response.statusCode == 404 || response.statusCode == 405)) {
-    return updateConversationSegmentText(conversationId, segmentId, '${first.text}\n${second.text}');
-  }
   return response != null && response.statusCode == 200;
 }
 

@@ -15405,4 +15405,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Jaa kohdistimen kohdalta';
+  @override
+  String get splitSegmentEmptySideError => 'Aseta kohdistin sanojen väliin, jotta molemmissa osissa on tekstiä.';
+  @override
+  String get splitSegmentMidWordError => 'Aseta kohdistin sanan rajalle ennen jakamista.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Tämä osa on liian lyhyt jaettavaksi siististi.';
 }

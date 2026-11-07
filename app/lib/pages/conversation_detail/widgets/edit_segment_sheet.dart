@@ -71,14 +71,15 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
     }
   }
 
-  String _splitFailureMessage(TranscriptSegmentSplitFailure failure) => switch (failure) {
-        TranscriptSegmentSplitFailure.insufficientTiming =>
-          'This line does not have enough timing detail to split accurately.',
-        TranscriptSegmentSplitFailure.midWordBoundary =>
-          'Place the cursor between words to split this line into two turns.',
-        TranscriptSegmentSplitFailure.emptySide =>
-          'Place the cursor between two spoken parts so both turns have text.',
-      };
+  String _splitFailureMessage(BuildContext context, TranscriptSegmentSplitFailure failure) {
+    final l10n = context.l10n;
+    return switch (failure) {
+      TranscriptSegmentSplitFailure.insufficientTiming => l10n.splitSegmentInsufficientTimingError,
+      TranscriptSegmentSplitFailure.midWordBoundary => l10n.splitSegmentMidWordError,
+      TranscriptSegmentSplitFailure.persistenceFailed => l10n.somethingWentWrong,
+      TranscriptSegmentSplitFailure.emptySide => l10n.splitSegmentEmptySideError,
+    };
+  }
 
   Future<void> _splitAtCursor() async {
     final onSplit = widget.onSplit;
@@ -88,20 +89,29 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
       _splitting = true;
       _splitError = null;
     });
-    final result = await onSplit(offset, _controller.text);
-    if (!mounted) return;
-    if (result.isSuccess) {
-      _dirty = false;
-      Navigator.of(context).pop();
-      return;
+    try {
+      final result = await onSplit(offset, _controller.text);
+      if (!mounted) return;
+      if (result.isSuccess) {
+        _dirty = false;
+        Navigator.of(context).pop();
+        return;
+      }
+      setState(() {
+        _splitting = false;
+        _splitError = _splitFailureMessage(context, result.failure ?? TranscriptSegmentSplitFailure.emptySide);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _splitting = false;
+        _splitError = context.l10n.somethingWentWrong;
+      });
     }
-    setState(() {
-      _splitting = false;
-      _splitError = _splitFailureMessage(result.failure ?? TranscriptSegmentSplitFailure.emptySide);
-    });
   }
 
   void _save() {
+    if (_splitting) return;
     final newText = _controller.text.trim();
     if (newText.isNotEmpty && newText != widget.segment.text) {
       widget.onSave(newText);
@@ -111,6 +121,7 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
   }
 
   Future<void> _confirmDiscard() async {
+    if (_splitting) return;
     final l10n = context.l10n;
     final discard = await showOmiConfirm(
       context,
@@ -128,9 +139,9 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_dirty,
+      canPop: !_dirty && !_splitting,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _confirmDiscard();
+        if (!didPop && !_splitting) _confirmDiscard();
       },
       child: SingleChildScrollView(
         child: Padding(
@@ -173,7 +184,7 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
                 const SizedBox(height: OmiSpacing.sm),
                 OmiButton.secondary(
                   key: const Key('split_segment_button'),
-                  label: 'Split at cursor',
+                  label: context.l10n.splitSegmentAtCursor,
                   expand: true,
                   onPressed: _splitting ? null : _splitAtCursor,
                 ),
@@ -185,11 +196,17 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
                     child: OmiButton.secondary(
                       label: context.l10n.cancel,
                       expand: true,
-                      onPressed: () => Navigator.of(context).maybePop(),
+                      onPressed: _splitting ? null : () => Navigator.of(context).maybePop(),
                     ),
                   ),
                   const SizedBox(width: OmiSpacing.sm),
-                  Expanded(child: OmiButton(label: context.l10n.save, expand: true, onPressed: _save)),
+                  Expanded(
+                    child: OmiButton(
+                      label: context.l10n.save,
+                      expand: true,
+                      onPressed: _splitting ? null : _save,
+                    ),
+                  ),
                 ],
               ),
             ],

@@ -15412,4 +15412,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'کرسر پر تقسیم کریں';
+  @override
+  String get splitSegmentEmptySideError => 'کرسر کو الفاظ کے درمیان رکھیں تاکہ دونوں حصوں میں متن موجود رہے۔';
+  @override
+  String get splitSegmentMidWordError => 'تقسیم کرنے سے پہلے کرسر کو لفظ کی حد پر رکھیں۔';
+  @override
+  String get splitSegmentInsufficientTimingError => 'یہ حصہ درست طریقے سے تقسیم کرنے کے لیے بہت چھوٹا ہے۔';
 }

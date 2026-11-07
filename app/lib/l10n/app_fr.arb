@@ -4677,5 +4677,9 @@
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "Scinder au curseur",
+    "splitSegmentEmptySideError": "Placez le curseur entre les mots pour que chaque partie contienne du texte.",
+    "splitSegmentMidWordError": "Placez le curseur à la limite d'un mot avant de scinder.",
+    "splitSegmentInsufficientTimingError": "Ce segment est trop court pour être scindé proprement."
 }

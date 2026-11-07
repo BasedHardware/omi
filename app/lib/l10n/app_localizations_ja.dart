@@ -15173,4 +15173,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'カーソル位置で分割';
+  @override
+  String get splitSegmentEmptySideError => '両方のパートにテキストが残るよう、単語の間にカーソルを置いてください。';
+  @override
+  String get splitSegmentMidWordError => '分割する前に単語の境界にカーソルを置いてください。';
+  @override
+  String get splitSegmentInsufficientTimingError => 'このセグメントは短すぎるため分割できません。';
 }

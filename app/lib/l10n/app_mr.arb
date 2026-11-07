@@ -12199,5 +12199,9 @@
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "splitSegmentAtCursor": "कर्सरवर विभाजित करा",
+    "splitSegmentEmptySideError": "दोन्ही भागांमध्ये मजकूर राहील अशा प्रकारे शब्दांच्या मध्ये कर्सर ठेवा.",
+    "splitSegmentMidWordError": "विभाजित करण्यापूर्वी शब्दाच्या सीमेवर कर्सर ठेवा.",
+    "splitSegmentInsufficientTimingError": "हा भाग व्यवस्थित विभाजित करण्यासाठी खूप लहान आहे."
 }

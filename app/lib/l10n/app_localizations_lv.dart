@@ -15435,4 +15435,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'Sadalīt pie kursora';
+  @override
+  String get splitSegmentEmptySideError => 'Novietojiet kursoru starp vārdiem, lai abās daļās būtu teksts.';
+  @override
+  String get splitSegmentMidWordError => 'Pirms sadalīšanas novietojiet kursoru pie vārda robežas.';
+  @override
+  String get splitSegmentInsufficientTimingError => 'Šis posms ir pārāk īss, lai to precīzi sadalītu.';
 }

@@ -15395,4 +15395,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get splitSegmentAtCursor => 'কার্সারে বিভক্ত করুন';
+  @override
+  String get splitSegmentEmptySideError => 'শব্দের মাঝে কার্সার রাখুন যাতে উভয় অংশেই টেক্সট থাকে।';
+  @override
+  String get splitSegmentMidWordError => 'বিভক্ত করার আগে শব্দের সীমানায় কার্সার রাখুন।';
+  @override
+  String get splitSegmentInsufficientTimingError => 'এই অংশটি সঠিকভাবে বিভক্ত করার জন্য খুবই ছোট।';
 }

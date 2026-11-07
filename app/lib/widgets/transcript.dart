@@ -1267,8 +1267,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // The badge marks the start of a speaker's turn, not every line of it.
     final startsTurn = previous == null ||
         data.id.contains('__split_') ||
-        previous.isUser != data.isUser ||
-        previous.speakerId != data.speakerId ||
+        (segmentIdx + 1 < widget.segments.length && widget.segments[segmentIdx + 1].id.startsWith('${data.id}__split_')) ||
+        previous.isUser != data.isUser || previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
         (data.speakerId == omiSpeakerId && !data.isUser);
     final selected = widget.selectedSegmentIds;
