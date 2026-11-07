@@ -49,6 +49,12 @@ def _normalize_cooldown(cooldown: Any) -> timedelta:
     return cooldown
 
 
+def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
+    if not getattr(snapshot, 'exists', False):
+        return {}
+    return snapshot.to_dict() or {}
+
+
 def claim_wedge_first_seen(
     uid: str,
     day: str,
@@ -63,15 +69,27 @@ def claim_wedge_first_seen(
         return False
 
     client = _client(firestore_client)
-    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(clean_uid)
+    collection = client.collection(CAPTURE_WEDGE_STATE_COLLECTION)
+    doc_ref = collection.document(clean_uid)
+    legacy_ref = collection.document(uid) if uid != clean_uid else None
     stamp = _normalize_utc(now)
 
     def _txn(transaction: Any) -> bool:
         snapshot = doc_ref.get(transaction=transaction)
-        data = snapshot.to_dict() or {} if getattr(snapshot, 'exists', False) else {}
-        if data.get('first_seen_day') == clean_day:
+        data = _snapshot_dict(snapshot)
+        legacy_data = _snapshot_dict(legacy_ref.get(transaction=transaction)) if legacy_ref is not None else {}
+
+        first_seen_day = data.get('first_seen_day')
+        legacy_first_seen = legacy_data.get('first_seen_day')
+        if (isinstance(first_seen_day, str) and first_seen_day.strip() == clean_day) or (
+            isinstance(legacy_first_seen, str) and legacy_first_seen.strip() == clean_day
+        ):
             return False
-        transaction.set(doc_ref, {'uid': clean_uid, 'first_seen_day': clean_day, 'updated_at': stamp}, merge=True)
+
+        payload: dict[str, Any] = {'uid': clean_uid, 'first_seen_day': clean_day, 'updated_at': stamp}
+        if data.get('last_nudge_at') is None and isinstance(legacy_data.get('last_nudge_at'), datetime):
+            payload['last_nudge_at'] = _normalize_utc(legacy_data['last_nudge_at'])
+        transaction.set(doc_ref, payload, merge=True)
         return True
 
     return firestore.transactional(_txn)(client.transaction())
@@ -97,17 +115,28 @@ def claim_wedge_nudge_cooldown(
     effective_cooldown = _normalize_cooldown(cooldown)
     now_utc = _normalize_utc(now)
     client = _client(firestore_client)
-    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(clean_uid)
+    collection = client.collection(CAPTURE_WEDGE_STATE_COLLECTION)
+    doc_ref = collection.document(clean_uid)
+    legacy_ref = collection.document(uid) if uid != clean_uid else None
 
     def _txn(transaction: Any) -> bool:
         snapshot = doc_ref.get(transaction=transaction)
-        data = snapshot.to_dict() or {} if getattr(snapshot, 'exists', False) else {}
-        last_nudge_at = data.get('last_nudge_at')
-        if isinstance(last_nudge_at, datetime):
-            last_nudge_utc = _normalize_utc(last_nudge_at)
-            if now_utc - last_nudge_utc < effective_cooldown:
-                return False
-        transaction.set(doc_ref, {'uid': clean_uid, 'last_nudge_at': now_utc, 'updated_at': now_utc}, merge=True)
+        data = _snapshot_dict(snapshot)
+        legacy_data = _snapshot_dict(legacy_ref.get(transaction=transaction)) if legacy_ref is not None else {}
+
+        candidate_stamps = [
+            _normalize_utc(stamp)
+            for stamp in (data.get('last_nudge_at'), legacy_data.get('last_nudge_at'))
+            if isinstance(stamp, datetime)
+        ]
+        if candidate_stamps and now_utc - max(candidate_stamps) < effective_cooldown:
+            return False
+
+        payload: dict[str, Any] = {'uid': clean_uid, 'last_nudge_at': now_utc, 'updated_at': now_utc}
+        legacy_first_seen = legacy_data.get('first_seen_day')
+        if data.get('first_seen_day') is None and isinstance(legacy_first_seen, str) and legacy_first_seen.strip():
+            payload['first_seen_day'] = legacy_first_seen.strip()
+        transaction.set(doc_ref, payload, merge=True)
         return True
 
     return firestore.transactional(_txn)(client.transaction())
