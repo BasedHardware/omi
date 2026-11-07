@@ -10,6 +10,7 @@ from database.fsr_read_cache import serving_config
 # clients to a not-yet-published route.
 DEFAULT_DESKTOP_DOWNLOAD_URL = "https://api.omi.me/v2/desktop/download/latest?channel=stable"
 VALID_DESKTOP_UPDATE_SEVERITIES = {"none", "banner", "required"}
+VALID_PLATFORMS = {"macos", "windows", "linux"}
 
 
 def _as_int(value: Any) -> Optional[int]:
@@ -19,7 +20,7 @@ def _as_int(value: Any) -> Optional[int]:
         return value
     if isinstance(value, str):
         try:
-            return int(value)
+            return int(value.strip())
         except ValueError:
             return None
     return None
@@ -49,8 +50,11 @@ def _as_download_url(value: Any) -> Optional[str]:
     candidate = _as_string(value)
     if candidate is None:
         return None
-    parsed = urlparse(candidate)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+    try:
+        parsed = urlparse(candidate)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            return None
+    except Exception:
         return None
     return candidate
 
@@ -67,10 +71,14 @@ def default_desktop_update_policy() -> dict[str, Any]:
         "cta_text": "Download latest",
         "download_url": DEFAULT_DESKTOP_DOWNLOAD_URL,
         "can_dismiss": True,
+        "platforms": [],
     }
 
 
-def _normalize_policy(data: dict[str, Any]) -> dict[str, Any]:
+def _normalize_policy(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        return default_desktop_update_policy()
+
     policy = default_desktop_update_policy()
 
     severity = _as_string(data.get("severity")) or "none"
@@ -98,12 +106,17 @@ def _normalize_policy(data: dict[str, Any]) -> dict[str, Any]:
     return policy
 
 
-def _applies_to_platform(policy: dict[str, Any], platform: str) -> bool:
+def _applies_to_platform(policy: dict[str, Any], platform: Any) -> bool:
+    if not isinstance(platform, str):
+        return False
+    normalized_platform = platform.strip().lower()
+    if normalized_platform not in VALID_PLATFORMS:
+        return False
     raw_platforms = policy.get("platforms")
     platforms: list[object] = cast(list[object], raw_platforms) if isinstance(raw_platforms, list) else []
     if not platforms:
         return True
-    return platform in [p for p in platforms if isinstance(p, str)]
+    return normalized_platform in [p.lower() for p in platforms if isinstance(p, str)]
 
 
 def get_desktop_update_policy(
@@ -120,8 +133,8 @@ def get_desktop_update_policy(
     raw_doc: object = serving_config('desktop_update_policy', fetch, identity=id(client))
     if raw_doc is None:
         return default_desktop_update_policy()
-    raw: dict[str, Any] = cast(dict[str, Any], raw_doc) if isinstance(raw_doc, dict) else {}
-    policy = _normalize_policy(raw)
+    policy = _normalize_policy(raw_doc)
+
     if not _applies_to_platform(policy, platform):
         return default_desktop_update_policy()
 
