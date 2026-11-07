@@ -1,6 +1,6 @@
 """A2b schema and typed-cell commit contracts, with disposable local Postgres."""
 
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -199,3 +199,28 @@ def test_native_revision_conflict_preserves_address_and_finishes_ticket(pg, monk
     assert events == ['begin', False] and bumps == []
     monkeypatch.setattr(CellTransaction, 'flush', original)
     assert store.action_items.get('task').description == 'Before'
+
+
+def test_folder_keyset_preserves_legacy_scalar_order(pg):
+    sid = pg.space('scalar-order')
+    for key, value in [
+        ('null', None),
+        ('false', False),
+        ('true', True),
+        ('zero', 0),
+        ('number', 3),
+        ('date', datetime(2026, 1, 1, tzinfo=timezone.utc)),
+        ('text', 'a'),
+    ]:
+        pg.seed(sid, 'folders', key, {'name': key, 'order': value})
+    repo = pg.folders(sid)
+    expected = ['null', 'false', 'true', 'zero', 'number', 'date', 'text']
+    assert [row.id for row in repo.list().items] == expected
+    ids, cursor = [], None
+    while True:
+        page = repo.list(limit=2, cursor=cursor)
+        ids.extend(row.id for row in page.items)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+    assert ids == expected

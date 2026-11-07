@@ -123,13 +123,15 @@ class CellSpaceTx:
     goals: CellGoals
     workstreams: CellWorkstreams
 
-    def __init__(self, raw, registry):
+    def __init__(self, raw, adapters):
         self.raw, self.space_id = raw, raw.space_id
         self.state = _State(self)
         self.fences = []
         self.task_fence = None
-        for domain in ('folders', 'people', 'action_items', 'goals', 'workstreams'):
-            setattr(self, domain, registry.bind(domain, self))
+        registry = AdapterRegistry()
+        for domain, adapter in adapters:
+            registry.register(domain, lambda _raw, factory=adapter: factory(self))
+            setattr(self, domain, registry.bind(domain, raw))
 
     def register_commit_fence(self, fence) -> None:
         self.fences.append(fence)
@@ -206,15 +208,14 @@ class CellSpaceStore:
         self.pool, self.space_id = pool, space_id
         self.actor_uid = actor_uid or space_id
         self.cell = CellStore(pool)
-        self.registry = AdapterRegistry()
-        for domain, adapter in (
+        self.adapters = (
             ('folders', CellFolders),
             ('people', CellPeople),
             ('action_items', CellActionItems),
             ('goals', CellGoals),
             ('workstreams', CellWorkstreams),
-        ):
-            self.registry.register(domain, adapter)
+        )
+        for domain, adapter in self.adapters:
             setattr(self, domain, adapter(self))
 
     def run(self, body: Callable[[SpaceTx], T]) -> T:
@@ -226,7 +227,7 @@ class CellSpaceStore:
             # per space. B2's admission head is locked before reading any rows.
             raw.conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', ('typed-space:' + self.space_id,))
             raw.conn.execute('SELECT space_id FROM space_heads WHERE space_id=%s FOR UPDATE', (self.space_id,))
-            tx = CellSpaceTx(raw, self.registry)
+            tx = CellSpaceTx(raw, self.adapters)
             attempts.append(tx)
             result = body(tx)
             tx.stage()
