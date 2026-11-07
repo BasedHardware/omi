@@ -42,6 +42,7 @@ _PAYLOAD_FIELDS = (
     'immediate',
     'version',
     'first_pending_at',
+    'pipeline_dispatch_at',
     'summary_deadline_at',
     'summary_lane',
     'summary_seen',
@@ -211,6 +212,11 @@ class FirestoreEnrichmentOutbox:
             new_dispatch=new_dispatch,
             snapshot_summary=snapshot_summary,
             stamps=stamps,
+            pipeline_snapshot=(
+                outbox.pipeline_snapshot(owner_id, conversation_id, firestore_client=self._bound_client)
+                if not effects_only
+                else None
+            ),
         )
         if tx is None:
             row, coalesced = self._mutate(dedupe_key, update)
@@ -376,6 +382,9 @@ class FirestoreEnrichmentOutbox:
                     due_at=now + outbox.settle_seconds(),
                 )
             pending.update(lease_until=0, owner=None, task_token=uuid.uuid4().hex, task_due_at=pending['due_at'])
+            if pending.get('pipeline_dispatch_at'):
+                pending['due_at'] = min(pending['due_at'], max(now, pending['pipeline_dispatch_at']))
+                pending['task_due_at'] = pending['due_at']
             return pending, (True, pending)
 
         settled, pending = self._mutate(claim.row_id, finish)

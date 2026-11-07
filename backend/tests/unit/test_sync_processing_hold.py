@@ -87,6 +87,25 @@ def test_optional_watermark_must_pass_quiet_gap():
     assert hold.admission(conversation, {'first_pending_at': 100}, now=700) == ('ready', None)
 
 
+def test_full_seal_fast_path_still_consumes_unchanged_obligation_once():
+    conversation = row()
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=101, sealed_fast=True) == ('ready', None)
+    conversation[hold.FIELD] = hold.completion_patch(conversation, hold.content_snapshot(conversation))
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=102, sealed_fast=True) == ('unchanged', None)
+
+
+def test_patient_dispatch_deadline_clamps_the_existing_durable_outbox(state, monkeypatch):
+    monkeypatch.setattr(
+        outbox, 'pipeline_snapshot', lambda *_: {'recorded_end': 100, 'record_lane_owner': 'batch_sync_v1'}
+    )
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=1600, sync_hold=True)
+    key = outbox.key('u', 'c')
+    assert rows[key]['due_at'] == 1780 and rows[key]['pipeline_dispatch_at'] == 1780
+    outbox.mark('u', 'c', 'en', now=1700, sync_hold=True)
+    assert rows[key]['due_at'] == 1780
+
+
 def test_kill_switch_drains_already_held_obligation_without_waiting(state, monkeypatch):
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=100, sync_hold=True)

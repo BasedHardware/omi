@@ -793,6 +793,42 @@ def test_an_ended_conversation_never_reopens_its_episode_and_the_next_words_open
     assert episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)['id'] == first['id']
 
 
+@pytest.mark.parametrize('race', ['producer', 'membership', 'activity', 'none'])
+def test_pipeline_close_rechecks_member_seal_and_snapshot_in_strict_transaction(race):
+    from config.pipeline_attention import seal_snapshot
+    from tests.unit.test_pipeline_attention import sealed
+
+    store = StrictFirestore()
+    assert _attach(store, 'c1', minutes=0) == 'opened'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    row = sealed(id='c1', finished_at=T0 + timedelta(seconds=60), recorded_end=T0 + timedelta(seconds=60))
+    store.rows[('users', UID, 'conversations', 'c1')] = dict(row)
+    proof = seal_snapshot(row)
+    before = episode['last_activity_at']
+    if race == 'producer':
+        store.rows[('users', UID, 'conversations', 'c1')]['record_upload_revision'] += 1
+    if race == 'activity':
+        store.rows[('users', UID, 'episodes', episode['id'])]['last_activity_at'] += timedelta(seconds=1)
+    if race == 'membership':
+        store.rows[('users', UID, 'episodes', episode['id'])]['conversation_ids'].append('late')
+    kwargs = dict(
+        closed_at=T0 + timedelta(seconds=1680),
+        expected_conversation_ids=['c1'],
+        expected_activity_at=before,
+        pipeline_seals={'c1': proof},
+        firestore_client=store,
+    )
+    if race == 'membership':
+        with pytest.raises(episodes_db.EpisodeConflict):
+            episodes_db.close_episode(UID, episode['id'], 'boundary', **kwargs)
+    else:
+        result = episodes_db.close_episode(UID, episode['id'], 'boundary', **kwargs)
+        assert (result is not None) == (race == 'none')
+    if race != 'none':
+        assert store.rows[('users', UID, 'episodes', episode['id'])]['status'] == 'live'
+    assert store.rows[('users', UID, 'conversations', 'c1')]['transcript_segments'] == row['transcript_segments']
+
+
 def test_a_finalize_tail_never_opens_an_episode_after_its_own_closed():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['A', 'B']})

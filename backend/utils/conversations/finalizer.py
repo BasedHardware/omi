@@ -76,6 +76,7 @@ from services.conversation_keyframes import ensure_conversation_keyframe_job, re
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
+from utils.conversations import pipeline_attention
 
 logger = logging.getLogger(__name__)
 
@@ -270,10 +271,11 @@ async def finalize_persisted_conversation(
     )
     if fenced is not None:
         return fenced
-    if (
-        server_batch_owned(conversation_data)
-        and not conversation.transcript_segments
+    if server_batch_owned(conversation_data) and (
+        not conversation.transcript_segments
         and not getattr(conversation, 'photos', None)
+        or server_batch_has_audio(conversation_data)
+        and await run_blocking(db_executor, pipeline_attention.serving, uid)
     ):
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):

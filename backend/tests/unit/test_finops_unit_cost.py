@@ -17,6 +17,79 @@ _SPEC.loader.exec_module(alloc)
 _AUTH_SPEC = importlib.util.spec_from_file_location("finops_gcpauth", _FINOPS / "gcpauth.py")
 gcpauth = importlib.util.module_from_spec(_AUTH_SPEC)
 _AUTH_SPEC.loader.exec_module(gcpauth)
+_CAPTURE_SPEC = importlib.util.spec_from_file_location('finops_capture', _FINOPS / 'pull_captured_audio.py')
+capture = importlib.util.module_from_spec(_CAPTURE_SPEC)
+_CAPTURE_SPEC.loader.exec_module(capture)
+
+
+def _manifest(**updates):
+    return {
+        'owner': 'synthetic',
+        'capture_root': 'physical',
+        'device': 'pendant',
+        'channel': 'mono',
+        'clock_epoch': 'boot',
+        'epoch_started_at': '2026-11-07T23:30:00Z',
+        'sample_rate': 16000,
+        'start_frame': 0,
+        'end_frame': 3600 * 16000,
+        'path': 'batch',
+        **updates,
+    }
+
+
+def test_capture_hour_union_counts_retry_live_and_reupload_once_across_midnight():
+    rows = [_manifest(), _manifest(path='live'), _manifest(start_frame=16000, end_frame=32000)]
+    report = capture.captured_hours(rows)
+    assert report['captured_audio_hours'] == {'2026-11-07': 0.5, '2026-11-08': 0.5}
+    assert report == capture.captured_hours(rows * 3)
+    assert report['denominator_complete']
+    assert 'synthetic' not in json.dumps(report)
+
+
+def test_distinct_physical_capture_rates_and_failed_transcription_count():
+    report = capture.captured_hours(
+        [
+            _manifest(transcription_status='failed'),
+            _manifest(capture_root='other', sample_rate=8000, end_frame=3600 * 8000),
+        ]
+    )
+    assert sum(report['captured_audio_hours'].values()) == 2
+
+
+def test_capture_unknown_identity_and_conflicting_clock_are_never_guessed():
+    report = capture.captured_hours([_manifest(), _manifest(owner=None)])
+    assert report['unknown_manifest_rows'] == 1 and not report['denominator_complete']
+    conflict = capture.captured_hours([_manifest(), _manifest(sample_rate=8000)])
+    assert conflict['captured_audio_hours'] == {} and conflict['conflicting_physical_sources'] == 1
+
+
+def test_cost_requires_complete_denominator_and_reconciled_captured_day_sources():
+    report = capture.captured_hours([_manifest()])
+    day = '2026-11-07'
+    costs = {
+        day: {
+            'reconciled': True,
+            'basis': 'captured_utc_day',
+            'gpu_excluded_from_cloud': True,
+            'source_receipts': ['settled-cloud', 'vendor-usage'],
+            'components': {name: 1 for name in capture.REQUIRED_COSTS},
+        }
+    }
+    assert capture.cost_per_captured_hour(report, costs)[day]['usd_per_captured_audio_hour'] == 12
+    costs[day]['basis'] = 'processing_day'
+    assert capture.cost_per_captured_hour(report, costs)[day]['usd_per_captured_audio_hour'] is None
+    costs[day]['basis'] = 'captured_utc_day'
+    report['denominator_complete'] = False
+    assert capture.cost_per_captured_hour(report, costs)[day]['status'] == 'unknown'
+
+
+def test_capture_report_dark_default_does_not_read_or_write(tmp_path, monkeypatch):
+    monkeypatch.delenv('PIPELINE_CAPTURE_COST_ENABLED', raising=False)
+    out = tmp_path / 'report.json'
+    with pytest.raises(SystemExit) as stopped:
+        capture.main(['--manifests', str(tmp_path / 'absent.jsonl'), '--output', str(out)])
+    assert stopped.value.code == 0 and not out.exists()
 
 
 def test_writer_is_finops_sa_not_human_or_readonly_bot():

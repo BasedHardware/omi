@@ -24,6 +24,18 @@ UID = 'composer-uid'
 T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
 
 
+def test_patient_settle_uses_absolute_deadline_even_after_rollout_kill(monkeypatch):
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+    episode = {
+        'compose_pending_since': T0 + timedelta(seconds=1000),
+        'compose_activity_at': T0 + timedelta(seconds=1600),
+        'closed_at': T0 + timedelta(seconds=1650),
+        'pipeline_dispatch_at': T0.timestamp() + 1680,
+    }
+    assert composer.settle_delay(episode, now=T0 + timedelta(seconds=1679)) == 1
+    assert composer.settle_delay(episode, now=T0 + timedelta(seconds=1680)) == 0
+
+
 def _row(cid, start, minutes, *, status='completed', title='T', overview='O', lines=None):
     lines = lines if lines is not None else [(0, 'We planned the launch.'), (60 * minutes - 30, 'Done.')]
     return {

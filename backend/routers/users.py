@@ -2743,6 +2743,7 @@ class SurfaceStateRequest(BaseModel):
     surface_open: bool
     foreground: bool
     transcript_visible: bool
+    home_visible: bool = False
 
 
 @router.post(

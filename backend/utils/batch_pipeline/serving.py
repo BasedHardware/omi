@@ -28,6 +28,7 @@ from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
+from utils.batch_pipeline import record_attention
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
@@ -469,10 +470,7 @@ def start_serving_from_env():
                 logging.getLogger(__name__).error(
                     'event=batch_serving action=record_drain outcome=retry exception_type=%s', type(error).__name__
                 )
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=20)
-            except asyncio.TimeoutError:
-                pass
+            await record_attention.wait_for_wake(stop)
 
     async def dispatch_recovery():
         # Quarantine -> recovery start rode the whole serving pass plus its 20 s

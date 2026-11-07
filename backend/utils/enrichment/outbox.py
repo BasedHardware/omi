@@ -29,6 +29,9 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Invali
 from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
+from utils.conversations import pipeline_attention
+from config import pipeline_attention as pipeline_policy
+from database import conversations as conversations_db
 from config import enrichment as enrichment_config
 from config.summary_guarantee import (
     ADMITTED_OWNER,
@@ -318,7 +321,7 @@ def _enqueue(row: dict[str, Any]) -> None:
     name = _task_name(row)
 
     first_summary = first_summary_pending(row)
-    if not first_summary and schedule(
+    if (not first_summary or pipeline_attention.serving(row['uid'])) and schedule(
         row['uid'],
         document_id,
         payload,
@@ -378,6 +381,7 @@ def mark(
         stamps=stamps,
         sync_hold=sync_hold,
         merge_hold=merge_hold,
+        pipeline_snapshot=pipeline_snapshot(uid, conversation_id) if not effects_only else None,
     )
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
@@ -406,6 +410,7 @@ def mark_update(
     stamps: list[tuple[str, str]] | None = None,
     sync_hold: bool = False,
     merge_hold: bool = False,
+    pipeline_snapshot: dict | None = None,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
@@ -497,6 +502,12 @@ def mark_update(
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
             )
 
+        deadline = pipeline_policy.dispatch_at(pipeline_snapshot or {}, row)
+        if deadline is not None and (pipeline_snapshot or row.get('pipeline_dispatch_at')):
+            row['pipeline_dispatch_at'] = deadline
+            row['due_at'] = min(row['due_at'], max(current, deadline))
+            row['sync_hold'] = True
+
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
         backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         if (old is None or old.get('dormant')) and not backfill and not effects_only and recent is None:
@@ -520,6 +531,42 @@ def mark_update(
         return row, ({**row, '_wake': wake}, old is not None)
 
     return update
+
+
+def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
+    if not pipeline_attention.serving(uid):
+        return None
+    row = conversations_db.get_conversation_raw_snapshot(
+        uid,
+        conversation_id,
+        firestore_client=firestore_client,
+        field_paths=['recorded_end', 'record_lane_owner'],
+    )
+    return row if row and row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'} else None
+
+
+def promote_pipeline(uid, document_id, *, now):
+    """A bounded owner read may advance a sealed obligation, never an active lease."""
+    if not pipeline_attention.serving(uid) or not pipeline_policy.seal_fast_enabled():
+        return None
+
+    def promote(old):
+        if (
+            not old
+            or old.get('uid') != uid
+            or old.get('dormant')
+            or old.get('effects_only')
+            or old.get('lease_until', 0) > now
+            or key(uid, old.get('conversation_id', '')) != document_id
+        ):
+            return old, None
+        source = conversations_db.get_conversation_raw_snapshot(uid, old['conversation_id'])
+        if not source or pipeline_policy.seal_snapshot(source) is None:
+            return old, None
+        row = dict(old, due_at=now, task_due_at=now, task_token=uuid.uuid4().hex, immediate=True)
+        return row, row
+
+    return _mutate(document_id, promote)
 
 
 def _deadline_seconds(row: Row) -> int:
@@ -674,6 +721,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 merge_hold=bool(row.get('merge_hold')),
                 sync_hold_requested=bool(row.get('sync_hold_requested')),
                 first_pending_at=row['first_pending_at'],
+                pipeline_dispatch_at=row.get('pipeline_dispatch_at'),
             )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
@@ -840,6 +888,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             pending['summary_repair'] = False
             pending['summary_expected_revision'] = None
             pending['due_at'] = max(current, pending['first_pending_at']) + settle_seconds()
+        if pending.get('pipeline_dispatch_at'):
+            pending['due_at'] = min(pending['due_at'], max(current, pending['pipeline_dispatch_at']))
         pending.update(
             lease_until=0,
             task_token=uuid.uuid4().hex,

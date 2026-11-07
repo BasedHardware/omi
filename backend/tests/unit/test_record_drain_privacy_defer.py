@@ -6,9 +6,76 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import fakeredis
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+
+@pytest.fixture
+def fast_records(monkeypatch):
+    from utils.batch_pipeline import record_attention
+
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setenv('PIPELINE_RECORD_FAST_ENABLED', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(record_attention.attention, 'serving', lambda _: True)
+    monkeypatch.setattr(record_attention.attention, 'client', lambda: redis)
+    return record_attention, redis
+
+
+def test_fast_records_reserve_original_age_under_continuous_fresh_traffic(fast_records):
+    records, redis = fast_records
+    from config.record_audio import record_identity
+
+    records.register('aged', 'old', 1)
+    old = record_identity('aged', 'old')[1]
+    for tick in range(20):
+        for n in range(8):
+            records.register(f'fresh-{tick}-{n}', f'c-{tick}-{n}', 1000 + tick * 8 + n)
+        selected = records.select([], 4, redis=redis, now=2000)
+        assert selected[0] == old and len(selected) == 4
+    # A retry cannot launder original enqueue age.
+    records.register('aged', 'old', 9999)
+    assert redis.zscore(records.base() + 'age', old) == 1
+
+
+def test_small_fast_passes_alternate_oldest_service_and_cap_owner(fast_records):
+    records, redis = fast_records
+    from config.record_audio import record_identity
+
+    records.register('old', 'c', 1)
+    records.register('new', 'c', 100)
+    records.register('new', 'second', 101)
+    assert records.select([], 1, redis=redis, now=200)[0] == record_identity('new', 'second')[1]
+    assert records.select([], 1, redis=redis, now=200)[0] == record_identity('old', 'c')[1]
+    assert len(records.select([], 4, redis=redis, now=200)) == 2
+
+
+def test_seal_wakes_parked_record_but_never_steals_active_lease(fast_records):
+    records, redis = fast_records
+    from config.record_audio import record_identity
+    from tests.unit.test_pipeline_attention import sealed
+
+    store = MemoryStore()
+    segment = record_identity('u', 'c')[1]
+    store.rows['jobs', segment] = pending(
+        owner_id='u', conversation_id='c', enqueued_at=1, available_at=1000, pipeline_record_deferred=True
+    )
+    assert records.sealed('u', 'c', sealed(), store=store, now=100)
+    assert store.rows['jobs', segment]['available_at'] == 100
+    store.rows['jobs', segment].update(available_at=500, pipeline_record_lease_until=500)
+    assert records.sealed('u', 'c', sealed(), store=store, now=101)
+    assert store.rows['jobs', segment]['available_at'] == 500
+    assert records.select([], 4, redis=redis, now=102) == []
+    assert not records.sealed('u', 'c', sealed(record_audio_partial=True), store=store, now=102)
+
+
+def test_record_fast_off_is_exact_legacy_selection(fast_records, monkeypatch):
+    records, redis = fast_records
+    monkeypatch.setenv('PIPELINE_RECORD_FAST_ENABLED', 'false')
+    assert records.select(['oldest', 'next'], 2, redis=redis) == ['oldest', 'next']
 
 
 class Snap:

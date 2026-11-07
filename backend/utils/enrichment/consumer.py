@@ -229,6 +229,7 @@ class EnrichmentConsumer:
                 merge_hold=bool(row.get('merge_hold')),
                 sync_hold_requested=bool(row.get('sync_hold_requested')),
                 first_pending_at=row['first_pending_at'],
+                pipeline_dispatch_at=row.get('pipeline_dispatch_at'),
             )
         summary_seen = superseded = empty_blocked = False
         retry_revision = None

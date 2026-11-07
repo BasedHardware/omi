@@ -47,6 +47,7 @@ from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
 from config.episode_attach import owner_reuse_enabled, walk_context_enabled
 from utils.episodes import sync_attach
+from utils.conversations import pipeline_attention
 from utils.episodes.visibility import hidden_member
 from utils.conversations.recorded_time import conversation_span, is_late, at_offset as _wall
 from utils.conversations.fragment_visibility import is_relevance_discarded
@@ -353,6 +354,8 @@ def _close(
     retained_member_window: bool = False,
     f_detaches: Optional[set[str]] = None,
     synced_f: bool = False,
+    pipeline_snapshot: bool = False,
+    pipeline_seals: Optional[Mapping[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     """Close once, returning committed state; None when the compare-and-swap loses.
 
@@ -360,7 +363,11 @@ def _close(
     ``closing`` keeps that member's items for finalization without reopening.
     ``preserve_for_reconciliation`` keeps other members' provisional items.
     """
-    expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
+    expected_activity_at = (
+        policy.utc(episode.get('last_activity_at')) if reason == 'idle' or pipeline_snapshot else None
+    )
+    snapshot_version = episode.get('state_version')
+    snapshot_ids = list(episode.get('conversation_ids') or [])
     # Fold unapplied WAL speech into these notes before close, explicitly
     # targeting this episode to avoid recursion or reassignment.
     if synced_f:
@@ -376,6 +383,8 @@ def _close(
             return None
         episode = fresh
     for cid in episode.get('recovered_conversation_ids') or []:
+        if pipeline_snapshot:
+            continue  # Patient snapshot gets one canonical compose after notes.
         if cid == detach:
             continue
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
@@ -383,6 +392,10 @@ def _close(
             _record_recovered(uid, str(episode['id']), cid, row, c)
     if not synced_f:
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
+    if pipeline_snapshot and (
+        episode.get('state_version') != snapshot_version or episode.get('conversation_ids') != snapshot_ids
+    ):
+        return None
     items = provisional_items(episode)
     transferred = [
         dict(item)
@@ -429,11 +442,14 @@ def _close(
         closed_at=closed_at,
         extra=extra,
         expected_activity_at=expected_activity_at,
-        expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
+        expected_conversation_ids=(
+            episode.get('conversation_ids') if split_after is not None or pipeline_snapshot else None
+        ),
         split_after=split_after,
         firestore_client=c.firestore_client,
         **({'retained_member_window': True} if retained_member_window else {}),
         **({'synced_f': True} if synced_f else {}),
+        **({'pipeline_seals': pipeline_seals} if pipeline_snapshot else {}),
     )
     if closed is not None:
         if (
@@ -452,6 +468,21 @@ def _close(
         f_join.record_closed_size(closed)
         composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
     return closed
+
+
+def close_pipeline_snapshot(uid, episode, deadline, proofs, *, now):
+    """Only the caller's fully sealed bounded member snapshot may close early."""
+    return _close(
+        uid,
+        episode,
+        'boundary',
+        Collaborators(),
+        now=datetime.fromtimestamp(now, timezone.utc),
+        preserve_for_reconciliation=True,
+        pipeline_snapshot=True,
+        pipeline_seals=proofs,
+        extra_fields={'pipeline_dispatch_at': deadline} if deadline is not None else {},
+    )
 
 
 def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -665,6 +696,8 @@ def _attach_once(
     decision = boundary_runtime.decision(
         uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
     )
+    if pipeline_attention.admitted(uid):
+        pipeline_attention.metrics.stage('conversation_gap', decision.gap_seconds)
     if decision.action == 'close' and episode:
         metrics.record_boundary('close')
         _close(uid, episode, decision.reason or 'gap', c, now=now)
@@ -1297,7 +1330,14 @@ def close_on_finalize(
         if pending is not None:
             record_moment(uid, pending, c)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-        return _close_for_finalize(uid, episode, conversation_id, trigger, c, _now(c))
+        now = _now(c)
+        outcome = _close_for_finalize(uid, episode, conversation_id, trigger, c, now)
+        if outcome == 'closed' and trigger == CLIENT_FINALIZE and pipeline_attention.admitted(uid):
+            activity = policy.utc((episode or {}).get('last_activity_at'))
+            pipeline_attention.metrics.stage(
+                'user_finalize_wait', (now - activity).total_seconds() if activity else None
+            )
+        return outcome
     except Exception as error:
         logger.warning('event=episode_finalize_close outcome=error exception_type=%s', type(error).__name__)
         return 'error'
