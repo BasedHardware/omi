@@ -114,6 +114,12 @@ run_proof "enrichment revision-race conformance (PL-439)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_revision_emulator_test.py
 
+# PL-426: local silence survives storage failure without paid/vendor-health debt.
+# CI requires sim/emulator; full local qualification also requires Postgres.
+run_proof "provider local-silence crash conformance (PL-426)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_silence_emulator_test.py
+
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.
 run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
