@@ -685,7 +685,9 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch.setattr(live, 'run_blocking', run_blocking)
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
-    current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
+    current = recording(
+        record_audio_closed=True, record_upload_revision=0, finished_at=datetime.fromtimestamp(101, timezone.utc)
+    )
     current['language'] = language
     proofs = []
     from unittest.mock import Mock
