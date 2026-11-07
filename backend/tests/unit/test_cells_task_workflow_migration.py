@@ -22,7 +22,7 @@ from database.jobstore.migrate import load, migrate
 from database.ports.action_items import ActionItemDraft
 from database.ports.folders import FolderCreate
 from database.ports.goals import GoalCreate
-from database.ports.workstreams import WorkstreamCreate
+from database.ports.workstreams import WorkstreamCreate, WorkstreamUpdate
 from testing.cells_fixtures import cells_dsn
 from testing.domain_fixtures import build_backend
 from testing.store_fixtures import BackendUnavailable, required_backends
@@ -315,3 +315,35 @@ from database.cells.adapters import CellSpaceStore
 assert CellSpaceStore.__module__ == 'database.cells.adapters.space_store'
 """
     subprocess.run([sys.executable, '-c', script], cwd=Path(__file__).resolve().parents[2], check=True, timeout=120)
+
+
+def test_legacy_workstream_cell_views_project_key_without_rewriting_payload(pg):
+    sid = pg.space('legacy-workstream-views')
+    pg.seed(
+        sid,
+        'workstreams',
+        'ws-key',
+        {
+            'workstream_id': 'ws-key',
+            'title': 'Legacy',
+            'objective': 'Finish',
+            'status': 'open',
+            'goal_id': 'goal-key',
+            'created_at': datetime.now(timezone.utc),
+            'updated_at': datetime.now(timezone.utc),
+        },
+    )
+    repo = pg.workstreams(sid)
+    assert repo.get('ws-key').id == 'ws-key'
+    assert repo.list_open()[0].id == 'ws-key'
+    assert repo.list_for_goal('goal-key')[0].id == 'ws-key'
+    assert (
+        repo.update(
+            'ws-key',
+            WorkstreamUpdate(data={'title': 'Changed'}),
+            idempotency_key='change',
+            account_generation=0,
+        ).id
+        == 'ws-key'
+    )
+    assert 'id' not in pg.read(sid, 'workstreams', 'ws-key')

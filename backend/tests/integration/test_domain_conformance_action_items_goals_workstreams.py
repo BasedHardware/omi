@@ -635,6 +635,9 @@ def test_legacy_workflow_ids_and_retirement_use_document_keys(domain_backend):
         'ws-key',
         {
             'title': 'Legacy workstream',
+            'workstream_id': 'ws-key',
+            'objective': 'Finish synthetic work',
+            'created_at': NOW,
             'status': 'open',
             'goal_id': 'goal-key',
             'updated_at': NOW,
@@ -642,15 +645,15 @@ def test_legacy_workflow_ids_and_retirement_use_document_keys(domain_backend):
     )
     streams = h.workstreams(sid)
     assert streams.get('ws-key').id == 'ws-key'
-    assert streams.list_open()[0].id == 'ws-key'
-    assert streams.list_for_goal('goal-key')[0].id == 'ws-key'
+    assert streams.list_open()[0].workstream_id == 'ws-key'
+    assert streams.list_for_goal('goal-key')[0].workstream_id == 'ws-key'
     assert (
         streams.update(
             'ws-key',
             WorkstreamUpdate(data={'title': 'Changed'}),
             idempotency_key='update',
             account_generation=0,
-        ).id
+        ).workstream_id
         == 'ws-key'
     )
     assert 'id' not in h.read(sid, 'workstreams', 'ws-key')
