@@ -162,6 +162,12 @@ def mark_pending(
         logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
 
 
+def synced_failed(error: BaseException) -> None:
+    """A sync or late join's F decision raised: today's time-only join stands and the fallback is reported."""
+    _fallback('other')
+    logger.warning('event=episode_f_join outcome=synced_failed exception_type=%s', type(error).__name__)
+
+
 def previous_transcript(
     uid: str,
     episode: Mapping[str, Any],
@@ -279,7 +285,7 @@ def later_member(episode: Mapping[str, Any], conversation_id: str, started_at: d
 
 
 def _split_still_clear(
-    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any
+    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any, *, member: bool = True
 ) -> bool:
     """Re-reads the episode after Jev answered: a split is clear only while the episode is live and no
     member recorded past the candidate's start. An unreadable episode keeps today's join."""
@@ -297,7 +303,7 @@ def _split_still_clear(
         fresh
         and not fresh.get('recorded_merged_into')
         and isinstance(fresh.get('conversation_ids'), list)
-        and conversation_id in fresh['conversation_ids']
+        and (not member or conversation_id in fresh['conversation_ids'])
         and isinstance(fresh.get('member_activity'), Mapping)
         and policy.is_live(fresh)
         and not later_member(fresh, conversation_id, started_at)
@@ -313,8 +319,13 @@ def settle(
     c: Any,
     *,
     started_at: datetime,
+    member: bool = True,
 ) -> policy.Boundary:
-    """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join."""
+    """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join.
+
+    ``member=False`` answers for a candidate not yet in the episode (a sync or late conversation placed
+    after the answer); the split then needs only the episode still live and no later member.
+    """
     gap = float(pending.get('gap_seconds') or 0.0)
     source_changed = bool(pending.get('source_changed'))
     keep = policy.Boundary(policy.CONTINUE, gap_seconds=gap, source_changed=source_changed)
@@ -342,7 +353,9 @@ def settle(
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
         return keep
-    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(uid, episode, conversation_id, started_at, c):
+    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(
+        uid, episode, conversation_id, started_at, c, member=member
+    ):
         # A member attached while Jev was answering; the split would now overlap it.
         metrics.record_boundary('f_later_member')
         return keep

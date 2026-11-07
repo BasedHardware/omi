@@ -1453,6 +1453,73 @@ def _rejoin_closed_synced(
     return 'rejoined_member'
 
 
+def _synced_f_verdict(
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    started: datetime,
+    finished: datetime,
+    c: Collaborators,
+):
+    """Variant F for a sync or late conversation: its whole transcript answers before it is placed.
+
+    Returns the owner and F's boundary, or None when F does not decide this join.
+    """
+    if not f_join.admitted(uid):
+        # Outside the cohort or killed: no owner read and no model call, so today's placement is untouched.
+        return None
+    segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
+    if sum(len(str(s.get('text') or '').split()) for s in segments) < MOMENT_MIN_WORDS:
+        # Too little speech to ask about: the join stays as today's, as a short moment keeps it.
+        return None
+    owner = episode_owning_recorded_time(uid, started, ended_at=finished, firestore_client=c.firestore_client)
+    if owner is None:
+        return None
+    source = getattr(row.get('source'), 'value', row.get('source')) or None
+    marker = f_join.uncertain(uid, owner, conversation_id, source, started, firestore_client=c.firestore_client)
+    if marker is None:
+        return None
+    if episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client) is not None:
+        # Already placed (a retry or a changed re-attach): F answers only a first placement, and nothing moves.
+        # Checked after the cheap gates, so only an admitted, ambiguous join pays this read.
+        return None
+    pending = {
+        'gap_seconds': marker.gap_seconds or 0.0,
+        'source_changed': marker.source_changed,
+        'variant': F_JOIN_VARIANT,
+        'previous': f_join.latest_member(owner, conversation_id),
+    }
+    named = _named_segments(uid, segments, c)
+    return owner, f_join.settle(uid, owner, conversation_id, pending, named, c, started_at=started, member=False)
+
+
+def _attach_recorded_synced(
+    uid: str, conversation_id: str, row: Mapping[str, Any], started: datetime, finished: datetime, c: Collaborators
+) -> dict[str, Any]:
+    """Place a sync or late conversation on its recorded span and return the episode it joined or opened.
+
+    Variant F may split it into its own occasion. Every failure keeps today's placement.
+    """
+    try:
+        verdict = _synced_f_verdict(uid, conversation_id, row, started, finished, c)
+    except Exception as error:
+        f_join.synced_failed(error)
+        verdict = None
+    if verdict is None or verdict[1].action != 'close':
+        return attach_recorded(uid, conversation_id, row, started, finished, c)
+    owner, boundary = verdict
+    try:
+        # Same split as the live path: the owner closes where the candidate begins, under the member guard.
+        closed = _close(uid, owner, boundary.reason or 'moved_on', c, now=started, split_after=started)
+    except episodes_db.EpisodeConflict:
+        closed = None
+        metrics.record_boundary('f_later_member')
+    if closed is None:
+        # The owner changed while F answered: the join stays as today's.
+        return attach_recorded(uid, conversation_id, row, started, finished, c)
+    return attach_recorded(uid, conversation_id, row, started, finished, c, new_occasion=True)
+
+
 def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
     """A sync-finalized conversation joins its recorded-time owner (or forms a closed one).
 
@@ -1473,7 +1540,7 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
         span = conversation_span(row)
         if span is None:
             return 'no_episode'
-        attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
+        _attach_recorded_synced(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
         return 'recorded'
     if started is None:
         return 'no_episode'
@@ -1493,7 +1560,14 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=True)
 
 
-def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_transcription=False) -> dict[str, Any]:
+def _no_owner(rows, started, finished):
+    """An occasion variant F has just split off: it opens its own episode rather than joining a neighbour."""
+    return None
+
+
+def attach_recorded(
+    uid, conversation_id, row, started, finished, c, *, pending_transcription=False, new_occasion=False
+) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
         started_at=started,
@@ -1509,7 +1583,7 @@ def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_
         source,
         started,
         finished,
-        choose=choose_recorded_episode,
+        choose=_no_owner if new_occasion else choose_recorded_episode,
         new_episode=template,
         firestore_client=c.firestore_client,
         pending_at=template['created_at'] if pending_transcription else None,
@@ -1548,7 +1622,7 @@ def _attach_synced(
         c,
         absorbed_from=absorbed_from,
         attach_once=_attach_synced_once,
-        attach_recorded=attach_recorded,
+        attach_recorded=_attach_recorded_synced,
         repoint_absorbed=_repoint_absorbed,
         repoint_donors=_repoint_sync_donors,
         end_discarded=_end_discarded,

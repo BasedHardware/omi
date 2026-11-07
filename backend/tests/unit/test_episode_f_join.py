@@ -11,6 +11,7 @@ from database import episodes as episodes_db
 from database.episodes import EpisodeConflict
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import omi_flags
+from utils.conversations.recorded_time import conversation_span
 from utils.episodes import f_join, incremental, metrics, policy, service
 from utils.episodes.service import Collaborators, MomentInput
 
@@ -396,3 +397,104 @@ def test_a_failed_f_marker_records_the_shared_fallback_and_keeps_todays_join(mon
     decision = policy.Boundary(policy.ASK, gap_seconds=720.0, source_changed=False)
     f_join.mark_pending(UID, live, live, 'c2', decision, {}, firestore_client=None)
     assert [item['component'] for item in fallbacks] == ['episode_f_join']
+
+
+def _sync_attach(store, cid, text, *, minutes, ask=None):
+    _store_row(store, cid, text, minutes=minutes)
+    row = store.rows[('users', UID, 'conversations', cid)]
+    return service.attach_synced_intake(UID, cid, row, collaborators=_c(store, minutes=minutes + 1, ask=ask))
+
+
+def test_a_synced_join_the_model_calls_moved_on_opens_its_own_occasion(store):
+    first = _first_episode(store)
+    asked = []
+
+    def ask(state, questions, **kwargs):
+        asked.append(state)
+        return SimpleNamespace(noul=lambda name: 0.05)
+
+    _sync_attach(store, 'c2', SECOND, minutes=12, ask=ask)
+    assert asked and '\n\nNEW speech (full transcript):\nYou: hi this is the dentist' in asked[0]
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['status'] == 'closed' and closed['close_reason'] == 'moved_on'
+    assert closed['conversation_ids'] == ['c1']
+    # A sync conversation with no live owner forms its own closed occasion, as it does without F.
+    own = episodes_db.get_episode_for_conversation(UID, 'c2', firestore_client=store)
+    assert own['id'] != first['id'] and own['conversation_ids'] == ['c2']
+    assert own['status'] == 'closed'
+
+
+def test_a_synced_join_the_model_calls_same_occasion_stays_one_episode(store):
+    first = _first_episode(store)
+    keep = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.9)  # noqa: E731
+    _sync_attach(store, 'c2', SECOND, minutes=12, ask=keep)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+@pytest.mark.parametrize('case', ['killed', 'outside_cohort', 'short_speech', 'short_gap', 'member_later'])
+def test_a_synced_join_that_f_does_not_decide_keeps_todays_join_without_a_question(store, monkeypatch, case):
+    first = _first_episode(store)
+    text, minutes = SECOND, 12
+    if case == 'killed':
+        monkeypatch.setenv(config.EPISODE_F_JOIN_ENABLED_ENV, 'off')
+    elif case == 'outside_cohort':
+        monkeypatch.setenv(config.EPISODE_F_JOIN_PERCENT_ENV, '0')
+    elif case == 'short_speech':
+        text = 'please call us back to confirm'
+    elif case == 'short_gap':
+        minutes = 2.5
+    elif case == 'member_later':
+        _attach(store, 'c3', minutes=12.5)
+    asked = []
+    _sync_attach(
+        store,
+        'c2',
+        text,
+        minutes=minutes,
+        ask=lambda *a, **k: asked.append(a) or SimpleNamespace(noul=lambda name: 0.05),
+    )
+    assert asked == []
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and 'c2' in episode['conversation_ids']
+
+
+def test_a_failing_synced_f_decision_keeps_todays_join_and_reports_the_fallback(store, monkeypatch):
+    first = _first_episode(store)
+    fallbacks = []
+    monkeypatch.setattr(f_join, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    def boom(*_a, **_k):
+        raise RuntimeError('storage down')
+
+    monkeypatch.setattr(f_join, 'settle', boom)
+    _sync_attach(store, 'c2', SECOND, minutes=12, ask=lambda *a, **k: SimpleNamespace(noul=lambda name: 0.05))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+    assert [item['component'] for item in fallbacks] == ['episode_f_join']
+
+
+def test_a_split_refused_by_the_member_guard_keeps_the_join(store, monkeypatch):
+    first = _first_episode(store)
+
+    def refuse(*_a, **_k):
+        raise EpisodeConflict('split_member_recorded_later')
+
+    monkeypatch.setattr(service, '_close', refuse)
+    _sync_attach(store, 'c2', SECOND, minutes=12, ask=lambda *a, **k: SimpleNamespace(noul=lambda name: 0.05))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+def test_a_conversation_already_placed_is_never_asked_about_again(store, monkeypatch):
+    first = _first_episode(store)
+    _sync_attach(store, 'c2', SECOND, minutes=12, ask=lambda *a, **k: SimpleNamespace(noul=lambda name: 0.9))
+    assert episodes_db.get_episode_for_conversation(UID, 'c2', firestore_client=store)['id'] == first['id']
+    ambiguous = policy.Boundary(policy.ASK, gap_seconds=720.0, source_changed=False)
+    monkeypatch.setattr(f_join, 'uncertain', lambda *a, **k: ambiguous)
+    monkeypatch.setattr(f_join, 'settle', lambda *a, **k: pytest.fail('a placed conversation was asked about again'))
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    span = conversation_span(row)
+    service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
