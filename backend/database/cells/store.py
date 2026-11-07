@@ -233,12 +233,15 @@ class CellTransaction:
         # flush already owns the space-head lock. Sample the database clock here,
         # after contention, and advance monotonically even if that clock recedes.
         # Caller `now` remains event/retention time, never revision authority.
-        head, _epoch, committed_at = self.conn.execute(
+        head, _epoch, revision_us = self.conn.execute(
             'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s, '
-            'revision_ts=greatest(extract(epoch FROM clock_timestamp())::float8, revision_ts+0.000001) '
-            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch, revision_ts',
+            'revision_us=greatest((extract(epoch FROM clock_timestamp())*1000000)::bigint, revision_us+1) '
+            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch, revision_us',
             (count, self.now, self.space_id),
         ).fetchone()
+        # Integer microseconds round-trip through datetime tokens without
+        # accumulating floating-point drift during logical clock advances.
+        committed_at = revision_us / 1_000_000
         for seq, address in enumerate(sorted(pending), head - count + 1):
             mutation = pending[address]
             if mutation.doc is None:
@@ -251,7 +254,7 @@ class CellTransaction:
                     'VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s) ON CONFLICT (space_id, entity, entity_id) DO UPDATE '
                     'SET author_id=EXCLUDED.author_id, rev=EXCLUDED.rev, doc=EXCLUDED.doc, '
                     'updated_at=EXCLUDED.updated_at',
-                    (self.space_id, *address, mutation.author_uid, seq, dumps(mutation.doc), self.now),
+                    (self.space_id, *address, mutation.author_uid, seq, dumps(mutation.doc), committed_at),
                 )
             self.conn.execute(
                 'INSERT INTO change_log (space_id, seq, entity, entity_id, op, rev, actor_uid, '

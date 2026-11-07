@@ -493,6 +493,36 @@ def test_datetime_revision_does_not_trust_pre_migration_timestamps(api):
     assert request(api, 'mutations').status_code == 200  # Integer revisions remain usable.
 
 
+def test_datetime_revision_roundtrips_row_timestamp_after_clock_regression(api):
+    enroll(api)
+    # Force logical clock advances even though the database clock is behind it.
+    # Repeated float increments would drift off datetime's microsecond grid.
+    with api.cell.pool.connection() as conn:
+        conn.execute(
+            'UPDATE space_heads SET revision_us=%s WHERE space_id=%s',
+            (int(time.time() * 1_000_000) + 60_000_000, api.sid),
+        )
+    for index in range(16):
+        api.cell.run(
+            api.sid,
+            lambda tx: tx.put('notes', 'a', {'index': index}),
+            actor_uid=api.sid,
+            now=0,
+        )
+    row = request(api, 'snapshot').json()['rows'][0]
+    payload = mutation()
+    payload['base_revision'] = datetime.fromtimestamp(row['updated_at'], timezone.utc).isoformat()
+    assert request(api, 'mutations', json=payload).status_code == 200
+    with api.cell.pool.connection() as conn:
+        stamps = [
+            r[0]
+            for r in conn.execute(
+                'SELECT committed_at FROM change_log WHERE space_id=%s ORDER BY seq', (api.sid,)
+            ).fetchall()
+        ]
+    assert all(first < second for first, second in zip(stamps, stamps[1:]))
+
+
 @pytest.mark.parametrize(
     'change',
     [
