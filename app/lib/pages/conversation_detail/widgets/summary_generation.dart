@@ -23,6 +23,9 @@ String summarySourceName(ConversationDetailProvider provider, String? appId, App
   return app?.name.decodeString ?? l10n.unknownApp;
 }
 
+String summarySourceNames(ConversationDetailProvider provider, List<String> appIds, AppLocalizations l10n) =>
+    appIds.map((id) => summarySourceName(provider, id, l10n)).join(', ');
+
 /// The saved "Make this my default" template, when it still resolves to an app.
 String? resolvedDefaultSummaryTemplateId(ConversationDetailProvider provider) {
   final id = provider.defaultSummaryTemplateAppId;
@@ -223,8 +226,11 @@ class SummaryGeneratingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ConversationDetailProvider>();
-    final label =
-        context.l10n.summarySummarizingWith(summarySourceName(provider, provider.reprocessingAppId, context.l10n));
+    final ids = provider.reprocessingAppIds;
+    final source = ids.isEmpty
+        ? summarySourceName(provider, provider.reprocessingAppId, context.l10n)
+        : summarySourceNames(provider, ids, context.l10n);
+    final label = context.l10n.summarySummarizingWith(source);
     Widget bar(double widthFactor, {double height = 14}) => FractionallySizedBox(
           widthFactor: widthFactor,
           alignment: Alignment.centerLeft,
@@ -286,6 +292,7 @@ class SummaryFailureCard extends StatelessWidget {
     final provider = context.read<ConversationDetailProvider>();
     final l10n = context.l10n;
     final busy = context.select<ConversationDetailProvider, bool>((p) => p.loadingReprocessConversation);
+    final speakerRefreshPending = context.select<ConversationDetailProvider, bool>((p) => p.offerSpeakerSummaryRefresh);
     final (
       String title,
       String body,
@@ -295,10 +302,20 @@ class SummaryFailureCard extends StatelessWidget {
       Future<void> Function()? secondary
     ) = switch (failure.kind) {
       SummaryFailureKind.template => (
-          l10n.summaryTemplateFailedTitle(summarySourceName(provider, failure.appId, l10n)),
+          l10n.summaryTemplateFailedTitle(
+            failure.appIds.isEmpty
+                ? summarySourceName(provider, failure.appId, l10n)
+                : summarySourceNames(provider, failure.appIds, l10n),
+          ),
           l10n.summaryTemplateFailedBody,
           l10n.tryAgain,
-          () => startSummary(provider, failure.appId),
+          () async {
+            if (failure.appIds.isNotEmpty) {
+              await provider.reprocessConversation(appIds: failure.appIds);
+            } else {
+              await startSummary(provider, failure.appId);
+            }
+          },
           l10n.summaryWithOmiInstead,
           () => startSummary(provider, null),
         ),
@@ -328,13 +345,21 @@ class SummaryFailureCard extends StatelessWidget {
           l10n.summaryFailedTitle,
           l10n.summaryFailedBody,
           l10n.tryAgain,
-          () => startSummary(provider, failure.appId),
+          () async {
+            if (failure.appIds.isNotEmpty) {
+              await provider.reprocessConversation(appIds: failure.appIds);
+            } else {
+              await startSummary(provider, failure.appId);
+            }
+          },
           l10n.summaryUseDifferentTemplate,
           () => showSummarizedAppsSheet(context),
         ),
     };
-    // Retrying is pointless while another reprocess runs; acknowledging never is.
+    // Batch retry is unavailable while speaker labels still need their own summary refresh.
     final blocked = busy && failure.kind != SummaryFailureKind.rateLimited;
+    final batchRetry = failure.kind == SummaryFailureKind.template || failure.kind == SummaryFailureKind.generic;
+    final primaryBlocked = blocked || (batchRetry && failure.appIds.isNotEmpty && speakerRefreshPending);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
@@ -352,7 +377,7 @@ class SummaryFailureCard extends StatelessWidget {
               key: const Key('summary_failure_primary'),
               label: primaryLabel,
               expand: true,
-              onPressed: blocked ? null : primary,
+              onPressed: primaryBlocked ? null : primary,
             ),
             if (secondaryLabel != null && secondary != null) ...[
               const SizedBox(height: OmiSpacing.xxs),

@@ -589,12 +589,18 @@ def test_user_title_set_during_late_model_call_vetoes_commit(monkeypatch):
     payload.update(
         status='completed', _notes_identity={'catalog_ids': [], 'frame_count': 1}, _notes_evidence_reprocess=True
     )
+    deleted_indexes = []
     monkeypatch.setattr(conversations_db, 'db', db)
-    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(
+        conversations_db,
+        '_delete_conversation_search_index',
+        lambda *args: deleted_indexes.append(args),
+    )
     encoded = conversations_db._prepare_conversation_for_write(payload, UID, 'standard')
     assert not conversations_db.persist_processing_result_with_lifecycle.__wrapped__.__wrapped__(UID, encoded)
     assert db.rows == before
     assert not db.transactions[-1].creates and not db.transactions[-1].updates
+    assert deleted_indexes == []
 
 
 def test_dismissed_person_is_not_recreated():

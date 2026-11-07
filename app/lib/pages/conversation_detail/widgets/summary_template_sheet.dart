@@ -18,6 +18,7 @@ import 'package:omi/widgets/extensions/string.dart';
 
 /// Analytics id for Omi's own summary (the sheet-viewed event already calls it "auto").
 const _omiAnalyticsId = 'auto';
+const int maxBatchSummaryTemplates = 5;
 
 /// The "Summarize with" sheet: Omi's own summary first (no network needed), the reader's templates,
 /// suggestions for this conversation, then the catalog and the template creator. A tap selects a
@@ -44,6 +45,8 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
 
   /// The selected row; null is Omi.
   String? _selectedAppId;
+  final Set<String> _selectedAppIds = {};
+  bool _multiSelect = false;
   bool _useForNewConversations = false;
   String? _installingAppId;
 
@@ -74,7 +77,19 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
     // Template lists land (or change) after the sheet opens; a selection inherited from the
     // displayed summary must not outlive its row.
     _dropUnresolvableSelection();
+    _dropUnresolvableMultiSelection();
     setState(() {});
+  }
+
+  void _dropUnresolvableMultiSelection() {
+    if (_provider.enabledTemplatesLoad == SummaryTemplatesLoad.loading ||
+        _provider.suggestedTemplatesLoad == SummaryTemplatesLoad.loading) {
+      return;
+    }
+    _selectedAppIds.removeWhere((id) {
+      final app = _appFor(id);
+      return app == null || (!_isEnabled(app) && !_isSuggested(app));
+    });
   }
 
   App? _appFor(String? appId) {
@@ -151,7 +166,10 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
     final load = provider.enabledTemplatesLoad;
     // An inherited selection with no offered row behind it is not a choice yet: Summarize waits
     // for the lists to back it (or the provider change to drop it onto Omi).
-    final busy = provider.loadingReprocessConversation || _installingAppId != null || !_selectionResolves;
+    final busy = provider.loadingReprocessConversation ||
+        _installingAppId != null ||
+        !_selectionResolves ||
+        (_multiSelect && provider.offerSpeakerSummaryRefresh);
 
     final templates = <Widget>[
       _appRow(provider.findAppById(builtInSummaryTemplateAppId)!,
@@ -178,8 +196,10 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
                   leading: const _OmiAvatar(),
                   title: l10n.omiAppName,
                   subtitle: l10n.summaryOmiTemplateSubtitle,
-                  selected: _selectedAppId == null,
-                  onTap: () => setState(() => _selectedAppId = null),
+                  selected: !_multiSelect && _selectedAppId == null,
+                  onTap: () {
+                    if (!_multiSelect) setState(() => _selectedAppId = null);
+                  },
                 ),
                 _SectionHeader(l10n.summaryYourTemplates),
                 ...templates,
@@ -211,22 +231,43 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                DefaultTextStyle.merge(
-                  style: OmiType.subhead,
-                  child: OmiCheckboxRow(
-                    key: const Key('summary_template_use_for_new'),
-                    label: l10n.summaryUseForNewConversations,
-                    value: _useForNewConversations,
-                    onChanged: (value) => setState(() => _useForNewConversations = value),
-                  ),
+                Row(
+                  children: [
+                    if (!_multiSelect)
+                      Expanded(
+                        child: DefaultTextStyle.merge(
+                          style: OmiType.subhead,
+                          child: OmiCheckboxRow(
+                            key: const Key('summary_template_use_for_new'),
+                            label: l10n.summaryUseForNewConversations,
+                            value: _useForNewConversations,
+                            onChanged: (value) => setState(() => _useForNewConversations = value),
+                          ),
+                        ),
+                      ),
+                    TextButton.icon(
+                      key: const Key('summary_template_multi_select'),
+                      icon: Icon(_multiSelect ? Icons.close_rounded : Icons.checklist_rounded),
+                      label: Text(_multiSelect ? context.l10n.cancel : context.l10n.selectActionItems),
+                      onPressed: () => setState(() {
+                        _multiSelect = !_multiSelect;
+                        _selectedAppIds.clear();
+                        if (_multiSelect) _useForNewConversations = false;
+                      }),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: OmiSpacing.xs),
                 OmiButton(
                   key: const Key('summary_template_confirm'),
-                  label: l10n.summarize,
+                  label: _multiSelect
+                      ? '${l10n.summarize} · ${l10n.selectedCount(_selectedAppIds.length)}'
+                      : l10n.summarize,
                   expand: true,
                   isLoading: _installingAppId != null,
-                  onPressed: busy ? null : _summarize,
+                  onPressed: _multiSelect
+                      ? (busy || _selectedAppIds.isEmpty ? null : _summarizeSelected)
+                      : (busy ? null : _summarize),
                 ),
               ],
             ),
@@ -251,15 +292,52 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
   }
 
   Widget _appRow(App app, {required bool isLastUsed}) {
+    final isSelected = _multiSelect ? _selectedAppIds.contains(app.id) : _selectedAppId == app.id;
     return _TemplateRow(
       key: Key('summary_template_app_${app.id}'),
       leading: _AppAvatar(app: app),
       title: app.name.decodeString,
       tag: isLastUsed ? context.l10n.lastUsedLabel : null,
-      selected: _selectedAppId == app.id,
+      selected: isSelected,
+      multiSelect: _multiSelect,
       installing: _installingAppId == app.id,
-      onTap: () => setState(() => _selectedAppId = app.id),
+      onTap: () {
+        if (_multiSelect && !_selectedAppIds.contains(app.id) && _selectedAppIds.length >= maxBatchSummaryTemplates) {
+          OmiFeedback.error(
+              context, '${context.l10n.frequencyMaximum} · ${context.l10n.selectedCount(maxBatchSummaryTemplates)}');
+          return;
+        }
+        setState(() {
+          if (_multiSelect) {
+            if (!_selectedAppIds.add(app.id)) _selectedAppIds.remove(app.id);
+          } else {
+            _selectedAppId = app.id;
+          }
+        });
+      },
     );
+  }
+
+  Future<void> _summarizeSelected() async {
+    final ids = _selectedAppIds.toList(growable: false);
+    if (ids.isEmpty || _provider.loadingReprocessConversation) return;
+    for (final id in ids) {
+      final app = _appFor(id);
+      if (app == null) return;
+      if (!_isEnabled(app)) {
+        setState(() => _installingAppId = id);
+        final installed = await _provider.enableApp(app);
+        if (!mounted) return;
+        setState(() => _installingAppId = null);
+        if (!installed) {
+          OmiFeedback.error(context, context.l10n.failedToInstallApp(app.name.decodeString));
+          return;
+        }
+      }
+    }
+    if (_provider.loadingReprocessConversation || _provider.offerSpeakerSummaryRefresh) return;
+    if (mounted) Navigator.of(context).pop();
+    await _provider.reprocessConversation(appIds: ids);
   }
 }
 
@@ -286,9 +364,10 @@ class _TemplateRow extends StatelessWidget {
     super.key,
     required this.leading,
     required this.title,
+    this.subtitle,
     required this.selected,
     required this.onTap,
-    this.subtitle,
+    this.multiSelect = false,
     this.tag,
     this.installing = false,
   });
@@ -298,6 +377,7 @@ class _TemplateRow extends StatelessWidget {
   final String? subtitle;
   final String? tag;
   final bool selected;
+  final bool multiSelect;
   final bool installing;
   final VoidCallback onTap;
 
@@ -306,7 +386,7 @@ class _TemplateRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      inMutuallyExclusiveGroup: true,
+      inMutuallyExclusiveGroup: !multiSelect,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {

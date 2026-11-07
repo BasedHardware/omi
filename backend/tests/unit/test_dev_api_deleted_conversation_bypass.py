@@ -9,17 +9,25 @@ are properly guarded and return 404 Not Found in Developer API endpoints:
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
+from tests.unit.dev_api_test_support import isolated_developer_api
 
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+conversations_db = None
+dev_routes = None
+UpdateConversationRequest = None
 
-from database import conversations as conversations_db
-from routers import developer as dev_routes
-from routers.developer import UpdateConversationRequest
+
+@pytest.fixture(autouse=True)
+def _isolated_developer_router(monkeypatch):
+    global conversations_db, dev_routes, UpdateConversationRequest
+    with isolated_developer_api(monkeypatch) as api:
+        conversations_db = api.conversations_db
+        dev_routes = api.developer
+        UpdateConversationRequest = dev_routes.UpdateConversationRequest
+        yield
+
 
 
 def _make_conversation(deleted: bool = False, locked: bool = False, conversation_id: str = 'conv-1') -> dict:
@@ -157,11 +165,11 @@ class TestDevApiDeletedConversationGuard:
             'get_conversation',
             lambda uid, conv_id, **kwargs: _make_conversation(deleted=False, conversation_id=conv_id),
         )
-        mock_update_title = MagicMock()
-        monkeypatch.setattr(conversations_db, 'update_conversation_title', mock_update_title)
+        mock_patch = MagicMock(return_value=True)
+        monkeypatch.setattr(dev_routes.lifecycle_service, 'apply_user_conversation_patch', mock_patch)
         monkeypatch.setattr(dev_routes, 'populate_folder_names', lambda uid, convs: None)
 
         request = UpdateConversationRequest(title='New Title')
         result = dev_routes.update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
-        mock_update_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
+        mock_patch.assert_called_once_with('test-uid', 'conv-1', title='New Title', discarded=None)
         assert result['id'] == 'conv-1'

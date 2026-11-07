@@ -44,6 +44,11 @@ def expired(row, created_at=None, *, now: float) -> bool:
     if seconds == 0:
         return False
     cutoff = now - seconds
+    # Only the transaction-owned explicit user-reprocess stamp supersedes an
+    # immutable recording age; background obligations retain the historical gate.
+    requested_at = timestamp(row.get('user_requested_at')) if row.get('effects_only') is True else None
+    if requested_at is not None and requested_at <= now:
+        return now - requested_at > seconds
     return any(
         value is not None and value < cutoff
         for value in (timestamp(row.get('first_pending_at')), timestamp(created_at))

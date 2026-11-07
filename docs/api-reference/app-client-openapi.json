@@ -53822,7 +53822,7 @@
     },
     "/v1/conversations/{conversation_id}/reprocess": {
       "post": {
-        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested\n    app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).\n:return: The updated conversation after reprocessing.",
+        "description": "Reprocess one conversation with the legacy default or explicit summary templates.\n\n``source=omi`` requests first-party Omi notes; omitting ``source`` preserves\nthe legacy default app selection. ``app_ids`` is a repeated query parameter\naccepting up to five distinct IDs, mutually exclusive with ``app_id`` and\n``source=omi``. ``app_id`` remains the released-client single-template contract.",
         "operationId": "reprocess_conversation_v1_conversations__conversation_id__reprocess_post",
         "parameters": [
           {
@@ -53868,6 +53868,25 @@
           },
           {
             "in": "query",
+            "name": "app_ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App Ids"
+            }
+          },
+          {
+            "in": "query",
             "name": "source",
             "required": false,
             "schema": {
@@ -53881,6 +53900,16 @@
                 }
               ],
               "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "speaker_summary_refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Speaker Summary Refresh",
+              "type": "boolean"
             }
           },
           {

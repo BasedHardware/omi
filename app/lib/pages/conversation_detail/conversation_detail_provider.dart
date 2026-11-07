@@ -43,7 +43,7 @@ part 'conversation_speaker_restore.dart';
 typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
     {bool? isUser, String? personId, int? speakerId});
 typedef ConversationReprocessCall = Future<ReprocessResult> Function(String,
-    {String? appId, bool requireSpeakerReceipt, bool forceOmi});
+    {String? appId, List<String>? appIds, bool requireSpeakerReceipt, bool forceOmi});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 /// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
@@ -709,12 +709,14 @@ class ConversationDetailProvider extends ChangeNotifier
   /// "Try Again" apply to that conversation only, even if the reader has opened another since.
   String? lastFailedReprocessConversationId;
   String? lastFailedReprocessAppId;
+  List<String> lastFailedReprocessAppIds = const [];
 
   /// The conversation the last successful reprocess replaced.
   String? reprocessedConversationId;
 
   /// The template the running reprocess asked for; null while it runs Omi's own summary.
   String? reprocessingAppId;
+  List<String> reprocessingAppIds = const [];
 
   /// Bumped by every detail read, by opening another conversation and by a reprocess landing. A
   /// read applies only while it is still the latest, so a slow earlier response (an older poll, the
@@ -1074,22 +1076,26 @@ class ConversationDetailProvider extends ChangeNotifier
   ///
   /// [forceOmi] (with a null [appId]) asks for Omi's own notes only: the server runs neither the
   /// preferred template nor a suggestion. Without it a null [appId] keeps the legacy meaning.
-  Future<bool> reprocessConversation({String? appId, bool forceOmi = false}) async {
+  Future<bool> reprocessConversation({String? appId, List<String>? appIds, bool forceOmi = false}) async {
+    if (appIds != null && offerSpeakerSummaryRefresh) return false;
     if (conversation.id.startsWith('ondevice-') || loadingReprocessConversation || _savingSpeaker) return false;
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = null;
     final target = conversation;
+    final requestedAppId = appIds?.firstOrNull ?? appId;
     _automaticSpeakerSummaryRefreshIds.remove(target.id);
     _confirmedSpeakerLabelingSessionIds.remove(target.id);
     // Any regeneration rewrites the summary from every saved label, so it also ends a labeling pass.
     if (_labelingSessionId == target.id) _endLabelingSession();
     final generation = _speakerEditGeneration;
     final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
-    Logger.debug('_reProcessConversation with appId: $appId');
+    Logger.debug('_reProcessConversation with appId: $appId, appIds: ${appIds?.length ?? 0}');
     lastFailedReprocessConversationId = null;
     lastFailedReprocessAppId = null;
+    lastFailedReprocessAppIds = const [];
     recordSummaryFailure(null);
-    reprocessingAppId = appId;
+    reprocessingAppId = appIds == null ? appId : null;
+    reprocessingAppIds = List.unmodifiable(appIds ?? const []);
     loadingReprocessConversation = true;
     reprocessConversationId = target.id;
     notifyListeners();
@@ -1097,8 +1103,9 @@ class ConversationDetailProvider extends ChangeNotifier
       final result = await _reprocess(
         target.id,
         appId: appId,
+        appIds: appIds,
         requireSpeakerReceipt: requireSpeakerReceipt,
-        forceOmi: forceOmi && appId == null,
+        forceOmi: forceOmi && appId == null && appIds == null,
       );
       if (_isDisposed) {
         _finishReprocessLoading();
@@ -1113,16 +1120,18 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       PlatformManager.instance.analytics.reProcessConversation(target);
       final updatedConversation = result.conversation;
-      if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
+      if (updatedConversation == null ||
+          !conversationHasRequestedSummary(updatedConversation, appId, appIds: appIds)) {
         _failReprocess(
           target,
-          appId,
+          requestedAppId,
           switch (result) {
             ReprocessBusy() => SummaryFailureKind.busy,
             ReprocessRateLimited() => SummaryFailureKind.rateLimited,
-            _ when appId != null => SummaryFailureKind.template,
+            _ when requestedAppId != null => SummaryFailureKind.template,
             _ => SummaryFailureKind.generic,
           },
+          appIds: appIds ?? const [],
         );
         return false;
       }
@@ -1141,7 +1150,7 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       _finishReprocessLoading();
       // Show what the reader asked for, even when the server kept other templates' results first.
-      showRequestedSummarySource(target.id, appId);
+      showRequestedSummarySource(target.id, appIds?.firstOrNull ?? appId);
       notifyListeners();
 
       // Check if the selected app summary is in the apps list.
@@ -1167,8 +1176,17 @@ class ConversationDetailProvider extends ChangeNotifier
         return false;
       }
       // Settle the page first: crash reporting is best effort and must never leave it loading.
-      if (!_isDisposed && loadingReprocessConversation && reprocessConversationId == target.id) {
-        _failReprocess(target, appId, appId != null ? SummaryFailureKind.template : SummaryFailureKind.generic);
+      if (loadingReprocessConversation && reprocessConversationId == target.id) {
+        if (_isDisposed) {
+          _finishReprocessLoading();
+        } else {
+          _failReprocess(
+            target,
+            requestedAppId,
+            requestedAppId != null ? SummaryFailureKind.template : SummaryFailureKind.generic,
+            appIds: appIds ?? const [],
+          );
+        }
       }
       try {
         await reportReprocessCrash(err, stacktrace, target);
@@ -1197,14 +1215,20 @@ class ConversationDetailProvider extends ChangeNotifier
     loadingReprocessConversation = false;
     selectedAppForReprocessing = null;
     reprocessingAppId = null;
-    reprocessConversationId = '';
+    reprocessingAppIds = const [];
   }
 
-  void _failReprocess(ServerConversation target, String? appId, SummaryFailureKind kind) {
+  void _failReprocess(
+    ServerConversation target,
+    String? appId,
+    SummaryFailureKind kind, {
+    List<String> appIds = const [],
+  }) {
     _finishReprocessLoading();
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
-    recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
+    lastFailedReprocessAppIds = List.unmodifiable(appIds);
+    recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId, appIds: appIds));
     notifyError('REPROCESS_FAILED');
     notifyListeners();
   }

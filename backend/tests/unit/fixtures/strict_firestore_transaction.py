@@ -337,15 +337,19 @@ class StrictFirestoreTransaction:
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
         if merge:
-            # Proven by fsr_people_generation_emulator_test.py: set+Increment
-            # without merge replaces the counter and repeatedly stores 1.
-            # Keep this fixture narrow: only the People generation transform
-            # has an emulator proof; do not approximate arbitrary merge masks.
-            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
-                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
             prior = dict(self._database.rows.get(ref.path) or {})
-            value = prior.get('generation', 0)
-            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+            if set(data) == {'generation'} and isinstance(data['generation'], Increment):
+                # Proven by fsr_people_generation_emulator_test.py: set+Increment
+                # without merge replaces the counter and repeatedly stores 1.
+                value = prior.get('generation', 0)
+                prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+            elif data.get('effects_only') is True and isinstance(data.get('version'), Increment):
+                # Lazy effects additionally require merge semantics so concurrent
+                # worker leases survive the app-result transaction.
+                prior.update({key: value for key, value in payload.items() if key != 'version'})
+                prior['version'] = prior.get('version', 0) + data['version'].value
+            else:
+                raise UnsupportedFirestoreOperationError('unsupported strict transaction merge')
             self._database.rows[ref.path] = prior
         else:
             self._database.rows[ref.path] = payload
