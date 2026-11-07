@@ -278,6 +278,28 @@ def finite(value):
     return isinstance(value, (int, float)) and math.isfinite(value)
 
 
+def v2_idle_qualified(values):
+    """True only when endpoint-specific v2 in-flight and error evidence proves v2 was idle.
+
+    Zero completed v2 duration observations alone cannot distinguish an idle v2
+    endpoint from requests hung in flight or early caller/readiness errors that
+    return before observing parakeet_request_duration_seconds. Shared batch
+    concurrency (parakeet_active_batch_requests) includes v1 traffic and cannot
+    substitute.
+    """
+    inflight = values.get('v2_inflight_max')
+    errors = values.get('v2_errors')
+    stale = values.get('v2_stale')
+    return (
+        finite(inflight)
+        and inflight == 0
+        and finite(errors)
+        and errors == 0
+        and finite(stale)
+        and 0 <= stale <= 120
+    )
+
+
 def evaluate(values):
     counts_known = all(finite(values.get(k)) for k in ('first_count', 'admission_count'))
     low = counts_known and (values['first_count'] < 20 or values['admission_count'] < 20)
@@ -286,7 +308,11 @@ def evaluate(values):
     # Prometheus returns NaN for idle histogram/ratio arithmetic. Fresh low counts
     # distinguish that expected lack of samples from a missing series/query error
     # (None). It remains LOW_SAMPLE, never CLEAN, without rolling back quiet hours.
+    # During busy v1 (not low), v2_p95 NaN is exempt only when endpoint-specific
+    # v2 in-flight and error signals prove zero in-flight work and zero errors.
     idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
+    if fresh and v2_idle_qualified(values):
+        idle_nan = set(idle_nan) | {'v2_p95'}
     # The weekly first_p95 evidence (quantile + its sample count) is optional
     # (retention, metric age, sparse hour): its absence selects the fallback
     # threshold instead of blinding the whole reading. The weekly refusal
