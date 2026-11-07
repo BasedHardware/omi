@@ -42,6 +42,7 @@ from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
+from database.outbox import STUCK_DEFER_GRACE_SECONDS, STUCK_DEFER_POLL_SECONDS, STUCK_DEFER_REASONS
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
 Row: TypeAlias = dict[str, Any]
@@ -62,11 +63,7 @@ LIVE_DEFER_SECONDS = 120
 # 30-120s: ~80% of backend-sync's /v2/sync-jobs/run deliveries. Once one reason
 # has deferred a row past the grace (``deferred_since``), it polls hourly;
 # custody, sweep repair and the eventual resume are unchanged.
-STUCK_DEFER_REASONS = frozenset(
-    {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
-)
-STUCK_DEFER_GRACE_SECONDS = 6 * 3600
-STUCK_DEFER_POLL_SECONDS = 3600
+# Canonical constants live in ``database.outbox`` and are imported above.
 # Both bindings stay valid so rows created before the C3 switch drain on their stored handler.
 HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')

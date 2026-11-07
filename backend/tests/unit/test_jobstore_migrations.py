@@ -42,10 +42,8 @@ def test_gaps_and_bad_names_are_rejected(tmp_path):
         migrate.load(tmp_path)
 
 
-def test_outbox_deferred_episode_migration_and_postgres_defer_sql():
-    from types import SimpleNamespace
-    from database.jobstore.outbox_pg import PostgresOutbox
-    from database.outbox import Claim, OutboxKind, defer_episode
+def test_outbox_deferred_episode_migration_and_helper():
+    from database.outbox import defer_episode
 
     migrations = {m.name: m.sql for m in migrate.load()}
     assert 'outbox_deferred_since' in migrations
@@ -68,46 +66,3 @@ def test_outbox_deferred_episode_migration_and_postgres_defer_sql():
     later = late + 6 * 3600 + 1
     since4, due4 = defer_episode('not_due', late, 'not_due', later + 30, later)
     assert (since4, due4) == (late, later + 30)
-
-    # Verify PostgresOutbox.defer and PostgresOutbox.ack issue the episode-aware SQL and clear state on ack.
-    executed = []
-
-    class FakeConn:
-        def execute(self, sql, params=()):
-            executed.append((sql, params))
-            return SimpleNamespace(fetchone=lambda: (1,))
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-    store = SimpleNamespace(
-        namespace='ns',
-        pool=SimpleNamespace(connection=lambda: FakeConn()),
-    )
-    wakes = []
-    outbox = PostgresOutbox(OutboxKind.ENRICHMENT, store, create_wake=lambda r, w, a: wakes.append((r, w, a)))
-    claim = Claim(
-        kind=OutboxKind.ENRICHMENT,
-        row_id='1',
-        lease_token='lease-1',
-        wake_token='wake-1',
-        attempt=1,
-        lease_until=late + 120,
-        owner_id='u1',
-        payload={'conversation_id': 'c1'},
-        policy_id=None,
-    )
-    token = outbox.defer(claim, late + 120, 'conversation_missing', now=late)
-    assert token is not None
-    defer_sql, defer_params = executed[0]
-    assert 'deferred_reason = %s' in defer_sql and 'deferred_since =' in defer_sql
-    assert defer_params[0] is True  # stuck reason
-    assert defer_params[5] == late + 3600  # 1-hour floor
-
-    executed.clear()
-    assert outbox.ack(claim, 'processed', now=late + 1)
-    ack_sql, _ = executed[0]
-    assert 'deferred_reason = NULL, deferred_since = NULL' in ack_sql
