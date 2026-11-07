@@ -108,7 +108,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('db:markVoiceTurnAcked', idempotencyKey),
   recordVoiceTurnFailure: (idempotencyKey: string, error: string) =>
     ipcRenderer.invoke('db:recordVoiceTurnFailure', idempotencyKey, error),
-  wipeUserData: () => ipcRenderer.invoke('db:wipeUserData'),
+  // ownerUid parks the outgoing owner's rewind index instead of deleting it
+  // (INV-AUTH-1 owner transition, see dbWipe.ts); null falls back to deletion.
+  wipeUserData: (ownerUid?: string | null) => ipcRenderer.invoke('db:wipeUserData', ownerUid),
+  // Move a returning owner's parked rewind frames back into the live index
+  // (no-op when nothing is parked, safe to call on every sign-in).
+  restoreRewindForOwner: (ownerUid: string) =>
+    ipcRenderer.invoke('db:restoreRewindForOwner', ownerUid),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
     ipcRenderer.on('recorder:hotkey', listener)

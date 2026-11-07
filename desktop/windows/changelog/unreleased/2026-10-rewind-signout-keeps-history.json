@@ -1,0 +1,6 @@
+{
+  "changes": [
+    "Signing out keeps your recent Rewind history (within your retention window) parked for your account, restored when you sign back in.",
+    "The cleaner now spares in-retention frame images whose index entry vanished, so an index glitch can't silently empty your Rewind."
+  ]
+}

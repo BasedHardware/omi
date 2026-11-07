@@ -2,6 +2,8 @@ import { readdir, stat, unlink } from 'fs/promises'
 import { join } from 'path'
 import { rewindRoot } from './paths'
 import { rewindImagePathsBetween } from '../ipc/db'
+import { getRewindSettings } from './captureService'
+import { retentionCutoff } from './retentionSelection'
 import {
   selectOrphanFiles,
   deriveKeepSetWindow,
@@ -20,6 +22,25 @@ import {
  * This finds `<tsMs>.jpg` files under each day dir with no matching DB row and
  * deletes the ones old enough that they can't be an in-flight insert. Pure
  * selection logic lives in orphanSelection.ts.
+ *
+ * Selection is bounded by normal retention, not just the grace window: a no-row
+ * file younger than the retention cutoff is kept, because its row may have been
+ * lost to an index reset (the sign-out wipe incident: the sweep then saw every
+ * historical JPEG as unreferenced and mass-deleted them) rather than to
+ * retention, and rebuildIndex.ts can still re-associate it. Only files past the
+ * retention cutoff are garbage no matter why their row is gone. Sign-out no
+ * longer resets the index at all (dbWipe.ts parks it), so this bound is the
+ * second line of defense for any future index-destroying bug.
+ *
+ * Accepted trade-off: a crash- or insert-failure orphan is indistinguishable
+ * from an index-reset victim at sweep time -- both are just a no-row file
+ * younger than the cutoff -- so it ALSO survives for up to the full retention
+ * window (14 days by default) instead of only the 60s grace, and nothing
+ * re-indexes it automatically (rebuildRewindIndexFromDisk runs only from the
+ * manual IPC). That bounds the wasted disk at ~retention-worth of orphans;
+ * shortening their grace back to 60s would re-arm the sweep against
+ * index-reset victims, which is the mass-deletion incident this sweep exists
+ * to prevent.
  */
 
 /** How often the runner sweeps after the startup pass. */
@@ -29,7 +50,11 @@ const SWEEP_STARTUP_DELAY_MS = 60_000
 
 const DAY_DIR_RE = /^\d{4}-\d{2}-\d{2}$/
 
-async function sweepDayDir(dayName: string, nowMs: number): Promise<number> {
+async function sweepDayDir(
+  dayName: string,
+  nowMs: number,
+  retireBeforeMs: number
+): Promise<number> {
   const dir = join(rewindRoot(), dayName)
   let entries: string[]
   try {
@@ -59,7 +84,13 @@ async function sweepDayDir(dayName: string, nowMs: number): Promise<number> {
   const win = deriveKeepSetWindow(tsValues)
   if (!win) return 0 // no parseable frame ts → nothing to bound; skip the query
   const dbImagePaths = new Set(rewindImagePathsBetween(win.fromMs, win.toMs))
-  const orphans = selectOrphanFiles({ files, dbImagePaths, nowMs, graceMs: ORPHAN_GRACE_MS })
+  const orphans = selectOrphanFiles({
+    files,
+    dbImagePaths,
+    nowMs,
+    graceMs: ORPHAN_GRACE_MS,
+    retireBeforeMs
+  })
   let removed = 0
   for (const p of orphans) {
     try {
@@ -80,8 +111,13 @@ export async function sweepOrphanedFramesOnce(nowMs = Date.now()): Promise<numbe
   } catch {
     return 0 // rewind root doesn't exist yet (no frames captured)
   }
+  // Retention bound for the index-reset defense: only files past the cutoff are
+  // deletable-on-sight. retentionCutoff clamps <= 0 days to `nowMs`, which
+  // degenerates to the legacy grace-only behavior (newestSignal is never > now).
+  const { retentionDays } = getRewindSettings()
+  const retireBeforeMs = retentionCutoff(nowMs, retentionDays)
   let total = 0
-  for (const day of dayNames) total += await sweepDayDir(day, nowMs)
+  for (const day of dayNames) total += await sweepDayDir(day, nowMs, retireBeforeMs)
   return total
 }
 

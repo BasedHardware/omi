@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "id": "FC-signout-wipe-mass-deletes-rewind",
+ "violated_contract": "Signing out must not silently destroy the signed-out account's local rewind history, and a cleanup pass must not delete in-retention frame files solely because their index rows disappeared (files past the retention cutoff are deletable on sight, row or no row) -- silent data loss is a product bug (PRODUCT.md principle 2). The Windows sign-out teardown ran DELETE FROM rewind_frames on a shared, owner-unscoped store, so every historical JPEG lost its referencing row at once and the orphaned-file sweep -- whose only guard was a 60-second in-flight grace window -- classified the entire history as garbage and unlinked it within minutes, silently. Destroying the index both erased years of local screen history and converted an index wipe into permanent file deletion the user never asked for.",
+ "canonical_prevention": "Make owner transitions park-and-restore instead of delete: move the outgoing owner's rewind rows into an owner-keyed parked table inside the same transaction as the rest of the teardown (still invisible to any other account), restore them when that owner signs in again, and cover parked rows in the file cleaner's keep-set so parked JPEGs stay referenced. Bound the cleaner by normal retention, not just an in-flight grace window: an unindexed file younger than the retention cutoff may be an index-reset victim and is left for the disk rebuild; only files past the cutoff are deletable on sight. Regression surface: the park/restore and keep-set SQL tests on a real SQLite db (dbWipe.test.ts), the retention-bound selection tests (orphanSelection.test.ts), and the sweep-vs-index-reset runner test on a real temp dir (orphanSweep.test.ts); all fail on the pre-fix behavior.",
+ "canonical_prevention_artifact": [
+  "desktop/windows/src/main/ipc/dbWipe.test.ts",
+  "desktop/windows/src/main/rewind/orphanSelection.test.ts",
+  "desktop/windows/src/main/rewind/orphanSweep.test.ts"
+ ],
+ "evidence_prs": [],
+ "scope_hints": [
+  "desktop/windows/src/main/ipc/dbWipe.ts",
+  "desktop/windows/src/main/ipc/db.ts",
+  "desktop/windows/src/main/rewind/orphanSweep.ts",
+  "desktop/windows/src/main/rewind/orphanSelection.ts"
+ ],
+ "status": "open"
+}

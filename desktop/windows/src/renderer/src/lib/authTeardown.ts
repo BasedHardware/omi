@@ -24,11 +24,14 @@ const USER_SCOPED_LOCALSTORAGE_KEYS = [
   POST_HISTORY_KEY // from-segments post history (backfill dedupe)
 ]
 
-export async function teardownUserData(): Promise<void> {
+export async function teardownUserData(priorUid?: string | null): Promise<void> {
   // 1. Local SQLite: every table holds user data (conversations + outbox,
   //    captions, local KG, rewind frames, app usage, insights, indexed files).
+  //    The signing-out owner's uid parks their rewind index for their return
+  //    (INV-AUTH-1 owner transition, see dbWipe.ts) while everything else is
+  //    wiped; null falls back to deleting rewind frames too.
   try {
-    await window.omi?.wipeUserData?.()
+    await window.omi?.wipeUserData?.(priorUid ?? null)
   } catch (e) {
     console.warn('[auth-teardown] wipeUserData failed:', (e as Error).message)
   }
@@ -124,7 +127,17 @@ export async function reconcileAccountForSignIn(uid: string | null): Promise<voi
   }
   if (stored && stored !== uid) {
     resetOnboarding()
-    await teardownUserData()
+    // Park the OUTGOING owner's rewind index under their uid: kept for their
+    // return, invisible to the incoming account (INV-AUTH-1 owner transition).
+    await teardownUserData(stored)
+  }
+  // Bring back the INCOMING owner's parked rewind index before the authed shell
+  // hydrates. Idempotent (nothing parked restores nothing), so it runs on every
+  // sign-in -- including a same-uid relaunch after a prior sign-out.
+  try {
+    await window.omi?.restoreRewindForOwner?.(uid)
+  } catch (e) {
+    console.warn('[auth-teardown] restoreRewindForOwner failed:', (e as Error).message)
   }
   try {
     localStorage.setItem(LAST_UID_KEY, uid)
