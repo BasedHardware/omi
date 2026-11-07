@@ -320,15 +320,15 @@ def test_all_sibling_projection_ledger_and_pinned_upload_are_required():
     ledger = {'status': 'processing', 'job_id': job, 'dispatch_protocol': 'batch_v1'}
     store.rows[('content', 'u/' + content)] = ledger
     assert record_attention.projection_state('u', 'c', row, store=store) is False
-    ledger['status'] = 'completed'
+    store.rows[('content', 'u/' + content)]['status'] = 'completed'
     assert record_attention.projection_state('u', 'c', row, store=store) is True
     # Projection may extend finished_at; original upload revision stays immutable.
     assert record_attention.projection_state('u', 'c', sealed(finished_at=110), store=store) is True
     for changes in ({'record_upload_revision': 4}, {'record_projection_revision': 0}, {'record_audio_closed': False}):
         assert record_attention.projection_state('u', 'c', sealed(**changes), store=store) is False
-    ledger['job_id'] = 'other'
+    store.rows[('content', 'u/' + content)]['job_id'] = 'other'
     assert record_attention.projection_state('u', 'c', row, store=store) is False
-    intake['owner_id'] = 'other'
+    store.rows[('intakes', job)]['owner_id'] = 'other'
     assert record_attention.projection_state('u', 'c', row, store=store, completed=False) is False
 
 
