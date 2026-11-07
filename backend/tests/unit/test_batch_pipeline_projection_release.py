@@ -27,6 +27,7 @@ BINDING = ProjectionBinding(OWNER, 'bp_upload', 'content', ('held',), target_con
 @pytest.fixture(autouse=True)
 def runtime_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', raising=False)
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
 
 
@@ -479,9 +480,14 @@ def test_ghost_repair_is_hint_only_with_identical_two_document_reads(monkeypatch
     assert read_paths == [JOB_KEY, RESULT_KEY]
     assert client.rows == {
         **seeded,
-        RESULT_KEY: {**seeded[RESULT_KEY], **({'projection_state': 'ready'} if enabled else {})},
+        RESULT_KEY: {
+            **seeded[RESULT_KEY],
+            **({'projection_state': 'ready', 'ghost_settled_cohort': 'g1'} if enabled else {}),
+        },
     }
-    assert client.transactions[-1].updates == ([(RESULT_KEY, {'projection_state': 'ready'})] if enabled else [])
+    assert client.transactions[-1].updates == (
+        [(RESULT_KEY, {'projection_state': 'ready', 'ghost_settled_cohort': 'g1'})] if enabled else []
+    )
     if enabled:
         assert not release.release('held', GHOST_NOW + 1)
         assert not release.ghost_settled and release.ghost_skip == 'hint_changed'
@@ -580,3 +586,47 @@ def test_ghost_summary_contains_only_fixed_aggregate_classes(monkeypatch, caplog
     assert 'count_only:1' in summary and 'age_buckets=1d:0,7d:0,30d_plus:1' in summary
     assert OWNER not in summary and TARGET not in summary and 'gs://' not in summary
     assert counts['ghost_skipped_count_only'] == 1
+
+
+@pytest.mark.parametrize('label', ['g1', 'G_2-drain', 'a' * 16])
+def test_cohort_is_written_only_with_the_single_ghost_update(monkeypatch, label):
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', label)
+    client, store = store_for(ghost_rows())
+    assert not ProjectionReleaseStore(store).release('held', GHOST_NOW)
+    assert client.transactions[-1].updates == [
+        (RESULT_KEY, {'projection_state': 'ready', 'ghost_settled_cohort': label})
+    ]
+
+
+@pytest.mark.parametrize('label', ['', 'a' * 17, ' g1', 'g1\n', 'bad/row', 'é', 'private-owner'])
+def test_invalid_cohort_falls_back_and_counts_without_logging_value_or_row(monkeypatch, caplog, label):
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    # private-owner is a valid label, used as the control for no diagnostic.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', label)
+    client, store = store_for(ghost_rows())
+    with caplog.at_level('INFO'):
+        ProjectionReleaseStore(store).release('held', GHOST_NOW)
+    valid = label == 'private-owner'
+    assert client.rows[RESULT_KEY]['ghost_settled_cohort'] == (label if valid else 'g1')
+    diagnostics = [r.getMessage() for r in caplog.records if 'event=batch_projection_ghost_cohort' in r.getMessage()]
+    assert diagnostics == ([] if valid else ['event=batch_projection_ghost_cohort outcome=invalid_fallback count=1'])
+    assert label not in '\n'.join(diagnostics) if label else True
+    assert OWNER not in '\n'.join(diagnostics) and 'held' not in '\n'.join(diagnostics)
+
+
+def test_flag_off_does_not_read_cohort_setting_or_write(monkeypatch):
+    from database import batch_pipeline_projection_release as release
+
+    monkeypatch.setenv(GHOST_FLAG, 'false')
+    monkeypatch.setattr(release, 'projection_ghost_settle_cohort', Mock(side_effect=AssertionError('flag off')))
+    client, store = store_for(ghost_rows())
+    assert not ProjectionReleaseStore(store).release('held', GHOST_NOW)
+    assert not client.transactions[-1].updates
+
+
+def test_real_hold_never_gets_a_cohort_marker(monkeypatch):
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    client, store = store_for(rows())
+    assert ProjectionReleaseStore(store).release('held', GHOST_NOW)
+    assert 'ghost_settled_cohort' not in client.rows[RESULT_KEY]

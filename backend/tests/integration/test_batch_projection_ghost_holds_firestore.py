@@ -35,6 +35,7 @@ RESTORABLE, MISSING, PRIVACY = 'c-real-restorable', 'd-real-missing', 'e-privacy
 @pytest.fixture
 def holds(lane, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', raising=False)
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'true')
     projection = lane.projector.store
@@ -156,7 +157,9 @@ def test_ghost_hold_release_normalizes_ready_hint(holds, segment, caplog, monkey
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
     scan(holds, NOW, caplog)
     # Automatic repair uses the normal ready discovery state.
-    assert holds.projector.store.ref('results', segment).get().to_dict()['projection_state'] == 'ready'
+    row = holds.projector.store.ref('results', segment).get().to_dict()
+    assert row['projection_state'] == 'ready'
+    assert row['ghost_settled_cohort'] == 'g1'
 
 
 @pytest.mark.parametrize('segment', GHOSTS, ids=['recovery-none', 'recovery-recovered'])
@@ -230,7 +233,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     committed_at = ready['committed_at']
     counts, _ = release_scan_pass(lane.projector.store, limit=RELEASE_PAGE, after_id=None, now=committed_at + 86400)
     assert counts['ghost_settled'] == 1
-    assert ref.get().to_dict() == ready
+    assert ref.get().to_dict() == {**ready, 'ghost_settled_cohort': 'g1'}
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == [segment]
     # Drive the ordinary ready-receipt replay path, including the real ledger,
     # accounting and acknowledgement transactions. Only external publication
@@ -241,6 +244,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     assert lane.projector.status(lane.uid, batch.binding.content_id)['status'] == 'completed'
     assert lane.published == [result]
     assert ref.get().to_dict()['projection_state'] == 'completed'
+    assert ref.get().to_dict()['ghost_settled_cohort'] == 'g1'
     assert lane.loads == loads and lane.tasks == tasks
     accounting = lane.projector.store.prepare_accounting(batch.binding, NOW)
     assert accounting['completed'] and not accounting['updates']
@@ -328,4 +332,40 @@ def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch):
     assert len(attempts) == 2
     assert counts['error'] == 0 and counts['ghost_settled'] == counts['ghost_classified'] == 1
     assert counts['ghost_age_30d_plus'] == 1
-    assert holds.projector.store.ref('results', segment).get().to_dict()['projection_state'] == 'ready'
+    row = holds.projector.store.ref('results', segment).get().to_dict()
+    assert row['projection_state'] == 'ready'
+    assert row['ghost_settled_cohort'] == 'g1'
+
+
+def test_cohort_equality_only_counts_and_inert_non_ghost_rows(holds, monkeypatch, caplog):
+    from google.cloud.firestore_v1.base_query import FieldFilter, And, Or
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'G_2-drain')
+    scan(holds, NOW, caplog)
+    results = holds.client.collection(f'{holds.store.namespace}_results')
+    for segment in (RESTORABLE, MISSING, PRIVACY):
+        assert 'ghost_settled_cohort' not in results.document(segment).get().to_dict()
+    # Same four aggregate shapes as the canary. All leaf filters are equality;
+    # no composite index is declared. Emulator execution cannot prove prod's
+    # composite-index enforcement; canary HTTP 400 stays UNKNOWN.
+    cohort = FieldFilter('ghost_settled_cohort', '==', 'G_2-drain')
+    blocked = ('pending', 'persisted', 'quarantine_held', 'quarantined')
+    for index, state in enumerate(('completed', *blocked, 'erased')):
+        results.document(f'cohort-count-{index}').set({'ghost_settled_cohort': 'G_2-drain', 'projection_state': state})
+    results.document('other-cohort').set({'ghost_settled_cohort': 'g2', 'projection_state': 'ready'})
+    queries = [
+        results.where(filter=cohort),
+        results.where(filter=And([cohort, FieldFilter('projection_state', '==', 'ready')])),
+        results.where(filter=And([cohort, FieldFilter('projection_state', '==', 'completed')])),
+        results.where(filter=And([cohort, Or([FieldFilter('projection_state', '==', state) for state in blocked])])),
+    ]
+    assert [q.count(alias='total').get()[0][0].value for q in queries] == [8, 2, 1, 4]
+
+
+def test_invalid_cohort_fallback_survives_real_transaction(holds, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'bad/label')
+    release = ProjectionReleaseStore(holds.projector.store)
+    assert not release.release(GHOSTS[0], NOW) and release.ghost_settled
+    assert holds.projector.store.ref('results', GHOSTS[0]).get().to_dict()['ghost_settled_cohort'] == 'g1'

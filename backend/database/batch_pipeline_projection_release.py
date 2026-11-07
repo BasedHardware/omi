@@ -29,6 +29,7 @@ from config.batch_pipeline import (
     batch_held_dead_letter_enabled,
     HELD_DEAD_LETTER_SECONDS,
     projection_ghost_settle_enabled,
+    projection_ghost_settle_cohort,
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
 
@@ -204,8 +205,12 @@ class ProjectionReleaseStore:
                     elif not self.ghost_budget:
                         classification = 'cap'
                     else:
-                        transaction.update(self.store.ref('results', segment_id), {'projection_state': 'ready'})
-                        return ('ghost_settled', bucket)
+                        cohort, invalid_cohort = projection_ghost_settle_cohort()
+                        transaction.update(
+                            self.store.ref('results', segment_id),
+                            {'projection_state': 'ready', 'ghost_settled_cohort': cohort},
+                        )
+                        return ('ghost_settled', bucket, invalid_cohort)
                 return (classification, bucket)
             if dead_before is not None:
                 expired_at = entry.get('held_expired_at')
@@ -282,6 +287,8 @@ class ProjectionReleaseStore:
         self.ghost_settled = isinstance(outcome, tuple) and outcome[0] == 'ghost_settled'
         self.ghost_skip = outcome[0] if isinstance(outcome, tuple) and not self.ghost_settled else None
         self.ghost_age = outcome[1] if isinstance(outcome, tuple) else None
+        if self.ghost_settled and outcome[2]:
+            logger.warning('event=batch_projection_ghost_cohort outcome=invalid_fallback count=1')
         self.expired = outcome == 'expired'
         released = outcome is True
         if released or self.expired or self.ghost_settled:
