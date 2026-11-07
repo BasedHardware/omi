@@ -5,7 +5,7 @@ import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart'
 import 'package:omi/services/devices/models.dart';
 
 void main() {
-  group('NativeBluetoothDiscoverer PLAUD and NotePin S discovery (#14376)', () {
+  group('NativeBluetoothDiscoverer PLAUD and NotePin S discovery (#14376, #20033)', () {
     test('identifies classic PLAUD NOTE device by prefix', () {
       final peripheral = BlePeripheral(
         uuid: '0000-1111-2222',
@@ -83,6 +83,57 @@ void main() {
 
       final device = NativeBluetoothDiscoverer.peripheralToDevice(peripheral);
       expect(device.type, DeviceType.plaud);
+    });
+
+    test('identifies unnamed PLAUD NotePin S via plaudServiceUuid and falls back to NotePin name (#20033)', () {
+      final peripheral = BlePeripheral(
+        uuid: '0000-6666-7777',
+        name: '',
+        rssi: -65,
+        serviceUuids: [plaudServiceUuid],
+      );
+
+      final scanned = NativeBluetoothDiscoverer.normalizeScannedPeripheral(peripheral);
+      expect(scanned, isNotNull);
+      expect(scanned!.name, 'NotePin');
+      expect(NativeBluetoothDiscoverer.isPlaud(peripheral), isTrue);
+      expect(NativeBluetoothDiscoverer.isSupportedPeripheral(peripheral), isTrue);
+
+      final device = NativeBluetoothDiscoverer.peripheralToDevice(peripheral);
+      expect(device.type, DeviceType.plaud);
+      expect(device.name, 'NotePin');
+      expect(device.id, '0000-6666-7777');
+    });
+
+    test('identifies unnamed PLAUD NotePin S via 16-bit service UUID 1910 and falls back to NotePin name (#20033)', () {
+      final peripheral = BlePeripheral(
+        uuid: '0000-7777-8888',
+        name: '',
+        rssi: -63,
+        serviceUuids: ['1910'],
+      );
+
+      final scanned = NativeBluetoothDiscoverer.normalizeScannedPeripheral(peripheral);
+      expect(scanned, isNotNull);
+      expect(scanned!.name, 'NotePin');
+      expect(NativeBluetoothDiscoverer.isPlaud(peripheral), isTrue);
+      expect(NativeBluetoothDiscoverer.isSupportedPeripheral(peripheral), isTrue);
+
+      final device = NativeBluetoothDiscoverer.peripheralToDevice(peripheral);
+      expect(device.type, DeviceType.plaud);
+      expect(device.name, 'NotePin');
+      expect(device.id, '0000-7777-8888');
+    });
+
+    test('drops unnamed non-PLAUD peripherals during scan normalization', () {
+      final unnamedOther = BlePeripheral(
+        uuid: '0000-9999-1111',
+        name: '',
+        rssi: -75,
+        serviceUuids: ['0000180a-0000-1000-8000-00805f9b34fb'],
+      );
+
+      expect(NativeBluetoothDiscoverer.normalizeScannedPeripheral(unnamedOther), isNull);
     });
 
     test('does not misidentify unrelated peripherals as PLAUD', () {
