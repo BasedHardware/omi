@@ -16,7 +16,13 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     patch_fresh_sync_lane(monkeypatch)
     real_decode = pipeline.decode_files_to_wav
     reprocessed = []
-    pending = _patch_sync_pipeline(monkeypatch, transcript_text='Testing one two three.', reprocessed=reprocessed)
+    user_selections = []
+    pending = _patch_sync_pipeline(
+        monkeypatch,
+        transcript_text='Testing one two three.',
+        reprocessed=reprocessed,
+        user_selections=user_selections,
+    )
     monkeypatch.setattr(pipeline, 'decode_files_to_wav', real_decode)
     monkeypatch.setattr(demand_processing, 'promote_conversation_effects', lambda *args: None)
     ingest = lifecycle.ingest_sync_conversation
@@ -46,3 +52,4 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     row = conversations_db.get_conversation('123', 'sync-created-conversation')
     assert row['sync_relevance_user_kept'] is True
     assert reprocessed == ['sync-created-conversation']
+    assert user_selections == [True]

@@ -45,6 +45,7 @@ def _patch_sync_pipeline(
     *,
     transcript_text: str,
     reprocessed: list[str],
+    user_selections: list[bool] | None = None,
 ):
     import routers.sync as sync_router
     import utils.sync.pipeline as sync_pipeline
@@ -130,8 +131,10 @@ def _patch_sync_pipeline(
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
         return conversation_obj.dict(), target_id is None, list(incoming["transcript_segments"])
 
-    def fake_reprocess_after_update(uid, conversation_id, language):
+    def fake_reprocess_after_update(uid, conversation_id, language, *, user_selected=False):
         reprocessed.append(conversation_id)
+        if user_selections is not None:
+            user_selections.append(user_selected)
         conversation = read_conversation(uid, conversation_id)
         assert conversation is not None
         conversation["id"] = conversation_id
@@ -150,6 +153,7 @@ def _patch_sync_pipeline(
         updated["id"] = conversation_id
         updated["structured"] = structured
         seed_conversation(uid, updated)
+        return Conversation(**updated)
 
     monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
     monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
