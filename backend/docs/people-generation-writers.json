@@ -6,7 +6,7 @@
   "backend/database/chat_edits.py:restore.apply": "5fdf32961bb04b56021e0565a3657205cc2fd2baad47e78e8dc578900f5814e9",
   "backend/database/notes_identity.py:stage_notes_identity": "afe1b3e1fa7752d35fe15630d66d05a727194cb27031f952b787171b3fdc9d13",
   "backend/database/people.py:FirestorePeople.__init__": "79d88b21d261b62849fa84089fcb3c84156b6b0c54cc5f4576db7599ffc941cd",
-  "backend/database/people.py:FirestorePeople._get_or_create_raw": "99f63d9cec65cb6d9447444f65dba3138adf0a5cd8090a605439d0280da66f42",
+  "backend/database/people.py:FirestorePeople._get_or_create_raw": "d33f6d3f8986df2690ce32670608d17fe8bc1c279ba4f74d64f18254dad0142a",
   "backend/database/people.py:FirestorePeople.read_generation": "59f6f93a535e909f54f3d90138d79e4a694192d08e4447443936cffc14f2b629",
   "backend/database/people.py:FirestorePeople.set_pinned": "b6d85215e75eddd6b029b2491df6c94661ad592a45190c876150502fdb3752f1",
   "backend/database/people_generation.py:bump_people_generation": "977240a3f4e86f943715e0d5d6a8174d4c8ef14028f7235f20846ab47f82c8f9",
