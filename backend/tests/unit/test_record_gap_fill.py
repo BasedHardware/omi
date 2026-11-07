@@ -416,6 +416,44 @@ def test_racing_writer_at_the_key_wins_and_is_never_overwritten(world, monkeypat
     assert world.bucket.objects == {path: racing}
 
 
+def test_pusher_commit_between_listing_and_create_is_untouched(world, monkeypatch):
+    """(b) lead2's race: a pusher object lands after the retained listing.
+
+    The fill was planned from the earlier listing, so its window overlaps the
+    late pusher object. Keys never collide (3 vs 6 decimals): both objects
+    exist afterwards, the pusher's bytes and generation are unchanged, and the
+    walk gives the overlap to whichever object lists first.
+    """
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    pusher_path = f'chunks/{UID}/{CID}/105.000.bin'
+    late = {}
+
+    def listing_then_pusher(*a, **kw):
+        listed = world.bucket.listing()
+        world.bucket.put(pusher_path, tone(3, 5))
+        late.update(world.bucket.objects[pusher_path])
+        return listed
+
+    monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', listing_then_pusher)
+    wal_pcm = ramp(12)
+    world.wal['units'] = [audio_unit(100.0, wal_pcm)]
+    assert fill(world) == 'written'
+    assert world.bucket.objects[pusher_path] == late
+    assert list(fills(world)) == [f'chunks/{UID}/{CID}/105.000000.bin']
+    _, units = admitted_units(world)
+    validate_record_tail(units, closed_row()['finished_at'])
+    pcm = materialized(world, units[0])
+    # The server's late object owns the frames it carries; the fill the rest.
+    assert pcm[5 * RATE * 2 :] == tone(3, 5) + wal_pcm[8 * RATE * 2 : 11 * RATE * 2]
+
+
+@pytest.mark.parametrize('started', [None, float('nan'), 'not-a-time'])
+def test_empty_retained_set_needs_a_valid_start(world, started):
+    world.wal['units'] = [audio_unit(0.0, ramp(120))]
+    assert fill(world, closed_row(started_at=started)) == 'skipped_gate'
+    assert not fills(world)
+
+
 def test_create_only_writer_has_no_overwrite_fallback():
     bucket = FakeBucket()
     first = record_gap_fill.create_gap_fill_chunk(
