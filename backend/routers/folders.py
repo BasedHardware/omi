@@ -85,10 +85,6 @@ def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
 def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Update folder metadata (name, description, color, icon, order)."""
-    folder = folders_db.get_folder(uid, folder_id)
-    if not folder:
-        raise HTTPException(status_code=404, detail="Folder not found")
-
     update_data = request.model_dump(exclude_unset=True)
     # Released clients serialize an omitted field as null, not absent. The Folder model requires
     # name, color, icon, and order, so writing a null over the stored value would make every
