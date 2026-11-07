@@ -215,7 +215,7 @@ def test_invalid_sid_and_membership_refresh(api):
     assert request(api, 'changes').status_code == 404
 
 
-@pytest.mark.parametrize('cell', [None, '', 123])
+@pytest.mark.parametrize('cell', [None, '', 123, 'cell2'])
 def test_malformed_directory_route_fails_closed(api, monkeypatch, cell):
     enroll(api)
     monkeypatch.setattr(api.directory, 'get_space', lambda sid: SimpleNamespace(cell=cell))
