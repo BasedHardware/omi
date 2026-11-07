@@ -114,7 +114,11 @@ def test_completion_stamp_failure_keeps_successful_recovery_and_unusable_memo(la
     member = seed(store)
     fallback = Mock()
     monkeypatch.setattr(episode_attach_memo, 'record_fallback', fallback)
-    monkeypatch.setattr(episode_attach_memo, 'run_transactional', Mock(side_effect=TimeoutError('stamp unavailable')))
+    monkeypatch.setattr(
+        episode_attach_memo,
+        'run_preloaded_transactional',
+        Mock(side_effect=TimeoutError('stamp unavailable')),
+    )
     assert service._attach_synced('u', 'same', member, c) == 'recorded'
     assert not store.rows[('users', 'u', 'episode_links', 'same')].get('attach_completed')
     assert fallback.call_count >= 1

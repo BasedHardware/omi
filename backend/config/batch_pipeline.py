@@ -8,6 +8,7 @@ import hashlib
 import logging
 import math
 import os
+import re
 import secrets
 import threading
 
@@ -53,6 +54,13 @@ def projection_source_deleted_enabled() -> bool:
 def projection_ghost_settle_enabled() -> bool:
     """Default OFF: normalize aged ghost hints; production enable needs David."""
     return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
+
+
+def projection_ghost_settle_cohort() -> tuple[str, bool]:
+    """Inert measurement label; return whether invalid config used the fallback."""
+    label = os.getenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'g1')
+    valid = re.fullmatch(r'[A-Za-z0-9_-]{1,16}', label) is not None
+    return (label, False) if valid else ('g1', True)
 
 
 def projection_hold_recovery_enabled() -> bool:

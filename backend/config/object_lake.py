@@ -53,5 +53,39 @@ def key_cache_ttl_seconds() -> int:
     return max(0, value)
 
 
+_FAKE_KMS_STAGES = frozenset({'local', 'offline'})
+
+
+def fake_kms_allowed() -> bool:
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() in _FAKE_KMS_STAGES
+
+
 def write_admitted(space_id: str) -> bool:
-    return bool(space_id) and write_enabled() and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
+    # TODO(#24811, per-object DEK follow-up): remove this stage fence only after each
+    # object has its own DEK; a configured KMS key does not bound nonce reuse.
+    return (
+        fake_kms_allowed()
+        and bool(space_id)
+        and write_enabled()
+        and bool(bucket())
+        and bool(release())
+        and (bool(kms_key()) or fake_kms_allowed())
+        and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
+    )
+
+
+def validate_write_settings(stage: str, enabled: object, percent: object) -> list[str]:
+    """Deployment gate independent of cohort admission or provisioned bindings."""
+    if stage.strip().lower() in _FAKE_KMS_STAGES:
+        return []
+    errors = []
+    reason = 'must stay off outside local/offline until per-object DEKs are implemented'
+    if str(enabled).strip().lower() in {'true', '1', 'on', 'yes'}:
+        errors.append(f'OBJECT_LAKE_WRITE_ENABLED {reason}')
+    try:
+        positive = float(str(percent)) > 0
+    except ValueError:
+        positive = False
+    if positive:
+        errors.append(f'OBJECT_LAKE_WRITE_PERCENT {reason}')
+    return errors

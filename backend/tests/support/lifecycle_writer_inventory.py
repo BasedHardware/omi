@@ -24,7 +24,7 @@ FIELD_SITES = {
     ],
     'database/action_items.py': [
         (
-            'retire_action_items_for_conversation',
+            'FirestoreActionItems.retire_conversation_documents',
             'status',
             "'superseded' if replacement_id else 'cancelled'",
             ('completed', 'completed_at', 'deleted', 'status', 'superseded_by', 'updated_at'),
@@ -128,7 +128,12 @@ FIELD_SITES = {
                 'projection_state',
             ),
         ),
-        ('ProjectionReleaseStore.release.commit', 'projection_state', "'ready'", ('projection_state',)),
+        (
+            'ProjectionReleaseStore.release.commit',
+            'projection_state',
+            "'ready'",
+            ('ghost_settled_cohort', 'projection_state'),
+        ),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),
@@ -1330,6 +1335,42 @@ FIELD_SITES = {
     ],
     'database/goals.py': [
         (
+            'FirestoreGoals.delete_document',
+            'status',
+            'GoalStatus.abandoned.value',
+            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+        ),
+        (
+            'FirestoreGoals.focus_document.apply',
+            'status',
+            'GoalStatus.background.value',
+            ('focus_rank', 'status', 'updated_at'),
+        ),
+        (
+            'FirestoreGoals.focus_document.apply',
+            'status',
+            'GoalStatus.focused.value',
+            ('focus_rank', 'is_active', 'status', 'updated_at'),
+        ),
+        (
+            'FirestoreGoals.transition_lifecycle_document.apply',
+            'status',
+            'status.value',
+            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+        ),
+        (
+            'FirestoreGoals.transition_lifecycle_document.apply',
+            'status',
+            'status.value',
+            ('relationship_disposition', 'status'),
+        ),
+        (
+            'FirestoreGoals.unfocus_document.apply',
+            'status',
+            'GoalStatus.background.value',
+            ('focus_rank', 'status', 'updated_at'),
+        ),
+        (
             '_new_goal_payload',
             'status',
             'status.value',
@@ -1353,14 +1394,6 @@ FIELD_SITES = {
             ),
         ),
         (
-            'delete_goal',
-            'status',
-            'GoalStatus.abandoned.value',
-            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
-        ),
-        ('focus_goal.apply', 'status', 'GoalStatus.background.value', ('focus_rank', 'status', 'updated_at')),
-        ('focus_goal.apply', 'status', 'GoalStatus.focused.value', ('focus_rank', 'is_active', 'status', 'updated_at')),
-        (
             'normalize_goal_storage',
             'status',
             'status_value',
@@ -1379,14 +1412,6 @@ FIELD_SITES = {
                 'why_it_matters',
             ),
         ),
-        (
-            'transition_goal_lifecycle.apply',
-            'status',
-            'status.value',
-            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
-        ),
-        ('transition_goal_lifecycle.apply', 'status', 'status.value', ('relationship_disposition', 'status')),
-        ('unfocus_goal.apply', 'status', 'GoalStatus.background.value', ('focus_rank', 'status', 'updated_at')),
     ],
     'database/import_jobs.py': [
         (
@@ -2147,6 +2172,47 @@ FIELD_SITES = {
     ],
     'database/workstreams.py': [
         (
+            'FirestoreWorkstreams.create_artifact_document.apply',
+            'status',
+            'ArtifactStatus.superseded.value',
+            ('status',),
+        ),
+        (
+            'FirestoreWorkstreams.import_links_documents.complete',
+            'status',
+            "'complete'",
+            ('completed_at', 'result', 'status', 'updated_at'),
+        ),
+        (
+            'FirestoreWorkstreams.import_links_documents.reserve',
+            'status',
+            "'processing'",
+            ('created_at', 'outcomes', 'request_hash', 'status', 'updated_at'),
+        ),
+        (
+            'FirestoreWorkstreams.resolve_candidate_document.apply',
+            'status',
+            "'pending'",
+            (
+                'account_generation',
+                'attempt_count',
+                'candidate_id',
+                'created_at',
+                'outbox_id',
+                'status',
+                'task_id',
+                'updated_at',
+            ),
+        ),
+        (
+            'FirestoreWorkstreams.resolve_candidate_document.apply',
+            'status',
+            'CandidateStatus.accepted.value',
+            ('resolution_reason', 'resolved_at', 'result_task_id', 'result_workstream_id', 'status'),
+        ),
+        ('FirestoreWorkstreams.transition_artifact_document.apply', 'status', 'request.status', ('status',)),
+        ('FirestoreWorkstreams.transition_artifact_document.apply', 'status', 'request.status.value', ('status',)),
+        (
             '_task_storage',
             'status',
             'TaskStatus.active.value',
@@ -2173,37 +2239,6 @@ FIELD_SITES = {
                 'workstream_id',
             ),
         ),
-        ('create_artifact_descriptor.apply', 'status', 'ArtifactStatus.superseded.value', ('status',)),
-        ('import_task_goal_links.complete', 'status', "'complete'", ('completed_at', 'result', 'status', 'updated_at')),
-        (
-            'import_task_goal_links.reserve',
-            'status',
-            "'processing'",
-            ('created_at', 'outcomes', 'request_hash', 'status', 'updated_at'),
-        ),
-        (
-            'resolve_workstream_candidate.apply',
-            'status',
-            "'pending'",
-            (
-                'account_generation',
-                'attempt_count',
-                'candidate_id',
-                'created_at',
-                'outbox_id',
-                'status',
-                'task_id',
-                'updated_at',
-            ),
-        ),
-        (
-            'resolve_workstream_candidate.apply',
-            'status',
-            'CandidateStatus.accepted.value',
-            ('resolution_reason', 'resolved_at', 'result_task_id', 'result_workstream_id', 'status'),
-        ),
-        ('transition_artifact_status.apply', 'status', 'request.status', ('status',)),
-        ('transition_artifact_status.apply', 'status', 'request.status.value', ('status',)),
     ],
     'database/wrapped.py': [
         (

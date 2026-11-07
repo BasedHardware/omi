@@ -21,6 +21,7 @@ from config.conversation_smart_merge import smart_merge_flatten_chain_repair_ena
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_lineage import sync_lineage_resolve_enabled
+from database import transcript_pointer
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, STRUCTURAL_REASONS
@@ -265,7 +266,15 @@ def assign_in_transaction(
 
     def load(cid: str) -> dict | None:
         if cid not in read:
-            read[cid] = collection.document(cid).get(transaction=transaction).to_dict()
+            row = collection.document(cid).get(transaction=transaction).to_dict()
+            if row and not row.get('deleted') and isinstance(row.get('transcript_segments'), dict):
+                try:
+                    # Validate before canonical/candidate admission; later merge
+                    # decode is too late to safely skip a deleted lake object.
+                    decode(row)
+                except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                    row = {**row, 'deleted': True, 'transcript_segments': [], 'transcript_segments_compressed': False}
+            read[cid] = row
         return read[cid]
 
     tombstones: dict[str, bool] = {}

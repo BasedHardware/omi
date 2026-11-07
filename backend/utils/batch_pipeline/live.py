@@ -27,6 +27,8 @@ from config.record_drain import (
     record_drain_concurrency,
     record_drain_lease_seconds,
     record_drain_privacy_defer_seconds,
+    barrier_retry_delay,
+    record_drain_barrier_backoff_enabled,
 )
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
@@ -54,6 +56,8 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
+# config.record_audio.require_record_audio_barrier: the capture is not finalized yet.
+BARRIER_NOT_CLOSED = 'capture upload/finalization barrier not closed'
 # Literal admission refusals worth counting; any other text could carry a value
 # and is reported only as `other`.
 _RETRY_REASONS = frozenset(
@@ -533,7 +537,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     async def admit_and_defer(segment, pending, lease):
         nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
-        failed = False
+        failed = barrier_open = False
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -548,13 +552,16 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return
         except Exception as error:
             failed = True
+            barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
-                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s',
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s record=%s',
                 type(error).__name__,
                 _retry_reason(error),
                 getattr(error, 'store_tables', 'n/a'),
+                # Same one-way key as the sync pending line (record content hash prefix), so the two join.
+                str(pending.get('record_content_id') or '-')[:16],
             )
 
         def defer(tx):
@@ -567,6 +574,11 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                 delay = 60
                 if not failed and (latest.get('partial_run') or {}).get('complete'):
                     delay = INVENTORY_POLL_SECONDS
+                elif barrier_open and record_drain_barrier_backoff_enabled():
+                    # The capture is not finalized yet: back off by how long it has waited.
+                    enqueued = latest.get('enqueued_at')
+                    age = time.time() - enqueued if isinstance(enqueued, (int, float)) else 0.0
+                    delay = barrier_retry_delay(age)
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)
