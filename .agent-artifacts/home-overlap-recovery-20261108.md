@@ -1,6 +1,6 @@
 # Home-overlap recovery verification
 
-Updated at: 2026-11-07T22:00:37.548577+00:00
+Updated at: 2026-11-07T22:07:48.519501+00:00
 
 Status: validation in progress; no push, merge or deployment in this recovery yet.
 
@@ -52,7 +52,11 @@ Logs and the exact backend file selection are under
 - Initial sync lifecycle E2E attempt exceeded the harness-wide 120s limit without
   a verdict. Retry uses documented `E2E_PYTEST_TIMEOUT=600s`.
 - PR metadata check passed all five checks after adding exact line-count exceptions.
-- `make preflight` is running; async-blocking check passed. Full result pending.
+- First `make preflight` failed only at the Firestore query-shape file wall timeout
+  (900s, at 95 percent, no assertion failure reported). Full retry is queued with
+  local `BACKEND_UNIT_FILE_BUDGET_SECONDS=1800`; no checks or CI settings changed.
+  See `preflight-retry.log`. Runtime source/third-party closure, async blocking,
+  registry, lifecycle writes and several other checks passed on the first run.
 
 ## In flight / resume
 
@@ -60,7 +64,7 @@ Do not push until remaining verification and PR body results are complete.
 The existing guarded runners are observable through these log files:
 
 - `backend-suite.log`: 15-file isolated backend selection in `backend-files.txt`.
-- `preflight.log`: full `make preflight`, local wall budget 900s per backend file.
+- `preflight.log`: first full preflight; `preflight-retry.log`: full retry with 1800s local per-file budget.
 - `detail-tests.log`: three focused detail widget/provider files.
 - `e2e-retry.log`: sync lifecycle and Watch Process Now with 600s harness budget.
 - `homesettle-retry.log` and `finalizer-logging-retry.log`: corrected fixtures.
