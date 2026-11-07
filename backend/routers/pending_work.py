@@ -25,14 +25,22 @@ from utils.other import endpoints as auth
 router = APIRouter(tags=['processing'])
 
 
-@router.get('/v1/pending-work', response_model=PendingWorkSnapshot)
+@router.get('/v1/pending-work', response_model=PendingWorkSnapshot, response_model_exclude_unset=True)
 def pending_work(uid: str = Depends(auth.get_current_user_uid)):
     from database.sync_jobs import pending_sync_jobs
 
+    from config.home_processing import ownership_enabled
+
     attention = store.list_items(uid, limit=store.LIMIT)
+    conversations = store.pending_conversations(uid)
+    if ownership_enabled(uid):
+        listed = {cid for item in conversations for cid in item['conversation_ids']}
+        syncs = pending_sync_jobs(uid, listed_conversation_ids=listed)
+    else:
+        syncs = pending_sync_jobs(uid)
     return {
         'enabled': True,
-        'items': store.pending_conversations(uid) + pending_sync_jobs(uid),
+        'items': conversations + syncs,
         'attention_unseen_count': sum(not item['seen'] for item in attention),
     }
 

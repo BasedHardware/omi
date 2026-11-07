@@ -307,6 +307,22 @@ async def finalize_persisted_conversation(
         if completion != 'completed':
             raise RuntimeError('desktop batch completion fenced')
         return ConversationFinalizationDisposition.completed
+    from config.home_processing import live_member_notes_enabled
+    from utils.episodes.member_notes import waits as live_member_waits
+
+    if live_member_notes_enabled(uid) and await run_blocking(
+        db_executor, live_member_waits, uid, conversation_data, trigger
+    ):
+        yielded = await run_blocking(
+            db_executor,
+            finalization_jobs_db.mark_finalization_retryable,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+            'live_episode_notes',
+            count_attempt=False,
+        )
+        return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL

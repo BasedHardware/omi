@@ -188,6 +188,8 @@ def create_sync_job(
     content_id: Optional[str] = None,
     dispatch_mode: str = 'inline',
     ledger_fence_mode: str = SyncLedgerFenceMode.LEGACY.value,
+    recording_ids: list[str] | None = None,
+    target_conversation_id: str | None = None,
     policy=None,
 ) -> Dict[str, Any]:
     """Create a new sync job and store in Redis. Returns the job dict."""
@@ -212,6 +214,8 @@ def create_sync_job(
         'successful_segments': 0,
         'failed_segments': 0,
         'result': None,
+        'recording_ids': sorted(set(recording_ids or [])),
+        'target_conversation_id': target_conversation_id,
         'error': None,
         'reason_code': None,
         'retry_after': None,
@@ -1372,10 +1376,15 @@ def try_mark_once(job_id: str, tag: str) -> bool:
         return True
 
 
-def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
+def pending_sync_jobs(uid: str, *, listed_conversation_ids: set[str] | None = None) -> list[dict[str, Any]]:
     """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
     from datetime import datetime, timezone
 
+    from utils.episodes.home_processing import live_owner
+    from config.home_processing import ownership_enabled
+
+    owner = live_owner(uid)
+    represented = set(listed_conversation_ids or ()) | set((owner or {}).get('conversation_ids') or ())
     index_key = _key(f'pending_sync_jobs:{uid}')
     ids = r.zrevrange(index_key, 0, 99) or []
     result = []
@@ -1390,12 +1399,25 @@ def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
         conversations = sorted(
             set(job_result.get('new_memories') or []) | set(job_result.get('updated_memories') or [])
         )
+        if ownership_enabled(uid):
+            target = job.get('target_conversation_id')
+            if target:
+                conversations = sorted(set(conversations) | {target})
+            # Suppress only a completely represented job. Empty and partial
+            # ownership cannot prove that its remaining recordings are listed.
+            if conversations and set(conversations).issubset(represented):
+                continue
         result.append(
             {
                 'id': 'sync:' + job_id,
                 'kind': 'sync_job',
                 'state': 'queued' if job['status'] == 'queued' else 'transcribing',
                 'conversation_ids': conversations,
+                **(
+                    {'recording_count': len(set(job.get('recording_ids') or conversations)) or 1}
+                    if ownership_enabled(uid)
+                    else {}
+                ),
                 'started_at': datetime.fromtimestamp(start, timezone.utc),
                 'duration_seconds': 0,
                 'updated_at': datetime.fromtimestamp(job['updated_at'], timezone.utc),

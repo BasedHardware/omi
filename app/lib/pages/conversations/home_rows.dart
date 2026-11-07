@@ -105,11 +105,13 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
         .where((c) => retainedIds.contains(c.id) && !c.discarded && !c.deleted && !deletedIds.contains(c.id))
         .where((c) => !_serverFinished(c))
         .toList();
+    // Membership belongs to the live row even when this snapshot is skipped.
+    // Hide it before returning, or closed processing members leak into a run.
+    hidden.addAll(episode.conversationIds);
     // A closing episode may still be live in the last server snapshot. The
     // streaming capture owns its row until it stops; then processing owns it.
     if (episode.live && (pending.isEmpty || episode.conversationIds.any(liveConversationIds.contains))) continue;
     final members = <ServerConversation>[];
-    hidden.addAll(episode.conversationIds);
     // Notes that already landed stay on Home: a member still processing (a late joiner, or a
     // stale local processing entry) never turns a composed episode back into "Finishing up…".
     // The episode page applies the same rule, so the row and its page agree.

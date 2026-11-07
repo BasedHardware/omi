@@ -118,3 +118,20 @@ def test_configured_result_is_queryable_until_expiry_then_unknown(redis, monkeyp
         # Local fake only: exercise the endpoint's existing unknown-job recovery.
         redis.expire(key, 0)
         assert client.get(f'/v2/sync-local-files/{job["job_id"]}').status_code == 404
+
+
+def test_admission_linkage_is_persisted_before_any_result(redis):
+    job = sync_jobs.create_sync_job(
+        'owner', 3, 0, recording_ids=['r2', 'r1', 'r1'], target_conversation_id='live-recording'
+    )
+    persisted = json.loads(redis.get('sync_job:' + job['job_id']))
+    assert persisted['result'] is None
+    assert persisted['recording_ids'] == ['r1', 'r2']
+    assert persisted['target_conversation_id'] == 'live-recording'
+    assert redis.ttl('sync_job:' + job['job_id']) >= 86398
+
+
+def test_unknown_target_stays_unknown_at_admission(redis):
+    job = sync_jobs.create_sync_job('owner', 3, 0, recording_ids=['session-only'])
+    assert job['target_conversation_id'] is None
+    assert job['recording_ids'] == ['session-only']

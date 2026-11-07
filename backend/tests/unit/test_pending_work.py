@@ -489,3 +489,141 @@ def test_recovery_openapi_has_typed_success_and_bodyless_204(http_client):
     assert paths['/v1/attention-items/retry-all']['post']['requestBody']['content']['application/json']['schema'] == {
         '$ref': '#/components/schemas/RetryAllRequest'
     }
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_pending_sync_dedupes_only_fully_listed_recordings(monkeypatch, enabled):
+    from database import sync_jobs
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', str(enabled).lower())
+    redis = Mock()
+    from utils.episodes import home_processing
+
+    monkeypatch.setattr(home_processing, 'live_owner', lambda uid: None)
+    redis.zrevrange.return_value = ['covered', 'partial', 'unknown', 'outside']
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+
+    def job(ids):
+        return {
+            'uid': UID,
+            'status': 'processing',
+            'created_at': NOW.timestamp(),
+            'updated_at': NOW.timestamp(),
+            'result': {'new_memories': ids},
+        }
+
+    jobs = {'covered': job(['a', 'b']), 'partial': job(['a', 'c']), 'unknown': job([]), 'outside': job(['c'])}
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', jobs.get)
+    items = sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'a', 'b'})
+    expected = ['partial', 'unknown', 'outside'] if enabled else list(jobs)
+    assert [item['id'] for item in items] == ['sync:' + key for key in expected]
+    # Hidden work is still pending, so its index entry must survive.
+    redis.zrem.assert_not_called()
+
+
+@pytest.mark.parametrize('attached', [False, True])
+def test_live_owner_hides_recordings_and_observes_attach_gap(caplog, attached):
+    from utils.episodes import home_processing, metrics
+
+    owner = {
+        'id': 'e',
+        'status': 'live',
+        'started_at': NOW,
+        'last_activity_at': NOW + timedelta(minutes=10),
+        'conversation_ids': ['c1'] if attached else [],
+    }
+    row = {'id': 'c1', 'recorded_start': NOW + timedelta(minutes=1), 'recorded_end': NOW + timedelta(minutes=2)}
+    before = metrics.EPISODE_HOME_ATTACH_GAP_TOTAL._value.get()
+    assert home_processing.owns_recording(owner, row)
+    assert metrics.EPISODE_HOME_ATTACH_GAP_TOTAL._value.get() - before == (0 if attached else 1)
+    assert ('event=episode_attach_gap' in caplog.text) is not attached
+    if not attached:
+        assert not home_processing.owns_recording(owner, dict(row, episode_id='closed-owner'))
+    assert not home_processing.owns_recording(None, row)
+    assert not home_processing.owns_recording(owner, dict(row, id='outside', recorded_start=NOW - timedelta(days=1)))
+
+
+def test_live_owner_flag_off_does_not_read_episode(monkeypatch):
+    from utils.episodes import home_processing
+
+    monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_ENABLED', raising=False)
+    read = Mock(side_effect=AssertionError('flag off must not read Firestore'))
+    monkeypatch.setattr(home_processing.episodes, 'get_current_episode', read)
+    assert home_processing.live_owner(UID) is None
+    read.assert_not_called()
+
+
+def test_pending_work_endpoint_dedupes_live_and_listed_owners(http_client, monkeypatch):
+    from database import sync_jobs
+    from utils.episodes import home_processing
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    monkeypatch.setattr(store, 'list_items', lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        home_processing,
+        'live_owner',
+        lambda *args, **kwargs: {
+            'id': 'live',
+            'status': 'live',
+            'conversation_ids': ['c1'],
+        },
+    )
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    query = Mock()
+    query.where.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [
+        SimpleNamespace(id=cid, to_dict=lambda: dict(ROW, status='processing', finalization_status='queued'))
+        for cid in ['c1', 'outside']
+    ]
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value = query
+    monkeypatch.setattr(store, 'db', client)
+    redis = Mock()
+    redis.zrevrange.return_value = ['live', 'listed', 'unowned']
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+    monkeypatch.setattr(
+        sync_jobs,
+        'get_sync_job',
+        lambda jid: {
+            'uid': UID,
+            'status': 'processing',
+            'created_at': NOW.timestamp(),
+            'updated_at': NOW.timestamp(),
+            'result': {'new_memories': {'live': ['c1'], 'listed': ['outside'], 'unowned': ['new']}[jid]},
+        },
+    )
+    response = http_client.get('/v1/pending-work')
+    assert response.status_code == 200
+    assert [item['id'] for item in response.json()['items']] == ['conv:outside', 'sync:unowned']
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, enabled):
+    from database import sync_jobs
+    from utils.episodes import home_processing
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(home_processing, 'live_owner', lambda uid: None)
+    redis = Mock()
+    redis.zrevrange.return_value = ['job']
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+    monkeypatch.setattr(
+        sync_jobs,
+        'get_sync_job',
+        lambda jid: {
+            'uid': UID,
+            'status': 'processing',
+            'created_at': NOW.timestamp(),
+            'updated_at': NOW.timestamp(),
+            'result': None,
+            'target_conversation_id': 'c1',
+            'recording_ids': ['r1', 'r2', 'r3'],
+        },
+    )
+    items = sync_jobs.pending_sync_jobs(UID)
+    assert items[0]['conversation_ids'] == (['c1'] if enabled else [])
+    assert items[0].get('recording_count', 1) == (3 if enabled else 1)
+    assert len(sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'c1'})) == (0 if enabled else 1)

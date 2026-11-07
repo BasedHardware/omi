@@ -315,6 +315,9 @@ def finish(uid: str, operation: dict[str, Any], state: str, attention_id: str | 
 
 
 def pending_conversations(uid: str) -> list[dict[str, Any]]:
+    from utils.episodes.home_processing import live_owner, owns_recording
+
+    owner = live_owner(uid, firestore_client=db)
     collection = db.collection('users').document(uid).collection('conversations')
     rows = collection.where(filter=FieldFilter('status', '==', 'processing')).limit(LIMIT).stream()
     result = []
@@ -327,7 +330,7 @@ def pending_conversations(uid: str) -> list[dict[str, Any]]:
             or row.get('finalization_status') in {'dead_letter', 'completed'}
         )
         phase_shadow.observe('processing_attention', row, not excluded)
-        if excluded:
+        if excluded or owns_recording(owner, dict(row, id=snapshot.id)):
             continue
         result.append(
             {

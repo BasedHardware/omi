@@ -111,3 +111,82 @@ def test_absorb_hook_reads_nothing_when_disabled(monkeypatch):
     monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder(calls))
     asyncio.run(finalizer._episode_after_absorb('u', 'n', ProcessingTrigger.CAPTURE_END))
     assert calls == []
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabled):
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+    from utils.conversations import demand_processing
+    from utils.sync.processing_hold import ProcessingDeferred
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', str(enabled).lower())
+    owner = {'id': 'e', 'status': 'live', 'conversation_ids': ['c1']}
+    read = Mock(return_value=owner)
+    monkeypatch.setattr(member_notes.episodes, 'get_episode_owner_snapshot', read)
+    redis = Mock()
+    redis.get.return_value = None
+    monkeypatch.setattr(demand_processing, 'client', lambda: redis)
+    row = {'id': 'c1'}
+    assert member_notes.waits('u', row) is enabled
+    assert not member_notes.waits('u', row, ProcessingTrigger.FIRST_OPEN)
+    if enabled:
+        with pytest.raises(ProcessingDeferred, match='live_episode_notes'):
+            member_notes.before_notes('u', SimpleNamespace(id='c1'), ProcessingTrigger.SYNC_UPDATE)
+        redis.get.return_value = 'detail-open'
+        assert not member_notes.waits('u', row)
+        redis.get.return_value = None
+        owner['status'] = 'closed'
+        assert not member_notes.waits('u', row)
+    else:
+        read.assert_not_called()
+
+
+def test_recording_detail_escalates_only_that_recording(monkeypatch):
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+    from utils.conversations import demand_processing
+    from database.outbox_firestore import ENRICHMENT_OUTBOX
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+    monkeypatch.setattr(
+        member_notes.episodes,
+        'get_episode_owner_snapshot',
+        lambda *args: {'id': 'e', 'status': 'live', 'conversation_ids': ['c1', 'c2']},
+    )
+    redis = Mock()
+    redis.get.return_value = None
+    monkeypatch.setattr(demand_processing, 'client', lambda: redis)
+    enqueue = Mock()
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'enqueue', enqueue)
+    member_notes.open_recording('u', {'id': 'c1', 'status': 'completed', 'transcript_segments': [{'text': 'text'}]})
+    assert redis.set.call_args.args[0].endswith(':u:c1')
+    assert enqueue.call_args.args[2]['conversation_id'] == 'c1'
+    assert enqueue.call_args.kwargs['coalesce'] == 'min'
+
+
+@pytest.mark.asyncio
+async def test_live_member_finalization_yields_before_closing_or_paid_work(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+
+    async def loaded(*args):
+        return None, {'id': 'c1'}, SimpleNamespace()
+
+    monkeypatch.setattr(finalizer, '_load_admitted_conversation', loaded)
+    monkeypatch.setattr(member_notes, 'waits', lambda *args: True)
+    yielded = Mock(return_value=True)
+    monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', yielded)
+    monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder([]))
+    result = await finalizer.finalize_persisted_conversation(
+        'u', 'c1', finalization_job_id='job', dispatch_generation=2, lease_epoch=3
+    )
+    assert result is finalizer.ConversationFinalizationDisposition.deferred
+    assert yielded.call_args.args == ('job', 2, 3, 'live_episode_notes')
+    assert yielded.call_args.kwargs == {'count_attempt': False}

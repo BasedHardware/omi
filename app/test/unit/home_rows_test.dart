@@ -54,6 +54,43 @@ ServerConversation waiting(String id, int minute,
     );
 
 void main() {
+  for (final processingCount in [0, 3]) {
+    test('live snapshot owns every member with $processingCount processing recordings', () {
+      final members = [for (var i = 0; i < 3; i++) waiting('closed-$i', i, status: ConversationStatus.processing)];
+      final e = Episode(
+          id: 'live',
+          live: true,
+          startedAt: start,
+          lastActivityAt: start.add(const Duration(minutes: 10)),
+          conversationIds: ['current', ...members.map((m) => m.id)],
+          members: members);
+      final rows = buildHomeRows(members, [e],
+          enabled: true,
+          liveConversationIds: {'current'},
+          processingConversations: members.take(processingCount).toList(),
+          groupAwaitingTranscript: true);
+      // The screen inserts exactly one Listening row outside this projection.
+      expect(rows, isEmpty);
+    });
+  }
+
+  test('closed episode still composing keeps its Processing row', () {
+    final members = [for (var i = 0; i < 3; i++) waiting('closed-$i', i, status: ConversationStatus.processing)];
+    final e = Episode(
+        id: 'closed',
+        live: false,
+        startedAt: start,
+        lastActivityAt: start.add(const Duration(minutes: 10)),
+        closedAt: start.add(const Duration(minutes: 10)),
+        conversationIds: members.map((m) => m.id).toList(),
+        members: members);
+    final rows =
+        buildHomeRows(members, [e], enabled: true, processingConversations: members, groupAwaitingTranscript: true);
+    expect(rows, hasLength(1));
+    expect(rows.single.isProcessing, isTrue);
+    expect(rows.single.count, 3);
+  });
+
   test('deadline layout takes live-to-ended status from the latest episode', () {
     final a = conversation('a'), b = conversation('b');
     final cached = episode(live: true, members: [a, b]);

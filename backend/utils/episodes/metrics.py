@@ -44,6 +44,14 @@ def reuse_or_create(factory, name: str, documentation: str, labelnames: list[str
     return factory(name, documentation, labelnames, **kwargs)
 
 
+EPISODE_HOME_ATTACH_GAP_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_home_attach_gap_total',
+    'Home reads observing an unlinked recording wholly inside a live ownership window; repeated reads count again.',
+    [],
+)
+
+
 MOMENT_OUTCOMES = frozenset(
     {
         'applied',

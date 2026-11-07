@@ -70,11 +70,16 @@ def held_for(request) -> str:
 def project_list(uid: str, rows: list[dict], request, response, *, filtered: bool) -> list[dict]:
     """Home-only suppression retains the original storage count for pagination."""
     held = held_for(request)
-    if not held or filtered:
+    if filtered:
+        return rows
+    from utils.episodes.home_processing import live_owner, owns_recording
+
+    owner = live_owner(uid)
+    if not held and owner is None:
         return rows
     if response is not None:
         response.headers[PAGE_SIZE_HEADER] = str(len(rows))
-    retained = suppress_held_members(uid, rows, held)
+    retained = [row for row in suppress_held_members(uid, rows, held) if not owns_recording(owner, row)]
     if response is not None:
         kept = {row['id'] for row in retained}
         response.headers[SUPPRESSED_HEADER] = ','.join(row['id'] for row in rows if row['id'] not in kept)
