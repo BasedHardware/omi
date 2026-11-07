@@ -88,6 +88,26 @@ class CellTransaction:
                 return deepcopy(mutation.doc) if mutation.doc is not None else {}
         return deepcopy(row[1]) if row is not None else {}
 
+    def get_with_rev(self, entity: str, entity_id: str) -> tuple[int, dict[str, Any]] | None:
+        validate_address(entity, entity_id)
+        return deepcopy(self._lock_read(entity, entity_id))
+
+    def receipt_seq(self, client_mutation_id: str) -> int | None:
+        if not client_mutation_id or '\x00' in client_mutation_id:
+            raise ValueError('client_mutation_id must be nonempty without NUL')
+        row = self.conn.execute(
+            'SELECT seq FROM mutation_receipts WHERE space_id=%s AND client_mutation_id=%s',
+            (self.space_id, client_mutation_id),
+        ).fetchone()
+        return row[0] if row else None
+
+    def seq_as_of(self, entity: str, entity_id: str, ts: float) -> int | None:
+        validate_address(entity, entity_id)
+        return self.conn.execute(
+            'SELECT max(seq) FROM change_log WHERE space_id=%s AND entity=%s AND entity_id=%s AND ts<=%s',
+            (self.space_id, entity, entity_id, ts),
+        ).fetchone()[0]
+
     def _buffer(
         self,
         entity: str,
