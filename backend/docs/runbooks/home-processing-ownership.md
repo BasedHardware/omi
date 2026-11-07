@@ -35,7 +35,11 @@ that relationship or change the upload contract. This limitation was reported to
 the coordinator before implementing supplied-ID persistence. Pending responses
 use admission targets only with ownership enabled, and report `recording_count`
 from distinct recording IDs (legacy fallback: distinct conversation IDs, then one
-unknown recording), never from WAL file/segment counts.
+unknown recording), never from WAL file/segment counts. Listed jobs share a
+distinct recording-ID census, so chunk jobs for the same recording count once;
+partial overlap contributes only newly represented recordings. Jobs without any
+recording or conversation identity remain separate. Raw writer-lease readers
+retain every job.
 
 `omi_episode_home_attach_gap_total` counts read observations of missing membership
 for recordings wholly inside the current live ownership window. Repeated reads

@@ -516,8 +516,12 @@ def test_pending_sync_dedupes_only_fully_listed_recordings(monkeypatch, enabled)
     jobs = {'covered': job(['a', 'b']), 'partial': job(['a', 'c']), 'unknown': job([]), 'outside': job(['c'])}
     monkeypatch.setattr(sync_jobs, 'get_sync_job', jobs.get)
     items = sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'a', 'b'})
-    expected = ['partial', 'unknown', 'outside'] if enabled else list(jobs)
+    # The partial job represents c; its later chunk job must not count c twice.
+    expected = ['partial', 'unknown'] if enabled else list(jobs)
     assert [item['id'] for item in items] == ['sync:' + key for key in expected]
+    if enabled:
+        assert items[0]['conversation_ids'] == ['c']
+        assert items[0]['recording_count'] == 1
     # Hidden work is still pending, so its index entry must survive.
     redis.zrem.assert_not_called()
 
@@ -681,3 +685,41 @@ def test_unlinked_sync_target_inside_live_window_never_reappears_as_a_job(monkey
     item = {'id': 'sync:job', 'conversation_ids': ['gap']}
     assert home_processing.suppress_owned_syncs(UID, [item], owner, set()) == []
     assert 'event=episode_attach_gap' in caplog.text
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('presentation', [False, True])
+@pytest.mark.parametrize('recording_ids', [False, True])
+def test_chunk_jobs_count_unique_recordings_without_hiding_raw_writers(
+    monkeypatch, enabled, presentation, recording_ids
+):
+    from database import sync_jobs
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', str(enabled).lower())
+    memberships = {'newest': ['1', '2'], 'overlap': ['2', '3'], 'duplicate': ['1'], 'unknown': []}
+    redis = Mock()
+    redis.zrevrange.return_value = list(memberships)
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+    monkeypatch.setattr(
+        sync_jobs,
+        'get_sync_job',
+        lambda jid: {
+            'uid': UID,
+            'status': 'processing',
+            'created_at': NOW.timestamp(),
+            'updated_at': NOW.timestamp(),
+            'recording_ids': ['r' + value for value in memberships[jid]] if recording_ids else [],
+            'result': {'new_memories': ['c' + value for value in memberships[jid]]},
+        },
+    )
+    items = (
+        sync_jobs.pending_sync_jobs(UID, listed_conversation_ids=set())
+        if presentation
+        else sync_jobs.pending_sync_jobs(UID)
+    )
+    deduped = enabled and presentation
+    assert [item['id'] for item in items] == ['sync:' + jid for jid in memberships if not deduped or jid != 'duplicate']
+    # Three known recordings plus one job whose recording is not known yet.
+    assert sum(item.get('recording_count', 1) for item in items) == (4 if deduped or not enabled else 6)
+    redis.zrem.assert_not_called()

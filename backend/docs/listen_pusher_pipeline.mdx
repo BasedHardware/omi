@@ -3075,8 +3075,10 @@ true. Live Home/pending suppression requires an admitted `X-Omi-App-Channel` and
 version checks are bypassed for live-dependent lists. `X-Omi-Home-Suppressed-Ids`
 continues to name only acknowledged held snapshots. Pending-work fills past
 suppressed pages, removes fully represented jobs, and adds `recording_count`
-(default one) for distinct recordings. Non-presentation writer-lease probes do
-not apply suppression.
+(default one) for distinct recordings across the listed jobs, including chunk
+jobs sharing a recording ID. Partially overlapping jobs count only newly
+represented recordings; identity-free jobs remain separate. Non-presentation
+writer-lease probes do not apply suppression.
 
 Redis `create_sync_job` stores supplied `recording_ids` and nullable
 `target_conversation_id` before results, with its existing TTL. A session-only
