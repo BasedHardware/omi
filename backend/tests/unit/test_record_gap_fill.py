@@ -368,6 +368,20 @@ def test_fill_stops_at_a_hole_inside_the_wal_and_resumes_on_a_later_upload(world
     validate_record_tail(units, closed_row()['finished_at'])
 
 
+def test_overlapping_wal_units_in_one_upload_never_overlap_each_other(world):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    first, second = ramp(5), ramp(6, offset=11)  # 105..110 and 108..114
+    world.wal['units'] = [audio_unit(105.0, first), audio_unit(108.0, second)]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('RECORD_SEAL_OVERLAP_TRIM_ENABLED', 'false')
+        assert fill(world) == 'written'
+        written = fills(world)
+        assert sorted(written) == [f'chunks/{UID}/{CID}/105.000000.bin', f'chunks/{UID}/{CID}/110.000000.bin']
+        assert written[f'chunks/{UID}/{CID}/110.000000.bin']['data'] == second[2 * RATE * 2 : 3 * RATE * 2]
+        _, units = admitted_units(world)
+    validate_record_tail(units, closed_row()['finished_at'])
+
+
 def test_empty_retained_set_without_a_start_is_never_filled(world):
     world.wal['units'] = [audio_unit(100.0, ramp(10))]
     assert fill(world, closed_row(started_at=None)) == 'skipped_gate'

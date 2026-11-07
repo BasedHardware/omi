@@ -221,6 +221,9 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
             cursor += count
         expected = unit.capture_at + last / RATE
         tolerance = TAIL_TOLERANCE_SECONDS
+        # An overlapping later WAL unit must start after what this fill wrote,
+        # exactly as it must start after retained audio.
+        lower = expected if lower is None else max(lower, expected)
         del pcm
     return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE, gapped
 
