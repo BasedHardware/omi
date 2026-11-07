@@ -19,6 +19,8 @@ from config.batch_pipeline_language import (
     admission_language_exclusion_enabled,
     admission_language_sample_enabled,
     batch_admission_language,
+    intake_request_language_lane,
+    intake_unit_language_plan,
 )
 from config.batch_pipeline_vendor_overflow import legacy_capacity_fallback_enabled, overflow_enabled
 from config.policy import BatchUnitPolicy, resolve_batch_policy
@@ -44,7 +46,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline import gpu_overflow
-from utils.batch_pipeline.provider_stt_admission import provider_enqueue
+from utils.batch_pipeline.provider_stt_admission import SttRoute, provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
@@ -814,16 +816,23 @@ async def accept_upload(
                 record_route('intake', first.language, 'parakeet')
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
+        unit_plans = []
+        staged = []
         phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
         ):
-            if len(items) >= 128:
+            if len(staged) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
-            item = unit_item(unit, len(items))
-            if len(items) in decisions:
+            item = unit_item(unit, len(staged))
+            if len(staged) in decisions:
                 # This unit was classified above under fresh authority (silent units on their own audio).
-                language_decision = decisions[len(items)]
+                language_decision = decisions[len(staged)]
+                # Sampled speech was refused whole unless every answer was Parakeet-safe
+                # vendor audio LID, and a sampled VAD failure refuses too; a sampled unit
+                # here is VAD-verified silent, so its strict speech answer is already
+                # known without a second CPU pass.
+                strict_speech = False
             else:
                 phase = 'language_probe'
                 probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
@@ -840,11 +849,24 @@ async def accept_upload(
                 )
                 # Refusal preserves the caller's source; never acknowledge or admit it.
                 probe_guard.raise_if_denied()
-            frozen_language = (
-                language_decision.language
-                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
-                else 'und' if language_guard_enabled() else input_language
+                strict_speech = None
+                if not language_decision.parakeet_safe:
+                    # A non-affirmative answer plus strict speech proof decides this
+                    # unit's serving lane on CPU; a VAD failure is not silence and
+                    # leaves the worker barrier as the authority.
+                    try:
+                        strict_speech = await run_blocking(sync_executor, _speech_windows, unit.wav) is not None
+                    except Exception:
+                        strict_speech = None
+            plan = intake_unit_language_plan(
+                decision_language=language_decision.language,
+                parakeet_safe=language_decision.parakeet_safe,
+                strict_speech=strict_speech,
+                input_language=input_language,
+                language_guard=language_guard_enabled(),
             )
+            unit_plans.append(plan)
+            frozen_language = plan.frozen_language
             repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
             phase = 'freeze_audio'
             frozen = await run_blocking(
@@ -869,9 +891,41 @@ async def accept_upload(
             )
             phase = 'stage_audio'
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
-            # Provider units are funded by the provider stage, not GPU compute admission.
-            items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+            # Compute admission is finalized after every unit's plan is known, below:
+            # provider units are funded by the provider stage, not GPU compute admission.
+            staged.append(replace(item, audio_uri=uri))
             phase = 'decode'
+        request_plan = intake_request_language_lane(unit_plans, stt_route=policy.stt_route)
+        if request_plan.provider_lane:
+            # Speech whose frozen language the GPU words engine can never serve used to
+            # ride the compute lane only to die at the worker's language barrier: a full
+            # decode, a terminal quarantine and a fenced recovery pass that re-ran the
+            # same recognition. The provider lane recognizes it directly under the same
+            # funding, privacy and at-most-once fences.
+            provider = True
+            flipped = SttRoute('provider', 'unsupported_language', 'modulate', request_plan.language)
+            policy = replace(
+                policy,
+                stt_route=flipped.stt_route,
+                provider_reason=flipped.provider_reason,
+                provider_service=flipped.provider_service,
+            )
+            # The provider stage reads the job row's route, so the flip rewrites the
+            # route object itself, not only the policy fields stamped beside it.
+            route = flipped
+            # C8's invariant: provider-lane units never take the record origin
+            # (whole-result desktop projection). The flip joins that lane.
+            record_origin = False
+            record_route('intake', request_plan.language, 'multilingual')
+            logger.info('event=batch_language_eligibility outcome=provider reason=%s', request_plan.reason)
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch',
+                to_mode='modulate',
+                reason='other',
+                outcome='degraded',
+            )
+        items = [replace(staged_item, requires_compute_admission=not provider) for staged_item in staged]
         if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
             return covered_response()
         binding = ProjectionBinding(
