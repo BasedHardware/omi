@@ -13,7 +13,7 @@ import pytest
 
 from config import cell_store
 from database.cells import AdapterRegistry, CellStore
-from database.cells.errors import BaseRevisionMismatch, CellContentionExhausted, MutationIdReused
+from database.cells.errors import BaseRevisionMismatch, CellContentionExhausted, CellSpaceUnavailable, MutationIdReused
 from database.cells.feed import CursorAhead, DEVICE_STALE_S, FEED_RETENTION_S, ResyncRequired
 from database.cells.receipts import MUTATION_RECEIPT_RETENTION_SECONDS
 from database.cells import store as store_module
@@ -34,7 +34,9 @@ def harness():
 
 @pytest.fixture
 def space(harness, request):
-    return harness.uid(request.node.name.replace('[', '-').replace(']', ''))
+    uid = harness.uid(request.node.name.replace('[', '-').replace(']', ''))
+    harness.store.enroll_space(uid, now=NOW)
+    return uid
 
 
 def write(store, space, key, *, now=NOW, **kwargs):
@@ -275,7 +277,7 @@ def test_future_cursors_rejected_and_head_accepted(harness, space, head):
     for cursor in (head + 1, head + 100):
         with pytest.raises(CursorAhead) as error:
             store.pull(space, cursor=cursor, now=NOW)
-        assert (error.value.space_id, error.value.head, error.value.epoch) == (space, head, int(bool(head)))
+        assert (error.value.space_id, error.value.head, error.value.epoch) == (space, head, 1)
         with pytest.raises(CursorAhead):
             store.set_cursor(space, 'device', last_seq=cursor, now=NOW)
     with store.pool.connection() as conn:
@@ -319,6 +321,7 @@ def test_receipt_purge_is_bounded_and_independent_of_feed(harness, space):
     store = harness.store
     cutoff = NOW - MUTATION_RECEIPT_RETENTION_SECONDS
     other = harness.uid('receipt-neighbor')
+    store.enroll_space(other, now=NOW)
     write(store, other, 'a', now=cutoff - 1, client_mutation_id='neighbor', fingerprint='fp')
     for key, ts in [('expired-1', cutoff - 2), ('expired-2', cutoff - 1), ('boundary', cutoff), ('recent', NOW)]:
         write(store, space, key, now=ts, client_mutation_id=key, fingerprint='fp')
@@ -364,7 +367,7 @@ def test_receipt_insert_failure_rolls_back_whole_write(harness, space, monkeypat
         patch.setattr(store.pool, 'connection', connection)
         with pytest.raises(RuntimeError, match='injected receipt failure'):
             write(store, space, 'a', client_mutation_id='mid', fingerprint='fp')
-    assert store.head(space) == (0, 0)
+    assert store.head(space) == (0, 1)
     assert store.read_doc(space, 'notes', 'a') == {}
     with store.pool.connection() as conn:
         for table in ('change_log', 'mutation_receipts'):
@@ -374,23 +377,78 @@ def test_receipt_insert_failure_rolls_back_whole_write(harness, space, monkeypat
 def test_purge_is_complete_and_isolated(harness, space):
     store = harness.store
     other = harness.uid('purge-neighbor')
+    store.enroll_space(other, now=NOW)
     for sid in (space, other):
         write(store, sid, 'a', client_mutation_id='mid', fingerprint='fp')
         store.set_cursor(sid, 'device', last_seq=1, now=NOW)
-    assert store.purge_space(space) == 5
+    assert store.purge_space(space) == 4
     with store.pool.connection() as conn:
-        for table in ('space_heads', 'cell_docs', 'change_log', 'sync_cursors', 'mutation_receipts'):
+        assert conn.execute('SELECT tombstoned FROM space_heads WHERE space_id=%s', (space,)).fetchone() == (True,)
+        for table in ('cell_docs', 'change_log', 'sync_cursors', 'mutation_receipts'):
             assert conn.execute(f'SELECT count(*) FROM {table} WHERE space_id=%s', (space,)).fetchone()[0] == 0
         assert conn.execute('SELECT count(*) FROM mutation_receipts WHERE space_id=%s', (other,)).fetchone()[0] == 1
     assert store.read_doc(other, 'notes', 'a')
     assert store.purge_space(space) == 0
 
 
+@pytest.mark.parametrize('state', ['missing', 'tombstoned'])
+def test_every_creating_write_requires_live_enrollment(harness, state):
+    store = harness.store
+    uid = harness.uid(f'write-fence-{state}')
+    if state == 'tombstoned':
+        store.enroll_space(uid, now=NOW)
+        store.tombstone_space(uid)
+    with pytest.raises(CellSpaceUnavailable) as error:
+        write(store, uid, 'late', client_mutation_id='mid', fingerprint='fp')
+    assert error.value.retryable is True
+    with pytest.raises(CellSpaceUnavailable):
+        store.set_cursor(uid, 'late-device', last_seq=0, now=NOW)
+    with pytest.raises(CellSpaceUnavailable):
+        store.bump_epoch(uid, now=NOW)
+    if state == 'tombstoned':
+        with pytest.raises(CellSpaceUnavailable):
+            store.enroll_space(uid, now=NOW)
+    with store.pool.connection() as conn:
+        for table in ('cell_docs', 'change_log', 'sync_cursors', 'mutation_receipts'):
+            assert conn.execute(f'SELECT count(*) FROM {table} WHERE space_id=%s', (uid,)).fetchone()[0] == 0
+        assert conn.execute('SELECT tombstoned FROM space_heads WHERE space_id=%s', (uid,)).fetchone() == (
+            (True,) if state == 'tombstoned' else None
+        )
+
+
+def test_fence_waits_for_admitted_commit_then_rejects_late_writer(harness, space, monkeypatch):
+    allocated, release = threading.Event(), threading.Event()
+    original = store_module.CellTransaction.flush
+
+    def held_commit(tx):
+        result = original(tx)
+        allocated.set()
+        assert release.wait(timeout=10)
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store_module.CellTransaction, 'flush', held_commit)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            writer = executor.submit(write, harness.store, space, 'admitted')
+            try:
+                assert allocated.wait(timeout=10)
+                fence = executor.submit(harness.store.tombstone_space, space)
+            finally:
+                release.set()
+            writer.result(timeout=10)
+            fence.result(timeout=10)
+    assert harness.store.read_doc(space, 'notes', 'admitted')
+    with pytest.raises(CellSpaceUnavailable):
+        write(harness.store, space, 'late')
+    assert harness.store.purge_space(space) == 2
+    assert harness.store.read_doc(space, 'notes', 'admitted') == {}
+
+
 def test_doc_semantics_and_rollback(harness, space):
     store = harness.store
     assert store.read_doc(space, 'notes', 'a') == {}
     assert store.run(space, lambda tx: tx.get('notes', 'a'), actor_uid=space, now=NOW).value == {}
-    assert store.head(space) == (0, 0)
+    assert store.head(space) == (0, 1)
     doc = {'nested': [{'when': datetime(2026, 1, 1, tzinfo=timezone.utc), 'bytes': b'\x00\xff'}]}
 
     def body(tx):
@@ -419,8 +477,8 @@ def test_doc_semantics_and_rollback(harness, space):
 
 def test_head_epoch_and_migrations(harness, space):
     store = harness.store
-    assert store.head(space) == (0, 0)
-    assert store.pull(space, cursor=0, now=NOW).epoch == 0
+    assert store.head(space) == (0, 1)
+    assert store.pull(space, cursor=0, now=NOW).epoch == 1
     write(store, space, 'a')
     assert store.head(space) == (1, 1)
     assert store.bump_epoch(space, now=NOW) == 2
@@ -429,7 +487,7 @@ def test_head_epoch_and_migrations(harness, space):
         path = Path(store_module.__file__).parent / 'migrations'
         assert migrate(conn, directory=path) == []
         assert migrate(conn, directory=path) == []
-        assert current_version(conn) == 1
+        assert current_version(conn) == 2
 
 
 def test_validation_and_adapter_registration(harness, space, monkeypatch):
@@ -534,7 +592,7 @@ def test_mutation_receipts_cannot_be_lost_during_coalescing(harness, space):
 
     with pytest.raises(MutationIdReused):
         store.run(space, reused, actor_uid=space, now=NOW)
-    assert store.head(space) == (0, 0)
+    assert store.head(space) == (0, 1)
     assert store.read_doc(space, 'notes', 'a') == {}
 
 
