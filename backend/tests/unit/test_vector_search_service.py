@@ -5,6 +5,7 @@ from database import vector_db
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchMode, SearchVectorHit, VectorRepairPurgeReason
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from database.memory_privacy_reference_index import with_privacy_reference_tokens
 from database.memory_vector_repair_outbox import (
     build_vector_repair_purge_outbox_records,
     write_vector_repair_purge_outbox_records,
@@ -429,6 +430,8 @@ def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_p
     assert db_client.set_paths == [expected_path, expected_path]
     assert db_client.docs[expected_path]['record_id'] == record['record_id']
     assert db_client.docs[expected_path]['idempotency_key'] == record['record_id']
+    assert db_client.docs[expected_path] == with_privacy_reference_tokens('u1', record)
+    assert 'privacy_reference_tokens' not in record
 
 
 def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or_missing_fence():

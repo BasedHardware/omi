@@ -46,7 +46,12 @@ from tests.support.firestore_dream_query_drivers import registry_extension as dr
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
-from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
+from tests.support.firestore_memory_ledger_drivers import (
+    registry_extension as memory_ledger_drivers,
+    reference_switch_environment,
+    seed_privacy_reference_history,
+    seed_privacy_operation_history,
+)
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
 from models.announcement import AnnouncementType
@@ -148,6 +153,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    # Re-reviewed 2026-11-07: both switch profiles exercise the parent purges;
+    # all terminal queries remain delegated to _iter_collection_documents.
+    'database.memory_ledger._iter_privacy_history_candidates': '9c671fa89532ed5cbfae41d1d19c656026b46db524c09a376eb3b86b09a89677',
     'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
@@ -212,8 +220,8 @@ BODY_DIGEST = {
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
     'database.open_loops.get_loops': 'f4d9bd449d4e45fbe81ce42d21c7f80d026dcb56369cf95cded23374b6828e2e',
-    'database.memory_ledger._append_commit_transaction': 'a30c4549844f8f10865249fc2c4444476c92a4d901191c69d2bac89a657ee7a8',
-    'database.memory_ledger._append_commit_with_builder_transaction': '56a25d5b0c29b9ba6b58ddc4fe5e5fe83a78b54cdf5964b92f3c54e83aef01a3',
+    'database.memory_ledger._append_commit_transaction': 'a2687d1eeecd27eb6daedf30ba86755b59dada17f50a7c401ad96e51060f2619',
+    'database.memory_ledger._append_commit_with_builder_transaction': 'ae4939ae5a04333cb3aadcb8e0a38a1c608139a556c01422adb6f048a937628c',
     'database.memory_ledger._assert_legacy_commit_privacy_fences': '59596ea3da66dd82e55c7a08ad949ee894ba1a4fe7714f79ced320955ed22959',
     # Lane 12 A6 staging backfill: an operator Cloud Run job, never a serving path.
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
@@ -2241,6 +2249,18 @@ _add(
     )
 )
 _add(
+    CoveredByEntry(
+        'database.memory_ledger._iter_privacy_history_candidates',
+        covered_by=(
+            'database.memory_ledger.purge_canonical_privacy_history_for_memories',
+            'database.memory_ledger.purge_source_replacement_receipts_for_memories',
+        ),
+        reason='on/off profiles exercise token builders; terminal queries are observed in _iter_collection_documents',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.memory_ledger._iter_privacy_history_candidates'],
+    )
+)
+_add(
     DriverEntry(
         'database.memory_ledger.finalize_canonical_privacy_tombstones',
         base={'uid': UID, 'memory_ids': ['mem-1', 'mem-2']},
@@ -2254,6 +2274,9 @@ _add(
 _add(
     DriverEntry(
         'database.memory_ledger.purge_canonical_privacy_history_for_memories',
+        patchers=(reference_switch_environment,),
+        setup=seed_privacy_operation_history,
+        trials=2,
         base={'uid': UID, 'memory_ids': ['mem-1', 'mem-2']},
         domains={'preserve_source_replacement_receipts': [False, True]},
         neutrals={
@@ -2271,6 +2294,9 @@ _add(
 _add(
     DriverEntry(
         'database.memory_ledger.purge_source_replacement_receipts_for_memories',
+        patchers=(reference_switch_environment,),
+        setup=seed_privacy_reference_history,
+        trials=2,
         base={'uid': UID, 'memory_ids': ['mem-1', 'mem-2']},
         neutrals={
             'revalidate_gate': (False, 'authority check only; no query shape change'),

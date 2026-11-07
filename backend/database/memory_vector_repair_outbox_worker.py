@@ -10,6 +10,7 @@ from google.cloud import firestore
 
 from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, drain_isolated, oldest_ready_age_seconds
 from database.memory_collections import MemoryCollections
+from database.memory_privacy_reference_index import privacy_reference_patch
 from database.memory_vector_repair_outbox_telemetry import (
     VectorRepairOutboxTelemetryConfig,
     emit_vector_repair_outbox_worker_telemetry,
@@ -288,7 +289,7 @@ def ack_vector_repair_purge_outbox_record(
         path = f"{MemoryCollections(uid=uid).memory_outbox}/{record_id}"
     ack_patch = dict(patch)
     ack_patch["updated_at"] = _iso_now(now)
-    db_client.document(path).update(ack_patch)
+    db_client.document(path).update(privacy_reference_patch(path.split('/')[1], ack_patch))
     return ack_patch
 
 
@@ -368,7 +369,12 @@ def _claim_vector_repair_purge_outbox_snapshot_in_transaction(
         return None
     record["outbox_path"] = path
     record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
-    transaction.update(doc_ref, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
+    transaction.update(
+        doc_ref,
+        privacy_reference_patch(
+            path.split('/')[1], _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at)
+        ),
+    )
     return record
 
 
@@ -389,7 +395,11 @@ def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
         return None
     record["outbox_path"] = path
     record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
-    doc_ref.update(_lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
+    doc_ref.update(
+        privacy_reference_patch(
+            path.split('/')[1], _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at)
+        )
+    )
     return record
 
 

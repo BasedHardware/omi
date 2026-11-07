@@ -3,6 +3,8 @@ import json
 import pytest
 
 from database import memory_vector_repair_outbox_worker as worker
+from database.memory_privacy_reference_index import privacy_reference_tokens
+from tests.unit.fixtures.memory_privacy_reference_fakes import apply_reference_patch
 
 from database.memory_vector_repair_pinecone_adapter import (
     VECTOR_REPAIR_PINECONE_NAMESPACE,
@@ -104,7 +106,7 @@ class _FakeDocumentReference:
         return _FakeSnapshot(self.path, self._store.get(self.path))
 
     def update(self, patch):
-        self._store[self.path].update(dict(patch))
+        apply_reference_patch(self._store[self.path], patch)
 
     def set(self, data):
         self._store[self.path] = dict(data)
@@ -1328,3 +1330,17 @@ class TestEntrypoint:
         assert upserts[0]["namespace"] == "ns2"
         assert upserts[0]["vectors"][0]["metadata"]["uid"] == "u1"
         assert upserts[0]["vectors"][0]["metadata"]["memory_id"] == "mem1"
+
+
+def test_ack_adds_new_string_leaves_without_losing_existing_tokens():
+    path = 'users/u1/memory_outbox/rec-1'
+    old_tokens = privacy_reference_tokens('u1', {'mem-1'})
+    record = _record(outbox_path=path)
+    db = _FakeFirestore({path: {**record, 'privacy_reference_tokens': old_tokens}})
+    ack = ack_vector_repair_purge_outbox_record(
+        db_client=db, record=record, patch={'last_error': 'new-error', 'action': 'repair'}
+    )
+    assert 'privacy_reference_tokens' not in ack
+    assert set(old_tokens + privacy_reference_tokens('u1', {'new-error', 'repair'})) <= set(
+        db.store[path]['privacy_reference_tokens']
+    )

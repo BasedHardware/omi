@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database.memory_collections import MemoryCollections
+from database.memory_privacy_reference_index import with_privacy_reference_tokens
 from models.memory_contracts import deterministic_contract_id
 
 VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE = "vector_repair_purge"
@@ -97,7 +98,7 @@ def write_vector_repair_purge_outbox_records(*, db_client: Any, records: List[Di
         return []
     for record in records:
         path = _required_str(record, "outbox_path")
-        db_client.document(path).set(dict(record))
+        db_client.document(path).set(with_privacy_reference_tokens(path.split('/')[1], dict(record)))
     return records
 
 

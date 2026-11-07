@@ -34,6 +34,7 @@ from database.legal_holds import (
     destructive_operation_gate,
 )
 from database.memory_collections import MemoryCollections
+from database.memory_privacy_reference_index import with_privacy_reference_tokens
 from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import (
     EVIDENCE_IDENTITY_FIELDS,
@@ -1979,7 +1980,7 @@ def _replace_conversation_source_firestore_transaction(
         tombstoned_evidence_ids=sorted(old_evidence_ids),
         committed_at=now,
     )
-    transaction.set(replacement_ref, firestore_data(receipt))
+    transaction.set(replacement_ref, with_privacy_reference_tokens(collections.uid, firestore_data(receipt)))
 
     return ConversationSourceReplacementResult(
         control_state=working_control,
@@ -2404,7 +2405,10 @@ def _apply_long_term_patch_firestore_transaction(
             replacement = result.memory_items[0]
             if replacement.memory_id != ledger_reopen_receipt.replacement_memory_id:
                 raise MemoryFirestoreApplyError("standalone ledger reopen replacement identity mismatch")
-            transaction.set(reopen_receipt_ref, firestore_data(ledger_reopen_receipt))
+            transaction.set(
+                reopen_receipt_ref,
+                with_privacy_reference_tokens(collections.uid, firestore_data(ledger_reopen_receipt)),
+            )
     return result
 
 
@@ -2622,7 +2626,7 @@ def write_apply_result(
     operation_ref: Any,
     result: ApplyResult,
 ) -> None:
-    transaction.set(operation_ref, firestore_data(result.operation))
+    transaction.set(operation_ref, with_privacy_reference_tokens(collections.uid, firestore_data(result.operation)))
     if result.status != ApplyStatus.committed:
         return
 
@@ -2642,7 +2646,7 @@ def write_apply_result(
         "outbox_event_ids": result.operation.committed_outbox_event_ids,
         "updated_at": result.control_state.updated_at,
     }
-    transaction.set(commit_ref, firestore_data(commit_doc))
+    transaction.set(commit_ref, with_privacy_reference_tokens(collections.uid, firestore_data(commit_doc)))
     for item in result.memory_items:
         item_ref = db_client.document(f"{collections.memory_items}/{item.memory_id}")
         transaction.set(item_ref, firestore_data(item))
@@ -2680,7 +2684,7 @@ def write_apply_result(
             transaction.set(review_ref, firestore_data(review_item))
     for event in result.outbox_events:
         event_ref = db_client.document(f"{collections.memory_outbox}/{event.event_id}")
-        transaction.set(event_ref, firestore_data(event))
+        transaction.set(event_ref, with_privacy_reference_tokens(collections.uid, firestore_data(event)))
 
 
 def _memory_state_head_from_control(control_state: MemoryControlState) -> MemoryApplyDoc:
