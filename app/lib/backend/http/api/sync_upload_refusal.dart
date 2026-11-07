@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_result.dart';
 
@@ -73,7 +72,6 @@ ApiResult<SyncUploadRefusalBody> decodeSyncUploadRefusal(http.Response response)
 bool isRecordingScopedSyncWaitReasonCode(String? reasonCode) => reasonCode == 'record_capture_pending';
 
 /// The closed recording-scoped wait code from a 5xx upload body, else null.
-@visibleForTesting
 String? syncUploadServerWaitReasonCode(http.Response response) {
   try {
     final decoded = jsonDecode(response.body);

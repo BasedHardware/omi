@@ -303,16 +303,28 @@ class SyncUploadGate {
             reason: RateLimitReason.backendBusy,
           );
         }
-        _recordUploadFailure(
-          error,
-          attemptId: attemptId,
-          recordingId: conversationId,
-          fileCount: files.length,
-          totalBytes: totalBytes,
-          claimsLiveCapture: claimLiveCapture,
-          startedAt: startedAt,
-          telemetrySource: telemetrySource,
-        );
+        if (error is SyncUploadHttpException && isRecordingScopedSyncWaitReasonCode(error.reasonCode)) {
+          // The WAL stays pending until its record is complete: a wait, not a failure.
+          _mirrorUpload(
+            attemptId: attemptId,
+            phase: 'deferred',
+            source: telemetrySource,
+            occurredAt: _clock(),
+            latencyMs: _latencyMs(startedAt),
+            httpStatus: error.statusCode,
+          );
+        } else {
+          _recordUploadFailure(
+            error,
+            attemptId: attemptId,
+            recordingId: conversationId,
+            fileCount: files.length,
+            totalBytes: totalBytes,
+            claimsLiveCapture: claimLiveCapture,
+            startedAt: startedAt,
+            telemetrySource: telemetrySource,
+          );
+        }
         rethrow;
       }
     } finally {
