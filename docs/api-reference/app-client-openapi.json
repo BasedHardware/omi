@@ -85615,7 +85615,7 @@
     },
     "/v2/firmware/latest": {
       "get": {
-        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered.",
+        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered. Releases with an\naudience (allow_uid_sha256, channels) also read the caller's token and app channel.",
         "operationId": "get_latest_version_v2_firmware_latest_get",
         "parameters": [
           {
