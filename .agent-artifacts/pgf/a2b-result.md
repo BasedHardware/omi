@@ -1,13 +1,12 @@
 # A2b implementation result
 
-Status: implementation committed; final executor replay and full preflights are queued in the managed heavy-command gate. This is a validation checkpoint, not a completed handoff.
-
-Current blocker (measured 2026-11-07T04:53:19.875331+00:00): the final managed replay/preflight chain has 14 older live queue tickets ahead of it. The host's configured main pool has four slots; occupied holders were verified to have active pytest/preflight/typecheck descendants. No capacity setting or other lane's process was changed. The existing bounded waiter is `omi-heavy run --wait 7200` (tool session 42865), running the executor replay, then `make preflight`, then the explicit PR-body preflight with `&&` gates. The owned 50-minute heartbeat remains armed and is touched while awake. If a handoff is forced before admission, the lead must arrange capacity or rerun the listed gates; neither full preflight is claimed green here.
+Status: implementation and focused validation committed; rerunning both full preflights after exposing the lazy public cell-composition API. This is a validation checkpoint, not a completed handoff.
 
 Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-a2b-upstream-keep-clean`. Branch: `lane/pgf-a2b`. Base: A2a tip `c2cbe8b53c04`; stacked on A1 #24800. Local commits only; no push, PR, deployment, production access, api.omi.me calls, or GCP tier.
 
 ## What was built
 
+- `backend/database/cells/adapters/__init__.py`: lazy public `CellSpaceStore` export; the low-level cell package still loads no domain composition or pool until explicitly requested. Conformance callers use this public entry point.
 - `backend/database/cells/adapters/_base.py`: typed-adapter transaction dispatch, domain-owned result receipts and logical CAS checks. No simulator import or SDK emulation.
 - `backend/database/cells/adapters/space_store.py`: explicit adapter composition through B1's registry; per-attempt identity maps; pending-write SQL overlays; one cell flush path for document/change-log writes; canonical change detection that preserves int/bool/float distinctions; partial codec normalization for related-domain task writes; native revision and mutation error mapping; task tickets held through flush and SQL commit; one post-commit task-list-version bump per changed UoW. Failed/retried attempts finish every registered fence, including when another cleanup raises.
 - `backend/database/cells/adapters/{folders,people,action_items,goals,workstreams}.py`: full protocol surfaces, cross-domain task relationships, legacy document semantics, codec-before-write, mutation result replay, focus/lifecycle/history, workstream events/artifacts/checkpoints/imports, people generations and folder conversation rehoming. Bounded SQL reads for limit-bearing lists, with stable keysets and byte-order ID ties; folder keysets retain Firestore scalar ordering across null/bool/number/tagged datetime/text legacy values.
@@ -60,7 +59,7 @@ Heavy commands use `backend/.venv/bin/python /tmp/a2b-run.py /Users/dazheng/work
 
 ### Terminal test outcomes
 
-Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest summaries and file receipts were parsed. The full command exited 1: 2,674 files passed, 2 files failed; 65,747 tests passed, 2 failed, 104 skipped, 2,130 deselected, 75 xfailed. The stale migration assertion is corrected; both failed files are being replayed through the same isolated runner. No whole-run green is claimed. Repository-preflight results remain pending in this checkpoint.
+Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest summaries and file receipts were parsed. The full command exited 1: 2,674 files passed, 2 files failed; 65,747 tests passed, 2 failed, 104 skipped, 2,130 deselected, 75 xfailed. The stale migration assertion is corrected (25-test file replay passed). Executor cold-dependency setup is corrected (36-test file replay passed, including a managed-gate repetition). No whole-run green is claimed. Repository-preflight results remain pending in this checkpoint.
 
 | Context | Exact command after credential scrub (heavy launcher as described above) | Result |
 |---|---|---|
@@ -87,7 +86,9 @@ Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest s
 | backend | `OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest -q tests/unit/test_cell_store_conformance.py` | After migration-version correction: 25 passed, 0 failed |
 | root | `OMI_REQUIRE_STORE_BACKENDS=postgres backend/.venv/bin/python /tmp/a2b-b2-compat.py` (temporary import overlay described below) | Final source with B2 store/purge/errors at `67894e0e15cc0c9ee55d1433d8014c202772d6e9`: 120 passed, 55 unavailable-emulator skips, 0 failed |
 | root | `scripts/pr-preflight --pr-body-file .agent-artifacts/pgf/a2b-pr-body.md --metadata-only` | 4 checks passed, 0 failed; 28.80 s |
-| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2b-executor-warm.txt BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=1 bash backend/test.sh` (credential-scrubbed short setup check) | Executor fixture correction: 36 passed, 0 failed; 12.43 s pytest / 23 s file wall. Two-second deadlines and all assertions unchanged. Managed repetition and full gates remain queued. |
+| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2b-executor-warm.txt BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=1 bash backend/test.sh` (credential-scrubbed short setup check) | Executor fixture correction: 36 passed, 0 failed; 12.43 s pytest / 23 s file wall. Two-second deadlines and all assertions unchanged. Managed repetition also passed: 36 passed in 8.61 s / 15 s file wall. Full gates are being rerun. |
+| backend | `OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest -q tests/unit/test_cells_task_workflow_migration.py tests/unit/test_port_surface_parity.py` | Final lazy public export: 62 passed, 0 failed; 32.79 s. Includes 11 cell contracts and 51 parity cases. |
+| root | `backend/.venv/bin/python .github/scripts/check_dead_code.py --area backend` | PASS; 16 existing unreachable files at baseline/allowlist floor; no `.github` changes |
 | root | `scripts/pr-preflight --suggest` | PASS; INV-TASK-2 and Failure-Class: none retained |
 | root | `black --line-length 120 --skip-string-normalization <changed Python files>` plus the pinned staged-file hook | PASS |
 
@@ -108,6 +109,7 @@ B2 compatibility uses a disposable package overlay under `/Volumes/Ephemeral/scr
 - First full CI-runner attempt stopped at typecheck: 56 errors / 76,605 warnings, so no full-suite pass was claimed. Fixed public helper names, decorator/heterogeneous-payload typing, explicit domain attributes and optional values. An incorrectly invoked narrow pyright command initially selected system Python 3.14 and added unrelated stdlib diagnostics; final commands specify the worktree's Python explicitly. Final adapter typecheck has zero errors.
 - A transient intermediate edit missed the new ParamSpec import, causing two collection errors. Corrected before the final tests/commit.
 - Broad run later exposed the old B1 `current_version == 1` assertion (24 other cell-store cases passed). Updated only the exact expectation to 3; the whole 25-test file passed replay. The same broad run also encountered a 2-second future timeout in unchanged `test_executors.py::test_submit_with_context_logs_byok_quota_halt_without_traceback`; its quieter file-isolated replay is required before handoff.
+- The first frozen-source `make preflight` stopped on `dead-code-ratchet` after 429.14 s: the conformance-only composition class had no production importer. Added a real lazy public export in the already authorized adapters package, migrated conformance imports to it, and added a no-pool/fresh-process import test. Focused backend ratchet and 62 public-API/parity tests pass; full gates are rerun. Other uncompleted checks from that failed run are not claimed passed.
 - Initial make preflight hit a runtime-image source-copy race: test-created `_segments`/`_speech_profiles` directories disappeared during copying. No source correction or safety bypass was made; final preflight is run after tests finish.
 
 ## Known gaps / integration gates
@@ -118,11 +120,11 @@ B2 compatibility uses a disposable package overlay under `/Volumes/Ephemeral/scr
 
 ## Draft PR body
 
-See `.agent-artifacts/pgf/a2b-pr-body.md`. The checkpoint draft follows; final gate results will replace its pending-verification paragraph.
+The same draft is saved as `.agent-artifacts/pgf/a2b-pr-body.md`.
 
 ## What changed and why
 
-Add conformance-only typed cell adapters for folders, people, action items, goals and workstreams, composed in one space UoW over the existing cell flush. SQL applies filters, ordering, keysets and limits before returning list rows. Task tickets span flush and commit, with one post-commit cache bump per changed UoW. Canonical change detection preserves numeric/boolean storage types, and related-domain task patches pass through the shared codec with their update timestamps.
+Add conformance-only typed cell adapters for folders, people, action items, goals and workstreams, exposed through a lazy `database.cells.adapters.CellSpaceStore` entry point and composed in one space UoW over the existing cell flush. SQL applies filters, ordering, keysets and limits before returning list rows. Task tickets span flush and commit, with one post-commit cache bump per changed UoW. Canonical change detection preserves numeric/boolean storage types, and related-domain task patches pass through the shared codec with their update timestamps.
 
 Promote doc-mode storage with expand-only generated query columns that decode tagged datetimes. Migration 0003 follows B2's byte-identical 0002 write-fence prerequisite. These migrations must land before enrollment. No serving selectors, runtime flags or production configuration change; CELL_STORE_MODE stays off.
 
@@ -132,13 +134,13 @@ Promote doc-mode storage with expand-only generated query columns that decode ta
 
 ## How it was verified
 
-Real disposable Postgres, Firestore emulator and simulator: 165 conformance tests passed. Legacy emulator regressions: 12 passed. Signature parity: 51 passed. Additional local Postgres tests cover migration application/reapplication, codec timestamps, bounded list materialization, native replay receipts (including reserved-ID no-ops), scalar types, related-domain task codecs/timestamps, fence ordering, retry cleanup and one cache bump per UoW.
+Simulator, real disposable Postgres and Firestore emulator: 165 conformance tests passed; 12 legacy emulator regressions passed. Final public API/cell contract/signature checks: 62 passed. Task/query/lifecycle guard replay: 2,436 passed. Core adapters also passed 120 tests with B2's write-fenced store, with 55 optional emulator cases skipped in that Postgres-focused run. OpenAPI is byte-identical to the fetched main baseline.
 
-Full backend and repository gates are being run; final counts and exact credential-scrubbed commands will be recorded in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
+The full 2,676-file backend command exited 1 (65,747 passed / 2 failed): a stale migration-version assertion and a two-second executor dependency-initialization timeout. Both files are corrected and pass isolated replay (25 cell-store tests; 36 executor tests). No full-run green is claimed. Both full preflights are being rerun after adding the public lazy export required by the dead-code ratchet; the focused backend ratchet passes. Exact commands and all outcomes are in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
 
 ## Tests
 
-Run the shared domain suites with OMI_REQUIRE_STORE_BACKENDS=all. New `test_cells_task_workflow_migration.py` exercises a fresh schema, idempotent migration replay, SQL paging over pending UoW writes, task commit fences and native replay records. Protocol/adapter signature pairs cover all five cell adapters and CellSpaceStore.
+Run the shared domain suites with OMI_REQUIRE_STORE_BACKENDS=all. New `test_cells_task_workflow_migration.py` exercises a fresh schema, idempotent migration replay, SQL paging over pending UoW writes, task commit fences and native replay records. Protocol/adapter signature pairs cover all five cell adapters and CellSpaceStore. A fresh-process import test rejects pool construction and verifies the low-level package does not load domain composition until requested.
 
 ## UI evidence
 
@@ -150,7 +152,7 @@ Failure-Class: none
 
 ## Scoped cleanups (optional)
 
-Stacked on A2a and A1 #24800; B2 #24805 remains the write-admission dependency. The copied 0002 migration is byte-identical to B2, avoiding migration-number/checksum conflicts. No edits to cells/store.py, feed.py, purge.py, jobstore, workflows, runtime env or testing/store_fixtures.py. The pgserver wheel was installed only in this worktree's venv, without lock changes. Required scope extensions: declare the new cell lifecycle payload sites in the existing inventory, and advance B1's exact migration-version assertion from 1 to 3.
+Stacked on A2a and A1 #24800; B2 #24805 remains the write-admission dependency. The copied 0002 migration is byte-identical to B2, avoiding migration-number/checksum conflicts. No edits to cells/store.py, feed.py, purge.py, jobstore, workflows, runtime env or testing/store_fixtures.py. The pgserver wheel was installed only in this worktree's venv, without lock changes. Required scope extensions: declare the new cell lifecycle payload sites in the existing inventory, and advance B1's exact migration-version assertion from 1 to 3; initialize the executor tests' lazy error-classification and SDK dependencies during setup while preserving their deadlines and assertions.
 
 The following exact size declarations cover the inherited A2a diff while this stack is validated against main; remove them when A2a is the merged target base.
 
@@ -159,4 +161,3 @@ Line-Count-Exception: backend/database/action_items.py | 1751 -> 2183 | A2a brie
 Line-Count-Exception: backend/database/workstreams.py | 1443 -> 1964 | A2a brief requires typed repositories beside frozen module functions and guards for externally owned transactions.
 
 Line-Count-Exception: backend/testing/domain_sim/store.py | 0 -> 1511 | A2a brief requires independent workflow reference adapters in the existing simulator.
-

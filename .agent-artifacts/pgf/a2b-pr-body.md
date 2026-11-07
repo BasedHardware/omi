@@ -1,6 +1,6 @@
 ## What changed and why
 
-Add conformance-only typed cell adapters for folders, people, action items, goals and workstreams, composed in one space UoW over the existing cell flush. SQL applies filters, ordering, keysets and limits before returning list rows. Task tickets span flush and commit, with one post-commit cache bump per changed UoW. Canonical change detection preserves numeric/boolean storage types, and related-domain task patches pass through the shared codec with their update timestamps.
+Add conformance-only typed cell adapters for folders, people, action items, goals and workstreams, exposed through a lazy `database.cells.adapters.CellSpaceStore` entry point and composed in one space UoW over the existing cell flush. SQL applies filters, ordering, keysets and limits before returning list rows. Task tickets span flush and commit, with one post-commit cache bump per changed UoW. Canonical change detection preserves numeric/boolean storage types, and related-domain task patches pass through the shared codec with their update timestamps.
 
 Promote doc-mode storage with expand-only generated query columns that decode tagged datetimes. Migration 0003 follows B2's byte-identical 0002 write-fence prerequisite. These migrations must land before enrollment. No serving selectors, runtime flags or production configuration change; CELL_STORE_MODE stays off.
 
@@ -10,13 +10,13 @@ Promote doc-mode storage with expand-only generated query columns that decode ta
 
 ## How it was verified
 
-Real disposable Postgres, Firestore emulator and simulator: 165 conformance tests passed. Legacy emulator regressions: 12 passed. Signature parity: 51 passed. Additional local Postgres tests cover migration application/reapplication, codec timestamps, bounded list materialization, native replay receipts (including reserved-ID no-ops), scalar types, related-domain task codecs/timestamps, fence ordering, retry cleanup and one cache bump per UoW.
+Simulator, real disposable Postgres and Firestore emulator: 165 conformance tests passed; 12 legacy emulator regressions passed. Final public API/cell contract/signature checks: 62 passed. Task/query/lifecycle guard replay: 2,436 passed. Core adapters also passed 120 tests with B2's write-fenced store, with 55 optional emulator cases skipped in that Postgres-focused run. OpenAPI is byte-identical to the fetched main baseline.
 
-Full backend and repository gates are being run; final counts and exact credential-scrubbed commands will be recorded in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
+The full 2,676-file backend command exited 1 (65,747 passed / 2 failed): a stale migration-version assertion and a two-second executor dependency-initialization timeout. Both files are corrected and pass isolated replay (25 cell-store tests; 36 executor tests). No full-run green is claimed. Both full preflights are being rerun after adding the public lazy export required by the dead-code ratchet; the focused backend ratchet passes. Exact commands and all outcomes are in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
 
 ## Tests
 
-Run the shared domain suites with OMI_REQUIRE_STORE_BACKENDS=all. New `test_cells_task_workflow_migration.py` exercises a fresh schema, idempotent migration replay, SQL paging over pending UoW writes, task commit fences and native replay records. Protocol/adapter signature pairs cover all five cell adapters and CellSpaceStore.
+Run the shared domain suites with OMI_REQUIRE_STORE_BACKENDS=all. New `test_cells_task_workflow_migration.py` exercises a fresh schema, idempotent migration replay, SQL paging over pending UoW writes, task commit fences and native replay records. Protocol/adapter signature pairs cover all five cell adapters and CellSpaceStore. A fresh-process import test rejects pool construction and verifies the low-level package does not load domain composition until requested.
 
 ## UI evidence
 

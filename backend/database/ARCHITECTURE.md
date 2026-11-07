@@ -51,7 +51,8 @@ ordering; it does not simulate production contention or external-service retries
 
 ### Typed cell domain adapters (A2b)
 
-`database/cells/adapters/space_store.py` composes folders, people, action items,
+`database.cells.adapters.CellSpaceStore` is the lazy public composition entry
+point, implemented by `database/cells/adapters/space_store.py`. It composes folders, people, action items,
 goals and workstreams over the single `CellStore.run` flush path. An attempt-local
 identity map buffers domain changes; SQL lists apply predicates, keysets and
 limits before materializing results and overlay pending UoW edits. Task writer

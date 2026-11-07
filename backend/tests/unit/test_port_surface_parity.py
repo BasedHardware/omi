@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from database.cells.adapters.space_store import CellSpaceStore
+from database.cells.adapters import CellSpaceStore
 from database.cells.adapters.action_items import CellActionItems
 from database.cells.adapters.goals import CellGoals
 from database.cells.adapters.workstreams import CellWorkstreams

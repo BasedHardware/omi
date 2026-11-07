@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import subprocess
+import sys
 from uuid import uuid4
 
 import pytest
@@ -270,3 +272,20 @@ def test_related_domain_task_patches_pass_the_codec(pg, monkeypatch):
     saved = pg.action_items(sid).get(tid)
     assert saved.goal_id is None and saved.updated_at > before
     assert pg.goals(sid).get(goal.id).model_extra['ended_at'] is not None
+
+
+def test_cell_package_defers_domain_composition_until_requested():
+    script = """
+import sys
+from database.jobstore.connection import Pool
+
+def forbidden_pool(*args, **kwargs):
+    raise AssertionError('import constructed a pool')
+
+Pool.__init__ = forbidden_pool
+import database.cells
+assert 'database.cells.adapters.space_store' not in sys.modules
+from database.cells.adapters import CellSpaceStore
+assert CellSpaceStore.__module__ == 'database.cells.adapters.space_store'
+"""
+    subprocess.run([sys.executable, '-c', script], cwd=Path(__file__).resolve().parents[2], check=True, timeout=30)

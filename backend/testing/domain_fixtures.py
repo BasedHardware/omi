@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from database.cells.adapters.space_store import CellSpaceStore
+from database.cells.adapters import CellSpaceStore
 from database.cells.store import CellStore
 from database.jobstore.connection import Pool
 from testing.cells_fixtures import cells_dsn
