@@ -2,6 +2,8 @@
 
 Status: implementation committed; final executor replay and full preflights are queued in the managed heavy-command gate. This is a validation checkpoint, not a completed handoff.
 
+Current blocker (measured 2026-11-07T04:53:19.875331+00:00): the final managed replay/preflight chain has 14 older live queue tickets ahead of it. The host's configured main pool has four slots; occupied holders were verified to have active pytest/preflight/typecheck descendants. No capacity setting or other lane's process was changed. The existing bounded waiter is `omi-heavy run --wait 7200` (tool session 42865), running the executor replay, then `make preflight`, then the explicit PR-body preflight with `&&` gates. The owned 50-minute heartbeat remains armed and is touched while awake. If a handoff is forced before admission, the lead must arrange capacity or rerun the listed gates; neither full preflight is claimed green here.
+
 Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-a2b-upstream-keep-clean`. Branch: `lane/pgf-a2b`. Base: A2a tip `c2cbe8b53c04`; stacked on A1 #24800. Local commits only; no push, PR, deployment, production access, api.omi.me calls, or GCP tier.
 
 ## What was built
