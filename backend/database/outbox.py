@@ -36,6 +36,32 @@ class Outcome(StrEnum):
     BUSY = 'busy'  # another live lease holds the row; no-op (watchdog keeps custody)
 
 
+STUCK_DEFER_REASONS = frozenset(
+    {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
+)
+STUCK_DEFER_GRACE_SECONDS = 6 * 3600
+STUCK_DEFER_POLL_SECONDS = 3600
+
+
+def defer_episode(
+    deferred_reason: str | None,
+    deferred_since: float | None,
+    reason: str,
+    available_at: float,
+    now: float,
+) -> tuple[float, float]:
+    """Return ``(deferred_since, available_at)`` applying the 6-hour grace and 1-hour floor for stuck reasons."""
+    since = (
+        float(deferred_since)
+        if deferred_reason == reason and deferred_since is not None and float(deferred_since) > 0
+        else float(now)
+    )
+    due_at = float(available_at)
+    if reason in STUCK_DEFER_REASONS and float(now) - since >= STUCK_DEFER_GRACE_SECONDS:
+        due_at = max(due_at, float(now) + STUCK_DEFER_POLL_SECONDS)
+    return since, due_at
+
+
 @dataclass(frozen=True)
 class Claim:
     kind: OutboxKind
