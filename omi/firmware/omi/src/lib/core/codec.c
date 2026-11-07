@@ -55,12 +55,10 @@ static struct k_thread codec_thread;
 uint16_t execute_codec();
 
 #if CODEC_OPUS
-#if (CONFIG_OPUS_MODE == CONFIG_OPUS_MODE_CELT)
-#define OPUS_ENCODER_SIZE 7180
-#endif
-#if (CONFIG_OPUS_MODE == CONFIG_OPUS_MODE_HYBRID)
+/* CONFIG_OPUS_MODE_CELT/HYBRID were never defined, so both former #if branches
+ * matched and the hybrid size always won. Keep that size; codec_start() checks
+ * it against opus_encoder_get_size() at runtime. */
 #define OPUS_ENCODER_SIZE 10916
-#endif
 __ALIGN(4)
 static uint8_t m_opus_encoder[OPUS_ENCODER_SIZE];
 static OpusEncoder *const m_opus_state = (OpusEncoder *) m_opus_encoder;
@@ -93,7 +91,9 @@ int codec_start()
 
 // OPUS
 #if CODEC_OPUS
-    ASSERT_TRUE(opus_encoder_get_size(1) == sizeof(m_opus_encoder));
+    int opus_size = opus_encoder_get_size(1);
+    LOG_WRN("Opus encoder needs %d bytes, buffer %u", opus_size, (unsigned) sizeof(m_opus_encoder));
+    ASSERT_TRUE(opus_size > 0 && (size_t) opus_size <= sizeof(m_opus_encoder));
     ASSERT_TRUE(opus_encoder_init(m_opus_state, 16000, 1, CODEC_OPUS_APPLICATION) == OPUS_OK);
     ASSERT_TRUE(opus_encoder_ctl(m_opus_state, OPUS_SET_BITRATE(CODEC_OPUS_BITRATE)) == OPUS_OK);
     ASSERT_TRUE(opus_encoder_ctl(m_opus_state, OPUS_SET_VBR(CODEC_OPUS_VBR)) == OPUS_OK);
