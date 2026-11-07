@@ -71,8 +71,8 @@ def test_expected_field_requirements_parses_only_additive_overrides():
         (requirement.collection_group, requirement.field_path, requirement.collection_group_modes)
         for requirement in FIELD_INDEX_REQUIREMENTS
     ]
-    assert len(requirements) == 23
-    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 25
+    assert len(requirements) == 31
+    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 33
     assert all(
         requirement.collection_group_modes
         and all(mode in {'ASCENDING', 'DESCENDING', 'CONTAINS'} for mode in requirement.collection_group_modes)
@@ -831,3 +831,23 @@ def test_start_only_reports_immediate_operation_failure():
             sleep=lambda _: pytest.fail('start-only must not sleep'),
             monotonic=lambda: 0,
         )
+
+
+def test_privacy_history_reference_fields_preserve_collection_array_indexes():
+    expected = {
+        'memory_operations',
+        'memory_commits',
+        'memory_outbox',
+        'memory_ledger_reopens',
+        'jit_trigger_feedback',
+        'jit_proactivity_events',
+        'jit_proactivity_daily_budgets',
+        'memory_source_replacements',
+    }
+    requirements = [r for r in FIELD_INDEX_REQUIREMENTS if r.field_path == 'privacy_reference_tokens']
+    assert {r.collection_group for r in requirements} == expected
+    for requirement in requirements:
+        assert requirement.collection_group_modes == ('CONTAINS',)
+        manifest = requirement.to_manifest()
+        assert {'queryScope': 'COLLECTION', 'arrayConfig': 'CONTAINS'} in manifest['indexes']
+        assert {'queryScope': 'COLLECTION_GROUP', 'arrayConfig': 'CONTAINS'} in manifest['indexes']

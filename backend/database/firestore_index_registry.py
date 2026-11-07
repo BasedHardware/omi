@@ -2224,6 +2224,24 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    # Runtime lookups remain owner-local. The existing additive-field readiness
+    # primitive declares group CONTAINS while retaining COLLECTION defaults;
+    # do not provision redundant one-field collection composites.
+    *(
+        FieldIndexRequirement(
+            f'{collection}_privacy_reference_tokens', collection, 'privacy_reference_tokens', ('CONTAINS',)
+        )
+        for collection in (
+            'memory_operations',
+            'memory_commits',
+            'memory_outbox',
+            'memory_ledger_reopens',
+            'jit_trigger_feedback',
+            'jit_proactivity_events',
+            'jit_proactivity_daily_budgets',
+            'memory_source_replacements',
+        )
+    ),
     FieldIndexRequirement('lifecycle_pair_finalization_status', 'conversations', 'finalization_status', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),
