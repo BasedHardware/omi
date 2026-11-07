@@ -880,7 +880,8 @@ async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, 
     async def inline(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    def claim(*args):
+    def claim(*args, expected_discarded=False):
+        assert expected_discarded is (mode == 'discarded_replay')
         events.append('claim')
         return {'status': claim_status, 'fanout_key': 'key'}
 
