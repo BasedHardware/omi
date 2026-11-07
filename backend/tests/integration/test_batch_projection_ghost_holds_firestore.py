@@ -341,7 +341,7 @@ def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch, c
 
 
 def test_cohort_equality_only_counts_and_inert_non_ghost_rows(holds, monkeypatch, caplog):
-    from google.cloud.firestore_v1.base_query import FieldFilter, And, Or
+    from google.cloud.firestore_v1.base_query import FieldFilter, And
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'G_2-drain')
@@ -349,9 +349,9 @@ def test_cohort_equality_only_counts_and_inert_non_ghost_rows(holds, monkeypatch
     results = holds.client.collection(f'{holds.store.namespace}_results')
     for segment in (RESTORABLE, MISSING, PRIVACY):
         assert 'ghost_settled_cohort' not in results.document(segment).get().to_dict()
-    # Same four aggregate shapes as the canary. All leaf filters are equality;
-    # no composite index is declared. Emulator execution cannot prove prod's
-    # composite-index enforcement; canary HTTP 400 stays UNKNOWN.
+    # Same six aggregate shapes as the canary: only equality conjunctions,
+    # with a separate count per blocked state. No OR/IN or composite index.
+    # Emulator execution cannot prove prod index availability; HTTP 400 stays UNKNOWN.
     cohort = FieldFilter('ghost_settled_cohort', '==', 'G_2-drain')
     blocked = ('pending', 'persisted', 'quarantine_held')
     for index, state in enumerate(('completed', *blocked, 'erased', 'quarantined')):
@@ -361,9 +361,14 @@ def test_cohort_equality_only_counts_and_inert_non_ghost_rows(holds, monkeypatch
         results.where(filter=cohort),
         results.where(filter=And([cohort, FieldFilter('projection_state', '==', 'ready')])),
         results.where(filter=And([cohort, FieldFilter('projection_state', '==', 'completed')])),
-        results.where(filter=And([cohort, Or([FieldFilter('projection_state', '==', state) for state in blocked])])),
+        *[results.where(filter=And([cohort, FieldFilter('projection_state', '==', state)])) for state in blocked],
     ]
-    assert [q.count(alias='total').get()[0][0].value for q in queries] == [8, 2, 1, 3]
+    total, ready, completed, *blocked_counts = [q.count(alias='total').get()[0][0].value for q in queries]
+    assert (total, ready, completed) == (8, 2, 1)
+    assert dict(zip(blocked, blocked_counts)) == {'pending': 1, 'persisted': 1, 'quarantine_held': 1}
+    blocked_total = sum(blocked_counts)
+    assert blocked_total == 3
+    assert total - ready - completed - blocked_total == 2
 
 
 def test_invalid_cohort_fallback_survives_real_transaction(holds, monkeypatch):

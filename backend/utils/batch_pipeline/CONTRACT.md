@@ -308,13 +308,17 @@ transaction retries, without the rejected value or row identifiers. This string
 setting is not a kill switch. The selector's boolean kill switch stays OFF by
 default. No cohort ceiling is added; lead2 controls rollout via the flag and cap.
 
-Cohort counts use equality-only COUNT: cohort total, cohort + `ready`, cohort +
-`completed`, and cohort + an OR of blocked/incomplete state equalities (`pending`,
-`persisted`, `quarantine_held`). Other/missing states (including
-`erased`) are `total - ready - completed - blocked`, UNKNOWN if inconsistent.
-No new index: single-field equality index merging is the production assumption;
-the emulator executes these queries but does not enforce production composite
-index requirements. The canary fails closed to UNKNOWN on HTTP 400 or any
+Cohort counts use six separate equality-only COUNT requests: cohort total,
+cohort + `ready`, cohort + `completed`, and one cohort + state request for each
+blocked/incomplete state (`pending`, `persisted`, `quarantine_held`). Blocked is
+the sum of those three per-state counts, never an OR or IN query. If any per-state
+count is unavailable or invalid, the sum is UNKNOWN, never zero. Other/missing
+states (including `erased`) are `total - ready - completed - blocked`, UNKNOWN if
+any required count is unavailable or the counts are inconsistent. No new index
+is added: each conjunction uses only simple equality filters, supported by
+[single-field index merging](https://docs.cloud.google.com/firestore/native/docs/standard-index-overview#use_index_merging).
+The emulator exercises all six query shapes but does not establish production
+index availability. The canary fails closed to UNKNOWN on HTTP 400 or any
 unavailable count. `completed` is durable acknowledgement after ledger completion.
 Eligible sync rows traverse publication, but legitimate skip paths (for example
 `source_deleted`) still acknowledge without publishing. It is not proof of
