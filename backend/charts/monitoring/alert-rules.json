@@ -22938,15 +22938,15 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT pressure sampler has no fresh observations or has stopped progressing for five minutes",
+      "summary": "Live STT pressure sampler has no fresh observations or has stopped progressing for thirty minutes",
       "user_impact": "This listen pod refuses Parakeet windows after its bounded cache expires and shifts audio to paid STT.",
       "scope": "Per backend-listen namespace/pod; no traffic floor, so a quiet broken pod remains visible.",
       "verification": "Hermetic sampler and alert behavior tests; live delivery requires authorized monitoring provisioning.",
       "safe_next_action": "Inspect fetch_failures_total by cause and refresh_total reset_client outcomes. Check pool discovery and sampler progress; if recovery fails, have the rollout lead replace affected listen pods. Do not disable pressure admission.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "fresh == 0 OR no sampler start/valid response within 15s, continuously for 5m. Telegram group_wait adds 30s.",
-      "evaluated_bad": "One zero-fresh pod among healthy pods fires after 5m, including at zero admissions; a frozen positive fresh gauge fires after progress ages 15s plus 5m.",
-      "evaluated_good": "A valid response resets progress; recovered freshness before 5m clears pending. Missing scrape targets use existing coverage alerts."
+      "threshold": "fresh == 0 OR no sampler start/valid response within 15s, continuously for 30m. Telegram group_wait adds 30s.",
+      "evaluated_bad": "One zero-fresh pod among healthy pods fires after 30m, including at zero admissions; a frozen positive fresh gauge fires after progress ages 15s plus 30m.",
+      "evaluated_good": "A valid response resets progress; recovered freshness before 30m clears pending. Missing scrape targets use existing coverage alerts."
     },
     "labels": {
       "alert_identity": "omi-stt-pressure-sampler-stuck",

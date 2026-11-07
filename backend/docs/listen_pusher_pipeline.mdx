@@ -793,7 +793,7 @@ After `PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES` (default 3) sweeps without
 a new quorum, listen recreates the sampler HTTP client and rediscovers the pool.
 Fetches have a three-second deadline; admission performs no pressure network
 requests. The monitoring live-STT rule `omi-stt-pressure-sampler-stuck` detects
-per-pod zero freshness for five minutes and a frozen progress timestamp. Full
+per-pod zero freshness for thirty minutes and a frozen progress timestamp. Full
 operational contract: [windowed live STT](operational/windowed-live-stt.md).
 
 ## Same-provider speaker scope preservation and successor replay deduplication
