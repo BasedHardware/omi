@@ -60,6 +60,26 @@ def _format_health_date(value: Any, clock: DisplayClock) -> str:
     return format_date(value, clock)
 
 
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Coerce value to float safely, returning default on None or conversion failure."""
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Coerce value to int safely, returning default on None or conversion failure."""
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
+
+
 def get_apple_health_data(uid: str, data_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Retrieve stored Apple Health data for a user.
@@ -145,8 +165,8 @@ def get_apple_health_steps_tool(
         if not steps_data:
             return "No step data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
-        total_steps = steps_data.get('total', 0)
-        avg_per_day = steps_data.get('average_per_day', 0)
+        total_steps = _safe_int(steps_data.get('total'))
+        avg_per_day = _safe_float(steps_data.get('average_per_day'))
         result = f"Apple Health Step Data\n{context}\n\n"
         result += f"Total Steps: {total_steps:,}\n"
         result += f"Average Steps per Day: {avg_per_day:,.0f}\n"
@@ -155,10 +175,10 @@ def get_apple_health_steps_tool(
         if daily_steps:
             result += "\nDaily Breakdown:\n"
             # Sort by date descending (most recent first)
-            sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
+            sorted_days = sorted(daily_steps, key=lambda x: str(x.get('date') or ''), reverse=True)
             for day in sorted_days:
                 date_str = _format_health_date(day.get('date'), clock)
-                steps = day.get('steps', 0)
+                steps = _safe_int(day.get('steps'))
                 result += f"  {date_str}: {steps:,} steps\n"
 
         return result.strip()
@@ -204,7 +224,7 @@ def get_apple_health_sleep_tool(
         if not sleep_data:
             return "No sleep data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
-        total_sleep_hours = sleep_data.get('total_sleep_hours', 0)
+        total_sleep_hours = _safe_float(sleep_data.get('total_sleep_hours'))
         daily_sleep: List[Dict[str, Any]] = sleep_data.get('daily', [])
 
         result = f"Apple Health Sleep Data\n{context}\n\n"
@@ -215,10 +235,10 @@ def get_apple_health_sleep_tool(
         if daily_sleep:
             result += "\nDaily Breakdown:\n"
             # Sort by date descending (most recent first)
-            sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
+            sorted_days = sorted(daily_sleep, key=lambda x: str(x.get('date') or ''), reverse=True)
             for day in sorted_days:
                 date_str = _format_health_date(day.get('date'), clock)
-                hours = day.get('sleepHours', 0)
+                hours = _safe_float(day.get('sleepHours'))
                 result += f"  {date_str}: {hours:.1f} hours\n"
 
         return result.strip()
@@ -265,17 +285,20 @@ def get_apple_health_heart_rate_tool(
                 "and you have heart rate data from Apple Watch.\n" + context
             )
 
-        avg_hr = heart_data.get('average')
-        min_hr = heart_data.get('minimum')
-        max_hr = heart_data.get('maximum')
+        raw_avg = heart_data.get('average')
+        raw_min = heart_data.get('minimum')
+        raw_max = heart_data.get('maximum')
 
         result = f"Apple Health Heart Rate Data\n{context}\n\n"
 
-        if avg_hr is not None:
+        if raw_avg is not None:
+            avg_hr = _safe_float(raw_avg)
             result += f"Average Heart Rate: {avg_hr:.0f} bpm\n"
-        if min_hr is not None:
+        if raw_min is not None:
+            min_hr = _safe_float(raw_min)
             result += f"Minimum Heart Rate: {min_hr:.0f} bpm\n"
-        if max_hr is not None:
+        if raw_max is not None:
+            max_hr = _safe_float(raw_max)
             result += f"Maximum Heart Rate: {max_hr:.0f} bpm\n"
 
         return result.strip()
@@ -332,26 +355,34 @@ def get_apple_health_workouts_tool(
 
         for i, workout in enumerate(shown_workouts, 1):
             workout_type = workout.get('type', 'Unknown')
-            duration = workout.get('durationMinutes', 0)
-            calories = workout.get('caloriesBurned', 0)
-            distance = workout.get('distanceKm')
+            duration = _safe_float(workout.get('durationMinutes'))
+            raw_calories = workout.get('caloriesBurned')
+            raw_distance = workout.get('distanceKm')
 
-            # Parse start date
-            start_ms = workout.get('startDate', 0)
+            # Parse start date (supports millisecond epoch or ISO 8601 string)
+            start_val = workout.get('startDate')
             date_str = ""
-            if start_ms:
+            if start_val:
                 try:
-                    start_dt = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
-                    date_str = f" - {format_instant(start_dt, clock)}"
+                    if isinstance(start_val, (int, float)) and not isinstance(start_val, bool):
+                        start_dt = datetime.fromtimestamp(float(start_val) / 1000, tz=timezone.utc)
+                    else:
+                        start_dt = to_datetime(start_val)
+                    if start_dt is not None:
+                        date_str = f" - {format_instant(start_dt, clock)}"
                 except (ValueError, TypeError, OSError, OverflowError):
                     pass
 
             result += f"{i}. {workout_type}{date_str}\n"
             result += f"   Duration: {duration:.0f} minutes\n"
-            if calories:
-                result += f"   Calories: {calories:.0f} kcal\n"
-            if distance:
-                result += f"   Distance: {distance:.2f} km\n"
+            if raw_calories is not None:
+                calories = _safe_float(raw_calories)
+                if calories:
+                    result += f"   Calories: {calories:.0f} kcal\n"
+            if raw_distance is not None:
+                distance = _safe_float(raw_distance)
+                if distance:
+                    result += f"   Distance: {distance:.2f} km\n"
             result += "\n"
 
         if len(workouts) > len(shown_workouts):
@@ -413,55 +444,55 @@ def get_apple_health_summary_tool(
         steps: Dict[str, Any] = health_data.get('steps', {})
         if steps:
             result += f"STEPS\n"
-            result += f"  Total: {steps.get('total', 0):,}\n"
-            result += f"  Daily Average: {steps.get('average_per_day', 0):,.0f}\n"
+            result += f"  Total: {_safe_int(steps.get('total')):,}\n"
+            result += f"  Daily Average: {_safe_float(steps.get('average_per_day')):,.0f}\n"
             daily_steps: List[Dict[str, Any]] = steps.get('daily', [])
             if daily_steps:
                 result += "  Daily:\n"
-                sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
+                sorted_days = sorted(daily_steps, key=lambda x: str(x.get('date') or ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('steps', 0):,}\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {_safe_int(day.get('steps')):,}\n"
             result += "\n"
 
         # Active Energy with daily breakdown
         active_energy: Dict[str, Any] = health_data.get('active_energy', {})
         if active_energy:
-            total_cal = active_energy.get('total', 0)
-            avg_cal = active_energy.get('average_per_day', 0)
+            total_cal = _safe_float(active_energy.get('total'))
+            avg_cal = _safe_float(active_energy.get('average_per_day'))
             result += f"ACTIVE ENERGY\n"
             result += f"  Total: {total_cal:,.0f} kcal\n"
             result += f"  Daily Average: {avg_cal:,.0f} kcal\n"
             daily_energy: List[Dict[str, Any]] = active_energy.get('daily', [])
             if daily_energy:
                 result += "  Daily:\n"
-                sorted_days = sorted(daily_energy, key=lambda x: x.get('date', ''), reverse=True)
+                sorted_days = sorted(daily_energy, key=lambda x: str(x.get('date') or ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('calories', 0):,.0f} kcal\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {_safe_float(day.get('calories')):,.0f} kcal\n"
             result += "\n"
 
         # Sleep with daily breakdown
         sleep: Dict[str, Any] = health_data.get('sleep', {})
         if sleep:
             result += f"SLEEP\n"
-            result += f"  Total Hours: {sleep.get('total_sleep_hours', 0):.1f}\n"
+            result += f"  Total Hours: {_safe_float(sleep.get('total_sleep_hours')):.1f}\n"
             daily_sleep: List[Dict[str, Any]] = sleep.get('daily', [])
             if daily_sleep:
                 result += "  Daily:\n"
-                sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
+                sorted_days = sorted(daily_sleep, key=lambda x: str(x.get('date') or ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('sleepHours', 0):.1f} hrs\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {_safe_float(day.get('sleepHours')):.1f} hrs\n"
             result += "\n"
 
         # Heart Rate
         heart_rate: Dict[str, Any] = health_data.get('heart_rate', {})
         if heart_rate:
             result += f"HEART RATE\n"
-            if heart_rate.get('average'):
-                result += f"  Average: {heart_rate.get('average'):.0f} bpm\n"
-            if heart_rate.get('minimum'):
-                result += f"  Min: {heart_rate.get('minimum'):.0f} bpm\n"
-            if heart_rate.get('maximum'):
-                result += f"  Max: {heart_rate.get('maximum'):.0f} bpm\n"
+            if heart_rate.get('average') is not None:
+                result += f"  Average: {_safe_float(heart_rate.get('average')):.0f} bpm\n"
+            if heart_rate.get('minimum') is not None:
+                result += f"  Min: {_safe_float(heart_rate.get('minimum')):.0f} bpm\n"
+            if heart_rate.get('maximum') is not None:
+                result += f"  Max: {_safe_float(heart_rate.get('maximum')):.0f} bpm\n"
             result += "\n"
 
         # Workouts
