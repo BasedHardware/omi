@@ -111,7 +111,6 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
 
   Future<void> _retry() async {
     _failedHttpUrls.clear();
-    _reportedLoaded = false;
     setState(() {
       _hasError = false;
       _isLoading = true;

@@ -611,7 +611,6 @@ class _PlansSheetState extends State<PlansSheet> {
                 billingInterval: billingInterval,
               );
               await provider.fetchSubscription();
-              await provider.loadAvailablePlans();
             } else {
               PlatformManager.instance.analytics.upgradeCancelled();
             }

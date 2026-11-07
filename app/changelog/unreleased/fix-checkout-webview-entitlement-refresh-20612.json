@@ -1,3 +1,3 @@
 {
-  "change": "Checkout keeps payment inputs interactive after the initial page load, surfaces a retryable error state when checkout fails over HTTP, and refreshes subscription entitlements immediately when a plan upgrade completes."
+  "change": "Checkout stays responsive after the first page loads, shows a retry option when a payment page fails to load, and updates your plan right after a successful upgrade."
 }

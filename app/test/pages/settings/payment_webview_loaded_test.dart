@@ -51,6 +51,7 @@ class _Navigation extends PlatformNavigationDelegate {
   _Navigation(super.params) : super.implementation();
   late PageEventCallback started;
   late PageEventCallback finished;
+  late ProgressCallback progress;
   late WebResourceErrorCallback failed;
   late HttpResponseErrorCallback httpFailed;
   @override
@@ -58,7 +59,7 @@ class _Navigation extends PlatformNavigationDelegate {
   @override
   Future<void> setOnPageFinished(PageEventCallback callback) async => finished = callback;
   @override
-  Future<void> setOnProgress(ProgressCallback callback) async {}
+  Future<void> setOnProgress(ProgressCallback callback) async => progress = callback;
   @override
   Future<void> setOnWebResourceError(WebResourceErrorCallback callback) async => failed = callback;
   @override
@@ -123,18 +124,25 @@ void main() {
     expect(find.byType(OmiSpinner), findsNothing);
   });
 
-  testWidgets('finishing checkout clears spinner and sub-navigations do not block payment entry', (tester) async {
+  testWidgets('portal page finish clears spinner and sub-navigations do not restart loading', (tester) async {
     var loaded = 0;
     await pump(tester, () => loaded++);
     expect(find.byType(OmiSpinner), findsOneWidget);
-    webView.navigation.started('https://billing.stripe.com/portal');
-    webView.navigation.finished('https://billing.stripe.com/portal');
+    webView.navigation.progress(100);
     await tester.pump();
-    expect(loaded, 1);
     expect(find.byType(OmiSpinner), findsNothing);
 
     webView.navigation.started('about:blank');
     await tester.pump();
+    expect(loaded, 0);
+    expect(find.byType(OmiSpinner), findsNothing);
+
+    webView.navigation.started('https://billing.stripe.com/portal');
+    await tester.pump();
+    expect(find.byType(OmiSpinner), findsOneWidget);
+    webView.navigation.finished('https://billing.stripe.com/portal');
+    await tester.pump();
+    expect(loaded, 1);
     expect(find.byType(OmiSpinner), findsNothing);
 
     webView.navigation.started('https://billing.stripe.com/portal/payment-methods');
