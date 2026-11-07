@@ -78,26 +78,47 @@ class RedisPubSubManager:
             self.running = False
             raise
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 5.0) -> None:
         """Stop the subscription and clean up."""
         self.running = False
+        join_timeout = (
+            max(0.0, float(timeout))
+            if isinstance(timeout, (int, float)) and not isinstance(timeout, bool)
+            else 5.0
+        )
 
         if self.pubsub:
             try:
                 self.pubsub.unsubscribe(self.CHANNEL)
             except Exception as e:
-                logger.error(f"Error closing pub/sub connection: {e}")
+                try:
+                    logger.error(f"Error closing pub/sub connection: {e}")
+                except Exception:
+                    pass
 
-        if self.subscriber_thread:
-            self.subscriber_thread.join(timeout=5)
+        if (
+            self.subscriber_thread
+            and self.subscriber_thread.is_alive()
+            and self.subscriber_thread is not threading.current_thread()
+        ):
+            try:
+                self.subscriber_thread.join(timeout=join_timeout)
+            except Exception:
+                pass
 
         if self.pubsub:
             try:
                 self.pubsub.close()
             except Exception as e:
-                logger.error(f"Error closing pub/sub connection: {e}")
+                try:
+                    logger.error(f"Error closing pub/sub connection: {e}")
+                except Exception:
+                    pass
 
-        logger.info("Stopped Redis pub/sub manager")
+        try:
+            logger.info("Stopped Redis pub/sub manager")
+        except Exception:
+            pass
 
     def register_callback(self, key_pattern: str, callback: Callable[[List[str]], None]) -> None:
         """
