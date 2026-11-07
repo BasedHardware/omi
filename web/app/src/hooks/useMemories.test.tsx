@@ -209,4 +209,42 @@ describe('useMemories standard list and cache scope', () => {
     expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBeNull();
   });
+
+  it('handles empty truncated read without pruning IndexedDB cache', async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce({
+      memories: [],
+      nextCursor: null,
+      truncated: true,
+    });
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.memories).toEqual([]);
+    expect(result.current.truncated).toBe(true);
+    expect(result.current.hasMore).toBe(false);
+    // IndexedDB cacheMemories must NOT have been called with an empty list to wipe the cache
+    expect(mocks.cacheMemories).not.toHaveBeenCalled();
+  });
+
+  it('preserves existing memories when refresh receives empty truncated response', async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(page('Initial memory'));
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.memories[0]?.content).toBe('Initial memory');
+
+    mocks.getMemoriesPage.mockResolvedValueOnce({
+      memories: [],
+      nextCursor: null,
+      truncated: true,
+    });
+    let refreshResult = true;
+    await act(async () => {
+      refreshResult = await result.current.refresh();
+    });
+
+    expect(refreshResult).toBe(false);
+    expect(result.current.truncated).toBe(true);
+    // Crucial: existing memories preserved, not wiped to []!
+    expect(result.current.memories[0]?.content).toBe('Initial memory');
+  });
 });

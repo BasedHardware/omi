@@ -65,18 +65,21 @@ function belongsToScope(memory: CachedMemory, scope: MemoryCacheScope): boolean 
 export async function cacheMemories(
   memories: Memory[],
   scope: MemoryCacheScope,
+  options?: { prune?: boolean },
 ): Promise<void> {
   try {
     const db = await getDB();
     const tx = db.transaction(['memories', 'metadata'], 'readwrite');
     const memoryStore = tx.objectStore('memories');
-    const existing = await memoryStore.getAll();
     const now = Date.now();
     const scopePrefix = `${memoryCacheScopeKey(scope)}:useful_now:`;
 
-    for (const memory of existing) {
-      if (memory.cacheKey.startsWith(scopePrefix)) {
-        await memoryStore.delete(memory.cacheKey);
+    if (options?.prune !== false) {
+      const existing = await memoryStore.getAll();
+      for (const memory of existing) {
+        if (memory.cacheKey.startsWith(scopePrefix)) {
+          await memoryStore.delete(memory.cacheKey);
+        }
       }
     }
     for (const memory of memories) {
@@ -88,7 +91,9 @@ export async function cacheMemories(
         cachedAt: now,
       });
     }
-    await tx.objectStore('metadata').put(now, metadataKey(scope));
+    if (options?.prune !== false || memories.length > 0) {
+      await tx.objectStore('metadata').put(now, metadataKey(scope));
+    }
     await tx.done;
   } catch (error) {
     console.error('[IndexedDB] Failed to cache memories:', error);

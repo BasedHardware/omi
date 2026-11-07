@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Brain, Loader2 } from 'lucide-react';
+import { AlertTriangle, Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MemoryCard } from './MemoryCard';
 import type { Memory, MemoryVisibility } from '@/types/conversation';
@@ -11,6 +11,8 @@ interface MemoryListProps {
   memories: Memory[];
   loading: boolean;
   hasMore: boolean;
+  truncated?: boolean;
+  onRetry?: () => void;
   onLoadMore: () => Promise<void>;
   onEdit: (id: string, content: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
@@ -28,6 +30,8 @@ export function MemoryList({
   memories,
   loading,
   hasMore,
+  truncated = false,
+  onRetry,
   onLoadMore,
   onEdit,
   onDelete,
@@ -91,6 +95,28 @@ export function MemoryList({
 
   // Empty state
   if (!loading && !hasMore && memories.length === 0) {
+    if (truncated) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center" role="status">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
+            <AlertTriangle className="h-8 w-8 text-amber-400" />
+          </div>
+          <h3 className="mb-2 text-lg font-medium text-text-primary">Incomplete memory history</h3>
+          <p className="max-w-sm text-sm text-text-tertiary">
+            The server reached its scan budget before completing the read. Your memories have not been deleted.
+          </p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-4 rounded-lg bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-quaternary"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-bg-tertiary">

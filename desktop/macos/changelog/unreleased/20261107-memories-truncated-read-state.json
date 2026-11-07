@@ -1,0 +1,3 @@
+{
+  "change": "Distinguish truncated memory reads from empty history and provide clear retry recovery"
+}

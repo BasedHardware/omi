@@ -634,6 +634,8 @@ export function MemoriesPage() {
                           memories={filteredMemories}
                           loading={loading}
                           hasMore={hasMore && !searchQuery && !selectedTag}
+                          truncated={truncated}
+                          onRetry={() => refresh()}
                           onLoadMore={loadMore}
                           onEdit={editMemory}
                           onDelete={removeMemory}
@@ -707,10 +709,12 @@ export function MemoriesPage() {
                     {/* Total memories */}
                     <div className="mb-3">
                       <div className="text-2xl font-bold text-white">
-                        {memories.length}
+                        {truncated ? (memories.length > 0 ? `${memories.length}+` : '—') : memories.length}
                       </div>
-                      <div className="text-sm text-text-secondary">Total Memories</div>
-                      {recentMemoriesCount > 0 && (
+                      <div className="text-sm text-text-secondary">
+                        {truncated ? 'Loaded Memories (Partial)' : 'Total Memories'}
+                      </div>
+                      {!truncated && recentMemoriesCount > 0 && (
                         <div className="mt-1 text-xs text-green-400">
                           +{recentMemoriesCount} this week
                         </div>

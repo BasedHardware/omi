@@ -72,4 +72,47 @@ describe('MemoryList layout', () => {
       'motion-reduce:animate-none',
     );
   });
+
+  it('renders incomplete memory history when truncated with 0 memories', () => {
+    const onRetry = vi.fn();
+    render(
+      <MemoryList
+        memories={[]}
+        loading={false}
+        hasMore={false}
+        truncated={true}
+        onRetry={onRetry}
+        onLoadMore={vi.fn().mockResolvedValue(undefined)}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    expect(screen.getByText('Incomplete memory history')).toBeInTheDocument();
+    expect(screen.getByText(/server reached its scan budget/i)).toBeInTheDocument();
+    expect(screen.queryByText('No memories yet')).not.toBeInTheDocument();
+
+    const retryButton = screen.getByRole('button', { name: 'Retry' });
+    retryButton.click();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders complete empty state when not truncated with 0 memories', () => {
+    render(
+      <MemoryList
+        memories={[]}
+        loading={false}
+        hasMore={false}
+        truncated={false}
+        onLoadMore={vi.fn().mockResolvedValue(undefined)}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    expect(screen.getByText('No memories yet')).toBeInTheDocument();
+    expect(screen.queryByText('Incomplete memory history')).not.toBeInTheDocument();
+  });
 });
