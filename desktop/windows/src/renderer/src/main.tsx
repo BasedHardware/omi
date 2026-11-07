@@ -38,6 +38,10 @@ import { AppCrashScreen } from './components/ui/AppCrashScreen'
 import { scrubEventPii } from '../../shared/sentryScrub'
 import { isSecondaryWindow } from './lib/windowRole'
 import { initFontScale } from './lib/fontScale'
+import { installRewindChunkE2EHooks } from './rewind/chunkE2EHooks'
+
+// Test hooks (no-op unless OMI_E2E=1) — module scope, before React mounts.
+installRewindChunkE2EHooks()
 
 // Renderer-side crash reporting. Only initializes when a DSN is configured, so
 // dev builds (and any build without the env var) stay entirely offline. Emails
