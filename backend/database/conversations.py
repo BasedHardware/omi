@@ -3505,7 +3505,7 @@ def claim_conversation_status(
     def _claim(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         if not snapshot.exists:
-            raise NotFound(f'Conversation {conversation_id} not found')
+            raise NotFound('Conversation not found')
         current = snapshot.to_dict() or {}
         if not _conversation_claim_matches(
             current, expected_status.value, expected_fields, allow_discarded=allow_discarded
@@ -3565,7 +3565,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     def _discard(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
-            raise NotFound(f'Conversation {conversation_id} not found')
+            raise NotFound('Conversation not found')
         current = snapshot.to_dict() or {}
         revision = _user_lifecycle_revision(current)
         if revision is None:
