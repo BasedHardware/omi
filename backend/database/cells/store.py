@@ -21,6 +21,7 @@ from database.jobstore.connection import Pool
 from database.cells._validation import validate_address, validate_document, validate_id
 from database.cells.feed import Feed
 from database.cells.purge import Purge
+from database.cells.purge import lock_writable_space
 from database.cells.receipts import Receipts
 
 T = TypeVar('T')
@@ -165,6 +166,9 @@ class CellTransaction:
         )
 
     def flush(self) -> dict[str, int]:
+        if self.mutations:
+            # Also guard replay-only writes; no implicit enrollment on this path.
+            lock_writable_space(self.conn, self.space_id)
         ids = [m.client_mutation_id for m in self.mutations if m.client_mutation_id is not None]
         receipts = {}
         if ids:
@@ -207,10 +211,9 @@ class CellTransaction:
             return replayed
         count = len(pending)
         head, _epoch = self.conn.execute(
-            'INSERT INTO space_heads (space_id, next_seq, epoch, updated_at) VALUES (%s,%s,1,%s) '
-            'ON CONFLICT (space_id) DO UPDATE SET next_seq=space_heads.next_seq+%s, '
-            'updated_at=EXCLUDED.updated_at RETURNING next_seq, epoch',
-            (self.space_id, count, self.now, count),
+            'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s '
+            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch',
+            (count, self.now, self.space_id),
         ).fetchone()
         for seq, address in enumerate(sorted(pending), head - count + 1):
             mutation = pending[address]
@@ -255,6 +258,17 @@ class CellStore(Feed, Purge, Receipts):
     def __init__(self, pool: Pool):
         self.pool = pool
 
+    def enroll_space(self, space_id: str, *, now: float) -> None:
+        """Enrollment/backfill only. Never revive a previously wiped identity."""
+        validate_id(space_id)
+        with self.pool.connection() as conn, conn.transaction():
+            conn.execute(
+                'INSERT INTO space_heads (space_id, next_seq, epoch, updated_at) VALUES (%s,0,1,%s) '
+                'ON CONFLICT (space_id) DO NOTHING',
+                (space_id, now),
+            )
+            lock_writable_space(conn, space_id)
+
     def run(self, space_id: str, body: Callable[[CellTransaction], T], *, actor_uid: str, now: float) -> RunResult[T]:
         validate_id(space_id)
         validate_id(actor_uid)
@@ -298,10 +312,9 @@ class CellStore(Feed, Purge, Receipts):
 
     def bump_epoch(self, space_id: str, *, now: float) -> int:
         validate_id(space_id)
-        with self.pool.connection() as conn:
+        with self.pool.connection() as conn, conn.transaction():
+            lock_writable_space(conn, space_id)
             return conn.execute(
-                'INSERT INTO space_heads (space_id, next_seq, epoch, updated_at) VALUES (%s,0,1,%s) '
-                'ON CONFLICT (space_id) DO UPDATE SET epoch=space_heads.epoch+1, updated_at=EXCLUDED.updated_at '
-                'RETURNING epoch',
-                (space_id, now),
+                'UPDATE space_heads SET epoch=epoch+1, updated_at=%s WHERE space_id=%s RETURNING epoch',
+                (now, space_id),
             ).fetchone()[0]

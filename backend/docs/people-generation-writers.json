@@ -5,9 +5,10 @@
   "backend/database/chat_edits.py:restore": "3d29685851e3593a39ab72464329655b39b8eeb546b067897ebb384ad4fadeb8",
   "backend/database/chat_edits.py:restore.apply": "5fdf32961bb04b56021e0565a3657205cc2fd2baad47e78e8dc578900f5814e9",
   "backend/database/notes_identity.py:stage_notes_identity": "afe1b3e1fa7752d35fe15630d66d05a727194cb27031f952b787171b3fdc9d13",
-  "backend/database/people.py:get_or_create_person_by_name": "9442ad8742e2320e7b97953c867fe07e18bafbb83f3bccb0dc4d6b1167c72569",
-  "backend/database/people.py:set_person_pinned": "07a61bab61f1f89eaa38d4ca25136449d84450f9371f7ee1d47bad2cabc043f6",
-  "backend/database/people.py:set_person_pinned.apply": "1875c7948f3489fed4f29e1db4b49d3205fad2f103bddcf993fcbe00258dd664",
+  "backend/database/people.py:FirestorePeople.__init__": "79d88b21d261b62849fa84089fcb3c84156b6b0c54cc5f4576db7599ffc941cd",
+  "backend/database/people.py:FirestorePeople._get_or_create_raw": "99f63d9cec65cb6d9447444f65dba3138adf0a5cd8090a605439d0280da66f42",
+  "backend/database/people.py:FirestorePeople.read_generation": "59f6f93a535e909f54f3d90138d79e4a694192d08e4447443936cffc14f2b629",
+  "backend/database/people.py:FirestorePeople.set_pinned": "b6d85215e75eddd6b029b2491df6c94661ad592a45190c876150502fdb3752f1",
   "backend/database/people_generation.py:bump_people_generation": "977240a3f4e86f943715e0d5d6a8174d4c8ef14028f7235f20846ab47f82c8f9",
   "backend/database/people_generation.py:generation_ref": "75e92c1f67823903ba930515d441b8f552188ea9d1ff55fdc38bc8deade2ad52",
   "backend/database/people_generation.py:read_people_generation": "a89aac501fbe0af9822ae5616129e73e62024c8eea4e4981f1c39f99b1eddb67",
@@ -76,7 +77,8 @@
   "backend/utils/conversations/meeting_context_pack.py:load_people_documents": "b47c34d777398cbf2e60965588eb4eae5a08547cdf729866eee87f1eecf61b37",
   "backend/utils/dream_prescan.py:scan_people": "cfc15bed7f732dc72f60efe1d0988db7fa68aa84d4db700ead8bfeba67a8d7cb",
   "backend/utils/dream_seed.py:load": "1cf9710ae0a0d0e1a33cdfcf88cac0e74da7178790ecc8afcca8cbea7d4dc828",
-  "backend/utils/episodes/f_join.py:previous_transcript": "188321dfa0f26578cc8e7d7a205473f97317aff1d418c06e6f3d5f74a2999c6c",
+  "backend/utils/episodes/f_join.py:previous_transcript": "c07dceea3b8d84105d50e477c09ce93de81ed737e1bd385ee7f9a6781aa141a3",
+  "backend/utils/episodes/service.py:_named_segments": "60ddfae9ffe73b9dbc8f1d16c6f5ee0551459c5cc3cb9360c3e2ff640fbd1c19",
   "backend/utils/person_evidence_backfill.py:backfill_person": "dc1cf034881b096a6697c9f4d3529644a95e6a32ea3ce03d10b59b1c5dd3f327",
   "backend/utils/person_evidence_backfill.py:backfill_person.merge": "f7c24335ff408ff637948f237f244e309579f97e9b914f75bd4af6bcf1a7fb9f"
 }

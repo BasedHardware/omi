@@ -66,6 +66,10 @@ from utils.memory.index_window_cursor import (
     encode_cursor as encode_memory_window_cursor,
     query_scope as memory_window_scope,
 )
+from database.folders import FirestoreFolders
+from database.people import FirestorePeople
+from database.ports.folders import FolderCreate
+from database.ports.people import PersonDraft
 from database.memories import MemoryListIndexState
 from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
@@ -160,7 +164,9 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
-    'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
+    'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
+    'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
+    'database.batch_pipeline_store.FirestoreStore.run': 'd7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -217,12 +223,36 @@ BODY_DIGEST = {
     'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
 }
 
+# Retained application entry-point recipes. Their query bodies now belong to
+# repository methods, so they are exercised by the port surface suite rather
+# than misclassified as direct query owners in the AST/index registry.
+PORT_CALLER_DRIVERS: dict[str, DriverEntry] = {}
+_PORT_CALLERS = frozenset(
+    {
+        'database.folders.bulk_move_conversations_to_folder',
+        'database.folders.create_folder',
+        'database.folders.delete_folder',
+        'database.folders.get_conversations_in_folder',
+        'database.folders.get_folder_by_category_mapping',
+        'database.folders.get_folders',
+        'database.folders.initialize_system_folders',
+        'database.folders.move_conversation_to_folder',
+        'database.folders.update_folder_conversation_count',
+        'database.people.get_or_create_person_by_name',
+    }
+)
+
 DRIVERS: dict[str, DriverEntry] = {}
 COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 
 
 def _add(entry: DriverEntry | CoveredByEntry | SkipEntry) -> None:
+    if isinstance(entry, DriverEntry) and entry.function in _PORT_CALLERS:
+        if entry.function in PORT_CALLER_DRIVERS:
+            raise ValueError(f'duplicate port caller recipe: {entry.function}')
+        PORT_CALLER_DRIVERS[entry.function] = entry
+        return
     if entry.function in DRIVERS or entry.function in COVERED_BY or entry.function in SKIPS:
         raise ValueError(f'duplicate registry entry: {entry.function}')
     if isinstance(entry, DriverEntry):
@@ -1068,6 +1098,7 @@ _add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start':
 _add(
     DriverEntry(
         'database.episode_timeline.check_window',
+        domains={'candidate_limit': [128, 2]},
         base={
             'transaction': ref_transaction(),
             'uid': UID,
@@ -1082,6 +1113,7 @@ _add(
 _add(
     DriverEntry(
         'database.episode_timeline.recorded_candidates',
+        domains={'candidate_limit': [128, 2]},
         base={'uid': UID, 'started': T0, 'finished': T1},
         neutrals={'transaction': (None, 'same query shape inside or outside a transaction')},
     )
@@ -1429,6 +1461,89 @@ _add(
     )
 )
 _add(DriverEntry('database.folders.update_folder_conversation_count', base={'uid': UID, 'folder_id': 'folder-1'}))
+
+
+class _PortRepoArgument:
+    """Bind a fresh repository only after run_driver installs its fake client.
+
+    The driver's argument copier invokes this once per trial; no SDK client is
+    constructed at registry import time, and no fake client is deep-copied.
+    """
+
+    def __init__(self, factory, *, transaction=False):
+        self.factory = factory
+        self.transaction = transaction
+
+    def __deepcopy__(self, memo):
+        repo = self.factory(UID)
+        if self.transaction:
+            repo.transaction = repo.client.transaction()
+        return repo
+
+
+_FOLDER_SELF = _PortRepoArgument(FirestoreFolders)
+_PEOPLE_SELF = _PortRepoArgument(FirestorePeople, transaction=True)
+_PORT_MUTATION = (None, 'dormant receipt id; point-document IO only, no query filter change')
+_PORT_REVISION = (None, 'dormant document revision guard; no query filter change')
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.list',
+        base={'self': _FOLDER_SELF},
+        neutrals={'limit': _LIMIT_OPT, 'cursor': (None, 'opaque keyset cursor; first-page query shape')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.create',
+        base={'self': _FOLDER_SELF, 'draft': FolderCreate(name='shape-folder')},
+        neutrals={'mutation_id': _PORT_MUTATION},
+    )
+)
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.delete',
+        base={'self': _FOLDER_SELF, 'folder_id': 'folder-1'},
+        domains={'move_to_folder_id': [None, 'folder-2']},
+        neutrals={'expected_revision': _PORT_REVISION, 'mutation_id': _PORT_MUTATION},
+        setup=_seed(f'users/{UID}/folders/folder-1', {'name': 'shape-folder', 'deleted': False}),
+    )
+)
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.conversations_in_folder',
+        base={'self': _FOLDER_SELF, 'folder_id': 'folder-1'},
+        domains={'include_discarded': [False, True]},
+        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.folders.FirestoreFolders._stream',
+        covered_by=(
+            'database.folders.FirestoreFolders.list',
+            'database.folders.FirestoreFolders.create',
+            'database.folders.FirestoreFolders.conversations_in_folder',
+        ),
+        reason='repository query terminals reached by the public list/create/conversation readers',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.folders.FirestoreFolders._count',
+        covered_by=('database.folders.FirestoreFolders.delete',),
+        reason='target folder count query reached by the explicit rehome-target delete trial',
+    )
+)
+_add(
+    DriverEntry(
+        'database.people.FirestorePeople._get_or_create_raw',
+        base={'self': _PEOPLE_SELF, 'draft': PersonDraft(id='person-1', name='shape-name')},
+        neutrals={
+            'mutation_id': _PORT_MUTATION,
+            'project': (False, 'learning projection does not change the exact-name People query'),
+        },
+    )
+)
 
 _FRAME_REQUEST_DOC = {
     'request_id': 'req-1',

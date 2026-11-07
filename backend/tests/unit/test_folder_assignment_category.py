@@ -1,3 +1,6 @@
+from database.ports import folders as folders_db
+from database.ports.folders import FolderEntity
+
 """Tests for category-aware folder assignment (issue #4043).
 
 AI folder assignment used to rely purely on fuzzy LLM matching, so an uncertain
@@ -84,18 +87,21 @@ _lpr.ChatPromptTemplate = MagicMock()
 _clients = _mod("utils.llm.clients")
 _clients.get_llm = MagicMock(return_value=MagicMock())
 
-folders_db = _load_module_from_file("database.folders", BACKEND_DIR / "database" / "folders.py")
+
 conv_folder = _load_module_from_file(
     "utils.llm.conversation_folder", BACKEND_DIR / "utils" / "llm" / "conversation_folder.py"
 )
 
 # A user with the three system folders plus one custom folder (no category_mapping).
 SYSTEM = [
-    {'id': 'w', 'name': 'Work', 'category_mapping': 'work', 'description': 'Work stuff'},
-    {'id': 'p', 'name': 'Personal', 'category_mapping': 'personal', 'description': 'Personal stuff'},
-    {'id': 's', 'name': 'Social', 'category_mapping': 'social', 'description': 'Social stuff'},
-    {'id': 'c', 'name': 'Recipes'},
-    {'id': 'def', 'name': 'Other', 'is_default': True},
+    FolderEntity.model_construct(**row)
+    for row in [
+        {'id': 'w', 'name': 'Work', 'category_mapping': 'work', 'description': 'Work stuff'},
+        {'id': 'p', 'name': 'Personal', 'category_mapping': 'personal', 'description': 'Personal stuff'},
+        {'id': 's', 'name': 'Social', 'category_mapping': 'social', 'description': 'Social stuff'},
+        {'id': 'c', 'name': 'Recipes'},
+        {'id': 'def', 'name': 'Other', 'is_default': True},
+    ]
 ]
 
 
@@ -122,7 +128,7 @@ class TestResolveCategoryFolderId:
         assert folders_db.resolve_category_folder_id('OTHER', SYSTEM) is None
 
     def test_returns_none_when_user_lacks_that_system_folder(self):
-        only_work = [{'id': 'w', 'category_mapping': 'work'}]
+        only_work = [FolderEntity(id='w', category_mapping='work')]
         # 'music' folds onto social, which this user does not have.
         assert folders_db.resolve_category_folder_id('music', only_work) is None
 
@@ -134,7 +140,7 @@ class TestBuildFoldersContext:
         assert "[home for social conversations]" in ctx
 
     def test_custom_folder_has_no_category_annotation(self):
-        ctx = conv_folder.build_folders_context([{'id': 'c', 'name': 'Recipes'}])
+        ctx = conv_folder.build_folders_context([FolderEntity(id='c', name='Recipes')])
         assert "home for" not in ctx
 
 
