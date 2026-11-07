@@ -94,7 +94,7 @@ def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=No
         if not row.exists:
             raise PermissionError('Edit target removed')
         data = row.to_dict()
-        if data.get('is_locked') or (kind != 'task' and data.get('deleted')):
+        if data.get('is_locked') or data.get('deleted'):
             raise PermissionError('Edit target unavailable')
         prior = {key: data[key] for key in FIELDS[kind] if key in data}
         if encode(prior) != expected:
