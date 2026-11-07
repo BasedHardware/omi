@@ -120,7 +120,7 @@ class AddAppProvider extends ChangeNotifier {
       setAppCategory('conversation-analysis');
 
       // Add memories capability
-      final memoriesCapability = capabilities.firstWhereOrNull((cap) => cap.id == 'memories');
+      final memoriesCapability = capabilities.firstWhereOrNull((cap) => _isCapability(cap, 'memories'));
       if (memoriesCapability != null && !selectedCapabilities.contains(memoriesCapability)) {
         selectedCapabilities.add(memoriesCapability);
       }
@@ -134,7 +134,7 @@ class AddAppProvider extends ChangeNotifier {
 
     // Preset external integration capability
     if (presetExternalIntegration) {
-      final externalIntegrationCapability = capabilities.firstWhereOrNull((cap) => cap.id == 'external_integration');
+      final externalIntegrationCapability = capabilities.firstWhereOrNull((cap) => _isCapability(cap, 'external_integration'));
       if (externalIntegrationCapability != null && !selectedCapabilities.contains(externalIntegrationCapability)) {
         selectedCapabilities.add(externalIntegrationCapability);
       }
@@ -225,7 +225,7 @@ class AddAppProvider extends ChangeNotifier {
     }
     if (app.proactiveNotification != null) {
       selectedScopes = app.getNotificationScopesFromIds(
-        capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes,
+        capabilities.firstWhere((element) => _isCapability(element, 'proactive_notification')).notificationScopes,
       );
     }
 
@@ -315,7 +315,7 @@ class AddAppProvider extends ChangeNotifier {
 
   List<CapacityAction> getActionTypes() {
     for (var capability in capabilities) {
-      if (capability.id == 'external_integration') {
+      if (_isCapability(capability, 'external_integration')) {
         if (capability.actions.isNotEmpty) {
           return capability.actions;
         }
@@ -447,6 +447,11 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _isCapability(AppCapability cap, String key) {
+    final lowerKey = key.toLowerCase();
+    return cap.id.toLowerCase() == lowerKey || cap.title.toLowerCase() == lowerKey;
+  }
+
   bool isFormValid() {
     if (!capabilitySelected() || (imageFile == null && imageUrl == null) || appCategory == null) {
       return false;
@@ -459,26 +464,22 @@ class AddAppProvider extends ChangeNotifier {
     if (selectedCapabilities.isEmpty) return false;
 
     for (var capability in selectedCapabilities) {
-      final capId = capability.id.toLowerCase();
-      final capTitle = capability.title.toLowerCase();
-
-      if (capId == 'external_integration' || capTitle == 'external_integration') {
-        if (triggerEvent == null && actions.isEmpty) {
+      if (_isCapability(capability, 'external_integration')) {
+        if (triggerEvent == null) {
           return false;
-        } else if (triggerEvent != null) {
-          if (externalIntegrationKey.currentState != null && !externalIntegrationKey.currentState!.validate()) {
-            return false;
-          }
         }
-      } else if (capId == 'chat' || capTitle == 'chat') {
+        if (externalIntegrationKey.currentState != null && !externalIntegrationKey.currentState!.validate()) {
+          return false;
+        }
+      } else if (_isCapability(capability, 'chat')) {
         if (chatPromptController.text.trim().isEmpty) {
           return false;
         }
-      } else if (capId == 'memories' || capTitle == 'memories') {
+      } else if (_isCapability(capability, 'memories')) {
         if (conversationPromptController.text.trim().isEmpty) {
           return false;
         }
-      } else if (capId == 'proactive_notification' || capTitle == 'proactive_notification') {
+      } else if (_isCapability(capability, 'proactive_notification')) {
         if (selectedScopes.isEmpty || selectedCapabilities.length <= 1) {
           return false;
         }
@@ -519,7 +520,7 @@ class AddAppProvider extends ChangeNotifier {
           return false;
         }
       }
-      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
+      if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'proactive_notification')) {
         if (selectedScopes.isEmpty) {
           AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCoreCapability);
           return false;
@@ -538,21 +539,19 @@ class AddAppProvider extends ChangeNotifier {
         return false;
       }
       for (var capability in selectedCapabilities) {
-        final capId = capability.id.toLowerCase();
-        final capTitle = capability.title.toLowerCase();
-        if (capId == 'chat' || capTitle == 'chat') {
+        if (_isCapability(capability, 'chat')) {
           if (chatPromptController.text.trim().isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterChatPrompt);
             return false;
           }
         }
-        if (capId == 'memories' || capTitle == 'memories') {
+        if (_isCapability(capability, 'memories')) {
           if (conversationPromptController.text.trim().isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterConversationPrompt);
             return false;
           }
         }
-        if (capId == 'external_integration' || capTitle == 'external_integration') {
+        if (_isCapability(capability, 'external_integration')) {
           if (triggerEvent == null) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectTriggerEvent);
             return false;
@@ -570,7 +569,7 @@ class AddAppProvider extends ChangeNotifier {
       }
       // Require source code URL for external integration or proactive notification apps
       bool needsSourceCode = selectedCapabilities.any(
-        (cap) => cap.id == 'external_integration' || cap.id == 'proactive_notification',
+        (cap) => _isCapability(cap, 'external_integration') || _isCapability(cap, 'proactive_notification'),
       );
       if (needsSourceCode && sourceCodeUrlController.text.trim().isEmpty) {
         AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.githubRepositoryUrlRequired);
@@ -603,7 +602,7 @@ class AddAppProvider extends ChangeNotifier {
     };
 
     for (var capability in selectedCapabilities) {
-      if (capability.id == 'external_integration') {
+      if (_isCapability(capability, 'external_integration')) {
         data['external_integration'] = {
           'triggers_on': triggerEvent,
           'webhook_url': webhookUrlController.text.trim(),
@@ -626,13 +625,13 @@ class AddAppProvider extends ChangeNotifier {
           data['external_integration']['actions'] = actions;
         }
       }
-      if (capability.id == 'chat') {
+      if (_isCapability(capability, 'chat')) {
         data['chat_prompt'] = chatPromptController.text;
       }
-      if (capability.id == 'memories') {
+      if (_isCapability(capability, 'memories')) {
         data['memory_prompt'] = conversationPromptController.text;
       }
-      if (capability.id == 'proactive_notification') {
+      if (_isCapability(capability, 'proactive_notification')) {
         if (data['proactive_notification'] == null) {
           data['proactive_notification'] = {};
         }
@@ -711,7 +710,7 @@ class AddAppProvider extends ChangeNotifier {
     };
 
     for (var capability in selectedCapabilities) {
-      if (capability.id == 'external_integration') {
+      if (_isCapability(capability, 'external_integration')) {
         data['external_integration'] = {
           'triggers_on': triggerEvent,
           'webhook_url': webhookUrlController.text.trim(),
@@ -734,13 +733,13 @@ class AddAppProvider extends ChangeNotifier {
           data['external_integration']['actions'] = actions;
         }
       }
-      if (capability.id == 'chat') {
+      if (_isCapability(capability, 'chat')) {
         data['chat_prompt'] = chatPromptController.text.trim();
       }
-      if (capability.id == 'memories') {
+      if (_isCapability(capability, 'memories')) {
         data['memory_prompt'] = conversationPromptController.text.trim();
       }
-      if (capability.id == 'proactive_notification') {
+      if (_isCapability(capability, 'proactive_notification')) {
         if (data['proactive_notification'] == null) {
           data['proactive_notification'] = {};
         }
@@ -966,9 +965,9 @@ class AddAppProvider extends ChangeNotifier {
     if (selectedCapabilities.contains(capability)) {
       selectedCapabilities.remove(capability);
     } else {
-      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'persona') {
+      if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'persona')) {
         AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppCapabilityConflictWithPersona);
-      } else if (selectedCapabilities.isNotEmpty && capability.id == 'persona') {
+      } else if (selectedCapabilities.isNotEmpty && _isCapability(capability, 'persona')) {
         AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppPersonaConflictWithCapabilities);
       } else {
         selectedCapabilities.add(capability);
@@ -997,12 +996,12 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool isCapabilitySelectedById(String capability) {
-    return selectedCapabilities.any((e) => e.id == capability);
+    return selectedCapabilities.any((e) => _isCapability(e, capability));
   }
 
   List<TriggerEvent> getTriggerEvents() {
     return selectedCapabilities
-        .where((element) => element.id == 'external_integration')
+        .where((element) => _isCapability(element, 'external_integration'))
         .map((e) => e.triggerEvents)
         .expand((element) => element)
         .toList();
@@ -1010,14 +1009,14 @@ class AddAppProvider extends ChangeNotifier {
 
   List<NotificationScope> getNotificationScopes() {
     return selectedCapabilities
-        .where((item) => item.id == 'proactive_notification')
+        .where((item) => _isCapability(item, 'proactive_notification'))
         .map((e) => e.notificationScopes)
         .expand((element) => element)
         .toList();
   }
 
   bool capabilitySelected() {
-    if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
+    if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'proactive_notification')) {
       return false;
     } else {
       return selectedCapabilities.isNotEmpty;

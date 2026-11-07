@@ -56,12 +56,14 @@ void main() {
       expect(provider.hasGeneratedApp, isFalse);
 
       // Simulate step where app metadata was generated but icon failed/returned null
-      provider.clear();
-      expect(provider.hasGeneratedApp, isFalse);
+      provider.updateName('Test app');
+      provider.updateDescription('Test description');
+      expect(provider.generatedIconBytes, isNull);
+      expect(provider.hasGeneratedApp, isTrue);
     });
 
-    test('defaultAppIconBytes is a valid PNG header', () {
-      final bytes = AiAppGeneratorProvider.defaultAppIconBytes;
+    test('defaultAppIconBytes is a valid PNG header', () async {
+      final bytes = await AiAppGeneratorProvider.getDefaultAppIconBytes();
       expect(bytes, isNotNull);
       expect(bytes.length, greaterThan(8));
       // PNG magic header: 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
@@ -69,6 +71,10 @@ void main() {
       expect(bytes[1], 0x50); // P
       expect(bytes[2], 0x4E); // N
       expect(bytes[3], 0x47); // G
+      expect(bytes[4], 0x0D);
+      expect(bytes[5], 0x0A);
+      expect(bytes[6], 0x1A);
+      expect(bytes[7], 0x0A);
     });
   });
 }

@@ -1,3 +1,3 @@
 {
-  "change": "Preserve AI app generator preview when icon generation fails and provide explicit validation feedback on manual app submission."
+  "change": "If an app icon fails to generate, the AI app generator still shows your app preview with an option to regenerate the icon. Manual app submissions now show a specific message explaining what to fix."
 }
