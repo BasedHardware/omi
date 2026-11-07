@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
+import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -18,11 +19,18 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
+      final devApiKeyProvider = DevApiKeyProvider();
+      final mcpProvider = McpProvider();
+      final usageProvider = UsageProvider();
+      addTearDown(devApiKeyProvider.dispose);
+      addTearDown(mcpProvider.dispose);
+      addTearDown(usageProvider.dispose);
+
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            ChangeNotifierProvider<McpProvider>(create: (_) => McpProvider()),
-            ChangeNotifierProvider<UsageProvider>(create: (_) => UsageProvider()),
+            ChangeNotifierProvider<McpProvider>.value(value: mcpProvider),
+            ChangeNotifierProvider<UsageProvider>.value(value: usageProvider),
           ],
           child: MaterialApp(
             locale: locale,
@@ -33,19 +41,19 @@ void main() {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            home: const MediaQuery(
-              data: MediaQueryData(
+            home: MediaQuery(
+              data: const MediaQueryData(
                 size: Size(320, 600),
                 textScaler: TextScaler.linear(1.3),
               ),
               child: Scaffold(
                 body: SingleChildScrollView(
-                  padding: EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      DeveloperApiKeysSection(),
-                      SizedBox(height: 24),
-                      DeveloperMcpSection(),
+                      DeveloperApiKeysSection(provider: devApiKeyProvider),
+                      const SizedBox(height: 24),
+                      const DeveloperMcpSection(),
                     ],
                   ),
                 ),
@@ -89,9 +97,18 @@ void main() {
 
     await tester.pump();
     expect(tester.takeException(), isNull);
-    expect(find.text('A very long section title that needs space'), findsOneWidget);
-    expect(find.text('Action 1'), findsOneWidget);
-    expect(find.text('Action 2'), findsOneWidget);
+    final titleFinder = find.text('A very long section title that needs space');
+    final action1Finder = find.text('Action 1');
+    final action2Finder = find.text('Action 2');
+    expect(titleFinder, findsOneWidget);
+    expect(action1Finder, findsOneWidget);
+    expect(action2Finder, findsOneWidget);
+
+    final titleBottom = tester.getBottomLeft(titleFinder).dy;
+    final action1Top = tester.getTopLeft(action1Finder).dy;
+    final action2Right = tester.getTopRight(action2Finder).dx;
+    expect(action1Top, greaterThanOrEqualTo(titleBottom));
+    expect(action2Right, lessThanOrEqualTo(200.0));
   });
 
   testWidgets('OmiSectionHeader aligns trailing widget to the right edge on wide screens', (tester) async {
