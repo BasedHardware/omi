@@ -52,8 +52,9 @@ describe('key API error handling', () => {
     );
     vi.stubGlobal('fetch', fetch);
     await createMcpApiKey('Claude Code');
-    expect(fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = fetch.mock.calls[0];
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0][0]).toBe('/api/proxy/v1/mcp/keys/scopes');
+    const [url, init] = fetch.mock.calls[1];
     expect(url).toBe('/api/proxy/v1/mcp/keys');
     expect(init?.method).toBe('POST');
     const body = JSON.parse(String(init?.body));
@@ -66,5 +67,53 @@ describe('key API error handling', () => {
     expect(body.scopes).not.toContain('screen_activity.read');
     expect(body.scopes).not.toContain('people.read');
     expect(body.scopes).not.toContain('people.rename');
+  });
+  it('uses the served default scopes instead of the offline literal', async () => {
+    const fetch = vi.fn(
+      async (url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify(
+            url.endsWith('/scopes')
+              ? { client_ids: [], required_scopes: [], default_scopes: ['chat.read'] }
+              : { id: 'k1' },
+          ),
+        ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    await createMcpApiKey('served');
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body))).toEqual({
+      name: 'served',
+      scopes: ['chat.read'],
+    });
+  });
+  it.each([404, 503])(
+    'uses offline defaults when the contract returns %s',
+    async (status) => {
+      const fetch = vi.fn(async (url: string, _init?: RequestInit) =>
+        url.endsWith('/scopes')
+          ? new Response('{}', { status })
+          : new Response('{"id":"k1"}'),
+      );
+      vi.stubGlobal('fetch', fetch);
+      await createMcpApiKey('fallback');
+      expect(JSON.parse(String(fetch.mock.calls[1][1]?.body)).scopes).toEqual([
+        'memories.read',
+        'conversations.read',
+        'action_items.read',
+        'goals.read',
+      ]);
+    },
+  );
+  it('preserves explicit scopes without fetching the contract', async () => {
+    const fetch = vi.fn(
+      async (_url: string, _init?: RequestInit) => new Response('{"id":"k1"}'),
+    );
+    vi.stubGlobal('fetch', fetch);
+    await createMcpApiKey('explicit', ['goals.read']);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
+      name: 'explicit',
+      scopes: ['goals.read'],
+    });
   });
 });
