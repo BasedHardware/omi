@@ -185,6 +185,41 @@ def test_recording_detail_escalates_only_that_recording(monkeypatch, has_existin
     assert enqueue.call_args.kwargs['coalesce'] == 'min'
 
 
+@pytest.mark.parametrize('intent', [None, '0', '1'])
+def test_detail_http_escalates_only_explicit_opens(monkeypatch, intent):
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import conversations as routes
+
+    row = {
+        'id': 'c1',
+        'created_at': datetime.now(timezone.utc),
+        'started_at': None,
+        'finished_at': None,
+        'status': 'completed',
+        'source': 'omi',
+        'structured': {'title': 'Recording', 'overview': ''},
+    }
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a, **k: row)
+    monkeypatch.setattr(routes, 'hidden_from_default_detail', lambda *a: False)
+    monkeypatch.setattr(routes.conversations_db, 'is_visible_conversation', lambda *a, **k: True)
+    opened = Mock()
+    monkeypatch.setattr(routes, 'open_recording', opened)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'u'
+    headers = {} if intent is None else {'X-Omi-Recording-Detail': intent}
+    with TestClient(app) as client:
+        response = client.get('/v1/conversations/c1', headers=headers)
+    assert response.status_code == 200
+    if intent == '1':
+        opened.assert_called_once_with('u', row)
+    else:
+        opened.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_live_member_finalization_closes_boundary_before_budget_free_wait(monkeypatch):
     from types import SimpleNamespace

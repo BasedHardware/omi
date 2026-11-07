@@ -3089,7 +3089,7 @@ wholly inside the live window without membership is hidden and emits the unlabel
 
 When the notes switch is true, automatic live-member notes wait without consuming
 finalization retry budget. Batch registration and boundary closure precede the
-wait. Recording detail queues its durable enrichment obligation before publishing
+wait. Recording detail with `X-Omi-Recording-Detail: 1` queues its durable enrichment obligation before publishing
 a five-minute per-recording escalation lease; optional dependency failures preserve
 the detail read and fail eager for processing. Explicit Process Now carries
 `backlog_choice` intent. The [runbook](runbooks/home-processing-ownership.md)

@@ -403,10 +403,11 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
-    headers: {},
+    headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'},
     method: 'GET',
     body: '',
   );
@@ -461,8 +462,8 @@ extension _Let<T> on T {
   R let<R>(R Function(T) f) => f(this);
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
-  return (await getConversationByIdResult(conversationId)).item;
+Future<ServerConversation?> getConversationById(String conversationId, {bool userInitiated = false}) async {
+  return (await getConversationByIdResult(conversationId, userInitiated: userInitiated)).item;
 }
 
 String conversationCollectionUrl(
@@ -550,9 +551,12 @@ class ConversationApi {
         debugName: 'conversation_parse',
       );
 
-  Future<ApiResult<ServerConversation>> byId(String id) async {
+  Future<ApiResult<ServerConversation>> byId(String id, {bool userInitiated = false}) async {
     final sent = await executeApi<String>(
-      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      request: ApiRequest(
+          url: '${_baseUrl}v1/conversations/$id',
+          method: 'GET',
+          headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'}),
       send: _send,
       decode: (body) => body,
     );

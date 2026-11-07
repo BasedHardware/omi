@@ -106,6 +106,7 @@ from utils.conversations.process_conversation import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.episodes import finalize as episode_finalize
+from utils.episodes.member_notes import open_recording
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -1136,6 +1137,7 @@ def get_conversation_by_id(
     include_translations: bool = Query(False),
     translation_cursor: Optional[str] = Query(None),
     response: Response = None,
+    request: Request = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
@@ -1154,9 +1156,9 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    from utils.episodes.member_notes import open_recording
-
-    open_recording(uid, conversation)
+    # Home lifecycle probes also read details; only a detail-page open escalates notes.
+    if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
+        open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred') and not conversation.get('processing_deferred'):

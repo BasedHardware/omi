@@ -18,8 +18,9 @@ the app does not read these server environment switches.
 - `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED=true`: automatic notes for a linked
   live member wait for episode close. Durable finalization yields without spending
   a processing attempt; enrichment uses its existing deferred settlement.
-  An authenticated recording detail read grants that recording a five-minute
-  escalation lease and wakes its existing durable enrichment obligation. Explicit
+  An authenticated recording detail read with `X-Omi-Recording-Detail: 1` grants that recording a five-minute
+  escalation lease and wakes its existing durable enrichment obligation. Home lifecycle
+  probes omit this explicit-open header and cannot escalate notes. Explicit
   reprocess and finalize retain their intent. Transcription and custody continue.
 - `HOME_PROCESSING_OWNERSHIP_UIDS` optionally restricts both switches to named
   accounts. Empty allows all only when the respective switch is true.
