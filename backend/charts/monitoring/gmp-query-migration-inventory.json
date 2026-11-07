@@ -119,6 +119,58 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
+      "file": "alerts/backlog-state-machine.json",
+      "issues": [],
+      "metrics": [
+        "omi_capture_retry_cap_total"
+      ],
+      "owner_title": "Retry cap quarantine rate (enforced by default)",
+      "owner_uid": "omi-backlog-retry-cap-quarantine-rate",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"sync_running_cap_reached\"}[30m])) or vector(0)",
+      "file": "alerts/backlog-state-machine.json",
+      "issues": [],
+      "metrics": [
+        "omi_backlog_state_transitions_total"
+      ],
+      "owner_title": "Sync running-job attempt cap reached",
+      "owner_uid": "omi-backlog-sync-running-cap-rate",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=~\"held_exhausted|projection_rearm_exhausted\"}[1h])) or vector(0)",
+      "file": "alerts/backlog-state-machine.json",
+      "issues": [],
+      "metrics": [
+        "omi_backlog_state_transitions_total"
+      ],
+      "owner_title": "Held re-drive budget exhausted",
+      "owner_uid": "omi-backlog-held-exhausted-rate",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"record_barrier_dead_letter\"}[1h])) or vector(0)",
+      "file": "alerts/backlog-state-machine.json",
+      "issues": [],
+      "metrics": [
+        "omi_backlog_state_transitions_total"
+      ],
+      "owner_title": "record_pending barrier dead letters",
+      "owner_uid": "omi-backlog-record-dead-letter-rate",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
       "file": "alerts/batch-held-dead-letter.json",
       "issues": [],
@@ -3920,7 +3972,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 262
+    "query_consumers": 266
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

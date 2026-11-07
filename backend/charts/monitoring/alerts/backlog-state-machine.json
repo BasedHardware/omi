@@ -399,7 +399,7 @@
     "record": null
   },
   {
-    "uid": "omi-backlog-record-barrier-dead-letter-rate",
+    "uid": "omi-backlog-record-dead-letter-rate",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Backlog state machine",
@@ -507,7 +507,7 @@
       "evaluated_good": "Synthetic: 100 parks in 1h, or weekly re-drives only."
     },
     "labels": {
-      "alert_identity": "omi-backlog-record-barrier-dead-letter-rate",
+      "alert_identity": "omi-backlog-record-dead-letter-rate",
       "component": "batch-pipeline",
       "impact": "product",
       "severity": "warning",

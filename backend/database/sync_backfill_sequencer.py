@@ -26,7 +26,7 @@ from config import sync_backfill_worker as worker_policy
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
-from utils.sync.retry_hygiene import dispatch_cap, running_attempt_carry
+from utils.sync.retry_hygiene import dispatch_cap, running_attempt_carry, running_expiries
 
 logger = logging.getLogger(__name__)
 OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
@@ -497,6 +497,7 @@ def claim_next(
             'active_payload': job['payload'],
             'active_epoch': epoch,
             'dispatch_attempt': 0,
+            'running_expiries': 0,
             'active_state': 'dispatching',
             'worker_available': job['payload'].get('worker_eligible') is True,
             'worker_fallback_at': (
@@ -951,6 +952,7 @@ def redrive_job(
         # the fenced terminal handoff; refusing here would strand the owner.
         carry = dispatching or running_attempt_carry(owner)
         dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if carry else 0
+        expiries = running_expiries(owner) + (0 if dispatching else 1) if carry else 0
         # Restore the persisted budget chain count across lease expiry.
         payload = dict(owner['active_payload'])
         deferrals = owner.get('active_budget_deferrals')
@@ -962,6 +964,7 @@ def redrive_job(
                 'epoch': next_epoch,
                 'active_epoch': next_epoch,
                 'dispatch_attempt': dispatch_attempt,
+                'running_expiries': expiries,
                 'active_state': 'dispatching',
                 'worker_token': firestore.DELETE_FIELD,
                 'worker_available': False,

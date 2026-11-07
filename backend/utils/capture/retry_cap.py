@@ -26,8 +26,10 @@ class RetryCap:
     serving: bool
 
 
-def retry_cap(uid: str, attempts: int, maximum: int) -> RetryCap | None:
-    enforced = retry_cap_enforced()
+def retry_cap(uid: str, attempts: int, maximum: int, *, enforce: bool = True) -> RetryCap | None:
+    """``enforce=False`` keeps the legacy cohort decision for a cap whose count
+    is not evidence of failed work (a sync dispatch retry deadline)."""
+    enforced = enforce and retry_cap_enforced()
     if not enforced and not refactor_modes.shadow_or_serve(MODE):
         return None
     return RetryCap(attempts >= max(1, maximum), enforced or refactor_modes.serving_for(MODE, uid))

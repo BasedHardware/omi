@@ -149,6 +149,7 @@ def test_running_lease_expiry_at_the_cap_terminalizes_instead_of_redriving(db, m
     account, epoch = running_owner(db, monkeypatch, attempts='2')
     replacement, now = crash_once(account, epoch, NOW)
     assert replacement['dispatch_attempt'] == 1
+    assert registry.get_owner(account)['running_expiries'] == 1
     epoch = replacement['epoch']
     assert registry.begin_job(account, 'crashy', epoch, now=now)
     expired = now + timedelta(seconds=registry.LEASE_SECONDS + 1)
@@ -170,6 +171,26 @@ def test_running_lease_expiry_at_the_cap_terminalizes_instead_of_redriving(db, m
     assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
     assert not registry.get_owner(account).get('active_job_id')
     assert transitions('sync_running_cap_reached') == before + 1
+
+
+def test_delayed_queue_dispatch_retries_are_not_terminalized_by_default(db, monkeypatch):
+    """A passed dispatch retry deadline is not failure: a backlogged queue delivers late.
+
+    Only a running lease expiry (the job began and died) is capped by default;
+    the dispatching-state cap keeps its CAPTURE_COVERAGE_MODE cohort gate.
+    """
+    from utils.sync import retry_hygiene
+
+    account, epoch = running_owner(db, monkeypatch, attempts='2')
+    owner = registry.get_owner(account)
+    for minute in range(6, 61, 6):
+        current = NOW + timedelta(minutes=minute)
+        replacement = registry.redrive_job(account, 'crashy', epoch, now=current)
+        assert replacement is not None and replacement['epoch'] == epoch
+        owner = registry.get_owner(account)
+    assert owner['dispatch_attempt'] == 10 and owner['running_expiries'] == 0
+    decision = retry_hygiene.dispatch_cap(account, owner)
+    assert decision.reached and not decision.serving
 
 
 def test_budget_deferral_chain_keeps_its_own_count_and_terminal(db, monkeypatch):

@@ -21,8 +21,8 @@ tokens or privacy fences, and each has an operator exit.
 | batch `dead/held_expired` | nightly re-drive | `held_redrives` vs `MAX_HELD_REDRIVES` (3) | `ready` with `attempt=0` | `dead/held_exhausted` (retained, operator requeue) |
 | projection `quarantine_held` | release scan + nightly re-drive | `projection_release_attempts` (3); `held_expired_rearms` (3) | `pending` when target restorable | re-arm stops; receipt retained as `held_expired` |
 | projection assignment hold (`persisted`, job `recovery_state=held`) | release scan, assignment leg | **none** (see open question) | `pending` when target restorable | operator redrive only |
-| sync owner `dispatching` | sequencer sweep | `dispatch_retry_at`; `dispatch_attempt` vs `SYNC_TASKS_MAX_ATTEMPTS` | redrive or finalize | job failed `sync_dispatch_exhausted` |
-| sync owner `running` | sequencer sweep | `lease_expires_at`; same carried `dispatch_attempt` | redrive (`epoch+1`) or finalize | job failed `sync_dispatch_exhausted` |
+| sync owner `dispatching` | sequencer sweep | `dispatch_retry_at`; `dispatch_attempt` vs `SYNC_TASKS_MAX_ATTEMPTS` (cap enforced only in the `CAPTURE_COVERAGE_MODE` cohort: a passed retry deadline is queue delay, not failure) | redrive or finalize | job failed `sync_dispatch_exhausted` (cohort only) |
+| sync owner `running` | sequencer sweep | `lease_expires_at`; `running_expiries` vs `SYNC_TASKS_MAX_ATTEMPTS`; `dispatch_attempt` carried | redrive (`epoch+1`) or finalize | job failed `sync_dispatch_exhausted` |
 | `record_pending` (young) | record drain | barrier backoff ladder (#24863) | admission | (next rows) |
 | `record_pending`, conversation missing | `record_pending_repair` | 7 d | `cancelled` | cancelled (audio retained) |
 | `record_pending`, conversation completed, barrier open | seal repair | seal repair proofs | admission after seal | seal repair refusal (unchanged) |
@@ -39,8 +39,8 @@ off.
 
 | Switch | Bug class | Turning it off |
 | --- | --- | --- |
-| `CAPTURE_RETRY_CAP_ENFORCED` | 1: the cap observed but never ended work | Cap decisions return to the `CAPTURE_COVERAGE_MODE` cohort (shadow outside it) |
-| `SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED` | 2: running lease expiry reset `dispatch_attempt` to 0 | Running expiry resets to 0; only dispatching owners are capped |
+| `CAPTURE_RETRY_CAP_ENFORCED` | 1: the cap observed but never ended work | Batch lease-expiry and sync running caps return to the `CAPTURE_COVERAGE_MODE` cohort (shadow outside it) |
+| `SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED` | 2: running lease expiry reset `dispatch_attempt` to 0 | Running expiry resets to 0, `running_expiries` stays 0, and only dispatching owners are capped |
 | `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | 3 and 6: requeue kept `attempt` at the cap; no terminal stop | Requeue keeps `attempt`; nightly re-drive and projection re-arm are unbounded again |
 | `RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED` | 4: unfinished conversations retried forever | Aged rows stay on the hourly barrier ladder |
 
@@ -53,9 +53,17 @@ the cap only logged `would_quarantine`. Now:
 - Batch: a unit whose lease expires at `BATCH_PIPELINE_MAX_ATTEMPTS` is quarantined
   (`quarantine_reason=worker_failed`, `recovery_state=held`), the same transition an
   explicit worker failure already took. It then follows the held rows above.
-- Sync: an owner whose `dispatch_attempt + 1` reaches `SYNC_TASKS_MAX_ATTEMPTS`
-  is finalized by the existing fenced finalizer (`sync_dispatch_exhausted`), which
-  refuses while a run lock or a renewed lease exists.
+- Sync: a running owner whose `running_expiries + 1` reaches
+  `SYNC_TASKS_MAX_ATTEMPTS` (the job began and its lease expired with no run lock,
+  that many times) is finalized by the existing fenced finalizer
+  (`sync_dispatch_exhausted`), which refuses while a run lock or a renewed lease
+  exists. Budget-deferral chains keep their own `budget_chain_exhausted` terminal.
+- Not changed: the dispatching-state cap (`dispatch_attempt`) stays on the
+  `CAPTURE_COVERAGE_MODE` cohort. A passed dispatch retry deadline only means the
+  queue has not delivered yet; a backlogged queue delivers hours late, so
+  enforcing that count by default would fail runnable jobs
+  (`FC-queued-delivery-invalidated-by-redrive`;
+  `test_delayed_queue_dispatch_retries_are_not_terminalized_by_default`).
 
 Watch `omi_capture_retry_cap_total{outcome="quarantine"}` (alert
 `omi-backlog-retry-cap-quarantine-rate`). A spike after deploy means units that
