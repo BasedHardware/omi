@@ -3,7 +3,7 @@ import asyncio
 from app import analyze_audio_with_hume
 import sys
 
-async def test_audio_file(file_path):
+async def helper_audio_file(file_path):
     print(f"\n{'='*60}")
     print(f"Testing: {file_path}")
     print(f"{'='*60}\n")

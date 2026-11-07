@@ -18,6 +18,11 @@ async def test_now():
     print(f"App ID: {omi_app_id}")
 
     message = "🎭 TEST: If you see this, notifications are working!"
+    test_uid = test_uid or ""
+    test_uid = test_uid or ""
+    if not test_uid:
+        print("Skipping notification test: TEST_OMI_UID not set")
+        return
     url = f"https://api.omi.me/v2/integrations/{omi_app_id}/notification?uid={quote(test_uid)}&message={quote(message)}"
 
     headers = {
