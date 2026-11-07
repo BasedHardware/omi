@@ -299,6 +299,26 @@ def commit_user_reprocess_app_results(
     lazy_effects_language: str | None = None,
 ) -> bool:
     """Persist reprocessed app results and an eligible restore in one transaction."""
+    stage_lazy_effects = None
+    wake_staged_lazy_effects = None
+    if schedule_lazy_effects:
+        if not lazy_effects_language:
+            raise ValueError('lazy effects require a language')
+        from utils.enrichment import outbox
+
+        def stage(transaction, client):
+            return outbox.stage_effects_in_transaction(
+                transaction,
+                client,
+                uid,
+                conversation_id,
+                lazy_effects_language,
+                immediate=True,
+                user_requested=True,
+            )
+
+        stage_lazy_effects = stage
+        wake_staged_lazy_effects = outbox.enqueue_staged_effects
     return conversations_db.persist_user_reprocess_app_results(
         uid,
         conversation_id,
@@ -312,7 +332,8 @@ def commit_user_reprocess_app_results(
         expected_lifecycle_revision=expected_lifecycle_revision,
         expected_user_lifecycle_revision=expected_user_lifecycle_revision,
         schedule_lazy_effects=schedule_lazy_effects,
-        lazy_effects_language=lazy_effects_language,
+        stage_lazy_effects=stage_lazy_effects,
+        wake_staged_lazy_effects=wake_staged_lazy_effects,
     )
 
 

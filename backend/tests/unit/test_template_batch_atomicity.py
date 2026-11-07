@@ -114,6 +114,22 @@ def _persist_app_results(
         else expected_speaker_receipt_sha256
     )
     document = _strict_firestore(monkeypatch, row) if document is None else document
+    stage_lazy_effects = None
+    wake_staged_lazy_effects = None
+    if schedule_lazy_effects:
+        def stage(transaction, client):
+            return enrichment_outbox.stage_effects_in_transaction(
+                transaction,
+                client,
+                'user',
+                'conversation',
+                lazy_effects_language,
+                immediate=True,
+                user_requested=True,
+            )
+
+        stage_lazy_effects = stage
+        wake_staged_lazy_effects = enrichment_outbox.enqueue_staged_effects
     monkeypatch.setattr(conversations_db, '_prepare_conversation_for_write', lambda value, *_args: value)
     persisted = conversations_db.persist_user_reprocess_app_results(
         'user',
@@ -128,7 +144,8 @@ def _persist_app_results(
         expected_lifecycle_revision=expected_lifecycle_revision,
         expected_user_lifecycle_revision=expected_user_lifecycle_revision,
         schedule_lazy_effects=schedule_lazy_effects,
-        lazy_effects_language=lazy_effects_language,
+        stage_lazy_effects=stage_lazy_effects,
+        wake_staged_lazy_effects=wake_staged_lazy_effects,
     )
     return persisted, document
 

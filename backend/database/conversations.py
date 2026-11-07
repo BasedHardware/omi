@@ -2458,11 +2458,12 @@ def persist_user_reprocess_app_results(
     expected_lifecycle_revision: datetime | None = None,
     expected_user_lifecycle_revision: int | None = None,
     schedule_lazy_effects: bool = False,
-    lazy_effects_language: str | None = None,
+    stage_lazy_effects: Callable[[Any, Any], Any] | None = None,
+    wake_staged_lazy_effects: Callable[[Any], None] | None = None,
 ) -> bool:
     """Merge selected results if their source snapshot and owner remain current."""
-    if schedule_lazy_effects and not lazy_effects_language:
-        raise ValueError('lazy effects require a language')
+    if schedule_lazy_effects and (stage_lazy_effects is None or wake_staged_lazy_effects is None):
+        raise ValueError('scheduled lazy effects require staging and wake callbacks')
     staged_lazy_effects = None
     if set(expected_selected_results) != selected_app_ids:
         raise ValueError('selected app result expectations must cover every selected app')
@@ -2543,17 +2544,10 @@ def persist_user_reprocess_app_results(
             result_updates, uid, current.get('data_protection_level', 'standard')
         )
         if schedule_lazy_effects:
-            from utils.enrichment import outbox
-
-            staged_lazy_effects = outbox.stage_effects_in_transaction(
-                transaction,
-                db,
-                uid,
-                conversation_id,
-                lazy_effects_language,
-                immediate=True,
-                user_requested=True,
-            )
+            assert stage_lazy_effects is not None
+            staged_lazy_effects = stage_lazy_effects(transaction, db)
+            if staged_lazy_effects is None:
+                raise RuntimeError('lazy effects staging returned no durable obligation')
         transaction.update(conversation_ref, prepared)
         return True
 
@@ -2562,9 +2556,8 @@ def persist_user_reprocess_app_results(
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
     if persisted and staged_lazy_effects is not None:
-        from utils.enrichment import outbox
-
-        outbox.enqueue_staged_effects(staged_lazy_effects)
+        assert wake_staged_lazy_effects is not None
+        wake_staged_lazy_effects(staged_lazy_effects)
     return persisted
 
 
