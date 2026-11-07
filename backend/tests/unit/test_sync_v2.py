@@ -1821,6 +1821,28 @@ class TestAsyncCoordinatorBehavioral:
         pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
         pipeline._run_conversation_created_webhook.assert_called_once()
 
+    def test_omi_source_discard_recovery_emits_creation_webhook(self, fenced_worker_module):
+        """An omi pendant conversation (e.g. custom STT / WAL upload) emits webhook when revived from discarded."""
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+        omi_source = pipeline.ConversationSource.omi
+        original = types.SimpleNamespace(source=omi_source, discarded=True)
+        recovered = types.SimpleNamespace(source=omi_source, discarded=False)
+
+        pipeline.conversations_db.get_conversation = MagicMock(return_value={'id': 'omi-conversation'})
+        pipeline.deserialize_conversation = MagicMock(return_value=original)
+        pipeline.process_conversation = MagicMock(return_value=recovered)
+        pipeline._run_conversation_created_webhook = MagicMock()
+        pipeline.submit_with_context = MagicMock(side_effect=lambda _executor, fn, *args: fn(*args))
+
+        pipeline._reprocess_conversation_after_update('uid-1', 'omi-conversation', 'en')
+
+        pipeline._run_conversation_created_webhook.assert_called_once_with('uid-1', recovered)
+
+        original.discarded = False
+        pipeline._reprocess_conversation_after_update('uid-1', 'omi-conversation', 'en')
+        pipeline._run_conversation_created_webhook.assert_called_once()
+
     @pytest.mark.asyncio
     async def test_durable_completion_offloads_epoch_and_terminal_metric(self, fenced_worker_module):
         """Redis-backed fencing and telemetry never run on the async coordinator loop."""
