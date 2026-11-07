@@ -1005,3 +1005,32 @@ def test_cell_cutover_rejects_explicit_generation_change(record, request_plane):
         )
     assert excinfo.value.code == 'account_generation_regression'
     assert record.account_generation == 0
+
+
+@pytest.mark.parametrize('plane', [None, 'legacy', 'cell'])
+@pytest.mark.parametrize(
+    'phase', [AccountCutoverCheckpointPhase.inventory, AccountCutoverCheckpointPhase.cutover_ready]
+)
+@pytest.mark.parametrize('bound', [False, True])
+def test_core_migrated_transition_requires_durable_readiness(plane, phase, bound):
+    record = AccountCutoverRecord(
+        uid='owner',
+        state=AccountCutoverState.migrating,
+        data_plane=plane,
+        checkpoint_phase=phase,
+        destination_backend_bound=bound,
+    )
+    request = AccountCutoverTransitionRequest(
+        target_state=AccountCutoverState.migrated,
+        expected_account_generation=0,
+        data_plane='cell',
+        checkpoint_phase=AccountCutoverCheckpointPhase.cutover_ready,
+        reason='direct-complete',
+    )
+    if plane == 'cell' and phase == AccountCutoverCheckpointPhase.cutover_ready and bound:
+        migrated = apply_cutover_transition(record, request)
+        assert migrated.state == AccountCutoverState.migrated
+        assert migrated.account_generation == 0
+    else:
+        with pytest.raises(AccountCutoverTransitionError):
+            apply_cutover_transition(record, request)

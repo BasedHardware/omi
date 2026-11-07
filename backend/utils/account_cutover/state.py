@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from models.account_cutover import (
+    AccountCutoverCheckpointPhase,
     AccountCutoverRecord,
     AccountCutoverState,
     AccountCutoverTransitionRequest,
@@ -89,6 +90,25 @@ def apply_cutover_transition(
             'cell cutovers must preserve the account generation',
             code='account_generation_regression',
         )
+    if request.target_state == AccountCutoverState.migrated:
+        # The core seam is also called directly, outside the coordinator. A
+        # request cannot invent the readiness or destination binding it needs.
+        if record.data_plane != 'cell':
+            raise AccountCutoverTransitionError('migrated completion requires cell kind')
+        ready = record.checkpoint_phase == AccountCutoverCheckpointPhase.cutover_ready
+        completed_retry = (
+            record.state == AccountCutoverState.migrated
+            and record.checkpoint_phase == AccountCutoverCheckpointPhase.completed
+        )
+        if not (ready or completed_retry):
+            raise AccountCutoverTransitionError(
+                'complete requires cutover_ready checkpoint', code='checkpoint_not_ready'
+            )
+        if record.destination_backend_bound is not True:
+            raise AccountCutoverTransitionError(
+                'destination backend binding required before complete', code='destination_backend_unbound'
+            )
+
     if request.target_state == record.state:
         # Idempotent no-op with optional checkpoint/manifest refresh.
         return _refresh_same_state(record, request)
