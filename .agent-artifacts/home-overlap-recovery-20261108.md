@@ -1,6 +1,6 @@
 # Home-overlap recovery verification
 
-Updated at: 2026-11-07T22:07:48.519501+00:00
+Updated at: 2026-11-07T22:37:48.463176+00:00
 
 Status: validation in progress; no push, merge or deployment in this recovery yet.
 
@@ -48,9 +48,15 @@ Logs and the exact backend file selection are under
   both were corrected and the pending-work file rerun passed.
 - The broader isolated run found two cache-rollback fixture failures and three
   finalizer logging fixture failures. Corrected their setup for enabled defaults;
-  focused retries are queued. Other file results are still arriving.
+  focused retries passed 48 and 3 cases respectively. The broad runner reached
+  its 1800s outer deadline; its parity worker lacked a terminal status, so the
+  prescribed isolated runner is retrying that file. Lifecycle inventory reported
+  1712 passes; other enrichment suites reported passing cases.
+- Additional detail widget/provider regressions: 44 passed.
 - Initial sync lifecycle E2E attempt exceeded the harness-wide 120s limit without
-  a verdict. Retry uses documented `E2E_PYTEST_TIMEOUT=600s`.
+  a verdict. The 600s retry finished with 8 passes and the Watch Process Now case
+  failing with opaque `stt_invalid_input`. That case now captures underlying
+  classifier exceptions; `watch-diagnostic.log` is queued for root-cause evidence.
 - PR metadata check passed all five checks after adding exact line-count exceptions.
 - First `make preflight` failed only at the Firestore query-shape file wall timeout
   (900s, at 95 percent, no assertion failure reported). Full retry is queued with
@@ -67,7 +73,9 @@ The existing guarded runners are observable through these log files:
 - `preflight.log`: first full preflight; `preflight-retry.log`: full retry with 1800s local per-file budget.
 - `detail-tests.log`: three focused detail widget/provider files.
 - `e2e-retry.log`: sync lifecycle and Watch Process Now with 600s harness budget.
-- `homesettle-retry.log` and `finalizer-logging-retry.log`: corrected fixtures.
+- `homesettle-retry.log` and `finalizer-logging-retry.log`: corrected fixtures, both passed.
+- `parity-retry.log`: formal callback-parity worker result.
+- `watch-diagnostic.log`: underlying Watch pipeline error capture.
 - `pr-body.md`: draft preserving the required attribution and footer.
 
 A host heartbeat is armed. Inspect ownership/liveness before stopping a runner;
