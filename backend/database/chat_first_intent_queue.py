@@ -5,7 +5,8 @@ Kept out of ``chat_first_intents.py`` so that 1,500-line file does not grow.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, List, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Any, Callable, Iterable, List, TypeVar
 
 from database.durable_queue import ProcessOutcome, drain_isolated, ready_sort_key
 
@@ -17,6 +18,10 @@ def sort_ready_intents(
     *,
     priority_of: Callable[[Any], int],
 ) -> List[Any]:
+    if not callable(priority_of):
+        raise TypeError("priority_of must be callable")
+    if not isinstance(intents, Sequence):
+        raise TypeError("intents must be a sequence")
     return sorted(
         intents,
         key=lambda intent: ready_sort_key(
@@ -32,4 +37,6 @@ def drain_intent_batch(
     items: Iterable[T],
     process_one: Callable[[T], ProcessOutcome],
 ) -> None:
+    if not callable(process_one):
+        raise TypeError("process_one must be callable")
     drain_isolated(items, process_one)
