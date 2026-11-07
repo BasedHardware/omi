@@ -82,6 +82,7 @@ class CellActionItems(WorkflowRepo):
         if document_id is not None and document_id in self._rows():
             if self._rows()[document_id].get('account_generation', 0) != generation:
                 raise TaskRelationshipConflictError('document id belongs to another account generation')
+            self.save(mutation_id, digest, document_id)
             return document_id
         data = prepare_action_item_for_write(draft.data)
         self.validate_task_relationship(

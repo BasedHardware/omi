@@ -13,7 +13,7 @@ from database.cells.adapters import space_store
 from database.cells.adapters.space_store import CellSpaceTx
 from database.cells.store import CellTransaction
 from database.cells.errors import BaseRevisionMismatch
-from database.ports.base import RevisionConflict
+from database.ports.base import MutationConflict, RevisionConflict
 from database.jobstore.connection import configure, dial
 from database.jobstore.migrate import load, migrate
 from database.ports.action_items import ActionItemDraft
@@ -224,3 +224,18 @@ def test_folder_keyset_preserves_legacy_scalar_order(pg):
         if cursor is None:
             break
     assert ids == expected
+
+
+def test_reserved_task_create_records_noop_mutation_without_cache_bump(pg, monkeypatch):
+    sid = pg.space('reserved-receipt')
+    repo = pg.action_items(sid)
+    repo.create(ActionItemDraft(data={'description': 'Original'}), document_id='reserved')
+    bumps = []
+    monkeypatch.setattr(space_store, 'bump_action_items_list_version', bumps.append)
+    draft = ActionItemDraft(data={'description': 'Retry'})
+    assert repo.create(draft, document_id='reserved', mutation_id='occupied') == 'reserved'
+    assert repo.create(draft, document_id='reserved', mutation_id='occupied') == 'reserved'
+    with pytest.raises(MutationConflict):
+        repo.create(ActionItemDraft(data={'description': 'Changed'}), document_id='reserved', mutation_id='occupied')
+    assert repo.get('reserved').description == 'Original'
+    assert bumps == []
