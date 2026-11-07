@@ -75,7 +75,7 @@ def fill_if_active(client: Any, kind: str, hashed_key: str, entries: Sequence[tu
     """Atomically check the marker and write all positive cache entries."""
     keys = [_marker_key(kind, hashed_key), *(key for key, _value in entries)]
     values = [value for _key, value in entries]
-    return client.eval(_FILL_IF_ACTIVE, len(keys), *keys, ttl, *values) == 1
+    return client.eval(_FILL_IF_ACTIVE, len(keys), *keys, ttl, *values) == 1  # nosec B307
 
 
 def read_context(client: Any, kind: str, hashed_key: str) -> ApiKeyCacheReadResult:
