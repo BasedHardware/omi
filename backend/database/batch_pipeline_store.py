@@ -20,6 +20,7 @@ from config.batch_pipeline import contention_retry_enabled, control_candidate_fa
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
@@ -178,7 +179,13 @@ class FirestoreTransaction:
         )
 
     def service_frontier(self, priority: int) -> float:
-        return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
+        # A transactional query locks the top control doc, which workers advance constantly,
+        # so every owner (re)activation conflicted with worker control writes and admission
+        # exhausted its retries (sync uploads 503 sync_batch_unavailable, 2026-11-07). The
+        # frontier only seeds a rejoining owner's credit via max(own, frontier), so a
+        # non-transactional hint is enough. Lever 'admission_frontier_hint' 0 restores the query.
+        transaction = None if lever_enabled('admission_frontier_hint') else self.transaction
+        return service_frontier(self.client, self.namespace, priority, transaction=transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         options = {}

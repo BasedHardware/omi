@@ -60,11 +60,16 @@ KNOWN_LEVERS = frozenset(
         'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
         'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
+        'admission_frontier_hint',  # ship-on: owner activation reads the service frontier outside the txn; 0 restores the txn query
     }
 )
 
 
-DEFAULT_PERCENTAGES = {'batch_metrics_oldest_leader': 100, 'batch_timeliness_leader': 100}
+DEFAULT_PERCENTAGES = {
+    'batch_metrics_oldest_leader': 100,
+    'batch_timeliness_leader': 100,
+    'admission_frontier_hint': 100,
+}
 
 
 @lru_cache(maxsize=4)
