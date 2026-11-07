@@ -52,6 +52,7 @@ def collectors() -> Collectors:
 def event(outcome):
     allowed = {
         'seal_denied',
+        'projection_pending',
         'fast',
         'patient_wait',
         'deadline',

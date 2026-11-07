@@ -14,6 +14,7 @@ from utils.enrichment.admission import run_created_webhook as _run_conversation_
 from utils.conversations import pipeline_attention
 from config import pipeline_attention as pipeline_policy
 from utils.episodes import pipeline_settlement
+from utils.batch_pipeline import record_attention
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
@@ -1126,17 +1127,25 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     accepted_deadline = pipeline_policy.seconds(context.get('pipeline_dispatch_at')) if context is not None else None
     if context is not None and (pipeline_attention.admitted(uid) or accepted_deadline):
         deadline = pipeline_policy.dispatch_at(conversation_data, context)
+        projected = record_attention.projection_state(
+            uid, conversation_id, conversation_data, required=accepted_deadline is not None
+        )
         settled = (
             pipeline_settlement.settle(uid, conversation_id, conversation_data, deadline)
-            if pipeline_attention.serving(uid) or accepted_deadline
+            if projected is True and (pipeline_attention.serving(uid) or accepted_deadline)
             else False
         )
         pipeline_fast, pipeline_due, proof = pipeline_attention.hold_decision(
-            uid, conversation_data, context, settled=settled
+            uid, conversation_data, context, projected=projected, settled=settled
         )
         if pipeline_due is not None:
             context.update(
-                defer_reason='pipeline_seal_pending' if proof is None else 'quiet_wait', defer_until=pipeline_due
+                defer_reason=(
+                    'pipeline_seal_pending'
+                    if pipeline_policy.seal_snapshot(conversation_data) is None
+                    else 'pipeline_projection_pending' if projected is False else 'quiet_wait'
+                ),
+                defer_until=pipeline_due,
             )
             return sync_result('deferred')
         if proof is not None:

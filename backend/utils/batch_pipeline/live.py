@@ -331,6 +331,11 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         phase_shadow.observe('batch_admission', current, False, now=now)
         raise
     phase_shadow.observe('batch_admission', current, True, now=now)
+    pipeline_receipt = (
+        pipeline_policy.mode() == 'serve'
+        and await run_blocking(db_executor, record_attention.attention.serving, uid)
+        and pipeline_policy.seal_snapshot(current, require_content_revision=False) is not None
+    )
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
@@ -474,6 +479,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
+            **({'pipeline_record_barrier': record_barrier} if pipeline_receipt else {}),
             **({'language_receipts': language_receipts} if language_receipts else {}),
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },

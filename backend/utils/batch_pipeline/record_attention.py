@@ -17,6 +17,53 @@ from utils.sync.stage import current_stage
 TTL = 2 * 86400
 
 
+def projection_state(uid, conversation_id, row, *, completed=True, required=False, store=None, firestore_client=None):
+    """True: pinned full projection, False: pending, None: pre-policy intake.
+
+    Existing intake and content-ledger receipts are authority. A per-unit text
+    revision is insufficient while other siblings still owe projection.
+    """
+    content, _ = record_identity(uid, conversation_id)
+    job_id = 'bp_' + content
+    try:
+        store = store or FirestoreStore('batch_pipeline_' + current_stage(), firestore_client=firestore_client)
+
+        def read(tx):
+            intake = tx.get('intakes', job_id) or {}
+            barrier = intake.get('pipeline_record_barrier')
+            if not barrier:
+                return False if required else None
+            proof = policy.seal_snapshot(row, require_content_revision=False)
+            if (
+                proof is None
+                or intake.get('owner_id') != uid
+                or intake.get('conversation_id') != conversation_id
+                or intake.get('content_id') != content
+                or barrier.get('record_lane_owner') != proof['owner']
+                or type(barrier.get('record_upload_revision')) is not int
+                or barrier['record_upload_revision'] != proof['upload_revision']
+                or barrier.get('status') != 'completed'
+                or barrier.get('record_audio_partial')
+            ):
+                return False
+            if not completed:
+                return True
+            revision = row.get('record_projection_revision')
+            if type(revision) is not int or revision < 1:
+                return False
+            ledger = tx.get('content', f'{uid}/{content}') or {}
+            return (
+                ledger.get('status') == 'completed'
+                and ledger.get('job_id') == job_id
+                and ledger.get('dispatch_protocol') == 'batch_v1'
+            )
+
+        return store.run(read)
+    except Exception:
+        attention.unavailable()
+        return False
+
+
 def base():
     return current_stage() + ':pipeline-record:v1:'
 

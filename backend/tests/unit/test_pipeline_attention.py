@@ -21,11 +21,17 @@ def sealed(**updates):
         'record_audio_closed': True,
         'record_upload_revision': 3,
         'sync_content_revision': 7,
+        'record_projection_revision': 1,
         'finished_at': 100,
         'recorded_end': 90,
         'transcript_segments': [{'text': 'Synthetic captured evidence', 'start': 0, 'end': 90}],
         **updates,
     }
+
+
+def decision(*args, **kwargs):
+    kwargs.setdefault('projected', True)
+    return runtime.hold_decision(*args, **kwargs)
 
 
 @pytest.fixture
@@ -61,7 +67,7 @@ def test_every_incomplete_seal_refuses_hold_bypass(serving, updates):
     row = sealed(**updates)
     before = deepcopy(row)
     assert policy.seal_snapshot(row) is None
-    assert runtime.hold_decision('u', row, {}, now=120) == (False, None, None)
+    assert decision('u', row, {}, now=120) == (False, None, None)
     assert row == before
 
 
@@ -69,7 +75,7 @@ def test_remote_owner_gate_runtime_kill_and_invalid_fail_closed(serving, monkeyp
     assert runtime.serving('u') and not runtime.serving('other')
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'invalid')
     assert not runtime.serving('u')
-    assert runtime.hold_decision('u', sealed(), {}, now=120) == (False, None, None)
+    assert decision('u', sealed(), {}, now=120) == (False, None, None)
     assert not policy.close_on_seal_enabled() and not policy.skip_silence_enabled()
 
 
@@ -86,22 +92,22 @@ def test_generic_app_open_promotes_but_cannot_sustain_watch(serving):
     assert runtime.attention('u', now=101) == 'unwatched'
     assert runtime.begin_promotion('u', trigger='app_open', now=100)
     assert not runtime.begin_promotion('u', trigger='api_read', now=101)
-    assert runtime.hold_decision('u', sealed(), {}, now=101)[0]
+    assert decision('u', sealed(), {}, now=101)[0]
 
 
 def test_mcp_promotion_does_not_require_a_mobile_presence_lease(serving):
     assert runtime.attention('u', now=100) == 'unknown'
     assert runtime.begin_promotion('u', trigger='mcp_read', now=100)
-    assert runtime.hold_decision('u', sealed(), {}, now=101)[0]
+    assert decision('u', sealed(), {}, now=101)[0]
 
 
 def test_unknown_presence_keeps_legacy_policy_without_explicit_demand(serving):
-    assert runtime.hold_decision('u', sealed(), {}, now=100) == (False, None, None)
+    assert decision('u', sealed(), {}, now=100) == (False, None, None)
 
 
 def test_accepted_deadline_dispatch_does_not_need_redis(serving, monkeypatch):
     monkeypatch.setattr(runtime, 'attention', lambda *_a, **_k: pytest.fail('deadline must be durable'))
-    assert runtime.hold_decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1770)[0]
+    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1770)[0]
 
 
 def test_patient_wait_and_absolute_deadline_cannot_slide(serving):
@@ -109,21 +115,21 @@ def test_patient_wait_and_absolute_deadline_cannot_slide(serving):
     obligation = {'pipeline_dispatch_at': 1770}
     runtime.observe_surface('u', 'background', {'foreground': False}, now=1700)
     assert policy.dispatch_at(sealed(recorded_end=1000), obligation) == 1770
-    assert runtime.hold_decision('u', row, obligation, now=1700) == (False, 1760, policy.seal_snapshot(row))
-    assert runtime.hold_decision('u', row, obligation, now=1770)[0]
+    assert decision('u', row, obligation, now=1700) == (False, 1760, policy.seal_snapshot(row))
+    assert decision('u', row, obligation, now=1770)[0]
     assert policy.dispatch_at(sealed(recorded_end=None), {}) is None
 
 
 def test_shadow_does_not_change_due_times_or_paid_work(serving, monkeypatch):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'shadow')
-    assert runtime.hold_decision('u', sealed(), {}, now=2000) == (False, None, None)
+    assert decision('u', sealed(), {}, now=2000) == (False, None, None)
 
 
 def test_accepted_patient_obligation_drains_after_kill(serving, monkeypatch):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
     obligation = {'pipeline_dispatch_at': 1770}
-    assert runtime.hold_decision('u', sealed(), obligation, now=1770)[0]
-    assert not runtime.hold_decision('u', sealed(), {}, now=1770)[0]
+    assert decision('u', sealed(), obligation, now=1770)[0]
+    assert not decision('u', sealed(), {}, now=1770)[0]
 
 
 def test_late_producer_fences_the_real_persistence_predicate(serving):
@@ -211,7 +217,7 @@ def test_non_clock_objects_cannot_mint_an_accepted_deadline(serving):
 
     value = Floatable()
     assert policy.seconds(value) is None
-    assert runtime.hold_decision('other', sealed(), {'pipeline_dispatch_at': value}, now=2000) == (False, None, None)
+    assert decision('other', sealed(), {'pipeline_dispatch_at': value}, now=2000) == (False, None, None)
 
 
 def test_naive_clock_is_utc_and_missing_seal_proof_cannot_compare_equal():
@@ -226,7 +232,7 @@ def test_naive_clock_is_utc_and_missing_seal_proof_cannot_compare_equal():
 def test_accepted_deadline_survives_partial_flag_kill(serving, monkeypatch, mode):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
     monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'false')
-    assert runtime.hold_decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=100) == (
+    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=100) == (
         False,
         1770,
         policy.seal_snapshot(sealed()),
@@ -261,7 +267,7 @@ def test_episode_deadline_conflict_keeps_existing_hold_path(serving, monkeypatch
 def test_accepted_patient_policy_survives_expired_presence(serving, monkeypatch):
     monkeypatch.setattr(runtime, 'attention', lambda *_a, **_k: 'unknown')
     monkeypatch.setattr(runtime, 'promoted', lambda *_a, **_k: False)
-    assert runtime.hold_decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1000) == (
+    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1000) == (
         False,
         1060,
         policy.seal_snapshot(sealed()),
@@ -269,8 +275,78 @@ def test_accepted_patient_policy_survives_expired_presence(serving, monkeypatch)
 
 
 def test_deadline_never_authorizes_an_unresolved_producer(serving):
-    assert runtime.hold_decision('u', sealed(record_audio_closed=False), {'pipeline_dispatch_at': 1770}, now=1770) == (
+    assert decision('u', sealed(record_audio_closed=False), {'pipeline_dispatch_at': 1770}, now=1770) == (
         False,
         1830,
         None,
     )
+
+
+@pytest.mark.parametrize('projected', [False, None])
+def test_new_policy_deadline_cannot_bypass_unfinished_projection(serving, projected):
+    runtime.begin_promotion('u', trigger='api_read', now=1770)
+    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, projected=projected, now=1770) == (False, 1830, None)
+
+
+def test_pre_policy_intake_keeps_legacy_timing(serving):
+    runtime.begin_promotion('u', trigger='api_read', now=100)
+    assert decision('u', sealed(), {}, projected=None, now=101) == (False, None, None)
+
+
+def test_all_sibling_projection_ledger_and_pinned_upload_are_required():
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_attention
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+    store = MemoryStore()
+    content, _ = record_identity('u', 'c')
+    job = 'bp_' + content
+    row = sealed()
+    assert record_attention.projection_state('u', 'c', row, store=store) is None
+    assert record_attention.projection_state('u', 'c', row, store=store, required=True) is False
+    intake = {
+        'owner_id': 'u',
+        'conversation_id': 'c',
+        'content_id': content,
+        'pipeline_record_barrier': {
+            'record_lane_owner': 'batch_live_v1',
+            'status': 'completed',
+            'record_upload_revision': 3,
+            'finished_at': 100,
+        },
+    }
+    store.rows[('intakes', job)] = intake
+    assert record_attention.projection_state('u', 'c', row, store=store, completed=False) is True
+    ledger = {'status': 'processing', 'job_id': job, 'dispatch_protocol': 'batch_v1'}
+    store.rows[('content', 'u/' + content)] = ledger
+    assert record_attention.projection_state('u', 'c', row, store=store) is False
+    ledger['status'] = 'completed'
+    assert record_attention.projection_state('u', 'c', row, store=store) is True
+    # Projection may extend finished_at; original upload revision stays immutable.
+    assert record_attention.projection_state('u', 'c', sealed(finished_at=110), store=store) is True
+    for changes in ({'record_upload_revision': 4}, {'record_projection_revision': 0}, {'record_audio_closed': False}):
+        assert record_attention.projection_state('u', 'c', sealed(**changes), store=store) is False
+    ledger['job_id'] = 'other'
+    assert record_attention.projection_state('u', 'c', row, store=store) is False
+    intake['owner_id'] = 'other'
+    assert record_attention.projection_state('u', 'c', row, store=store, completed=False) is False
+
+
+def test_deadline_preserves_unresolved_f_join_boundary(serving, monkeypatch):
+    episode = {'id': 'e', 'status': 'live', 'pending_boundary': {'c': {'decision': 'pending'}}}
+    monkeypatch.setattr(pipeline_settlement.episodes, 'get_episode_for_conversation', lambda *_: episode)
+    monkeypatch.setattr(
+        pipeline_settlement.service, 'close_pipeline_snapshot', lambda *a, **k: pytest.fail('F owns this')
+    )
+    assert not pipeline_settlement.settle('u', 'c', sealed(), 1770, now=1770)
+    assert episode['pending_boundary'] == {'c': {'decision': 'pending'}}
+
+
+def test_fast_compose_requires_current_notes_receipt(serving):
+    runtime.begin_promotion('u', trigger='api_read', now=100)
+    row = sealed()
+    assert not runtime.fast_members('u', [row])
+    row[policy.FIELD] = {'notes_fingerprint': runtime.notes_fingerprint(row)}
+    assert runtime.fast_members('u', [row])
+    row['sync_content_revision'] += 1
+    assert not runtime.fast_members('u', [row])

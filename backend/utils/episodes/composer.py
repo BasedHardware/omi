@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 from utils.conversations import phase_shadow
 from utils.conversations import pipeline_attention
+from utils.batch_pipeline import record_attention
 from config.pipeline_attention import seconds as pipeline_seconds
 
 from config.episodes import (
@@ -607,6 +608,11 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
         return 'live'
     state, members = _members(uid, episode, c)
     if state == 'waiting':
+        return 'waiting'
+    if pipeline_seconds(episode.get('pipeline_dispatch_at')) is not None and any(
+        record_attention.projection_state(uid, str(row['id']), row, firestore_client=c.firestore_client) is False
+        for row in members
+    ):
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
     if not members or not any(_segments(row) for row in members):

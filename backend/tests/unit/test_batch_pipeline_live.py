@@ -660,16 +660,19 @@ def test_reference_scope_and_generation_are_fail_closed(change):
         )
 
 
+@pytest.mark.parametrize('pipeline_mode', ['off', 'serve'])
 @pytest.mark.parametrize('server_only', [False, True])
 @pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
 @pytest.mark.parametrize('language', ['en', 'multi', 'ca'])
 async def test_native_admission_stages_references_and_drains_after_rollback(
-    monkeypatch, server_only, barrier_change, language
+    monkeypatch, server_only, barrier_change, language, pipeline_mode
 ):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
 
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', pipeline_mode)
+    monkeypatch.setattr(live.record_attention.attention, 'serving', lambda _: pipeline_mode == 'serve')
     unit_reads = []
     original_run_blocking = live.run_blocking
 
@@ -797,6 +800,11 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     result = await live.admit_recording(store, pending, now=1, provider_outbox_factory=lambda: outbox)
     assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
+    intake = store.rows['intakes', 'bp_' + content]
+    if pipeline_mode == 'serve':
+        assert intake['pipeline_record_barrier']['record_upload_revision'] == current['record_upload_revision']
+    else:
+        assert 'pipeline_record_barrier' not in intake
     job = store.rows['jobs', segment]
     assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')
     if language == 'ca':

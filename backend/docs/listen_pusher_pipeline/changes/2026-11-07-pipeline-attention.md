@@ -139,3 +139,19 @@ Final test commands and receipts are recorded in the PR. Credentialed emulator
 contention, full provider-to-pushed-Home acceptance, rendered/device backfill,
 phone/pendant power and production reserve/ramp checks are not claimed by local
 unit results. Deployment belongs only to the Infra Rollout Coordinator.
+
+
+### Projection and F-join settlement fences
+
+A per-unit content revision does not prove that sibling units have finished.
+New serve-cohort native intakes pin `pipeline_record_barrier` in the existing
+atomic admission. Accelerated notes and deadline compose require that upload
+revision plus the existing content ledger's matching `batch_v1` job completion
+and a committed record projection revision. Untagged older intakes retain legacy
+timing; no backfill or index is introduced. Registration uses the existing intake
+lookup; accelerated admission reads the intake and content ledger transactionally.
+The projection owner's all-sibling completion proof remains authoritative.
+
+Forced settlement refuses any pending F-join boundary in the planned episode,
+a fresh service read, and the closing transaction. Only canonical F reconciliation
+may consume that boundary; deadline pressure never clears a pending split decision.

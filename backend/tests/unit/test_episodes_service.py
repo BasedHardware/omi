@@ -793,7 +793,7 @@ def test_an_ended_conversation_never_reopens_its_episode_and_the_next_words_open
     assert episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)['id'] == first['id']
 
 
-@pytest.mark.parametrize('race', ['producer', 'membership', 'activity', 'none'])
+@pytest.mark.parametrize('race', ['producer', 'membership', 'activity', 'pending_boundary', 'none'])
 def test_pipeline_close_rechecks_member_seal_and_snapshot_in_strict_transaction(race):
     from config.pipeline_attention import seal_snapshot
     from tests.unit.test_pipeline_attention import sealed
@@ -811,6 +811,8 @@ def test_pipeline_close_rechecks_member_seal_and_snapshot_in_strict_transaction(
         store.rows[('users', UID, 'episodes', episode['id'])]['last_activity_at'] += timedelta(seconds=1)
     if race == 'membership':
         store.rows[('users', UID, 'episodes', episode['id'])]['conversation_ids'].append('late')
+    if race == 'pending_boundary':
+        store.rows[('users', UID, 'episodes', episode['id'])]['pending_boundary'] = {'c1': {'pending': True}}
     kwargs = dict(
         closed_at=T0 + timedelta(seconds=1680),
         expected_conversation_ids=['c1'],
@@ -2308,3 +2310,9 @@ def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
     wires = home_read.project_episodes(UID, [first], firestore_client=store)
     assert wires[0]['status'] == 'closed'
     assert scheduled == [(UID, first['id'])]
+
+
+def test_pipeline_service_refuses_planned_f_boundary(monkeypatch):
+    monkeypatch.setattr(service, '_close', lambda *a, **k: pytest.fail('F reconciliation owns boundary'))
+    episode = {'pending_boundary': {'c1': {'pending': True}}}
+    assert service.close_pipeline_snapshot(UID, episode, 1680, {}, now=1680) is None

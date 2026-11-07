@@ -602,6 +602,7 @@ def test_promotion_does_not_persist_a_permanent_immediate_tier(state, monkeypatc
         }
     )
     monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', read)
+    monkeypatch.setattr(outbox.record_attention, 'projection_state', lambda *a, **k: True)
     promoted = outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101)
     assert promoted and 'immediate' not in promoted
     assert 'transcript_segments' not in read.call_args.kwargs['field_paths']
@@ -657,3 +658,17 @@ def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monk
         assert result.outcome == 'deferred'
     assert rows[key]['pipeline_dispatch_at'] == 1780
     assert rows[key]['due_at'] == 1840 and rows[key]['lease_until'] == 0
+
+
+def test_promotion_keeps_due_time_while_projection_siblings_are_pending(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    before = dict(rows[outbox.key('u', 'c')])
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed())
+    monkeypatch.setattr(outbox.record_attention, 'projection_state', lambda *a, **k: False)
+    assert outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101) is None
+    assert rows[outbox.key('u', 'c')] == before

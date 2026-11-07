@@ -1240,3 +1240,14 @@ def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, c
     store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
     assert len(calls) == 2
+
+
+def test_accepted_deadline_waits_for_all_projection_siblings_before_paid_compose(store, monkeypatch):
+    store.episode['pipeline_dispatch_at'] = T0.timestamp() + 1680
+    calls = []
+    monkeypatch.setattr(composer.record_attention, 'projection_state', lambda *a, **k: False)
+    assert composer.compose(UID, 'ep1', _c(calls=calls)) == 'waiting'
+    assert calls == []
+    monkeypatch.setattr(composer.record_attention, 'projection_state', lambda *a, **k: True)
+    assert composer.compose(UID, 'ep1', _c(calls=calls)) == 'composed'
+    assert len(calls) == 1

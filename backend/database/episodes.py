@@ -766,6 +766,8 @@ def _close(
     current_id = _link_target(client, uid, CURRENT, transaction)
     if not raw or raw.get('status') != 'live':
         return None
+    if pipeline_seals is not None and raw.get('pending_boundary'):
+        return None  # Only canonical F-join reconciliation may consume this decision.
     if expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
         return None  # Speech won the race with a lazy reader's stale idle decision.
     if expected_conversation_ids is not None and set(raw.get('conversation_ids') or []) != set(

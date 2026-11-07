@@ -30,6 +30,7 @@ from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
 from utils.conversations import pipeline_attention
+from utils.batch_pipeline import record_attention
 from config import pipeline_attention as pipeline_policy
 from database import conversations as conversations_db
 from config import enrichment as enrichment_config
@@ -543,12 +544,32 @@ def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
             uid,
             conversation_id,
             firestore_client=firestore_client,
-            field_paths=['recorded_end', 'record_lane_owner'],
+            field_paths=[
+                'recorded_end',
+                'record_lane_owner',
+                'status',
+                'finished_at',
+                'record_audio_closed',
+                'record_audio_partial',
+                'record_upload_failed',
+                'record_upload_sessions',
+                'deleted',
+                'discarded',
+                'record_upload_revision',
+            ],
         )
+        # Pin new policy debt only to the original native intake receipt.
+        if (
+            row
+            and record_attention.projection_state(
+                uid, conversation_id, row, completed=False, firestore_client=firestore_client
+            )
+            is True
+        ):
+            return row
     except Exception:
         pipeline_attention.unavailable()
-        return None  # Retain the original durable obligation with legacy timing.
-    return row if row and row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'} else None
+    return None  # Retain the original durable obligation with legacy timing.
 
 
 def promote_pipeline(uid, document_id, *, now):
@@ -581,9 +602,14 @@ def promote_pipeline(uid, document_id, *, now):
                 'discarded',
                 'record_upload_revision',
                 'sync_content_revision',
+                'record_projection_revision',
             ],
         )
-        if not source or pipeline_policy.seal_snapshot(source) is None:
+        if (
+            not source
+            or pipeline_policy.seal_snapshot(source) is None
+            or record_attention.projection_state(uid, old['conversation_id'], source) is not True
+        ):
             return old, None
         row = dict(old, due_at=now, task_due_at=now, task_token=uuid.uuid4().hex)
         row.pop('immediate', None)

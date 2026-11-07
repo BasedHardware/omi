@@ -393,7 +393,9 @@ def _close(
     if not synced_f:
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
     if pipeline_snapshot and (
-        episode.get('state_version') != snapshot_version or episode.get('conversation_ids') != snapshot_ids
+        episode.get('pending_boundary')
+        or episode.get('state_version') != snapshot_version
+        or episode.get('conversation_ids') != snapshot_ids
     ):
         return None
     items = provisional_items(episode)
@@ -477,6 +479,8 @@ def _close(
 
 def close_pipeline_snapshot(uid, episode, deadline, proofs, *, now):
     """Only the caller's fully sealed bounded member snapshot may close early."""
+    if episode.get('pending_boundary'):
+        return None
     return _close(
         uid,
         episode,

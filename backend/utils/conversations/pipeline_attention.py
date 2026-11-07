@@ -104,7 +104,7 @@ def begin_promotion(uid, *, trigger, now=None, redis=None) -> bool:
     return bool(r.set(key(uid) + ':promoted', trigger, ex=policy.LEASE_SECONDS, nx=True))
 
 
-def hold_decision(uid, row, obligation, *, settled=False, now=None):
+def hold_decision(uid, row, obligation, *, projected: bool | None, settled=False, now=None):
     """Return (bypass, due, proof); refused proof preserves legacy admission."""
     now = time.time() if now is None else now
     accepted = policy.seconds(obligation.get('pipeline_dispatch_at'))
@@ -117,6 +117,11 @@ def hold_decision(uid, row, obligation, *, settled=False, now=None):
     if policy.mode() == 'shadow' and not accepted:
         metrics.event('shadow')
         return False, None, None
+    if projected is not True:
+        if projected is None and not accepted:
+            return False, None, None  # Untagged old intakes retain their legacy policy.
+        metrics.event('projection_pending')
+        return False, now + 60, None
     if accepted and now >= accepted:
         return True, None, proof  # Durable accepted work must survive Redis loss/kill.
     if accepted and (policy.mode() != 'serve' or not policy.seal_fast_enabled() or not admitted(uid)):
@@ -141,6 +146,9 @@ def fast_members(uid, members):
         and policy.seal_fast_enabled()
         and bool(members)
         and all(policy.seal_snapshot(member) is not None for member in members)
+        and all(
+            (member.get(policy.FIELD) or {}).get('notes_fingerprint') == notes_fingerprint(member) for member in members
+        )
         and (attention(uid) == 'watched' or promoted(uid))
     )
 

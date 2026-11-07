@@ -17,6 +17,8 @@ def settle(uid, conversation_id, row, deadline, *, now=None):
         return False  # A quiet conversation alone does not prove episode settlement.
     saved = policy.seconds(episode.get('pipeline_dispatch_at'))
     deadline = min(at for at in (saved, deadline) if at is not None) if saved or deadline else None
+    if episode.get('pending_boundary'):
+        return False  # Only the canonical F-join path may settle this decision.
     if episode.get('status') != 'live':
         return True
     if deadline and saved != deadline:
