@@ -78,7 +78,6 @@ final episodeScenarios = <AuditScenario>[
         ..debugSetLive(null)
         ..debugSetHomeEpisodes([closed]);
       addTearDown(history.dispose);
-      addTearDown(episodes.dispose);
       await a.pump(const HomeFrame(), scaffold: false, providers: [
         ChangeNotifierProvider<ConversationProvider>.value(value: history),
         ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
@@ -97,6 +96,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.byKey(const Key('home_processing_row')), findsNothing);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       await a.shot('Processing finished; same slot becomes the episode row', step: 'complete');
+      // Unmount before disposing: a processing hold re-reads on a timer that must not outlive the page.
+      await a.tester.pumpWidget(const SizedBox.shrink());
+      episodes.dispose();
     },
   ),
   AuditScenario(
