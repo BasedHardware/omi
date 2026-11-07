@@ -800,7 +800,15 @@ class CaptureController extends ChangeNotifier
   /// id). Downstream semantic controls must use that fresh identity, not this
   /// getter, as the authoritative live capture session.
   @override
-  String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
+  String? get activeCaptureSessionId => _sessionStartSeconds == 0
+      ? null
+      : _nextConversationWindows == 0
+          ? 'live-$_sessionStartSeconds'
+          : 'live-$_sessionStartSeconds-$_nextConversationWindows';
+
+  /// How many windows [_startNextConversationWindow] has opened. It tells apart conversations whose
+  /// windows open in the same second.
+  int _nextConversationWindows = 0;
 
   /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting
   /// conversation so the pipeline can be joined without timing heuristics.
@@ -950,24 +958,25 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Preserved session start for auto-sync after socket-driven conversation completion.
-  /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
-  int _pendingAutoSyncSessionStart = 0;
+  /// Conversations the server started processing, by id, until their ConversationEvent arrives. Each
+  /// keeps the session start it was stamped from (set before _resetStateVariables() clears
+  /// _sessionStartSeconds), whether that session crossed a socket interruption (a later transcript
+  /// proves the repaired socket worked, but not that audio from before the reconnect arrived, so its WAL
+  /// must still drain), and a fallback that syncs its WALs if the event doesn't arrive within 30 s. The
+  /// next conversation can close before an event arrives, so an event only finishes its own close.
+  final Map<String, ({int sessionStart, bool needsRepair, Timer fallback})> _pendingCloses = {};
 
-  /// Fallback timer that fires if ConversationEvent doesn't arrive within 30s.
-  Timer? _autoSyncFallbackTimer;
-
-  /// The conversation ID from ConversationProcessingStartedEvent, kept for fallback sync.
-  String? _pendingAutoSyncConversationId;
-
-  /// True when the just-finished session crossed a socket interruption. A
-  /// later transcript proves the repaired socket worked, but not that audio
-  /// from before the reconnect arrived, so its WAL must still drain.
-  bool _pendingAutoSyncNeedsRepair = false;
-
-  /// Future tracking the in-progress _finalizeAndStampSession(), so the next
-  /// coordinated transfer wake cannot run before the durable stamp is ready.
+  /// Every close's stamp so far, chained in close order, so the next coordinated transfer wake cannot
+  /// run before the durable stamp is ready. The WALs at a close include an earlier conversation's that
+  /// are still unstamped, under the same recording id, so an earlier close must stamp its own first.
+  /// A wait on this covers the waiter's own close, and every close before it. It is never cleared: a
+  /// close during a wait chains onto it, and clearing it would let that close's waiters skip its stamp.
   Future<void>? _pendingFinalizeAndStamp;
+  Future<void> _transcriptConfirmation = Future<void>.value();
+
+  /// Completes after confirmation has persisted the resulting WAL inventory.
+  @visibleForTesting
+  Future<void> get transcriptConfirmationForTesting => _transcriptConfirmation;
 
   /// When each live segment of the open conversation last arrived, in phone seconds. The saved
   /// transcript counts from the server's start, so these anchor it to the phone's own clock.
@@ -1420,6 +1429,32 @@ class CaptureController extends ChangeNotifier
     _sessionStartSeconds = 0;
     _endOfflineSession();
     notifyListeners();
+  }
+
+  /// Drains a closing conversation's tail, on both closing paths. The drain runs before finalize's first
+  /// await, so the WALs that exist right after it hold everything recorded up to the close; they fence
+  /// the conversation's stamp. [closedAt] then opens the next conversation's window, once the caller
+  /// has reset the session.
+  ({Future<void> drained, Set<Wal>? walsAtClose, int closedAt}) _drainClosingConversation() {
+    final phoneSync = _wal.getSyncs().phone;
+    final drained = phoneSync.finalizeCurrentSession();
+    final walsAtClose = phoneSync is LocalWalSyncImpl ? phoneSync.walsNow() : null;
+    return (drained: drained, walsAtClose: walsAtClose, closedAt: _nowSeconds);
+  }
+
+  /// Whether capture goes on into the next conversation when one closes: the socket outlives the close,
+  /// and a paused or interrupted capture resumes on it. A stopped or failed one sends nothing more.
+  bool get _captureOutlivesClose =>
+      _socket != null && recordingState != RecordingState.stop && recordingState != RecordingState.error;
+
+  /// The socket outlives a conversation that closes, on silence or with Process now, and the session
+  /// start is set only when a socket opens. Restart the window at the close, so the next conversation's
+  /// audio is stamped and confirmed like the first one's instead of staying unstamped and being
+  /// uploaded again later.
+  void _startNextConversationWindow(int startSeconds) {
+    if (!_captureOutlivesClose) return;
+    _sessionStartSeconds = startSeconds;
+    _nextConversationWindows++;
   }
 
   void _endOfflineSession() {
@@ -2933,6 +2968,10 @@ class CaptureController extends ChangeNotifier
     _liveRecovery.kickTimer?.cancel();
     _continuityTimer?.cancel();
     _continuityTimer = null;
+    for (final close in _pendingCloses.values) {
+      close.fallback.cancel();
+    }
+    _pendingCloses.clear();
     unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();
@@ -3971,33 +4010,47 @@ class CaptureController extends ChangeNotifier
       // a real processing row, so timeout/retry apply to the confirmed id.
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
-      _pendingAutoSyncSessionStart = _sessionStartSeconds;
-      _pendingAutoSyncConversationId = event.memory.id;
-      _pendingAutoSyncNeedsRepair = _sessionTransportInterrupted;
+      final conversationId = event.memory.id;
+      final sessionStart = _sessionStartSeconds;
+      final needsRepair = _sessionTransportInterrupted;
       _sessionTransportInterrupted = false;
 
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
       // Store the future so the coordinated transfer wake waits for the stamp.
-      _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
+      final close = _drainClosingConversation();
+      _pendingFinalizeAndStamp = _finalizeAndStampSession(
+        close.drained,
+        sessionStart,
+        conversationId,
+        close.walsAtClose,
+        after: _pendingFinalizeAndStamp,
+        keepLocation: _captureOutlivesClose,
+      );
 
       _resetStateVariables();
+      _startNextConversationWindow(close.closedAt);
 
       // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
-      _autoSyncFallbackTimer?.cancel();
-      _autoSyncFallbackTimer = _scheduling.once(const Duration(seconds: 30), () {
-        if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
-          final sessionStart = _pendingAutoSyncSessionStart;
-          final convId = _pendingAutoSyncConversationId!;
-          final needsRepair = _pendingAutoSyncNeedsRepair;
-          _pendingAutoSyncSessionStart = 0;
-          _pendingAutoSyncConversationId = null;
-          _pendingAutoSyncNeedsRepair = false;
-          Logger.debug(
-            'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)',
-          );
-          unawaited(_confirmSessionWalsRetained(sessionStart, convId, failClosedReason: 'missing_conversation_event'));
-        }
-      });
+      _pendingCloses.remove(conversationId)?.fallback.cancel();
+      if (sessionStart > 0) {
+        _pendingCloses[conversationId] = (
+          sessionStart: sessionStart,
+          needsRepair: needsRepair,
+          fallback: _scheduling.once(const Duration(seconds: 30), () {
+            if (_pendingCloses.remove(conversationId) == null) return;
+            Logger.debug(
+              'Auto-sync fallback timer fired — syncing WALs to conversation $conversationId (needsRepair=$needsRepair)',
+            );
+            unawaited(
+              _confirmSessionWalsRetained(
+                sessionStart,
+                conversationId,
+                failClosedReason: 'missing_conversation_event',
+              ),
+            );
+          }),
+        );
+      }
       return;
     }
 
@@ -4014,15 +4067,19 @@ class CaptureController extends ChangeNotifier
       } catch (_) {}
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
-      _autoSyncFallbackTimer?.cancel();
-      if (_pendingAutoSyncSessionStart > 0) {
-        final sessionStart = _pendingAutoSyncSessionStart;
-        final needsRepair = _pendingAutoSyncNeedsRepair;
-        _pendingAutoSyncSessionStart = 0;
-        _pendingAutoSyncConversationId = null;
-        _pendingAutoSyncNeedsRepair = false;
+      final pending = _pendingCloses.remove(event.memory.id);
+      if (pending != null) {
+        pending.fallback.cancel();
+        final sessionStart = pending.sessionStart;
+        final needsRepair = pending.needsRepair;
         Logger.debug('Conversation ${event.memory.id} closed — confirming WAL retention (needsRepair=$needsRepair)');
-        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals, needsRepair: needsRepair));
+        _transcriptConfirmation = _confirmSessionTranscript(
+          sessionStart,
+          event.memory,
+          segmentArrivals,
+          needsRepair: needsRepair,
+        );
+        unawaited(_transcriptConfirmation);
       }
       return;
     }
@@ -4146,7 +4203,8 @@ class CaptureController extends ChangeNotifier
     _finalizeGate.markFinalized();
     externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
 
-    await phoneSync.finalizeCurrentSession();
+    final close = _drainClosingConversation();
+    await close.drained;
     if (lifetime.isClosed ||
         recordingSessionId != activeRecordingId ||
         conversationRevision != _systemSurfaceConversationRevision) {
@@ -4158,9 +4216,11 @@ class CaptureController extends ChangeNotifier
       }
       return;
     }
-    _clearSessionLocation();
+    // The location snapshot belongs to the recording, so capture that goes on keeps it.
+    if (!_captureOutlivesClose) _clearSessionLocation();
 
     _resetStateVariables();
+    _startNextConversationWindow(close.closedAt);
     final confirmedProcessing = _firstCaptureProcess;
     final Future<InProgressProcessOutcome> request;
     if (_processInProgressOutcomeOverride != null) {
@@ -4177,7 +4237,10 @@ class CaptureController extends ChangeNotifier
       _lastProcessRequest = request.then((outcome) => outcome.response);
     }
     _processInFlight = request.then((_) {}, onError: (_) {});
-    request.then<void>((outcome) async {
+    // This close takes its place among the stamps now. Its stamp goes once the response names the
+    // conversation and the earlier closes have stamped theirs.
+    final earlierStamps = _pendingFinalizeAndStamp;
+    final stamped = request.then<void>((outcome) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
         result: outcome.response,
         absence: outcome.absence,
@@ -4186,20 +4249,29 @@ class CaptureController extends ChangeNotifier
         onNoConversation: _onProcessProducedNoConversation,
         removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
       );
+      await earlierStamps;
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
+          phoneSync.prepareConversationStamp(recordingSessionId, walsAtClose: close.walsAtClose);
         }
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
-    }).catchError((Object error, StackTrace stack) => OptimisticProcessingPlaceholder.handleFailure(
-          actions: externalActions,
-          removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
-          error: error,
-          stack: stack,
-          report: (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace),
-        ));
+    }).catchError((Object error, StackTrace stack) async {
+      await OptimisticProcessingPlaceholder.handleFailure(
+        actions: externalActions,
+        removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
+        error: error,
+        stack: stack,
+        report: (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace),
+      );
+      await earlierStamps;
+    });
+    // A failed request or stamp stamps nothing, and the closes after it still wait for the earlier ones.
+    _pendingFinalizeAndStamp = stamped.then((_) {}, onError: (Object e) async {
+      Logger.debug('Process now stamp error: $e');
+      await earlierStamps;
+    });
   }
 
   Future<void> _reportDetachedCaptureError(String operation, Object error, StackTrace stack) =>
@@ -4216,7 +4288,19 @@ class CaptureController extends ChangeNotifier
     phone.setActiveRecordingSessionId(activeRecordingId);
   }
 
-  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
+  /// [drained] is the finalize that drained the closing conversation's tail. [walsAtClose], the WALs
+  /// that existed right after that drain, fences the stamp to the audio recorded before the close. The
+  /// stamp goes [after] the earlier closes' stamps, and the returned future never completes before them.
+  /// The location snapshot belongs to the recording: [keepLocation] keeps it when capture goes on into
+  /// the next conversation.
+  Future<void> _finalizeAndStampSession(
+    Future<void> drained,
+    int sessionStartSeconds,
+    String conversationId,
+    Set<Wal>? walsAtClose, {
+    Future<void>? after,
+    required bool keepLocation,
+  }) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
     // Capture before the flush. A device update can roll the session while
@@ -4226,18 +4310,21 @@ class CaptureController extends ChangeNotifier
     try {
       final phoneSync = _wal.getSyncs().phone;
       final walGeneration = phoneSync is LocalWalSync ? phoneSync.sessionGeneration : null;
-      await phoneSync.finalizeCurrentSession();
+      // Waits for both even when the drain fails, so no later close stamps before an earlier one.
+      await Future.wait([drained, if (after != null) after]);
       if (sessionStartSeconds > 0 &&
           (walGeneration == null || (phoneSync is LocalWalSync && phoneSync.sessionGeneration == walGeneration))) {
         if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
+          phoneSync.prepareConversationStamp(recordingSessionId, walsAtClose: walsAtClose);
         }
         await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
       }
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');
     } finally {
-      if (_captureSessionIsCurrent(ownerToken) && locationGeneration == _sessionGeolocationGeneration) {
+      if (!keepLocation &&
+          _captureSessionIsCurrent(ownerToken) &&
+          locationGeneration == _sessionGeolocationGeneration) {
         _clearSessionLocation();
       }
     }
@@ -4306,10 +4393,8 @@ class CaptureController extends ChangeNotifier
     final token = _sessionOwner?.token;
     final phone = _wal.getSyncs().phone;
     final walGeneration = phone is LocalWalSync ? phone.sessionGeneration : null;
-    final pending = _pendingFinalizeAndStamp;
-    if (pending != null) {
-      await pending;
-      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
+    if (_pendingFinalizeAndStamp != null) {
+      await _pendingFinalizeAndStamp;
     }
     bool stillCurrent() =>
         _captureSessionIsCurrent(token) &&
@@ -4340,10 +4425,8 @@ class CaptureController extends ChangeNotifier
   Future<void> _autoSyncSessionWals({WakeTrigger trigger = WakeTrigger.cooldownElapsed}) async {
     final token = _sessionOwner?.token;
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
-    final pending = _pendingFinalizeAndStamp;
-    if (pending != null) {
-      await pending;
-      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
+    if (_pendingFinalizeAndStamp != null) {
+      await _pendingFinalizeAndStamp;
     }
     if (!_captureSessionIsCurrent(token)) return;
     final owner = _sessionOwner;

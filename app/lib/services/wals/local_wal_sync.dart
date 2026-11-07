@@ -153,6 +153,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   int? _sessionGeolocationSetAt;
   String? _activeRecordingSessionId;
   String? _conversationStampRecordingId;
+  Set<Wal>? _conversationStampWalsAtClose;
 
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
@@ -161,10 +162,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   /// Recording id captured before a flush. [stampConversationId] keeps its
   /// original signature so session spies do not have to learn a new argument.
-  void prepareConversationStamp(String? recordingSessionId) {
+  ///
+  /// [walsAtClose] are the WALs that existed when the conversation closed, taken
+  /// with [walsNow] right after the close's drain. A recording can go on into
+  /// the next conversation, so the stamp leaves any WAL created after the close
+  /// for that one.
+  void prepareConversationStamp(String? recordingSessionId, {Set<Wal>? walsAtClose}) {
     final trimmed = recordingSessionId?.trim();
     _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    _conversationStampWalsAtClose = walsAtClose;
   }
+
+  /// The WALs that exist now, by identity, since two tails drained in the same second share an id. Read
+  /// right after [finalizeCurrentSession] is called for a closing conversation, whose drain runs before
+  /// its first await, they hold everything recorded up to the close, the tail included.
+  Set<Wal> walsNow() => Set<Wal>.identity()..addAll(_wals);
 
   bool _isCancelled = false;
 
@@ -1715,12 +1727,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
+    final walsAtClose = _conversationStampWalsAtClose;
+    _conversationStampWalsAtClose = null;
     for (final wal in _wals) {
       // Transport-only synced copies (socket sends, never server-confirmed)
       // must bind to the conversation so confirmSessionTranscription can judge
       // them: covered → synced retention, uncovered → repair upload.
       final transportSynced = wal.status == WalStatus.synced && wal.syncedAt == 0;
       if ((wal.status != WalStatus.miss && !transportSynced) || wal.conversationId != null) continue;
+      if (walsAtClose != null && !walsAtClose.contains(wal)) continue;
       final walRecording = wal.recordingSessionId;
       final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
       if (foreignRecording) continue;
