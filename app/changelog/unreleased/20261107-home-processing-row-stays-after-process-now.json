@@ -1,0 +1,3 @@
+{
+  "change": "After you end a conversation and tap Process Now, its processing row stays on Home until the server picks it up, instead of briefly disappearing."
+}
