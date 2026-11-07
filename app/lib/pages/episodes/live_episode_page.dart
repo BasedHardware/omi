@@ -63,6 +63,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   late final TabController _tabs;
   EpisodeProvider? _episodes;
   bool _mutePending = false;
+  bool _leaving = false;
   Timer? _tick;
 
   @override
@@ -88,7 +89,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
-    if (_mutePending) return;
+    if (_mutePending || _leaving) return;
     setState(() => _mutePending = true);
     try {
       OmiHaptics.medium();
@@ -114,26 +115,46 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   /// conversation (a phone recording stops first), Home shows it as a processing row, and the live
   /// episode closes while a fresh one starts counting from now. It never pauses the pendant: with
   /// nothing new since the last boundary there is nothing to process, and the clock still restarts.
+  ///
+  /// The page closes at once and the finish completes on its own: it can wait its turn behind a
+  /// transcription reconnect or server processing, and a page that waited with it read as frozen,
+  /// took a second tap, and then closed twice. Only this page ever closes.
   Future<void> _stopConversation(CaptureProvider provider) async {
+    if (_leaving) return;
+    _leaving = true;
     final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
+    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
+    if (hadContent) {
+      switchHomeToConversationsTab(context);
+    }
+    final Future<void> finish;
     if (hadContent) {
       // Ending the capture fires the shared finalize hook, which closes the episode.
-      await provider.finishCapture();
-      if (!mounted) return;
-      switchHomeToConversationsTab(context);
+      finish = provider.finishCapture();
     } else {
       final source = provider.liveCaptureSource;
-      if (source == null || source == ConversationSource.phone.name) {
-        await provider.stopStreamRecording();
-      }
       final episodes = _episodes;
-      if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
+      finish = () async {
+        if (source == null || source == ConversationSource.phone.name) {
+          await provider.stopStreamRecording();
+        }
+        if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
+      }();
     }
-    if (!mounted) return;
     // A swipe back during the finish has already popped this route; it only stays mounted while it
     // animates out, and a pop then would take Home with it and leave the navigator empty.
-    final route = ModalRoute.of(context);
-    if (route != null && route.isCurrent) Navigator.of(context).pop();
+    if (route != null && route.isCurrent) {
+      navigator.pop();
+    } else if (route != null && route.isActive) {
+      navigator.removeRoute(route);
+    }
+    try {
+      await finish;
+    } catch (_) {
+      final home = navigator.context;
+      if (home.mounted) OmiFeedback.error(home, home.l10n.somethingWentWrong);
+    }
   }
 
   @override

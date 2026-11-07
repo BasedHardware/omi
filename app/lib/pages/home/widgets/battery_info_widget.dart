@@ -362,9 +362,13 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      if (context.mounted) _maybeShowOptionsTip(context);
+      _maybeShowOptionsTip(context);
+      try {
+        await captureProvider.finishCapture();
+      } catch (_) {
+        if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
       return;
     }
     if (captureProvider.isPendantBatchRecording) {
