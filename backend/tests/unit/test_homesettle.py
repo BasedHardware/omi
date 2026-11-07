@@ -352,7 +352,17 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
     monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'false')
-    request = Request({'type': 'http', 'headers': [(b'x-omi-home-episode-ids', b'e:a')], 'query_string': b''})
+    request = Request(
+        {
+            'type': 'http',
+            'headers': [
+                (b'x-omi-home-episode-ids', b'e:a'),
+                (b'x-omi-home-ownership', b'1'),
+                (b'x-omi-app-channel', b'beta'),
+            ],
+            'query_string': b'',
+        }
+    )
     cached = Response(status_code=304) if not_modified else None
     finish = Mock()
     start = Mock(return_value=SimpleNamespace(not_modified=cached, finish=finish))
