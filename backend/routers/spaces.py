@@ -77,7 +77,8 @@ def _serving_space(sid: str, uid: str):
         raise HTTPException(404, detail='Space not found')
     if space.cell == 'firestore':
         raise HTTPException(503, detail={'code': 'space_not_cell_served', 'retryable': False})
-    if not isinstance(space.cell, str) or not space.cell or space.cell == 'disabled':
+    cell = getattr(space, 'cell', None)  # Validate malformed driver results at this boundary.
+    if not isinstance(cell, str) or not cell or cell == 'disabled':
         raise _directory_unavailable()
     return space
 
