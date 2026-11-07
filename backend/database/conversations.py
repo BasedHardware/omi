@@ -2661,6 +2661,8 @@ def persist_template_batch_results(
             return False
 
         current_results = current.get('apps_results') or []
+        if not isinstance(current_results, list):
+            return False
         current_selected = {
             row.get('app_id', row.get('appId')): {
                 'app_id': row.get('app_id', row.get('appId')),
@@ -2678,7 +2680,7 @@ def persist_template_batch_results(
             *(
                 row
                 for row in current_results
-                if isinstance(row, dict) and row.get('app_id', row.get('appId')) not in requested
+                if not isinstance(row, dict) or row.get('app_id', row.get('appId')) not in requested
             ),
         ]
         updates = {'apps_results': merged_results}

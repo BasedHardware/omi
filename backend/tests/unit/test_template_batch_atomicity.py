@@ -395,7 +395,7 @@ def test_batch_transaction_merges_current_unselected_user_edits(monkeypatch):
     row = {
         'transcript_segments': transcript.copy(),
         'manual_speaker_assignments': receipt.copy(),
-        'apps_results': [{'app_id': 'other', 'content': 'user edited while LLM ran'}],
+        'apps_results': [{'app_id': 'other', 'content': 'user edited while LLM ran'}, 'legacy-opaque'],
     }
 
     persisted, document = _persist(monkeypatch, row)
@@ -406,6 +406,7 @@ def test_batch_transaction_merges_current_unselected_user_edits(monkeypatch):
             'apps_results': [
                 {'app_id': 'selected', 'content': 'new output'},
                 {'app_id': 'other', 'content': 'user edited while LLM ran'},
+                'legacy-opaque',
             ]
         }
     ]

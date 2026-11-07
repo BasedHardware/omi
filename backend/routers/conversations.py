@@ -939,7 +939,7 @@ def execute_reprocess(
         expected_user_lifecycle_revision=expected_user_lifecycle_revision,
     )
 
-
+    # Template-only batches do not schedule speaker-learning or other derived work.
     if app_ids:
         return processed_conversation
     return schedule_reprocessed_learning(
