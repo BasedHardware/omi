@@ -1,0 +1,4 @@
+{
+  "change": "Android can now pair with and reconnect to BLE devices such as OMI Glass more reliably.",
+  "platforms": ["android"]
+}
