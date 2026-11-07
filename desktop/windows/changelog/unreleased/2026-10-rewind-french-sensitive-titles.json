@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Rewind now also skips login, password, verification-code and private-browsing windows whose titles are in French (for example \"Connexion\", \"Mot de passe\", \"Navigation privée\")."
+  ]
+}
