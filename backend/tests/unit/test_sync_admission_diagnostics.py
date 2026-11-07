@@ -127,20 +127,20 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
 
 
 async def test_conversation_level_wait_is_memoized_and_repeated_without_upload_work(record_wait_memo):
-    response = await live_upload._conversation_pending(
+    response = await live_upload.conversation_pending(
         live_upload.RecordUploadWait.RECORD_JOBS_MISSING, 'synthetic-owner', 'synthetic-conversation'
     )
     assert response.status_code == 503
     repeated = await live_upload.memoized_record_wait('synthetic-owner', 'synthetic-conversation')
     assert repeated is not None and repeated.status_code == 503
     assert 'retry-after' not in repeated.headers
-    assert json.loads(repeated.body)['code'] == 'record_capture_pending'
+    assert json.loads(bytes(repeated.body))['code'] == 'record_capture_pending'
     # Another conversation of the same owner is never held by this memo.
     assert await live_upload.memoized_record_wait('synthetic-owner', 'other-conversation') is None
 
 
 async def test_content_level_wait_is_not_memoized(record_wait_memo):
-    await live_upload._conversation_pending(
+    await live_upload.conversation_pending(
         live_upload.RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, 'synthetic-owner', 'synthetic-conversation'
     )
     assert record_wait_memo == {}

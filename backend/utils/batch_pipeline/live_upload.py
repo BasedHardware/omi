@@ -88,7 +88,7 @@ def _pending(reason: RecordUploadWait):
 _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadWait.RESERVATION_PENDING})
 
 
-async def _conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str):
+async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
     if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
         await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
     return _pending(reason)
@@ -264,7 +264,7 @@ async def registered_record_response(
             and record_capture_eligible(uid, row, policy=policy)
         )
         if awaiting_reservation or (snapshot is not None and not snapshot.exists and policy.live_record_enabled):
-            return await _conversation_pending(RecordUploadWait.RESERVATION_PENDING, uid, conversation_id)
+            return await conversation_pending(RecordUploadWait.RESERVATION_PENDING, uid, conversation_id)
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
@@ -342,7 +342,7 @@ async def registered_record_response(
     if prior:
         return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT)
     if not jobs:
-        return await _conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
+        return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
