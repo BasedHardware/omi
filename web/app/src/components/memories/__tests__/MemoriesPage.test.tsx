@@ -179,5 +179,7 @@ describe('MemoriesPage list layout', () => {
     expect(screen.getByRole('status')).toHaveTextContent('memory view is partial');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(screen.getByText('Loaded Memories (Partial)')).toBeInTheDocument();
+    expect(screen.queryByText('Total Memories')).not.toBeInTheDocument();
   });
 });

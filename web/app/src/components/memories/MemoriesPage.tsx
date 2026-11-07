@@ -634,6 +634,8 @@ export function MemoriesPage() {
                           memories={filteredMemories}
                           loading={loading}
                           hasMore={hasMore && !searchQuery && !selectedTag}
+                          truncated={truncated}
+                          onRetry={() => refresh()}
                           onLoadMore={loadMore}
                           onEdit={editMemory}
                           onDelete={removeMemory}
@@ -707,10 +709,12 @@ export function MemoriesPage() {
                     {/* Total memories */}
                     <div className="mb-3">
                       <div className="text-2xl font-bold text-white">
-                        {memories.length}
+                        {truncated ? (memories.length > 0 ? `${memories.length}+` : '—') : memories.length}
                       </div>
-                      <div className="text-sm text-text-secondary">Total Memories</div>
-                      {recentMemoriesCount > 0 && (
+                      <div className="text-sm text-text-secondary">
+                        {truncated ? 'Loaded Memories (Partial)' : 'Total Memories'}
+                      </div>
+                      {!truncated && recentMemoriesCount > 0 && (
                         <div className="mt-1 text-xs text-green-400">
                           +{recentMemoriesCount} this week
                         </div>
@@ -723,7 +727,7 @@ export function MemoriesPage() {
                         <div className="flex items-center gap-1.5 rounded-lg bg-orange-500/10 px-2.5 py-1">
                           <Flame className="h-3.5 w-3.5 text-orange-500" />
                           <span className="text-sm font-medium text-orange-500">
-                            {todayMemories.length} today
+                            {truncated ? `${todayMemories.length}+ today` : `${todayMemories.length} today`}
                           </span>
                         </div>
                       </div>
@@ -736,7 +740,7 @@ export function MemoriesPage() {
                           Activity (30 days)
                         </span>
                         <span className="text-xs text-text-quaternary">
-                          {recentMemoriesCount} memories
+                          {truncated ? `${recentMemoriesCount}+ memories` : `${recentMemoriesCount} memories`}
                         </span>
                       </div>
                       <div className="flex h-10 items-end gap-0.5">
@@ -747,7 +751,7 @@ export function MemoriesPage() {
                             style={{
                               height: `${Math.max((day.count / maxActivity) * 100, 4)}%`,
                             }}
-                            title={`${day.date}: ${day.count} memories`}
+                            title={`${day.date}: ${day.count}${truncated ? '+' : ''} memories`}
                           />
                         ))}
                       </div>
@@ -759,7 +763,7 @@ export function MemoriesPage() {
                     <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
                       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-text-tertiary">
                         <Sparkles className="h-4 w-4 text-white" />
-                        Life Balance
+                        {truncated ? 'Life Balance (Partial)' : 'Life Balance'}
                       </h3>
                       <LifeBalanceChart data={lifeBalance} compact />
                     </div>

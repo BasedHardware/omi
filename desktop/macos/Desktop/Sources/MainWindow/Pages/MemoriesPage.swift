@@ -267,6 +267,10 @@ class MemoriesViewModel: ObservableObject {
   /// though it were part of the account projection.
   private var hasAuthoritativeServerProjection = false
 
+  /// Whether the last loaded memory page was truncated by server scan budget.
+  /// When true, 0 rows is an honest partial result, not a complete-empty account.
+  @Published internal(set) var isTruncated = false
+
   /// A cache-first initial load can clear `isLoading` while its authoritative
   /// API projection is still syncing. Automation search must wait for that
   /// lifecycle to finish instead of treating the temporarily hidden spinner as
@@ -584,6 +588,7 @@ class MemoriesViewModel: ObservableObject {
     let batchSize = 500
     var allFetched: [ServerMemory] = []
     var fetchedLifecycleExposure: Bool?
+    var truncated = false
 
     do {
       while true {
@@ -593,21 +598,35 @@ class MemoriesViewModel: ObservableObject {
           authorizationSnapshot: authorizationSnapshot)
         fetchedLifecycleExposure = page.canonicalLifecycleExposed
         let batch = page.memories
+        if page.truncated {
+          truncated = true
+          if !batch.isEmpty {
+            allFetched.append(contentsOf: batch)
+          }
+          break
+        }
         if batch.isEmpty { break }
         allFetched.append(contentsOf: batch)
         offset += batch.count
         if batch.count < batchSize { break }
       }
 
-      // A successful fetch (even if empty) is an authoritative keep-set for
-      // pruning. Without this, stale SQLite rows remain visible after a
-      // conversation cascade delete retracts all backend memories.
-      let pruned = try await MemoryStorage.shared.syncServerMemoriesAndPruneAbsent(
-        allFetched,
-        within: .defaultAccess
-      )
-      if pruned > 0 {
-        log("MemoriesViewModel: Pruned \(pruned) server-backed orphans after conversation delete")
+      if !truncated {
+        // A successful fetch (even if empty) is an authoritative keep-set for
+        // pruning. Without this, stale SQLite rows remain visible after a
+        // conversation cascade delete retracts all backend memories.
+        let pruned = try await MemoryStorage.shared.syncServerMemoriesAndPruneAbsent(
+          allFetched,
+          within: .defaultAccess
+        )
+        if pruned > 0 {
+          log("MemoriesViewModel: Pruned \(pruned) server-backed orphans after conversation delete")
+        }
+      } else {
+        log("MemoriesViewModel: Conversation cascade refresh was truncated; skipping orphan prune")
+        if !allFetched.isEmpty {
+          _ = try await MemoryStorage.shared.syncServerMemories(allFetched)
+        }
       }
 
       guard isCurrentScope(token) else { return }
@@ -616,22 +635,50 @@ class MemoriesViewModel: ObservableObject {
         canonicalLifecycleCapabilityEstablished = true
         guard isCurrentScope(token) else { return }
       }
-      hasAuthoritativeServerProjection = true
-      memories = MemoryPageProjection.visibleMemories(
-        cachedMemories: [],
-        serverMemories: allFetched,
-        source: .authoritativeServer,
+      applyCascadeRefreshProjection(
+        allFetched: allFetched,
+        truncated: truncated,
         lifecycleExposed: canonicalLifecycleExposed
       )
-      currentOffset = allFetched.count
-      rawBackendOffset = allFetched.count
-      hasMoreMemories = false
-      recomputeFilteredMemories()
       await loadTagCountsFromDatabase()
     } catch {
       logError("MemoriesViewModel: Failed to refresh after conversation delete", error: error)
       await loadMemories()
     }
+  }
+
+  func applyCascadeRefreshProjection(
+    allFetched: [ServerMemory],
+    truncated: Bool,
+    lifecycleExposed: Bool
+  ) {
+    hasAuthoritativeServerProjection = !truncated
+    isTruncated = truncated
+    let candidateRows: [ServerMemory]
+    if truncated {
+      // A truncated cascade refresh must preserve existing projection, merging in partial rows
+      var merged = memories
+      for item in allFetched {
+        if let idx = merged.firstIndex(where: { $0.id == item.id }) {
+          merged[idx] = item
+        } else {
+          merged.append(item)
+        }
+      }
+      candidateRows = merged
+    } else {
+      candidateRows = allFetched
+    }
+    memories = MemoryPageProjection.visibleMemories(
+      cachedMemories: [],
+      serverMemories: candidateRows,
+      source: .authoritativeServer,
+      lifecycleExposed: lifecycleExposed
+    )
+    currentOffset = memories.count
+    rawBackendOffset = memories.count
+    hasMoreMemories = false
+    recomputeFilteredMemories()
   }
 
   func resetSessionState() {
@@ -674,6 +721,7 @@ class MemoriesViewModel: ObservableObject {
     undoTimeRemaining = 0
     hasLoadedInitially = false
     hasAuthoritativeServerProjection = false
+    isTruncated = false
     isActive = false
     currentOffset = 0
     rawBackendOffset = 0
@@ -729,12 +777,21 @@ class MemoriesViewModel: ObservableObject {
           deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
         )
       else { return }
-      hasAuthoritativeServerProjection = true
+      hasAuthoritativeServerProjection = !page.truncated
+      isTruncated = page.truncated
 
       // Sync API results to local cache
-      try await MemoryStorage.shared.syncServerMemories(apiMemories)
+      if !apiMemories.isEmpty {
+        try await MemoryStorage.shared.syncServerMemories(apiMemories)
+      }
 
       guard isCurrentScope(token) else { return }
+      if page.truncated && apiMemories.isEmpty && !memories.isEmpty {
+        log("MemoriesViewModel: Auto-refresh received empty truncated list; preserving existing \(memories.count) memories")
+        hasMoreMemories = false
+        backendCursor = nil
+        return
+      }
       log(
         "MemoriesViewModel: Auto-refresh showing \(apiMemories.count) authoritative memories"
       )
@@ -747,7 +804,7 @@ class MemoriesViewModel: ObservableObject {
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
       hasMoreMemories = Self.hasMoreAfterPage(page, received: apiMemories.count)
-      backendCursor = page.nextCursor
+      backendCursor = page.truncated ? nil : page.nextCursor
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -793,7 +850,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Whether another page is worth asking for. A truncated page is an honest
   /// partial response with no resumable cursor, so callers must not continue.
-  private static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
+  static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
     if page.truncated { return false }
     if page.nextCursor != nil { return true }
     return ServerPaging.hasMore(received: received)
@@ -1185,15 +1242,18 @@ class MemoriesViewModel: ObservableObject {
         return
       }
 
-      hasAuthoritativeServerProjection = true
+      hasAuthoritativeServerProjection = !page.truncated
       hasLoadedInitially = true
-      log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
+      isTruncated = page.truncated
+      log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API (truncated: \(page.truncated))")
 
       // Step 3: Sync API results to local cache. The successful API page remains
       // the display authority; local rows are durable sync state only.
       do {
-        try await MemoryStorage.shared.syncServerMemories(fetchedMemories)
-        log("MemoriesViewModel: Synced \(fetchedMemories.count) memories to local cache")
+        if !fetchedMemories.isEmpty {
+          try await MemoryStorage.shared.syncServerMemories(fetchedMemories)
+          log("MemoriesViewModel: Synced \(fetchedMemories.count) memories to local cache")
+        }
 
         let visibleMemories = MemoryPageProjection.visibleMemories(
           cachedMemories: [],
@@ -1207,8 +1267,12 @@ class MemoriesViewModel: ObservableObject {
           isLoading = false
           return
         }
-        memories = visibleMemories
-        currentOffset = visibleMemories.count
+        if page.truncated && fetchedMemories.isEmpty && !memories.isEmpty {
+          log("MemoriesViewModel: Retaining \(memories.count) existing memories on empty truncated read")
+        } else {
+          memories = visibleMemories
+          currentOffset = visibleMemories.count
+        }
         // Track the raw backend cursor for subsequent loadMore() fetches.
         rawBackendOffset = fetchedMemories.count
         // Use the raw backend page count for pagination, not the tier-filtered
@@ -1219,23 +1283,25 @@ class MemoriesViewModel: ObservableObject {
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
         hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
-        backendCursor = page.nextCursor
+        backendCursor = page.truncated ? nil : page.nextCursor
         log(
-          "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
+          "MemoriesViewModel: Showing \(memories.count) memories (raw: \(fetchedMemories.count), truncated: \(page.truncated))"
         )
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
         // Fall back to the API page if local persistence fails.
-        memories = MemoryPageProjection.visibleMemories(
-          cachedMemories: [],
-          serverMemories: fetchedMemories,
-          source: .authoritativeServer,
-          lifecycleExposed: page.canonicalLifecycleExposed
-        )
-        currentOffset = memories.count
+        if !page.truncated || !fetchedMemories.isEmpty || memories.isEmpty {
+          memories = MemoryPageProjection.visibleMemories(
+            cachedMemories: [],
+            serverMemories: fetchedMemories,
+            source: .authoritativeServer,
+            lifecycleExposed: page.canonicalLifecycleExposed
+          )
+          currentOffset = memories.count
+        }
         rawBackendOffset = fetchedMemories.count
         hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
-        backendCursor = page.nextCursor
+        backendCursor = page.truncated ? nil : page.nextCursor
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1567,9 +1633,12 @@ class MemoriesViewModel: ObservableObject {
           deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
         )
       else { return }
-      hasAuthoritativeServerProjection = true
+      hasAuthoritativeServerProjection = !page.truncated
+      isTruncated = page.truncated
       // Sync to local cache first
-      try await MemoryStorage.shared.syncServerMemories(newMemories)
+      if !newMemories.isEmpty {
+        try await MemoryStorage.shared.syncServerMemories(newMemories)
+      }
 
       let visibleNewMemories = displayMemories(newMemories.filter { layerAllowed($0, for: token) }, for: token)
 
@@ -1580,7 +1649,7 @@ class MemoriesViewModel: ObservableObject {
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
       hasMoreMemories = Self.hasMoreAfterPage(page, received: newMemories.count)
-      backendCursor = page.nextCursor
+      backendCursor = page.truncated ? nil : page.nextCursor
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )
@@ -2111,12 +2180,25 @@ struct MemoriesPage: View {
       } else if let error = viewModel.errorMessage {
         errorView(error)
       } else if hasActiveMemoryQueryScope && viewModel.filteredMemories.isEmpty {
+        if viewModel.isTruncated {
+          truncatedBanner
+        }
         noResultsView
       } else if viewModel.memories.isEmpty {
-        emptyState
+        if viewModel.isTruncated {
+          truncatedEmptyState
+        } else {
+          emptyState
+        }
       } else if viewModel.filteredMemories.isEmpty {
+        if viewModel.isTruncated {
+          truncatedBanner
+        }
         noResultsView
       } else {
+        if viewModel.isTruncated {
+          truncatedBanner
+        }
         memoryList
       }
     }
@@ -2501,7 +2583,7 @@ struct MemoriesPage: View {
               Text("All")
                 .scaledFont(size: OmiType.body)
               Spacer()
-              Text("\(viewModel.totalMemoriesCount)")
+              Text(viewModel.isTruncated && viewModel.totalMemoriesCount > 0 ? "\(viewModel.totalMemoriesCount)+" : (viewModel.isTruncated ? "—" : "\(viewModel.totalMemoriesCount)"))
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
                 .padding(.horizontal, OmiSpacing.xs)
@@ -2757,6 +2839,46 @@ struct MemoriesPage: View {
   }
 
   // MARK: - Empty States
+
+  private var truncatedBanner: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundColor(Color.orange)
+      Text("This memory view is partial. The server stopped before reaching its read budget, so it is not the complete history.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+      Spacer()
+      Button {
+        Task { await viewModel.loadMemories() }
+      } label: {
+        Text("Retry")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+      }
+      .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+    }
+    .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+    .padding(.vertical, OmiSpacing.xs)
+    .background(Color.orange.opacity(0.12))
+    .cornerRadius(8)
+    .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+    .padding(.top, OmiSpacing.xs)
+  }
+
+  private var truncatedEmptyState: some View {
+    GlassEmptyState(
+      systemImage: "exclamationmark.triangle",
+      title: "Incomplete Memory History",
+      message: "The server reached its scan budget before completing the read.\nYour memories have not been deleted."
+    ) {
+      Button {
+        Task { await viewModel.loadMemories() }
+      } label: {
+        Label("Retry", systemImage: "arrow.clockwise")
+      }
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+    }
+    .accessibilityIdentifier("memories-truncated-empty")
+  }
 
   private var emptyState: some View {
     GlassEmptyState(

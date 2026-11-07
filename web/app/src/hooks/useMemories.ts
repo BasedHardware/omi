@@ -148,6 +148,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   // Use ref for offset to avoid dependency issues
   const offsetRef = useRef(cachedEntry?.offset || 0);
   const cursorRef = useRef<string | null>(cachedEntry?.nextCursor || null);
+  const memoriesRef = useRef<Memory[]>(memories);
+  memoriesRef.current = memories;
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
   // In-flight canonical refresh, shared with concurrent callers (see refresh).
@@ -309,21 +311,43 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         if (!isCurrentRequest() || !isQueryCurrent()) return;
         const pageHasMore =
           Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
-        setMemories(page.memories);
-        offsetRef.current = page.memories.length;
-        cursorRef.current = page.nextCursor;
-        setHasMore(pageHasMore);
-        setTruncated(page.truncated);
-        // Update both caches
-        setToCache(
-          key,
-          page.memories,
-          page.memories.length,
-          page.nextCursor,
-          pageHasMore,
-          page.truncated,
-        );
-        await cacheMemories(page.memories, memoryCacheScope);
+
+        if (page.truncated && page.memories.length === 0 && memoriesRef.current.length > 0) {
+          // Keep already-loaded memories if backend timed out returning 0 rows
+          setTruncated(true);
+          setHasMore(false);
+          setToCache(
+            key,
+            memoriesRef.current,
+            memoriesRef.current.length,
+            null,
+            false,
+            true,
+          );
+        } else {
+          setMemories(page.memories);
+          offsetRef.current = page.memories.length;
+          cursorRef.current = page.truncated ? null : page.nextCursor;
+          setHasMore(page.truncated ? false : pageHasMore);
+          setTruncated(page.truncated);
+          // Update both caches
+          setToCache(
+            key,
+            page.memories,
+            page.memories.length,
+            page.truncated ? null : page.nextCursor,
+            page.truncated ? false : pageHasMore,
+            page.truncated,
+          );
+        }
+
+        // Enable pruning only when the response has neither truncated nor nextCursor;
+        // otherwise upsert the page without deleting existing cached rows.
+        if (!page.truncated && !page.nextCursor) {
+          await cacheMemories(page.memories, memoryCacheScope);
+        } else if (page.memories.length > 0) {
+          await cacheMemories(page.memories, memoryCacheScope, { prune: false });
+        }
         if (!isCurrentRequest() || !isQueryCurrent()) return;
       } catch (err) {
         if (!isCurrentRequest() || !isQueryCurrent()) return;
@@ -557,6 +581,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           const pageHasMore =
             Boolean(page.nextCursor) ||
             (!page.truncated && page.memories.length >= limit);
+
+          if (page.truncated && page.memories.length === 0 && memoriesRef.current.length > 0) {
+            setTruncated(true);
+            setHasMore(false);
+            return false;
+          }
+
           setMemories(page.memories);
           offsetRef.current = page.memories.length;
           cursorRef.current = page.nextCursor;
@@ -571,7 +602,12 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
             pageHasMore,
             page.truncated,
           );
-          return true;
+          if (!page.truncated) {
+            await cacheMemories(page.memories, memoryCacheScope);
+          } else if (page.memories.length > 0) {
+            await cacheMemories(page.memories, memoryCacheScope, { prune: false });
+          }
+          return !page.truncated;
         } catch (err) {
           if (isCurrentRequest() && isQueryCurrent()) {
             setError(err instanceof Error ? err.message : 'Failed to refresh memories');

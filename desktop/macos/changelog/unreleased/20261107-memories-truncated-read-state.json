@@ -1,0 +1,3 @@
+{
+  "change": "If memory history cannot be completely loaded from the server, an explanation and retry option are shown instead of treating the history as empty."
+}
