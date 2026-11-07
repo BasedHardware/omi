@@ -362,9 +362,7 @@ async def registered_record_response(
             # write this owner WAL's missing span so the drain's next normal
             # pass can. The answer is the same 503 either way: the WAL is
             # released only by a later upload's byte-exact coverage proof.
-            await run_blocking(
-                storage_executor,
-                record_gap_fill.fill_closed_record_gap,
+            await record_gap_fill.run_gap_fill(
                 uid=uid,
                 conversation_id=conversation_id,
                 row=row,

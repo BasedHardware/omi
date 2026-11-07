@@ -19,13 +19,18 @@ audio for the missing span as new retained objects, and the drain's next
 normal pass admits the record. Admission, `validate_record_tail`, barriers, the
 drain and projection are unchanged.
 
-Gates (all required): switch and uid cohort; owner context (checked earlier in
-the function: same uid path, source and capture device); no record jobs;
+Gates (all required), checked on the database pool before any audio is read:
+switch and uid cohort; owner context (checked earlier in the function: same uid
+path, source and capture device); no record jobs;
 `require_record_audio_barrier` passes and the row is not partial, deleted,
 discarded or sync-disabled; finished, and the row unwritten, for at least 300 s
-(`CLOSED_MIN_SECONDS`); a (record, WAL) Redis marker for 600 s (a Redis error
-counts as no marker); admission's own retained walk ends more than 0.1 s before
-`finished_at`; the `check_privacy` fence.
+(`CLOSED_MIN_SECONDS`); the `check_privacy` fence; a registered
+`record_pending` job for this record (so the drain will retry admission; a
+record that registration refused, such as server-batch-only without server
+audio, is never filled); a (record, WAL) Redis marker for 600 s on a client
+bounded to 0.5 s. A Redis error lets the attempt through, which is safe because
+the write is create-only. Then, on the storage pool, admission's own retained
+walk must end more than 0.1 s before `finished_at`.
 
 Written: the decoded WAL PCM inside `[retained end, finished_at + 1 s]`, or from
 `started_at - 1 s` when nothing is retained; at most 3600 s per request, in
@@ -49,7 +54,7 @@ on every retry for the full window, so the refusal is a missing tail, not
 listing lag.
 
 Telemetry: `event=sync_record_gap_fill outcome=<written|skipped_gate|skipped_recent|skipped_marker|skipped_retained|skipped_no_gap|skipped_no_audio|skipped_collision|failed> record=<16 hex> seconds_bucket=<0-10|10-60|60-600|600+>`
-and `omi_record_gap_fill_total{outcome}`. No uid, conversation id, audio or
+and `omi_record_gap_fill_total{outcome}` (`skipped_no_pending` also counted). No uid, conversation id, audio or
 error text is logged.
 
 Ramp: 1, 10, 50, 100 percent, at least 30 minutes per step, with lead2's go at

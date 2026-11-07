@@ -120,7 +120,16 @@ def world(monkeypatch):
     monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', lambda *a, **kw: bucket.listing())
     monkeypatch.setattr(record_gap_fill, 'decode_units', lambda paths: iter(wal['units']))
     monkeypatch.setattr(live, 'read_reference', read)
-    return SimpleNamespace(bucket=bucket, markers=markers, wal=wal, store=MemoryStore())
+    store = MemoryStore()
+    content, segment = live.record_identity(UID, CID)
+    store.rows['jobs', segment] = {
+        'segment_id': segment,
+        'state': 'record_pending',
+        'record_content_id': content,
+        'owner_id': UID,
+        'conversation_id': CID,
+    }
+    return SimpleNamespace(bucket=bucket, markers=markers, wal=wal, store=store, segment=segment)
 
 
 def fill(world, row=None, **kwargs):
@@ -214,6 +223,43 @@ def test_privacy_block_refuses_without_writing(world, monkeypatch):
     monkeypatch.setattr(world.store, 'run', blocked)
     assert fill(world) == 'skipped_gate'
     assert world.bucket.objects == {}
+
+
+@pytest.mark.parametrize(
+    'job',
+    [None, {'state': 'admitted'}, {'state': 'record_pending', 'record_content_id': 'other'}],
+)
+def test_record_without_a_pending_obligation_is_never_filled(world, job):
+    # Registration refused or never ran (for example server-batch-only with no
+    # server audio): the drain has nothing to admit, so audio would not help.
+    content, segment = live.record_identity(UID, CID)
+    if job is None:
+        world.store.rows.pop(('jobs', segment))
+    else:
+        world.store.rows['jobs', segment] = {
+            'owner_id': UID,
+            'conversation_id': CID,
+            'record_content_id': content,
+            **job,
+        }
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world) == 'skipped_no_pending'
+    assert world.bucket.objects == {} and world.markers == set()
+
+
+def test_privacy_is_checked_before_any_retained_read(world, monkeypatch):
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+
+    def blocked(body):
+        raise BatchPrivacyBlocked('synthetic block')
+
+    def never(*a, **kw):
+        raise AssertionError('retained audio listed past a privacy block')
+
+    monkeypatch.setattr(world.store, 'run', blocked)
+    monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', never)
+    assert fill(world) == 'skipped_gate'
+    assert world.markers == set()
 
 
 def test_no_gap_when_retained_audio_reaches_finish(world):
@@ -318,15 +364,22 @@ def test_long_gap_splits_into_bounded_pieces(world, monkeypatch):
 
 
 def test_racing_writer_at_the_key_wins_and_is_never_overwritten(world, monkeypatch):
-    # Another fill for the same record committed after this request listed
-    # an empty retained set: its object owns the key and this write skips.
+    # Another fill for the same record commits between this request's
+    # retained listing (empty) and its create: that object owns the key and
+    # this write is skipped, leaving its bytes and generation unchanged.
     path = f'chunks/{UID}/{CID}/100.000000.bin'
-    world.bucket.put(path, tone(11, 9))
-    original = world.bucket.objects[path]
-    monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', lambda *a, **kw: [])
+    racing = {}
+
+    def listing_then_race(*a, **kw):
+        listed = world.bucket.listing()
+        world.bucket.put(path, tone(11, 9))
+        racing.update(world.bucket.objects[path])
+        return listed
+
+    monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', listing_then_race)
     world.wal['units'] = [audio_unit(100.0, ramp(11))]
     assert fill(world) == 'skipped_collision'
-    assert world.bucket.objects == {path: original}
+    assert world.bucket.objects == {path: racing}
 
 
 def test_create_only_writer_has_no_overwrite_fallback():
@@ -419,7 +472,7 @@ def test_marker_skips_a_repeat_and_redis_errors_fall_through(world, monkeypatch)
         calls.append((args, kwargs))
         raise ConnectionError('synthetic redis outage')
 
-    monkeypatch.setattr(sync_record_wait_cache.redis_db.r, 'set', broken, raising=False)
+    monkeypatch.setattr(sync_record_wait_cache, '_marker_client', lambda: SimpleNamespace(set=broken))
     assert sync_record_wait_cache.claim_gap_fill_marker('a' * 64, 'b' * 64, 600) is True
     assert calls and calls[0][1] == {'ex': 600, 'nx': True}
     assert UID not in calls[0][0][0] and CID not in calls[0][0][0]
@@ -462,7 +515,12 @@ async def test_jobs_missing_upload_runs_the_fill_and_keeps_the_same_503(monkeypa
     calls = []
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
     monkeypatch.setattr(live_upload, 'remember_record_wait', lambda *a: None)
-    monkeypatch.setattr(record_gap_fill, 'fill_closed_record_gap', lambda **kw: calls.append(kw) or 'written')
+
+    async def run(**kw):
+        calls.append(kw)
+        return 'written'
+
+    monkeypatch.setattr(record_gap_fill, 'run_gap_fill', run)
     response = await live_upload.registered_record_response(
         uid=UID,
         conversation_id=CID,
@@ -479,3 +537,32 @@ async def test_jobs_missing_upload_runs_the_fill_and_keeps_the_same_503(monkeypa
     if enabled:
         assert calls[0]['paths'] == ['synthetic-wal.bin'] and calls[0]['wal_content_id'] == 'synthetic-content'
         assert calls[0]['store'] is store
+
+
+async def test_serving_entry_runs_both_phases(world, monkeypatch):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(100.0, ramp(12))]
+    monkeypatch.setattr(
+        record_gap_fill, 'create_storage_client', lambda: SimpleNamespace(bucket=lambda name: world.bucket)
+    )
+    monkeypatch.setattr(record_gap_fill, 'users_db', SimpleNamespace(get_data_protection_level=lambda uid: 'standard'))
+    monkeypatch.setattr(record_gap_fill.audio_archive, 'admitted', lambda *a, **kw: False)
+    outcome = await record_gap_fill.run_gap_fill(
+        uid=UID,
+        conversation_id=CID,
+        row=closed_row(),
+        paths=['synthetic-wal.bin'],
+        wal_content_id='c',
+        store=world.store,
+    )
+    assert outcome == 'written'
+    assert list(fills(world)) == [f'chunks/{UID}/{CID}/105.000000.bin']
+
+
+def test_marker_client_is_bounded(monkeypatch):
+    made = []
+    monkeypatch.setattr(sync_record_wait_cache, '_marker_redis', None)
+    monkeypatch.setattr(sync_record_wait_cache, 'create_bounded_redis_client', lambda t: made.append(t) or object())
+    first = sync_record_wait_cache._marker_client()
+    assert sync_record_wait_cache._marker_client() is first
+    assert made == [0.5]

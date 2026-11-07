@@ -49,6 +49,7 @@ from database.sync_record_wait_cache import claim_gap_fill_marker
 from utils import encryption
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.live import retained_record_units
+from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, owner_storage_write_gate, private_cloud_sync_bucket
 
@@ -62,6 +63,7 @@ OUTCOMES = frozenset(
         'skipped_gate',
         'skipped_recent',
         'skipped_marker',
+        'skipped_no_pending',
         'skipped_retained',
         'skipped_no_gap',
         'skipped_no_audio',
@@ -204,28 +206,59 @@ def _write_window(uid, conversation_id, paths, lower, upper, protection_level, m
     return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE
 
 
-def _fill(uid, conversation_id, row, paths, record, wal, store, now, storage_client, bucket, protection_level):
+def _gates(uid, conversation_id, row, record, segment, wal, store, now):
+    """Row, job, privacy and marker gates; Firestore/Redis only, no audio read.
+
+    Returns a refusal outcome, or None to proceed to the storage phase.
+    """
     try:
         require_record_audio_barrier(row)
     except ValueError:
-        return 'skipped_gate', 0.0
+        return 'skipped_gate'
     if (
         row.get('record_audio_partial')
         or row.get('deleted')
         or row.get('discarded')
         or not row.get('private_cloud_sync_enabled')
     ):
-        return 'skipped_gate', 0.0
+        return 'skipped_gate'
     finish = _epoch(row.get('finished_at'))
     if finish is None:
-        return 'skipped_gate', 0.0
+        return 'skipped_gate'
     # Settled: the capture finished, and no row write (close, upload session
     # release, finalization) happened, at least CLOSED_MIN_SECONDS ago.
     settled = max(finish, _epoch(row.get('updated_at')) or finish)
     if now - settled < CLOSED_MIN_SECONDS:
-        return 'skipped_recent', 0.0
+        return 'skipped_recent'
+
+    def read(tx):
+        # Privacy first: nothing of this record is read past a block.
+        tx.check_privacy(uid, (conversation_id,))
+        return tx.get('jobs', segment)
+
+    try:
+        pending = store.run(read)
+    except BatchPrivacyBlocked:
+        return 'skipped_gate'
+    # Only a registered record_pending obligation is drained into admission.
+    # A record that canonical registration refused (for example server-batch
+    # only with no server audio) or never registered gains nothing from audio.
+    if (
+        (pending or {}).get('state') != 'record_pending'
+        or pending.get('record_content_id') != record
+        or pending.get('owner_id') != uid
+        or pending.get('conversation_id') != conversation_id
+    ):
+        return 'skipped_no_pending'
     if not claim_gap_fill_marker(record, wal, MARKER_SECONDS):
-        return 'skipped_marker', 0.0
+        return 'skipped_marker'
+    return None
+
+
+def _write(uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level):
+    """Storage phase: admission's retained walk, then the clipped create-only write."""
+    finish = _epoch(row.get('finished_at'))
+    assert finish is not None
     client = storage_client if storage_client is not None else create_storage_client()
     chunks = list_audio_chunks(uid, conversation_id, max_count=4096, require_archive=True)
     try:
@@ -238,10 +271,6 @@ def _fill(uid, conversation_id, row, paths, record, wal, store, now, storage_cli
         return 'skipped_no_gap', 0.0
     started = _epoch(row.get('started_at'))
     lower = end if end is not None else (started - FINISH_SLACK_SECONDS if started is not None else None)
-    try:
-        store.run(lambda tx: tx.check_privacy(uid, (conversation_id,)))
-    except BatchPrivacyBlocked:
-        return 'skipped_gate', 0.0
     if protection_level is None:
         protection_level = users_db.get_data_protection_level(uid)
     metadata = {'source': 'phone_wal', 'rendition': RENDITION, 'record': record[:16], 'wal': wal[:16]}
@@ -253,6 +282,45 @@ def _fill(uid, conversation_id, row, paths, record, wal, store, now, storage_cli
     if written:
         return 'written', seconds
     return ('skipped_collision' if collisions else 'skipped_no_audio'), seconds
+
+
+def _keys(uid, conversation_id, wal_content_id):
+    record, segment = record_identity(uid, conversation_id)
+    return record, segment, hashlib.sha256(f'gap-fill-wal-v1:{wal_content_id}'.encode()).hexdigest()
+
+
+def _report(outcome: str, record: str, seconds: float) -> str:
+    GAP_FILL_TOTAL.labels(outcome=outcome).inc()
+    logger.info(
+        'event=sync_record_gap_fill outcome=%s record=%s seconds_bucket=%s',
+        outcome,
+        record[:16],
+        _seconds_bucket(seconds),
+    )
+    return outcome
+
+
+async def run_gap_fill(*, uid, conversation_id, row, paths, wal_content_id, store) -> str | None:
+    """Serving entry: gates on the database pool, audio work on the storage pool.
+
+    Returns the outcome, or None while the switch is off. Never raises: the
+    caller's 503 is the same whatever happens here.
+    """
+    if not gap_fill_enabled(uid):
+        return None
+    record, segment, wal = _keys(uid, conversation_id, wal_content_id)
+    seconds = 0.0
+    try:
+        outcome = await run_blocking(
+            db_executor, _gates, uid, conversation_id, row, record, segment, wal, store, time.time()
+        )
+        if outcome is None:
+            outcome, seconds = await run_blocking(
+                storage_executor, _write, uid, conversation_id, row, paths, record, wal, None, None, None
+            )
+    except Exception:
+        outcome = 'failed'
+    return _report(outcome, record, seconds)
 
 
 def fill_closed_record_gap(
@@ -268,36 +336,17 @@ def fill_closed_record_gap(
     bucket=None,
     protection_level: str | None = None,
 ) -> str | None:
-    """One gap-fill attempt; returns its outcome, or None while the switch is off.
-
-    Never raises: the caller's 503 is the same whatever happens here.
-    """
+    """Synchronous composition of the same two phases, with injectable storage."""
     if not gap_fill_enabled(uid):
         return None
-    record = record_identity(uid, conversation_id)[0]
-    wal = hashlib.sha256(f'gap-fill-wal-v1:{wal_content_id}'.encode()).hexdigest()
+    record, segment, wal = _keys(uid, conversation_id, wal_content_id)
     seconds = 0.0
     try:
-        outcome, seconds = _fill(
-            uid,
-            conversation_id,
-            row,
-            paths,
-            record,
-            wal,
-            store,
-            time.time() if now is None else now,
-            storage_client,
-            bucket,
-            protection_level,
-        )
+        outcome = _gates(uid, conversation_id, row, record, segment, wal, store, time.time() if now is None else now)
+        if outcome is None:
+            outcome, seconds = _write(
+                uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level
+            )
     except Exception:
         outcome = 'failed'
-    GAP_FILL_TOTAL.labels(outcome=outcome).inc()
-    logger.info(
-        'event=sync_record_gap_fill outcome=%s record=%s seconds_bucket=%s',
-        outcome,
-        record[:16],
-        _seconds_bucket(seconds),
-    )
-    return outcome
+    return _report(outcome, record, seconds)

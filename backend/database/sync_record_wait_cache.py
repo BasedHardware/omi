@@ -11,7 +11,7 @@ fail open to the full check (a pure cache miss, no mode change).
 
 from typing import Optional
 
-from database import redis_db
+from database.redis_connection import create_bounded_redis_client
 from database.redis_db import delete_generic_cache, get_generic_cache, set_generic_cache
 
 RECORD_WAIT_CACHE_SECONDS = 30
@@ -35,6 +35,18 @@ def forget_record_wait(uid: str, conversation_id: str) -> None:
     delete_generic_cache(_path(uid, conversation_id))
 
 
+_MARKER_TIMEOUT_SECONDS = 0.5
+_marker_redis = None
+
+
+def _marker_client():
+    """A bounded client: a stalled Redis cannot hold the upload past its 503."""
+    global _marker_redis
+    if _marker_redis is None:
+        _marker_redis = create_bounded_redis_client(_MARKER_TIMEOUT_SECONDS)
+    return _marker_redis
+
+
 def claim_gap_fill_marker(record_key: str, wal_key: str, ttl: int) -> bool:
     """First claim of a (record, WAL) gap fill inside ``ttl``; False on a repeat.
 
@@ -43,6 +55,6 @@ def claim_gap_fill_marker(record_key: str, wal_key: str, ttl: int) -> bool:
     gets through is a no-op.
     """
     try:
-        return bool(redis_db.r.set(f'sync:record_gap_fill:v1:{record_key}:{wal_key}', '1', ex=ttl, nx=True))
+        return bool(_marker_client().set(f'sync:record_gap_fill:v1:{record_key}:{wal_key}', '1', ex=ttl, nx=True))
     except Exception:
         return True
