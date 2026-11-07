@@ -4,6 +4,7 @@ import math
 from typing import Any
 from uuid import uuid4
 
+from database.firestore_read_origin import read_origin
 from database.batch_pipeline_policy import (
     PROCESS_ENVIRONMENT,
     load_stage_policy,
@@ -16,7 +17,8 @@ from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
-from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
 # Permit one replacement recognition only after the original intent's dwell.
@@ -114,6 +116,36 @@ class RecoveryStore:
         ):
             raise ProjectionBlocked('recovery content owner lost')
         return job, binding
+
+    def expire_held(self, segment_id, now):
+        if not batch_held_dead_letter_enabled():
+            return 'disabled'
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            return expire_held_in_transaction(tx, job, now)
+
+        return self.store.run(commit)
+
+    def requeue_quarantined(self, segment_id, now, *, dead_before=None):
+        """Operator and nightly entry: retain the content/privacy ownership CAS."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            if dead_before is not None:
+                expired_at = job.get('held_expired_at')
+                if (
+                    job.get('state') != 'dead'
+                    or job.get('dead_letter_reason') != 'held_expired'
+                    or isinstance(expired_at, bool)
+                    or not isinstance(expired_at, (int, float))
+                    or not math.isfinite(expired_at)
+                    or expired_at >= dead_before
+                ):
+                    return False
+            return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
+
+        return self.store.run(commit)
 
     def prepare(self, segment_id, owner_id, now):
         load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
@@ -324,6 +356,8 @@ class RecoveryStore:
                 # This is a local result failure, not an abandoned recognizer.
                 marker.update(settled_at=now, failure={'stage': 'payload_validation', 'reason': 'operation_failed'})
                 job['recovery_state'] = 'failed_held'
+                if batch_held_dead_letter_enabled():
+                    job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
                 tx.put('jobs', segment_id, job)
                 return 'exhausted'
             marker['missing_result_history'] = [
@@ -364,6 +398,8 @@ class RecoveryStore:
             ):
                 return False
             job['recovery_state'] = 'failed_held'
+            if batch_held_dead_letter_enabled():
+                job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
             job['measured_held_vad_speech_seconds'] = held_vad_census(job, 0)
             job['recovery'].update(
                 settled_at=now,
@@ -402,6 +438,8 @@ class RecoveryStore:
             ):
                 return False
             job['recovery_state'] = 'failed_held'
+            if batch_held_dead_letter_enabled():
+                job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
             job['recovery'].update(settled_at=now, refusal={'reason': 'invalid_retained_manifest'})
             tx.put('jobs', segment_id, job)
             return True
@@ -548,6 +586,8 @@ class RecoveryStore:
             job['measured_held_vad_speech_seconds'] = census
             if result_uri is None:
                 job.update(recovery_state='failed_held')
+                if batch_held_dead_letter_enabled():
+                    job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
                 if failure:
                     from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
 
@@ -577,6 +617,50 @@ class RecoveryStore:
         return changed
 
 
+def expire_held_in_transaction(tx, job, now):
+    """CAS a dormant compute hold into a retained, reasoned dead letter.
+
+    No artifact IO, TTL or conversation write. Callers retain RecoveryStore.checked
+    and the store's commit-boundary privacy fence. Old rows get a full window.
+    """
+    if not batch_held_dead_letter_enabled():
+        return 'disabled'
+    if not Scheduler.held_requeue_eligible(tx, job, now, allow_dead=False):
+        return 'held'
+    deadline = job.get('held_deadline_at')
+    if deadline is None:
+        job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
+        tx.put('jobs', job['segment_id'], job)
+        return 'stamped'
+    if isinstance(deadline, bool) or not isinstance(deadline, (int, float)) or not math.isfinite(deadline):
+        return 'held'  # Malformed metadata is not permission to expire custody.
+    if deadline > now:
+        return 'held'
+    # The pre-existing redrive_dead route requires merge_pending. Preserve that
+    # recovery contract even if this feature is disabled or its code reverted.
+    job.update(state='dead', merge_pending=True, dead_letter_reason='held_expired', held_expired_at=now)
+    tx.put('jobs', job['segment_id'], job)
+    return 'expired'
+
+
+def dead_held_candidates(client, namespace, limit=32, *, after_id=None):
+    """Only this reason is nightly redriven; historical dead stock is untouched."""
+    collection = client.collection(f'{namespace}_jobs')
+    query = collection.where('state', '==', 'dead').where('dead_letter_reason', '==', 'held_expired')
+    query = query.order_by('__name__')
+    if after_id is not None:
+        query = query.start_after({'__name__': collection.document(after_id)})
+    return [(doc.id, doc.to_dict() or {}) for doc in query.limit(max(1, min(limit, 64))).stream()]
+
+
+def held_expired_stock(client, namespace):
+    query = client.collection(f'{namespace}_jobs').where('state', '==', 'dead')
+    jobs = query.where('dead_letter_reason', '==', 'held_expired').count().get()[0][0].value
+    results = client.collection(f'{namespace}_results').where('projection_state', '==', 'quarantine_held')
+    return jobs + results.where('held_expired_reason', '==', 'held_expired').count().get()[0][0].value
+
+
+@read_origin('job:batch_pipeline_quarantine_recovery:recovery_candidates')
 def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int = 10, *, after_id: str | None = None):
     """Only unattempted or reconcilable units; failed STT never hot-loops."""
     collection = client.collection(f'{namespace}_jobs')
@@ -596,6 +680,7 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
     return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
+@read_origin('job:batch_pipeline_quarantine_recovery:held_candidates')
 def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | None = None):
     """Held/failed_held units in document order for the partial scan; eligibility is rechecked per upload."""
     collection = client.collection(f'{namespace}_jobs')

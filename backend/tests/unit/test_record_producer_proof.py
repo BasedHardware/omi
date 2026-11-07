@@ -109,6 +109,24 @@ def test_absence_inventory_must_postdate_process_start_uncertainty(load):
     assert not proof.producer_tokens_dead({'t': {'pod': 'new', 'process_started_at': 998}}, load([]))
 
 
+def test_abandoned_token_is_dead_without_pod_proof_but_reconnect_is_live(load):
+    abandoned = {'pod': 'live', 'process_started_at': 900, 'abandoned_at': 950}
+    current = load([pod('live', 800)])
+    assert proof.producer_tokens_dead({'old': abandoned}, current)
+    assert proof.producer_tokens_dead({'old': abandoned}, None)
+    assert proof.producer_tokens_dead({'old': abandoned}, {**current, 'captured_at': 1})
+    assert not proof.producer_tokens_dead(
+        {'old': abandoned, 'new': {'pod': 'live', 'process_started_at': 900}}, current
+    )
+
+
+@pytest.mark.parametrize('abandoned', [None, True, '950', float('nan'), float('inf'), 899])
+def test_malformed_abandon_attestation_never_proves_dead(load, abandoned):
+    token = {'t': {'pod': 'live', 'process_started_at': 900, 'abandoned_at': abandoned}}
+    assert not proof.producer_tokens_dead(token, load([pod('live', 800)]))
+    assert not proof.producer_tokens_dead(token, None)
+
+
 @pytest.mark.parametrize('raw', [{}, {'kind': 'List', 'apiVersion': 'v1', 'items': []}])
 def test_malformed_list_refuses(tmp_path, monkeypatch, raw):
     monkeypatch.setattr(proof.time, 'time', lambda: 1000)

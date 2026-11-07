@@ -6,6 +6,7 @@ from google.cloud import firestore
 from prometheus_client import Counter
 
 from config import record_partial as config
+from config import record_seal_repair as repair_config
 from config.record_audio import record_identity, require_record_audio_barrier
 from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -32,7 +33,7 @@ def continuation_refusal(store, pending):
     return store.run(read)
 
 
-def finish_partial(store, path, *, reason, proof, now, register=None, preview=False):
+def finish_partial(store, path, *, reason, proof, now, register=None, preview=False, retry_aged=False):
     """Fresh transactional fence, including producer completion during planning.
 
     The complete planner's refusal is diagnostic only. This path checks its own
@@ -82,8 +83,12 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             return 'byok_refused'
         tx.check_privacy(uid, (cid,), expected_generation=job['privacy_generation'])
         mark = row.get('record_audio_partial') or {}
+        aged_retry = retry_aged and repair_config.jobs_enabled()
         if config.partial_barrier(row) and job.get('partial_coordinator'):
-            return 'already_partial'
+            if not (
+                aged_retry and job.get('state') in {'record_pending', 'partial_retired'} and config.repair_due(row, now)
+            ):
+                return 'already_partial'
         if preview:
             return 'partial_eligible'
         mark = {
@@ -95,12 +100,16 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             'applied_generation': mark.get('applied_generation', 0),
             'finished_partial_at': mark.get('finished_partial_at', datetime.fromtimestamp(now, timezone.utc)),
         }
-        # A new upload revision reopens a retired coordinator through repair.
-        # Unsignalled storage changes do not restart retired inventory polling.
+        if aged_retry:
+            mark['repair_attempted_at'] = datetime.fromtimestamp(now, timezone.utc)
+        # A changed upload revision or proof-gated aged retry reopens the
+        # coordinator, preserving its existing coverage and barrier generations.
         job.update(state='record_pending', partial_coordinator=True, partial_reason=mark['reason'], available_at=now)
         if job.get('partial_run') and job['partial_run'].get('retired_at'):
             job['partial_run'] = {**job['partial_run'], 'inventory_changed_at': now, 'next_inventory_at': now}
             job['partial_run'].pop('retired_at')
+        if aged_retry and job.get('partial_run'):
+            job['partial_run'] = {**job['partial_run'], 'next_inventory_at': now}
         if not producer_tokens_dead({}, proof):
             return 'state_changed'
         tx.put('jobs', segment, job)

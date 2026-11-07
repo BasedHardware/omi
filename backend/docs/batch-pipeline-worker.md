@@ -17,8 +17,10 @@ routes approximately 99% to backfill. One job per owner, queue concurrency
 13 seconds/job constrain dispatch. Supplied GPU utilization is approximately
 7%; batch pyannote T4 RTF is 0.04 and Parakeet L4 RTF 0.0025. The supplied
 1.5 seconds/audio-hour batch estimate is not qualified full-chain capacity.
-`SYNC_LEGACY_FRESH_ENABLED` remains independently owned; its classification
-feeds this queue unchanged.
+The optional legacy fresh-admission flags and Redis budget were retired in
+[#24754](https://github.com/BasedHardware/omi/pull/24754). Recent unbound
+uploads retain fresh routing only when legacy mode is `on`, including its
+fail-safe path; `draining` and `dark` disable that promotion.
 
 ## Target, ownership and work units
 
@@ -261,6 +263,28 @@ audio and never extends accepted-audio retention or incident preservation.
 
 ## Capacity and autoscaling
 
+The dedicated runtime exports `omi_batch_pipeline_stage_seconds{stage=...}`
+for pull, maintenance, admission, full worker flight, publication, ordered merge,
+and projection, plus fetch/decode, VAD, window assembly, ASR, padded retry,
+diarization, encrypted result persistence, and final CUDA synchronization.
+Timings include failed operations and executor wait; a prefetched fetch/decode
+is measured where it executes, not at the later consuming wait. `pump_cycle` contains the
+whole pass; `worker_flight` contains worker leaves and CUDA synchronization.
+Do not add parent and child sums. Model leaves measure host-observed wall time,
+not isolated CUDA kernel occupancy. Unattributed worker time includes validation,
+packing and policy callbacks. No owner, segment, URI, or exception labels exist.
+Divide a stage's rate of `_sum` by the worker-scoped leased-event rate for an
+amortized seconds-per-leased-job view; use its `_count` for per-call means.
+
+The production adapter reads local Prometheus, while the worker's `PodMonitoring`
+feeds managed Prometheus. Both the local `batch-pipeline-worker-metrics` scrape
+and the external queue-age rule must be installed. Verify the external metrics
+API returns fresh values for the exact namespace/release and all three classes
+before enabling HPA. A healthy adapter APIService alone is insufficient. Samples
+older than 60 seconds must be absent, including a pump blocked in a long flight.
+Prewarm replicas before admission ramps: the chart records cold GPU/model startup
+exceeding 600 seconds; queue-age HPA is overflow protection, not immediate capacity.
+
 Conversation units run only on dedicated batch GPUs. Shared-live stays off;
 future admission requires explicit capture spans ≤120 seconds, fresh slack,
 empty live queue, utilization/memory headroom and one durable reservation per
@@ -455,13 +479,12 @@ Service remains the primary rank and worker affinity breaks ties within the
 bounded query prefix. Set 64 to restore the previous query width; list reuse
 remains active. `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy selection.
 
-`worker.firestoreReadLevers: '{"batch_privacy_memoize":100}'` renders
-`FIRESTORE_READ_LEVERS='{"batch_privacy_memoize":100}'` on worker pods only.
-The existing transaction-local memo enrolls each first read in the conflict set,
-including commit-boundary privacy checks, and is rebuilt on transaction retry.
-Set `worker.firestoreReadLevers: '{}'` in the override values file to disable it. A string avoids Helm's deep-map
-merge retaining the enabled default when an empty map is supplied. Serving-role
-complete lever literals and privacy fences are unchanged.
+`worker.firestoreReadLevers: '{}'` is the default. The retired WQ12
+`batch_privacy_memoize` lever and its transaction snapshot dedupe are removed;
+privacy checks retain the live walk and WQ26 token fencing. The string setting
+avoids Helm deep-map merging when operators supply a complete lever literal.
+The token-fenced negative lookup rollout is documented in
+[privacy-check-shadow.md](runbooks/privacy-check-shadow.md).
 
 `worker.admissionParallelCalls` maps to `BATCH_ADMISSION_PARALLEL_CALLS`
 (default true; false restores serial flight calls). First-seen owner groups are

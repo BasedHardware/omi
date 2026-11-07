@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "titling-dedupe",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "3673a90338cf7537b74c3be29909336cbee9f50fb891d8672592b1e71b55e64b",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Synthetic matching successful notes checkpoint, prepared with the real fingerprint path. Main should reuse its nonempty title and complete without a second notes call.",
+  "stages": {
+    "titling": {
+      "expect": "pass"
+    }
+  }
+}

@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Батарэя вышэй за 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Пераканайцеся, што ў вашага прыбору 15% батарэі.",
+    "firmwareBatteryRequirement": "Батарэя вышэй за 30%",
+    "firmwareEnsureBattery": "Пераканайцеся, што ў вашага прыбору 30% батарэі.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "Абнаўленне не ўдалося",
     "firmwareUpdateFailedMessage": "Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.",
     "firmwareDownloadFailedMessage": "Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.",
-    "firmwareBatteryTooLow": "Зарад батарэі {level}%. Зарадзіце прыладу хаця б да 15% перад абнаўленнем.",
+    "firmwareBatteryUnavailable": "Узровень зараду батарэі пакуль недаступны. Пачакайце крыху і падключыце прыладу зноў, калі нічога не зменіцца.",
+    "firmwareBatteryTooLow": "Зарад батарэі {level}%. Зарадзіце прыладу хаця б да 30% перад абнаўленнем.",
     "startUpdate": "Пачаць абнаўленне",
     "otaNotSupported": "Гэтую прашыўку нельга абнавіць праз Wi-Fi.",
     "otaConnectFailed": "Не ўдалося падключыцца да {deviceName}. Трымайце прыладу ўключанай і побач, потым паспрабуйце зноў.",
@@ -11284,13 +11282,8 @@
     "reviewChangesSectionTerms": "Імёны і тэрміны",
     "reviewChangesSectionTitles": "Назвы і зводкі",
     "reviewChangesSectionOther": "Іншыя змены",
-    "reviewChangeConversationCount": "{count, plural, =1{1 размова} other{Размоў: {count}}}",
-    "reviewChangePlaceCount": "{count, plural, =1{1 месца} other{Месцаў: {count}}}",
-    "reviewChangeShowAll": "Паказаць усе ({count})",
     "reviewChangeUndoAll": "Адрабіць усё",
-    "reviewChangeSeeEvidence": "Паказаць доказы",
     "reviewChangeViewConversation": "Адкрыць размову",
-    "reviewChangeViewTask": "Адкрыць задачу",
     "reviewChangesUndoPartial": "Не ўдалося адрабіць {failed} з {total}. Паспрабуйце яшчэ раз.",
     "reviewShowMore": "Паказаць больш",
     "entityKeptCurrent": "Актуальнасць падтрымлівае Omi",
@@ -11313,7 +11306,6 @@
     "tasksGroupByProject": "Групаваць па праектах",
     "tasksGroupByDate": "Групаваць па даце",
     "dreamReportTitle": "Справаздача Dream",
-    "dreamReportShadowBanner": "Рэжым папярэдняга прагляду: Dream паказвае, што б змяніў, але ў вашым акаўнце пакуль нічога не мяняецца.",
     "dreamReportLiveBanner": "Dream прымяняе гэтыя змены сам. Адмяніць любую з іх можна ў раздзеле «Нядаўнія змены».",
     "dreamReportRunNow": "Запусціць зараз",
     "dreamReportRunLimit": "Ручныя запускі на сёння скончыліся",
@@ -11328,20 +11320,14 @@
     "dreamReportFailed": "Памылка ({error})",
     "dreamReportTimedOut": "Спынена з-за ліміту часу",
     "dreamReportNothingFound": "Няма чаго выпраўляць",
-    "dreamReportStats": "Прачытана элементаў: {records} · токенаў: {tokens}",
     "dreamReportWouldFix": "Выправіў бы",
     "dreamReportFixed": "Выпраўлена",
     "dreamReportWouldAsk": "Спытаў бы вас",
     "dreamReportWouldSuggestTasks": "Прапанаваў бы задачы",
     "dreamReportLearnedWords": "Вывучаныя словы",
-    "dreamReportFeedback": "Адпраўлена камандзе Omi",
     "dreamReportDeletedItem": "Выдалены элемент",
-    "dreamReportPasses": "{count} з {limit} запускаў сёння",
-    "dreamReportQueued": "{count, plural, =0{Няма змен у чаканні} =1{1 змена чакае} other{{count} змены чакаюць}}",
     "dreamReportRunsLeft": "{count, plural, =1{Сёння застаўся 1 ручны запуск} other{Сёння засталося {count} ручныя запускі}}",
     "dreamReportFound": "{fixes, plural, =1{1 выпраўленне} other{{fixes} выпраўленні}} · {asks, plural, =1{1 прапанова} other{{asks} прапановы}}",
-    "dreamReportDropped": "{count, plural, =1{1 больш старая змена прапушчана} other{{count} больш старыя змены прапушчаны}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}",
     "speakerTagPromptExcerptSaved": "Адказ захаваны для гэтага ўрыўка.",
     "pinPersonDescription": "Замацаваныя людзі заўсёды знаходзяцца ўверсе вашага спісу «Людзі» і не выдаляюцца пры Ачыстцы.",
     "chatAppsProblemFailed": "Нешта пайшло не так. Паспрабуй яшчэ раз.",
@@ -11541,6 +11527,9 @@
     "paywallTrialSaveAmount": "Эканомія {amount}",
     "paywallTrialCta": "Пачаць за {price}",
     "paywallTrialCancelNote": "Адмяніць у любы час. Без камісій і штрафаў.",
+    "paywallMonthlyFallbackTitle": "Пакуль не гатовыя на год?",
+    "paywallMonthlyFallbackTrialBody": "Пачніце з месячнага плана. Тыя ж {days} дзён бясплатна, потым {price} у месяц. Адмяніць можна ў любы момант.",
+    "paywallMonthlyFallbackTrialCta": "Паспрабаваць месячны бясплатна",
     "paywallTrialStarted": "Ваш {days}-дзённы бясплатны пробны перыяд Omi Pro пачаўся.",
     "paywallCancelAnytime": "Адмяняйце ў любы час.",
     "connectAnAgent": "Падключыць агента",
@@ -11552,9 +11541,6 @@
     "syncCardTranscribingAmount": "Ператварэнне {amount} у размовы",
     "syncCardTranscribedOf": "Гатова {done} з {total} · можна пакінуць гэты экран",
     "syncCardReadyAmount": "{amount} гатова да сінхранізацыі",
-    "syncStepLabelDownload": "Omi → тэлефон",
-    "syncStepLabelUpload": "Загрузка",
-    "syncStepLabelTranscribe": "Расшыфроўка",
     "syncDetailsTitle": "Дэталі сінхранізацыі",
     "syncDetailsRightNow": "Цяпер",
     "syncDetailsYourOmi": "Ваш Omi",
@@ -11562,7 +11548,6 @@
     "syncDetailsWaitingOnOmi": "Чакае на Omi",
     "syncDetailsWaitingOnPhone": "Чакае на гэтым тэлефоне",
     "syncDetailsTranscribing": "Расшыфроўваецца ў Omi",
-    "syncDetailsForSupport": "Для падтрымкі",
     "syncDetailsAudioFiles": "Аўдыяфайлы",
     "syncDetailsServerJobs": "Заданні сервера (гатова / усяго)",
     "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі",
@@ -11878,17 +11863,13 @@
     "episodeContinues": "Працяг «{title}»",
     "episodeLiveSince": "· з {time}",
     "episodeNotesStartWithTranscript": "Нататкі з’явяцца, калі прыбудзе канчатковая расшыфроўка.",
-    "episodeOnDeviceNotesFootnote": "Ствараюцца на вашым тэлефоне, пакуль вы гаварыце. Поўныя нататкі з’явяцца разам з канчатковай расшыфроўкай.",
-    "episodeOnThisPhone": "На гэтым тэлефоне",
     "livePreviewBehind": "Канчатковая расшыфроўка адстае прыблізна на {duration}",
     "livePreviewCatchingUp": "Канчатковая расшыфроўка даганяе",
     "livePreviewNoEngineBody": "Вашы словы з’явяцца тут праз хвіліну-две пасля таго, як вы іх вымовіце.",
-    "livePreviewNoEngineTitle": "Бяспечны запіс",
     "livePreviewOnPhoneDivider": "Толькі што, на гэтым тэлефоне",
     "livePreviewTurnOnLiveText": "Уключыць жывы тэкст",
     "deviceCatchUpOnItsWay": "у дарозе",
     "deviceCatchUpWhenOnline": "пры злучэнні з інтэрнэтам",
-    "onTheWayCatchingUp": "{duration} яшчэ загружаецца",
     "onTheWayUploadsByItself": "Загрузка ідзе аўтаматычна. Размовы з'яўляюцца па меры прыбыцця запісаў.",
     "onTheWayUploadsWhenOnline": "Загрузка ідзе аўтаматычна, калі вы зноў будзеце онлайн. Размовы з'яўляюцца па меры прыбыцця запісаў.",
     "onTheWayDayUploading": "Загружаецца",
@@ -11896,10 +11877,6 @@
     "onTheWayDayQueued": "У чарзе",
     "onTheWayNoDate": "Без даты",
     "onTheWayFootnote": "Запісы, якія не ўдалося загрузіць, працягнуць спробы ў фонавым рэжыме. Пра ўсё, што мы не зможам пераўтварыць у тэкст, нам паведамяць аўтаматычна.",
-    "onTheWayDetailsForSupport": "Падрабязнасці для падтрымкі",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 кароткі запіс схаваны} other{Схаваныя кароткія запісы: {count}}}",
-    "homeNoiseFoldShow": "Паказаць",
-    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}",
     "deleteLocalRecordingsWarning": "{count, plural, =1{Адзін запіс яшчэ не загружаны. Калі выдаліць яго цяпер, ён будзе страчаны — пакіньце праграму адкрытай, каб завяршыць загрузку.} other{{count} запісаў яшчэ не загружаны. Калі выдаліць іх цяпер, яны будуць страчаны — пакіньце праграму адкрытай, каб завяршыць загрузку.}}",
     "deleteConfirmGraceSubtitle": "Перш чым сысці, даведайцеся, што будзе з вашымі данымі.",
     "deletePauseConfirmation": "Omi прыпынены. Аднавіць запіс можна ў любы час.",
@@ -11944,10 +11921,283 @@
     "chatAppsWaitingMessageIn": "Адпраў паведамленне ў праграме {app}. Гэты экран абновіцца, як толькі Omi яго атрымае.",
     "chatAppsCodeExpiredMessageIn": "Атрымай новы код і адпраў яго з праграмы {app}.",
     "episodeWritingNotes": "Пішам нататкі…",
+    "homeStepTranscribing": "Расшыфроўваем…",
+    "homeRecordingsCount": "{count, plural, one{{count} запіс} few{{count} запісы} many{{count} запісаў} other{{count} запісу}}",
     "episodeWritingNotesDetail": "Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.",
     "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
     "liveAudioSaved": "Захавана {duration}",
     "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі.",
-    "episodeFinishingUp": "Завяршаем…"
+    "searchNoiseFilter": "Кароткія кліпы",
+    "reviewChangeConversationCount": "{count, plural, =1{1 размова} other{Размоў: {count}}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 месца} other{Месцаў: {count}}}",
+    "reviewChangeShowAll": "Паказаць усе ({count})",
+    "reviewChangeSeeEvidence": "Паказаць доказы",
+    "reviewChangeViewTask": "Адкрыць задачу",
+    "dreamReportShadowBanner": "Рэжым папярэдняга прагляду: Dream паказвае, што б змяніў, але ў вашым акаўнце пакуль нічога не мяняецца.",
+    "dreamReportStats": "Прачытана элементаў: {records} · токенаў: {tokens}",
+    "dreamReportFeedback": "Адпраўлена камандзе Omi",
+    "dreamReportPasses": "{count} з {limit} запускаў сёння",
+    "dreamReportQueued": "{count, plural, =0{Няма змен у чаканні} =1{1 змена чакае} other{{count} змены чакаюць}}",
+    "dreamReportDropped": "{count, plural, =1{1 больш старая змена прапушчана} other{{count} больш старыя змены прапушчаны}}",
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}",
+    "syncStepLabelDownload": "Omi → тэлефон",
+    "syncStepLabelUpload": "Загрузка",
+    "syncStepLabelTranscribe": "Расшыфроўка",
+    "syncDetailsForSupport": "Для падтрымкі",
+    "episodeOnDeviceNotesFootnote": "Ствараюцца на вашым тэлефоне, пакуль вы гаварыце. Поўныя нататкі з’явяцца разам з канчатковай расшыфроўкай.",
+    "episodeOnThisPhone": "На гэтым тэлефоне",
+    "livePreviewNoEngineTitle": "Бяспечны запіс",
+    "onTheWayCatchingUp": "{duration} яшчэ загружаецца",
+    "onTheWayDetailsForSupport": "Падрабязнасці для падтрымкі",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 кароткі запіс схаваны} other{Схаваныя кароткія запісы: {count}}}",
+    "homeNoiseFoldShow": "Паказаць",
+    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}",
+    "speakerWholeRecording": "Ужыць да ўсяго запісу",
+    "speakerSelectionChanged": "Дакладчык змяніўся. Выберыце радкі зноў.",
+    "speakerRenameIssue": "{reason, select, limit{Запіс занадта вялікі. Выберыце менш радкоў у адной размове.} partial{Некаторыя радкі захаваны. Выберыце астатнія і паспрабуйце зноў.} other{Некаторыя радкі захаваны. Выберыце астатнія і паспрабуйце зноў.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Іншыя радкі гэтага голасу (ахоп запісу не пацверджаны)} other{{count, plural, =1{Перайменавана 1 радкоў толькі ў даступных размовах.} other{Перайменавана {count} радкоў толькі ў даступных размовах.}}}}",
+    "episodeFinishingUp": "Завяршаем…",
+    "buildAndShareApp": "Стварыце і раздзеліцеся сваім дадатком",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ членаў і больш.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "У Omi мы адданы абаронцы вашай прыватнасці. Гэта старонка дазваляе вам кантраляваць, як вашы дадзеныя захоўваюцца і выкарыстоўваюцца.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "Вашы дадзеныя абаронены па змаўчанні сільным шыфраваннем. Прагледзьце ваш параметры і адносныя вариянты прыватнасці ніжэй.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "Наладзіць пастаўшчыка STT",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "Імпартаваць дадзеныя з іншых крыніц",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "Слоў разумена з вашых размоў.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "Факты і дэталі запамінаны для вас.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "Дапамагае дыягнаставаць праблемы",
+    "deleteKnowledgeGraphMessage": "Гэта выдаліць усе вывераныя дадзеныя графа ведаў (вузлы і звязкі). Вашы арыгінальныя ўспаміны заставаюцца бяспечныя. Граф будзе перабудаваны з часам або пры наступным запыце.",
+    "deleteKnowledgeGraphDesc": "Ачысціць усе вузлы і звязкі",
+    "enhanceTranscriptAccuracyDesc": "Па меры палепшэння нашай мадэлі, мы можам забяспечыць лепшыя вынікі транскрыпцыі для вашых запісаў.",
+    "bestInClassTranscription": "Лепшая ў сваім класе расшыфроўка без наладкі",
+    "optimizedForConversation": "Аптымізавана для разговора",
+    "highAccuracy": "Высокая дакладнасць",
+    "privacyFirst": "Прыватнасць наперш",
+    "keepGoing": "Прадоўжайце, вы робіце адлічна",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "Ваш персаніфічны шлях росту з AI, які слухае кожнае вашае слова.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "firmwareBatteryAbove15": "Батарэя вышэй за 15%",
+    "@firmwareBatteryAbove15": {
+        "description": "Firmware update step title about battery level"
+    },
+    "configureSttProvider": "Наладзьце пастаўшчыка STT",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "Очыстіць усе вузлы і злучэнні",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Вітаем у Omi! Ваш AI асістэнт готаў дапамагаць вам з разнамовамі, задачамі і многім іншым.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "Разнамовы апрацоўваюцца аўтаматычна",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "Атрымаць ўгледзінаў і рэзюмаў танічна",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "Оценка, чтобы помочь вам лучше\nсосредоточиться на исполнении.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "Пачніце разнамову і дайце чарадзэйству пачаціся",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "Надзеваны AI асістэнт",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "Арганізуйце і кіруйце вашымі памяткамі",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "Установіць усе памяткі на прыватны доступ",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "Установіць усе памяткі на публічны доступ",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "Выберыце вашу аддаленую мову для лепшага вопыту Omi",
+    "enableFeaturesForBestExperience": "Ўключыце функцыі для лепшага вопыту Omi на вашым прыладзе.",
+    "deliveryTimeDescription": "Когда атрымаць вашу щодзённую зводку",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "Наканфігуйце пастаўшчыка STT",
+    "setConversationEndDescription": "Ўстаноўце, калі размовы аўтаматычна заканчваюцца",
+    "clearNodesDescription": "Очысціць ўсе вузлы і злучэнні",
+    "deleteKnowledgeGraphWarning": "Гэта выдаліць ўсе вывядзеныя даныя графа ведаў. Вашы асноўныя спогады застаюцца бяспечны.",
+    "createAndShareYourApp": "Стварыце і дзяліцеся вашым прыкладаннем",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "Шыфраванне ад канца да канца - гэта золаты стандарт для прыватнасці. Калі ўключана, вашы даныя шыфруюцца на вашым прыладзе да адпраўкі на нашы серверы. Гэта азначае, што ніхто, нават Omi, не можа атрымаць доступ да вашага змесціва.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "Вашы даныя шыфруюцца з ключом, адзінкавым для вас на нашых серверах, размешчаны на Google Cloud. Гэта азначае, што ваше сыра змесціва недаступна ніхто, уключаючы персонал Omi або Google, непасрэдна з базы даных.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "Ўключыце для максімальнай бяспекі, дзе толькі вы можаце мець доступ да вашых даных. Клацніце для больш дэталяў.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Ваш Omi, далі. Прайсцяце неабмежавана для бясконцых магчымасцей.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "У Omi мы вельмі цэнім вашу прыватнасць. Мы хочам быць прозрыстымі адносна дадзеных, якія мы збіраем, і як мы іх выкарыстоўваем для палепшэння нашага прадукту для вас. Вось што вам трэба ведаць:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "Мы зацвёрджаны выкарыстоўваць дадзеныя, якія мы збіраем, толькі для палепшэння Omi. Ваша прыватнасць і даверыгу нам вельмі важныя.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Дзякуем, што вы каристальнік Omi. Калі ў вас ёсць якія-либо пытанні або ўзнікаюць праблемы, не вагайцеся звяртацца да нас team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "Гэта удаліт усе дадзеныя дэрыванага графа ведаў (вузлы і злучэнні). Ваша арыгінальная память застанецца ў безпеце. Граф будзе адбудаваны з часам або пры наступным запыце.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "Як толькі чалавек створаны, вы можаце перайсці да транскрыпцыі разговора і прызначыць яму іх адпаведныя сегменты, гэта дозваліт Omi распазнаваць іх мову!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "Постаў і дзелісь сваім адмысловым прыкладаннем",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "@processingProgress": {
+        "description": "Progress label showing current/total items",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onboardingChooseYourPreference": "Выберыце ваш перавагу",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "Прадаць патрэбны доступ",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "Выберыце, да якога бэкэнда падключыцца",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "Ваш вызовы астаюцца прыватнымі і бяспечнымі",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "Калі вашы Omi не злучаны з вашым тэлефонам, ён захоўвае аўдыё адзінаў у абрана пам'яці прыстасавання. Вы ніколі не страчаеце запіс.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Уключыце некалькі дазволаў, каб Omi мог адкрыць свайна магію.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "AI для прафесіяналаў — тысячы чатаў + агентная аўтаматызацыя",
+    "syncCardProgressOf": "{current} з {total}",
+    "newestFirst": "Спачатку новыя",
+    "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.",
+    "alwaysInContext": "Заўсёды ў кантэксце",
+    "conversationsNotCapturedCount": "Не запісана ({count})",
+    "memoryAllowUse": "Дазволіць выкарыстанне",
+    "memoryDontUse": "Не выкарыстоўваць",
+    "speakerTagPromptSubtitle": "Хуткая праверка галасоў за апошнія два дні",
+    "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}",
+    "captureRecoveryBanner": "Omi не перадае гук — націсніце, каб падключыцца зноў",
+    "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
+    "pinPersonSubtitle": "Захаваць {name} і чакаць у вашых размовах",
+    "pinPersonHonestLine": "Omi пытаецца, перш чым супаставіць падобныя галасы.",
+    "speakerTagPromptHintConfirm": "«Так» павышае ўпэўненасць у {name}.",
+    "localCopiesSection": "Лакальныя копіі",
+    "capturePendantDisconnectedShort": "Omi перападключыцца сам",
+    "forYou": "Для вас",
+    "stopThese": "Спыніць гэта",
+    "meetingActionItemsTitle": "Элементы действий",
+    "addToTasks": "Дадаць у задачы",
+    "showInTranscript": "Паказаць у расшыфроўцы",
+    "tentativeTaskDueDate": "Тэрмін прыблізна {date}",
+    "tentativeTaskDueDateSemantics": "Меркаваны тэрмін {date}",
+    "openTask": "Адкрыць задачу",
+    "completeTask": "Завяршыць задачу",
+    "reopenTask": "Адкрыць задачу нанова",
+    "addingToTasks": "Дадаецца ў задачы",
+    "taskAddedToTasks": "Задача створана",
+    "completedStatus": "Завершана",
+    "notCompletedStatus": "Чакаючыя",
+    "referralAffiliate": "Партнёрская праграма",
+    "referralCampaignTerms": "Сябры атрымліваюць зніжку 10% на прылады Omi. Пакупкі першых 2 розных сяброў адкрываюць 2 месяцы Pro, пакупкі наступных 3 розных сяброў — яшчэ 3. Да 5 сяброў і 5 месяцаў.",
+    "referralMilestone": "{months} мес. Pro · {count}/{target} пакупак",
+    "referralClaim": "Атрымаць узнагароду",
+    "referralClaimed": "Атрымана {months} мес. Pro",
+    "referralRewardPending": "Узнагарода захоўваецца да заканчэння платнай падпіскі.",
+    "referralCampaignTitle": "Запрашайце ў Omi. Атрымлівайце Pro бясплатна.",
+    "referralCampaignSubtitle": "Ім зніжка 10% на Omi. Вам да 5 месяцаў Pro.",
+    "referralShareInvite": "Падзяліцца запрашэннем",
+    "referralYourRewards": "Вашы ўзнагароды",
+    "referralRewardFirstTitle": "2 месяцы Pro",
+    "referralRewardFirstDetail": "Калі 2 сябры купяць Omi",
+    "referralRewardSecondTitle": "Яшчэ 3 месяцы",
+    "referralRewardSecondDetail": "Калі яшчэ 3 сябры купяць",
+    "referralClaimShort": "Атрымаць",
+    "paymentDeclinedTitle": "Вашу картку адхілілі",
+    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}",
+    "hasLinkedTasksLabel": "Ёсць звязаныя задачы",
+    "hasTasksFilter": "З задачамі",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

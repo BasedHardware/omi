@@ -39,6 +39,9 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     return status == ConversationStatus.processing || status == ConversationStatus.merging;
   }
 
+  String _processingTargetId(ServerConversation row) =>
+      row is OptimisticProcessingConversation ? row.targetConversationId ?? row.id : row.id;
+
   Map<String, ServerConversation> _realProcessingConversationsById() => {
         for (final conversation in processingConversations.whereType<OptimisticProcessingConversation>())
           if (conversation.targetConversationId != null && conversation.targetConversationId != '0')
@@ -181,7 +184,11 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       }
     }
 
-    processingConversations = [...localPlaceholder, ...reconciled];
+    final prefs = SharedPreferencesUtil();
+    processingConversations = [
+      for (final row in [...localPlaceholder, ...reconciled])
+        if (!prefs.isConversationDeleteConfirmed(_processingTargetId(row))) row,
+    ];
     _syncProcessingReconcileTimer();
   }
 }

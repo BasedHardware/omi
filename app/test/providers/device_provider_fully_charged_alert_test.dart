@@ -11,12 +11,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/services.dart';
 
 class _ChargingTransport implements DeviceTransport {
   List<int> value = const [1];
+  Completer<List<int>>? pendingRead;
   final notifications = StreamController<List<int>>.broadcast(sync: true);
 
   @override
@@ -25,6 +27,7 @@ class _ChargingTransport implements DeviceTransport {
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     expect(characteristicUuid, OmiDeviceConnection.settingsChargingStatusCharacteristicUuid);
+    if (pendingRead != null) return pendingRead!.future;
     return value;
   }
 
@@ -96,6 +99,26 @@ void main() {
     } catch (_) {
       // Ignore if another suite already initialized the singleton.
     }
+  });
+
+  test('late charging read from a disconnected session cannot restore charging', () async {
+    final pending = Completer<List<int>>();
+    final transport = _ChargingTransport()..pendingRead = pending;
+    final provider = _provider(transport, []);
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    final device = _device();
+    provider.connectedDevice = device;
+    provider.batteryLevel = 80;
+    final listening = provider.initiateChargingStatusListener();
+    // Let the connection loader return so the charging read is in flight.
+    await Future<void>.delayed(Duration.zero);
+    provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+    provider.setIsConnected(true);
+    pending.complete([1]);
+    await listening;
+    expect(provider.batteryLevel, -1);
+    expect(provider.isCharging, isFalse);
   });
 
   test('charging edge with a stale cached 100 does not notify', () async {

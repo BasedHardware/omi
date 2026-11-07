@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/providers/conversation_noise_fold.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -85,16 +84,14 @@ Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterabl
   return grouped;
 }
 
-class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
+class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
-  @override
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
-  @override
   bool showDiscardedConversations = false;
 
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
@@ -174,8 +171,20 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   Timer? _initialFetchRetryTimer;
   int _initialFetchRetryCount = 0;
   int _sessionGeneration = 0;
+  int? _disposedSessionGeneration;
   int _conversationFetchRevision = 0;
   int _conversationLoadingRevision = 0;
+
+  /// Bumped whenever transcript speaker identities are edited in place
+  /// (applySpeakerPromptIdentities). The in-place segment mutations change no
+  /// conversation container identity, so downstream cheap change
+  /// fingerprints (conversation detail's projection comparator) fold this in
+  /// to notice them without re-encoding the transcript.
+  int _speakerIdentityRevision = 0;
+
+  /// Revision of the last in-place speaker-identity edit; see
+  /// [_speakerIdentityRevision].
+  int get speakerIdentityRevision => _speakerIdentityRevision;
   static const int _maxInitialFetchRetries = 4;
   // After the fast backoff budget is spent we keep retrying on a slow fixed
   // interval rather than giving up — otherwise a prolonged outage latches the
@@ -276,6 +285,11 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         _conversationApi = conversationApi {
     _setupMergeListener();
     _loadSettings();
+    _confirmedDeleteSubscription = _confirmedDeletes.stream.listen((id) {
+      if (!SharedPreferencesUtil().isConversationDeleteConfirmed(id)) return;
+      if (_conversationServerLoadedIds.remove(id) && _conversationServerOffset > 0) _conversationServerOffset--;
+      if (_removeConfirmedDeleteFromLists(id)) notifyListeners();
+    });
   }
 
   static Future<({ServerConversation? item, bool ok})> _legacyLifecycleFromTyped(ConversationApi api, String id) async {
@@ -347,7 +361,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   }
 
   void clearUserData() {
-    resetFoldedNoise();
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -553,6 +566,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   }
 
   void addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
+    if (SharedPreferencesUtil().isConversationDeleteConfirmed(_processingTargetId(conversation))) return;
     if (conversation.id == OptimisticProcessingPlaceholder.id) {
       _cancelProcessingPlaceholderTimers();
       // The request or WAL drain may never resolve. Expire only this local
@@ -645,7 +659,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
     SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
-    resetFoldedNoise();
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -654,7 +667,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
-      fetchConversations().then((_) => refreshFoldedNoiseCounts());
+      fetchConversations();
     }
 
     PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -825,11 +838,11 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       processingRowsAtStart,
       {for (final conversation in newConversations) conversation.id: conversation.status.name},
     );
+    final receivedStorageCount = _recordServerPageIds(rawNewConversations, rawNewConversations.length);
     if (_conversationServerOffset == 0) {
-      _conversationServerOffset = rawNewConversations.length;
+      _conversationServerOffset = receivedStorageCount;
       _conversationServerHasMore = !result.truncated && rawNewConversations.length >= _conversationPageSize;
     }
-    _conversationServerLoadedIds.addAll(rawNewConversations.map((conversation) => conversation.id));
     final currentlyProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
         .map((conversation) => conversation.id)
@@ -850,7 +863,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
           conversation == null ||
           conversation.status != ConversationStatus.completed ||
           currentlyProcessingIds.contains(conversation.id) ||
-          memoriesToDelete.containsKey(conversation.id) ||
+          _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -869,7 +882,9 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
           !pageConversationIds.contains(row.id) &&
           (coveredAfter == null || (row.startedAt ?? row.createdAt).isAfter(coveredAfter)));
     }
+    conversations.removeWhere((row) => _isHiddenByDelete(row.id));
     for (final conversation in completedById.values) {
+      if (_isHiddenByDelete(conversation.id)) continue;
       final index = conversations.indexWhere((existing) => existing.id == conversation.id);
       if (index == -1) {
         conversations.insert(0, conversation);
@@ -973,11 +988,9 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       processingRowsAtStart,
       {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
     );
-    _conversationServerOffset = result.storageCount;
+    _conversationServerLoadedIds.clear();
+    _conversationServerOffset = _recordServerPageIds(result.items, result.storageCount);
     _conversationServerHasMore = !result.truncated && result.storageCount >= _conversationPageSize;
-    _conversationServerLoadedIds
-      ..clear()
-      ..addAll(result.items.map((conversation) => conversation.id));
 
     // The page replaces overlaps and covered rows; older cached pages remain
     // reachable. A live completion while the list/lifecycle awaits can outdate
@@ -1000,7 +1013,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
           conversation == null ||
           conversation.status != ConversationStatus.completed ||
           currentlyProcessingIds.contains(conversation.id) ||
-          memoriesToDelete.containsKey(conversation.id) ||
+          _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -1010,7 +1023,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     }
     for (final conversation in conversations) {
       if (conversation.status != ConversationStatus.completed) continue;
-      if (memoriesToDelete.containsKey(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
+      if (_isHiddenByDelete(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
       // A changed live object wins over a stale page object even when the
@@ -1020,6 +1033,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         completedById[conversation.id] = conversation;
       }
     }
+    completedById.removeWhere((id, _) => _isHiddenByDelete(id));
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     // Only use cache when no folder filter is applied
@@ -1098,7 +1112,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         .toSet();
     bool visible(ServerConversation conversation) =>
         !activeProcessingIds.contains(conversation.id) &&
-        !memoriesToDelete.containsKey(conversation.id) &&
+        !_isHiddenByDelete(conversation.id) &&
         _matchesActiveConversationFilters(conversation);
     // The fallback starts with an empty list. Rows delivered during decode
     // (including local phone rows) win over older cached objects with that ID.
@@ -1149,13 +1163,12 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _cancelInitialFetchRetry();
     final fetched = await fetchConversations();
     if (!fetched || !_isSignedIn()) return;
-    unawaited(refreshFoldedNoiseCounts());
     if (checkDailySummaries) await checkHasDailySummaries();
   }
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
-      if (memoriesToDelete.containsKey(convo.id)) return false;
+      if (_isHiddenByDelete(convo.id)) return false;
       // Filter by discarded status
       // When showDiscardedConversations is true, show all conversations (including discarded)
       // When showDiscardedConversations is false, hide discarded conversations
@@ -1384,19 +1397,22 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
       return false;
     }
+    if (pageOffset != _conversationServerOffset) {
+      // A confirmed delete in the already-loaded range shifted this request's offset.
+      setLoadingConversations(false);
+      return getMoreConversationsFromServer();
+    }
     if (!pageResult.ok) {
       setLoadingConversations(false);
       notifyListeners();
       return false;
     }
     final newConversations = pageResult.items;
-    _conversationServerOffset += pageResult.storageCount;
+    _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
     _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;
-    _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
-    conversations.addAll(
-      _filterPendingDeletes(newConversations).where((conversation) => !existingIds.contains(conversation.id)),
-    );
+    final visiblePage = _filterPendingDeletes(newConversations);
+    conversations.addAll(visiblePage.where((conversation) => !existingIds.contains(conversation.id)));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     final siriFetchIsUnfiltered = selectedFolderId == null &&
@@ -1412,11 +1428,10 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       final serverRows = conversations.where((row) => _conversationServerLoadedIds.contains(row.id)).toList();
       SiriIntegration.current.queueReconcileConversations(serverRows, coveredAfter: coveredAfter);
     } else {
-      SiriIntegration.current.queueUpsertConversations(newConversations);
+      SiriIntegration.current.queueUpsertConversations(visiblePage);
     }
     setLoadingConversations(false);
     notifyListeners();
-    unawaited(refreshFoldedNoiseCounts());
     return true;
   }
 
@@ -1438,6 +1453,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         identity.id: identity
     };
     final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    var applied = false;
     for (final row in rows) {
       if (row.id != result.conversationId) continue;
       for (final segment in row.transcriptSegments) {
@@ -1446,8 +1462,12 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         segment.isUser = identity.isUser;
         segment.personId = identity.personId;
         segment.speakerLabelSource = 'manual';
+        applied = true;
       }
     }
+    // In-place segment edits change no container identity: bump the revision
+    // so cheap downstream fingerprints (conversation detail) still notify.
+    if (applied) _speakerIdentityRevision++;
     notifyListeners();
   }
 
@@ -1490,6 +1510,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
 
   final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation) {
+    if (_isHiddenByDelete(conversation.id)) return;
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;
@@ -1576,7 +1597,9 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   /// [pendingDeleteWindow] so Undo can restore them, then kept as tombstones through the in-flight
   /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
-  final Map<String, Timer> _pendingDeleteTimers = {};
+  final Map<String, ({Timer timer, VoidCallback? onFailure})> _pendingDeletes = {};
+  static final _confirmedDeletes = StreamController<String>.broadcast();
+  late final StreamSubscription<String> _confirmedDeleteSubscription;
 
   Future<void> _restoreSiriAfterOptimisticDelete(ServerConversation conversation) async {
     final generation = _sessionGeneration;
@@ -1590,26 +1613,29 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   /// full time; the toast commits early via [commitPendingDelete] when it closes, so the usual
   /// delete still reaches the server about 5 s after the swipe.
   static const pendingDeleteWindow = Duration(seconds: 10);
+
+  bool _isHiddenByDelete(String id) =>
+      memoriesToDelete.containsKey(id) || SharedPreferencesUtil().isConversationDeleteConfirmed(id);
+
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
     _mergedAwayConversationIds.addAll(items.where((c) => c.isMergedDonor).map((c) => c.id));
     return items
         .where((c) =>
-            !c.deleted &&
-            !c.isMergedDonor &&
-            !memoriesToDelete.containsKey(c.id) &&
-            !_mergedAwayConversationIds.contains(c.id))
+            !c.deleted && !c.isMergedDonor && !_isHiddenByDelete(c.id) && !_mergedAwayConversationIds.contains(c.id))
         .toList();
   }
 
   /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
-  Future<void> deleteConversationLocally(ServerConversation conversation, [DateTime? date]) async {
+  Future<void> deleteConversationLocally(ServerConversation conversation, {VoidCallback? onFailure}) async {
     memoriesToDelete[conversation.id] = conversation;
     SiriIntegration.current.queueDelete('conversation', conversation.id);
-    _pendingDeleteTimers.remove(conversation.id)?.cancel();
-    _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
+    _pendingDeletes.remove(conversation.id)?.timer.cancel();
+    _pendingDeletes[conversation.id] = (
+      timer: Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id)),
+      onFailure: onFailure,
+    );
     conversations.removeWhere((element) => element.id == conversation.id);
-    dropFromFoldedNoise(conversation.id);
     for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
     }
@@ -1618,80 +1644,128 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   }
 
   /// Whether [conversationId] was deleted in the UI and can still be restored.
-  bool isDeletePending(String conversationId) => _pendingDeleteTimers.containsKey(conversationId);
+  bool isDeletePending(String conversationId) => _pendingDeletes.containsKey(conversationId);
 
   /// Sends a pending delete now (its Undo toast closed without Undo). No-op once sent or restored.
   void commitPendingDelete(String conversationId) {
     if (!isDeletePending(conversationId)) return;
-    deleteConversationOnServer(conversationId);
+    unawaited(deleteConversationOnServer(conversationId));
   }
 
   void _cancelPendingDeleteTimers() {
-    for (final timer in _pendingDeleteTimers.values) {
-      timer.cancel();
+    for (final pending in _pendingDeletes.values) {
+      pending.timer.cancel();
     }
-    _pendingDeleteTimers.clear();
+    _pendingDeletes.clear();
   }
 
-  void deleteConversationOnServer(String conversationId) {
-    _pendingDeleteTimers.remove(conversationId)?.cancel();
+  Future<void> deleteConversationOnServer(String conversationId) async {
+    final pending = _pendingDeletes.remove(conversationId);
+    pending?.timer.cancel();
     final generation = _sessionGeneration;
+    final prefs = SharedPreferencesUtil();
+    final owner = prefs.uid;
+    final cacheSession = prefs.conversationCacheSession;
+    bool ownsCache() =>
+        (generation == _sessionGeneration || generation == _disposedSessionGeneration) &&
+        _isSignedIn() &&
+        prefs.uid == owner &&
+        prefs.conversationCacheSession == cacheSession;
+    bool current() => generation == _sessionGeneration && ownsCache();
+
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
-    final deleteFuture = conversationId.startsWith('ondevice-')
-        ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
-            Future.value(false))
-        : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
-    unawaited(
-      deleteFuture.then(
-        (succeeded) async {
-          // A DELETE can outlive sign-out/account switching. Its result belongs
-          // to the session that started it; never let an old account mutate the
-          // new provider's tombstones, cursor, revision, or loading state.
-          if (generation != _sessionGeneration) return;
-          // Only rebase the server cursor after the backend confirms deletion. A
-          // failed DELETE leaves the row in the server sequence and must not make
-          // the next page skip an item.
-          if (succeeded && wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
-            if (_conversationServerOffset > 0) _conversationServerOffset--;
-          }
-          if (succeeded) {
-            final invalidatedRevision = _conversationFetchRevision;
-            _conversationFetchRevision++;
-            if (_conversationLoadingRevision == invalidatedRevision) {
-              setLoadingConversations(false);
-            }
-          }
-          // Keep the tombstone in place until the request settles so a concurrent
-          // refresh cannot reinsert the server row before DELETE completes.
-          if (succeeded) {
-            _phoneOnlyConversations.remove(conversationId);
-            conversations.removeWhere((conversation) => conversation.id == conversationId);
-            searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
-            for (final group in groupedConversations.values) {
-              group.removeWhere((conversation) => conversation.id == conversationId);
-            }
-            groupedConversations.removeWhere((_, group) => group.isEmpty);
-          } else {
-            final deleted = memoriesToDelete[conversationId];
-            if (deleted != null) await _restoreDeletedConversation(deleted);
-          }
+    bool succeeded;
+    try {
+      succeeded = await (conversationId.startsWith('ondevice-')
+          ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
+              Future.value(false))
+          : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId));
+    } catch (_) {
+      succeeded = false;
+    }
+    // A confirmed delete outlives its route, but never its account session.
+    if (!ownsCache()) return;
+
+    if (!succeeded) {
+      final deleted = memoriesToDelete[conversationId];
+      if (deleted != null) {
+        if (current()) {
+          await _restoreDeletedConversation(deleted);
+        } else {
+          await _restoreSiriAfterOptimisticDelete(deleted);
+        }
+      }
+      if (!ownsCache()) return;
+      _clearDeleteTombstone(conversationId);
+      if (current()) notifyListeners();
+      pending?.onFailure?.call();
+      return;
+    }
+
+    final persistDeletion = prefs.recordConfirmedConversationDelete(conversationId);
+    if (current()) {
+      // Only a confirmed deletion changes the server cursor.
+      if (wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
+        if (_conversationServerOffset > 0) _conversationServerOffset--;
+      }
+      final invalidatedRevision = _conversationFetchRevision++;
+      if (_conversationLoadingRevision == invalidatedRevision) {
+        setLoadingConversations(false);
+      }
+      _removeConfirmedDeleteFromLists(conversationId);
+    }
+    _confirmedDeletes.add(conversationId);
+
+    try {
+      // Keep the row hidden through the cache write. The shared queue prevents
+      // concurrent deletes, list writes and merge completion from losing each other's edits.
+      await _queueConversationPersistence(() async {
+        await persistDeletion;
+        if (ownsCache() && await prefs.evictCachedConversation(conversationId) && ownsCache()) {
           _clearDeleteTombstone(conversationId);
-          notifyListeners();
-        },
-        onError: (Object _, StackTrace __) async {
-          // Same as a refused DELETE: the conversation still exists, so put its
-          // row back, but do not rebase the server cursor.
-          if (generation != _sessionGeneration) return;
-          final deleted = memoriesToDelete[conversationId];
-          if (deleted != null) await _restoreDeletedConversation(deleted);
-          _clearDeleteTombstone(conversationId);
-          notifyListeners();
-        },
-      ),
-    );
+        }
+      });
+    } catch (error) {
+      Logger.debug('ConversationProvider: deleted row cache eviction failed: ${error.runtimeType}');
+    }
+    if (!current()) return;
+    notifyListeners();
   }
 
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
+
+  bool _removeConfirmedDeleteFromLists(String id) {
+    var removed = _phoneOnlyConversations.remove(id) != null;
+    List<ServerConversation> withoutDeleted(List<ServerConversation> rows) {
+      if (!rows.any((row) => row.id == id)) return rows;
+      removed = true;
+      return rows.where((row) => row.id != id).toList();
+    }
+
+    conversations = withoutDeleted(conversations);
+    searchedConversations = withoutDeleted(searchedConversations);
+    for (final entry in groupedConversations.entries.toList()) {
+      final rows = withoutDeleted(entry.value);
+      if (identical(rows, entry.value)) continue;
+      if (rows.isEmpty) {
+        groupedConversations.remove(entry.key);
+      } else {
+        groupedConversations[entry.key] = rows;
+      }
+    }
+    final matchingProcessing = processingConversations.where((row) => _processingTargetId(row) == id);
+    if (matchingProcessing.isNotEmpty) {
+      if (matchingProcessing.any((row) => row.id == OptimisticProcessingPlaceholder.id)) {
+        _cancelProcessingPlaceholderTimers();
+        _bumpProcessingStateRevision(OptimisticProcessingPlaceholder.id);
+      }
+      _bumpProcessingStateRevision(id);
+      processingConversations = processingConversations.where((row) => _processingTargetId(row) != id).toList();
+      _syncProcessingReconcileTimer();
+      removed = true;
+    }
+    return removed;
+  }
 
   /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
   /// the server refuses or fails the DELETE, since the conversation then still exists.
@@ -1707,16 +1781,18 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
 
   /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
   Future<void> undoDeletedConversation(ServerConversation conversation) async {
-    final timer = _pendingDeleteTimers.remove(conversation.id);
-    if (timer == null) return;
-    timer.cancel();
+    final pending = _pendingDeletes.remove(conversation.id);
+    if (pending == null) return;
+    pending.timer.cancel();
     await _restoreDeletedConversation(conversation);
   }
 
   @override
   void dispose() {
+    _confirmedDeleteSubscription.cancel();
     _cancelProcessingPlaceholderTimers();
     _processingReconcileTimer?.cancel();
+    _disposedSessionGeneration = _sessionGeneration;
     _sessionGeneration++;
     _conversationFetchRevision++;
     _conversationLoadingRevision++;
@@ -2232,7 +2308,9 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       _mergedAwayConversationIds.addAll(removed);
       mergingConversationIds.removeAll({...removed, mergedConversationId});
       conversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
-      if (_matchesActiveConversationFilters(target)) conversations.insert(0, target);
+      if (!_isHiddenByDelete(target.id) && _matchesActiveConversationFilters(target)) {
+        conversations.insert(0, target);
+      }
       searchedConversations.removeWhere((c) => removed.contains(c.id));
       processingConversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
       final cacheRows = {
@@ -2263,7 +2341,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       for (final id in removed) {
         SiriIntegration.current.queueDelete('conversation', id);
       }
-      SiriIntegration.current.queueUpsertConversations([target]);
+      if (!_isHiddenByDelete(target.id)) SiriIntegration.current.queueUpsertConversations([target]);
       PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removed.toList());
       notifyListeners();
     });

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "titling-recovery-minimum",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "ef9efda2628d4fa51c080162024c99cb07a341ee94a90d8a02336ddd6d17db5a",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Synthetic decoded recovery input. With main defaults (recovery-minimum guard off), one notes cassette call supplies the title and the job completes. The enabled minimum branch is covered separately in emulator tests.",
+  "stages": {
+    "titling": {
+      "expect": "pass"
+    }
+  }
+}

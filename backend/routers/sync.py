@@ -1,3 +1,12 @@
+"""Offline capture sync surface: manifest admission, /v2/sync-local-files intake,
+the OIDC sync/audio-merge job runners, and playback URL serving.
+
+Fresh and backfill traffic are deliberately split -- backfill never falls back
+into fresh/inline capacity and fresh keeps only a bounded inline fallback -- and
+job polling is window-admitted because an unbounded reconciler drain produced the
+2026-10 edge 429 storm (app/docs/sync-poll-storm.md documents the mechanism).
+"""
+
 from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
@@ -119,6 +128,7 @@ from utils.cloud_tasks import (
 from utils.executors import (
     critical_executor,
     db_executor,
+    postprocess_executor,
     storage_executor,
     sync_executor,
     run_blocking,
@@ -237,7 +247,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
+from utils.sync import backfill_cutover, legacy_dark, stage as sync_stage, uid_sequencer
 from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
@@ -699,11 +709,10 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        # Legacy-dark: the legacy fresh budget is never consulted outside ``on``.
-        allow_legacy_fresh=legacy_allowed and legacy_fresh.enabled_for(uid),
+        # Preserve allowed promotion in ON, including ramp-read failures, without
+        # the retired Redis budget. DARK/draining still pass False unchanged.
+        allow_legacy_fresh=legacy_allowed,
     )
-    if legacy_allowed and lane_decision.reason == 'recent_legacy_capture':
-        lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.
     fresh_refused = False
@@ -1878,6 +1887,16 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
     except Exception:
         return await _run_sync_job_body(request, task_retry_count, entry_state)
+    if isinstance(payload, dict) and payload.get('kind') == 'batch_final_pass':
+        from routers.enrichment import _task
+        from utils.conversations.final_pass_retry import consume as consume_speaker_pass
+
+        task = _task(payload)
+        if task is None:
+            return JSONResponse(status_code=400, content={'status': 'invalid_speaker_task'})
+        return JSONResponse(
+            status_code=200, content=await run_blocking(postprocess_executor, consume_speaker_pass, *task)
+        )
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         if isinstance(payload.get('uid'), str):
             try:

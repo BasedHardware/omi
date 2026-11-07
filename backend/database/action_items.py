@@ -1,3 +1,12 @@
+"""Action-item document persistence: generation-fenced creation, completion
+state, chat-edit compare-and-swap updates, and paged reads for list/sync.
+
+Task edits carry an expected chat state so a whole-object edit, duplicate tap or
+sync replay cannot clobber a concurrent change, writes mark Dream dirty, and
+this store owns documents only -- list-shaping policy lives at the callers
+(backend/database/ARCHITECTURE.md).
+"""
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging

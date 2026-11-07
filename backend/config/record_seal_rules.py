@@ -24,3 +24,7 @@ def live_producer_grace_seconds() -> float:
     except ValueError:
         return 3600.0
     return value if value == value and 0 <= value <= 7 * 86400 else 3600.0
+
+
+def refused_stamp_enabled():
+    return os.getenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', 'true').strip().lower() == 'true'

@@ -20,6 +20,7 @@ def edited_candidate(candidate: CandidateRecord, edits: dict) -> CandidateRecord
         payload['description'] = description
     if 'due_at' in edits:
         payload['due_at'] = edits['due_at']
+        payload['due'] = None
     updates = {'task_change': TaskCreatePayload.model_validate(payload)}
     if 'workstream_id' in edits:
         updates['workstream_id'] = edits['workstream_id']

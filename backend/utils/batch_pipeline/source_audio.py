@@ -14,7 +14,7 @@ from typing import Callable
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from utils.batch_pipeline.audio import audio_unit, with_context
-from utils.batch_pipeline import leaf_timings
+from utils.batch_pipeline import leaf_timings, record_seal_profile
 from utils.other.raw_audio import decode_capture
 
 MAGIC = b'OMIRECORD1\n'
@@ -94,37 +94,56 @@ def read_reference(
     *,
     source_metadata=False,
     read_budget=None,
+    listed_source=None,
 ) -> bytes:
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
     blob = client.bucket(ref['bucket']).blob(ref['path'], generation=generation)
     if read_budget is not None:
         read_budget.begin()
-    leaf_timings.call(
-        'download_metadata',
-        blob.reload,
-        if_generation_match=generation,
-        timeout=read_budget.timeout(30) if read_budget is not None else 30,
-        retry=None,
+    # Data generation alone does not fence metadata-only updates (sample rate,
+    # encryption/checksum metadata). Only a versioned listing can replace the GET.
+    listed = listed_source or {}
+    size = listed.get('size')
+    metageneration = listed.get('metageneration')
+    use_listing = (
+        size is not None
+        and (not source_metadata or 'metadata' in listed)
+        and type(metageneration) is int
+        and metageneration > 0
     )
+    if not use_listing:
+        record_seal_profile.metadata_reload()
+        leaf_timings.call(
+            'download_metadata',
+            blob.reload,
+            if_generation_match=generation,
+            timeout=read_budget.timeout(30) if read_budget is not None else 30,
+            retry=None,
+        )
+        size = blob.size
+        metadata = (blob.metadata or {}) if source_metadata else {}
+    else:
+        metadata = listed.get('metadata') or {}
     if source_metadata:
-        # Admission needs the source metadata in the manifest, including the
-        # legacy sample rate. Reuse this generation-pinned GET, not a second one.
-        ref['metadata'] = blob.metadata or {}
+        ref['metadata'] = metadata
         if 'sample_rate' not in ref:
-            ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
-    if not blob.size or not 0 < blob.size <= MAX_SOURCE_BYTES:
+            ref['sample_rate'] = int(metadata.get('record_sample_rate', 16000))
+    if not size or not 0 < size <= MAX_SOURCE_BYTES:
         raise ValueError('retained audio source exceeds size budget')
     if read_budget is not None:
-        read_budget.reserve(blob.size)
+        read_budget.reserve(size)
     raw = leaf_timings.call(
         'download',
         blob.download_as_bytes,
         if_generation_match=generation,
+        **({'if_metageneration_match': metageneration} if use_listing else {}),
         timeout=read_budget.timeout(60) if read_budget is not None else 60,
         retry=None,
     )
+    record_seal_profile.received(len(raw))
     if read_budget is not None:
+        read_budget.received_bytes += len(raw)
         read_budget.timeout(60)
     return decode_source(raw, ref, key)
 

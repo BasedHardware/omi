@@ -483,6 +483,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     if isLocked {
       return .locked
     }
+    // This is a bounded server transcription wait, not a running summary job.
+    // Keep its explicit title and do not offer the summary stall's Reprocess.
+    if isAwaitingTranscription {
+      return .titled(structured.title)
+    }
     switch status {
     case .inProgress, .processing, .merging:
       // A deferred row wears `processing` on the wire only so the client
@@ -529,6 +534,15 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     return f
   }()
 
+  /// The server's presentation-only batch wait must not start the summary stall clock.
+  var isAwaitingTranscription: Bool {
+    !isLocked && !deferred && status == .processing && structured.title == "Transcribing…" && transcriptSegments.isEmpty
+  }
+
+  var showsSummaryProcessing: Bool {
+    !isAwaitingTranscription && (deferred || status == .processing)
+  }
+
   /// The string a row/header should display in the title slot.
   var displayTitle: String {
     switch displayState {
@@ -537,7 +551,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     // Matches the badge's waiting copy; rows/header that show the badge skip
     // the title text so the pill is not duplicated beside itself. Plain-string
     // callers (Spine tiles, link lists, accessibility) still get honest copy.
-    case .locked: return "Saved and waiting"
+    case .locked: return "Waiting"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
     }
@@ -697,8 +711,10 @@ struct Structured: Codable, Equatable {
       OmiAPI.ActionItem(
         candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: $0.captureOwner,
         completed: $0.completed,
-        completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
-        dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
+        completedAt: nil, concreteDeliverable: nil, context: $0.context, conversationId: nil, createdAt: nil,
+        description_: $0.description,
+        dueAt: $0.dueAt.map(Event.encodeDateForWire), dueCertainty: $0.dueCertainty, ownerName: $0.ownerName,
+        ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
         targetTaskId: $0.targetTaskID, updatedAt: nil)
     }
     let eventsWire = events.map {
@@ -749,7 +765,7 @@ struct Structured: Codable, Equatable {
 struct ActionItem: Codable, Identifiable, Equatable {
   var id: String { description }
   let description: String
-  let completed: Bool
+  var completed: Bool
   let deleted: Bool
   /// Extraction ownership from the backend (`capture_owner`), e.g. "user" when
   /// the item is the user's own commitment. Optional: legacy captures and
@@ -760,6 +776,12 @@ struct ActionItem: Codable, Identifiable, Equatable {
   /// rather than inferring a task from the description.
   let targetTaskID: String?
   let sourceSegmentIDs: [String]
+  /// The owner's display name when the extraction names one (`owner_name`).
+  let ownerName: String?
+  let dueAt: Date?
+  let dueCertainty: String?
+  /// One line on why the item exists (`context`).
+  let context: String?
 
   init(
     description: String,
@@ -767,7 +789,11 @@ struct ActionItem: Codable, Identifiable, Equatable {
     deleted: Bool,
     captureOwner: String? = nil,
     targetTaskID: String? = nil,
-    sourceSegmentIDs: [String] = []
+    sourceSegmentIDs: [String] = [],
+    ownerName: String? = nil,
+    dueAt: Date? = nil,
+    dueCertainty: String? = nil,
+    context: String? = nil
   ) {
     self.description = description
     self.completed = completed
@@ -775,6 +801,10 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.captureOwner = captureOwner
     self.targetTaskID = targetTaskID
     self.sourceSegmentIDs = sourceSegmentIDs
+    self.ownerName = ownerName
+    self.dueAt = dueAt
+    self.dueCertainty = dueCertainty
+    self.context = context
   }
 
   /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
@@ -787,16 +817,14 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+    self.ownerName = wire.ownerName
+    self.dueAt = wire.dueAt.flatMap(Event.parseWireDate)
+    self.dueCertainty = wire.dueCertainty
+    self.context = wire.context
   }
 
   init(from decoder: Decoder) throws {
-    let wire = try OmiAPI.ActionItem(from: decoder)
-    self.description = wire.description_
-    self.completed = wire.completed ?? false
-    self.deleted = false
-    self.captureOwner = wire.captureOwner
-    self.targetTaskID = wire.targetTaskId
-    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+    self.init(try OmiAPI.ActionItem(from: decoder))
   }
 
   func encode(to encoder: Encoder) throws {
@@ -808,10 +836,13 @@ struct ActionItem: Codable, Identifiable, Equatable {
       completed: completed,
       completedAt: nil,
       concreteDeliverable: nil,
+      context: context,
       conversationId: nil,
       createdAt: nil,
       description_: description,
-      dueAt: nil,
+      dueAt: dueAt.map(Event.encodeDateForWire),
+      dueCertainty: dueCertainty,
+      ownerName: ownerName,
       ownershipConfidence: nil,
       sourceSegmentIds: sourceSegmentIDs,
       targetTaskId: targetTaskID,
@@ -891,6 +922,11 @@ struct Event: Codable, Identifiable, Equatable {
 
   private static func parseDate(_ s: String) -> Date? {
     fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
+  }
+
+  /// The wire's ISO-8601 instant, with or without fractional seconds; nil when unparseable.
+  fileprivate static func parseWireDate(_ s: String) -> Date? {
+    parseDate(s)
   }
 
   private static func decodeDate(_ s: String, using decoder: Decoder) throws -> Date {

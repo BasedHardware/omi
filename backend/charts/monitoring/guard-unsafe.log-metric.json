@@ -1,0 +1,12 @@
+{
+  "name": "omi_incluster_guard_unsafe",
+  "description": "Unsafe production guard verdicts (TRIP, BLIND or read errors), emitted even when the batch observer does not fail the Job. Alert on the counter, never scan raw logs from Grafana.",
+  "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=(\"guard\" OR \"batch-guard\") AND jsonPayload.message=~\"\\\"page_signal\\\": true\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "displayName": "Omi in-cluster unsafe guard verdicts"
+  },
+  "disabled": false
+}

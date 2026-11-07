@@ -74,28 +74,42 @@ def parse_pusher_pod_proof(payload, captured_at):
 def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
     if not isinstance(tokens, dict):
         return False
-    if proof is not None:
-        if (
-            proof.get('namespace') != NAMESPACE
-            or not isinstance(proof.get('pods'), dict)
-            or not 0 <= time.time() - proof.get('captured_at', 0) <= 300
-        ):
-            return False
+    proof_valid = proof is not None and (
+        proof.get('namespace') == NAMESPACE
+        and isinstance(proof.get('pods'), dict)
+        and 0 <= time.time() - proof.get('captured_at', 0) <= 300
+    )
+    if proof is not None and not proof_valid and not tokens:
+        return False  # Cluster repair also uses the empty map to validate inventory freshness.
     for value in tokens.values():
         if value is True:
-            if not producers_stopped:
+            if not producers_stopped or (proof is not None and not proof_valid):
                 return False
             continue  # Explicit operator fallback for pre-identity tokens only.
-        if not isinstance(value, dict) or proof is None:
+        if not isinstance(value, dict):
             return False
         pod, started = value.get('pod'), value.get('process_started_at')
         if (
-            not isinstance(pod, str)
-            or not pod
-            or not isinstance(started, (int, float))
+            not isinstance(started, (int, float))
             or isinstance(started, bool)
             or not math.isfinite(started)
             or not 0 < started
+        ):
+            return False
+        if 'abandoned_at' in value:
+            abandoned = value['abandoned_at']
+            if (
+                not isinstance(abandoned, (int, float))
+                or isinstance(abandoned, bool)
+                or not math.isfinite(abandoned)
+                or abandoned < started
+            ):
+                return False
+            continue  # Producer attested stoppage after settling all executor I/O.
+        if (
+            not isinstance(pod, str)
+            or not pod
+            or not proof_valid
             or started + PRODUCER_START_MARGIN_SECONDS > proof['captured_at']
         ):
             return False

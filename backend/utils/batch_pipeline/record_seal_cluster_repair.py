@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import signal
@@ -18,8 +19,10 @@ import sys
 import time
 from typing import Any
 
+from utils.batch_pipeline import record_seal_profile
 from config import record_seal_repair as config
 from config import record_partial as partial_config
+from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
 
@@ -54,6 +57,9 @@ DISPOSITIONS = frozenset(
         'already_partial',
         'not_aged',
         'byok_refused',
+        'missing_cancel_eligible',
+        'missing_cancelled',
+        'missing_cancelled_fenced',
     }
 )
 
@@ -85,25 +91,48 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     from utils.batch_pipeline.live import record_identity
     from utils.batch_pipeline.record_seal_sweeper import require_fresh_proof
 
+    record_seal_profile.enter('proof')
     budget.check()
     uid, cid = nojob.conversation_path(path)
     _, job_id = record_identity(uid, cid)
     job = store.run(lambda tx: tx.get('jobs', job_id))
     budget.check()
-    if job.get('partial_coordinator'):
-        # Partial rows stay open, including after coordinator retirement. Only
-        # a changed barrier needs fresh producer proof and transactional rearm.
-        row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
-        budget.check()
-        if partial_config.partial_barrier(row):
+    row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+    budget.check()
+    blocker = pending_blocker(row)
+    if reason_out is not None:
+        reason_out['blocker'] = blocker
+    if job and not row and config.jobs_enabled():
+        from database.record_pending_repair import cancel_missing
+
+        record_seal_profile.enter('apply')
+        return cancel_missing(store, uid, cid, now=time.time(), preview=mode == 'plan')
+    partial = bool(job.get('partial_coordinator') or config.jobs_enabled() and row.get('record_audio_partial'))
+    if partial:
+        # Aged pending/retired barriers retry only with the rollback switch on
+        # and fresh transactional proof; age never clears the barrier.
+        if partial_config.partial_barrier(row) and (
+            not config.jobs_enabled()
+            or job.get('state') not in {'record_pending', 'partial_retired'}
+            or not partial_config.repair_due(row, time.time())
+        ):
             return 'already_partial'
     proof = inventory()
     require_fresh_proof(proof)  # Required for every attempted seal or rearm.
-    if job.get('partial_coordinator'):
+    if partial:
         if reason_out is not None:
             reason = job.get('partial_reason')
             reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
-        return finish_partial(store, path, reason='tail_lagging', proof=proof, now=time.time(), preview=mode == 'plan')
+        record_seal_profile.enter('apply')
+        return finish_partial(
+            store,
+            path,
+            reason='tail_lagging',
+            proof=proof,
+            now=time.time(),
+            preview=mode == 'plan',
+            retry_aged=config.jobs_enabled(),
+        )
     plan: dict[str, Any]
     if job:
         plan = repair.plan_seals(
@@ -114,6 +143,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
             producer_proof=proof,
             check_budget=budget.check,
             repair_upload_failed=True,
+            repair_closed=True,
         )
         apply = repair.apply_seals
     else:
@@ -126,13 +156,18 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if len(entries) != 1:
         return 'unknown'
     disposition = entries[0].get('disposition')
-    if partial_config.enabled() and (
-        disposition == 'proof_refused'
-        and entries[0].get('proof_reason') in partial_config.REASONS
-        or disposition == 'read_error'
-        and entries[0].get('proof_reason') == 'budget_limit'
+    if (
+        not row.get('record_audio_closed')
+        and partial_config.enabled()
+        and (
+            disposition == 'proof_refused'
+            and entries[0].get('proof_reason') in partial_config.REASONS
+            or disposition == 'read_error'
+            and entries[0].get('proof_reason') == 'budget_limit'
+        )
     ):
         require_fresh_proof(proof)
+        record_seal_profile.enter('apply')
         partial_result = finish_partial(
             store,
             path,
@@ -158,11 +193,30 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
         return disposition if disposition in DISPOSITIONS else 'unknown'
     require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
     budget.check()
+    record_seal_profile.enter('apply')
     result = apply(store, plan, plan['plan_sha256'])
     if sum(result.values()) != 1 or len(result) != 1:
         return 'unknown'
     disposition = next(iter(result))
     return disposition if disposition in DISPOSITIONS else 'unknown'
+
+
+def settled(data):
+    """Rows a repair attempt can only refuse until their state changes.
+
+    A recent valid partial barrier is repair's `already_partial`; a deleted, discarded
+    or sync-disabled row is `privacy_refused`. Both used to take a worker slot
+    on every pass (207 of 208 attempts in prod 2026-11-04), so the cursor
+    crawled while recent stuck captures waited. Any change to the mark, upload
+    revision or privacy fields makes the row eligible again on the next pass.
+    """
+    if data.get('deleted') or data.get('discarded') or data.get('private_cloud_sync_enabled') is False:
+        return True
+    return (
+        bool(data.get('record_audio_partial'))
+        and partial_config.partial_barrier(data)
+        and (not config.jobs_enabled() or not partial_config.repair_due(data, time.time()))
+    )
 
 
 def discover(
@@ -181,7 +235,7 @@ def discover(
     # Freeze each pass's upper finish boundary. Continuous newer inflow must
     # not prevent wrap and indefinitely starve the oldest refused rows.
     horizon = (after or {}).get('horizon') or datetime.now(timezone.utc)
-    resume = None
+    resume = after
     while scanned < max_scan and len(rows) < max_rows:
         budget.check()
         query = (
@@ -191,7 +245,17 @@ def discover(
             .where(filter=FieldFilter('finished_at', '<=', horizon))
             .order_by('finished_at')
             .order_by('__name__')
-            .select(('finished_at', 'record_audio_closed', 'record_audio_partial'))
+            .select(
+                (
+                    'finished_at',
+                    'record_audio_closed',
+                    'record_audio_partial',
+                    'record_upload_revision',
+                    'deleted',
+                    'discarded',
+                    'private_cloud_sync_enabled',
+                )
+            )
             .limit(min(128, max_scan - scanned))
         )
         if cursor is not None:
@@ -212,6 +276,7 @@ def discover(
                 (not data.get('record_audio_closed') or data.get('record_audio_partial'))
                 and isinstance(finished, datetime)
                 and finished.tzinfo is not None
+                and not settled(data)
             ):
                 rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
                 if selected_cursors is not None:
@@ -228,6 +293,83 @@ def discover(
     return rows, scanned >= max_scan or len(rows) >= max_rows, resume if len(rows) > advance_rows else cursor
 
 
+BLOCKERS = frozenset(
+    {
+        'partial_barrier',
+        'producer_pending_tokens',
+        'upload_failed',
+        'already_closed_job_pending',
+        'conversation_missing',
+        'seal_eligible',
+    }
+)
+
+
+def pending_blocker(row):
+    if not row:
+        return 'conversation_missing'
+    if row.get('record_audio_partial'):
+        return 'partial_barrier'
+    if row.get('record_upload_sessions'):
+        return 'producer_pending_tokens'
+    if row.get('record_upload_failed'):
+        return 'upload_failed'
+    if row.get('record_audio_closed'):
+        return 'already_closed_job_pending'
+    return 'seal_eligible'
+
+
+@read_origin('job:record_seal_cluster_repair:discover_jobs')
+def discover_jobs(client, *, budget, after=None, max_rows=8, max_scan=128, selected_cursors=None):
+    """Independent bounded state/name cursor: no completed-conversation predicate.
+
+    Filter numeric enqueued_at locally, avoiding a new composite index and the
+    drainer's mutable available_at. The encrypted frontier wraps over refusals.
+    Resolution and all writes happen in disposable, deadline-bound row workers.
+    """
+    from google.cloud.firestore_v1 import FieldFilter
+    from config.record_audio import record_identity
+
+    if not 1 <= max_rows <= MAX_ROWS or not 1 <= max_scan <= MAX_SCAN:
+        raise ValueError('invalid jobs discovery limits')
+    budget.check()
+    horizon = (after or {}).get('finished_at') or datetime.now(timezone.utc)
+    query = (
+        client.collection('batch_pipeline_prod_jobs')
+        .where(filter=FieldFilter('state', '==', 'record_pending'))
+        .order_by('__name__')
+        .select(('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id'))
+        .limit(min(128, max_scan))
+    )
+    if after:
+        query = query.start_after({'__name__': client.document(after['path'])})
+    page = list(query.stream(timeout=budget.timeout(), retry=None))
+    budget.check()
+    rows, cursor = [], None
+    for doc in page:
+        budget.check()
+        cursor = {'path': doc.reference.path, 'finished_at': horizon}
+        job = doc.to_dict() or {}
+        uid, cid, enqueued = job.get('owner_id'), job.get('conversation_id'), job.get('enqueued_at')
+        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
+            continue
+        if doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
+            continue
+        if not isinstance(enqueued, (int, float)) or isinstance(enqueued, bool) or not math.isfinite(enqueued):
+            continue
+        age = horizon.timestamp() - enqueued
+        if age < config.JOBS_MIN_AGE_SECONDS:
+            continue
+        path = f'users/{uid}/conversations/{cid}'
+        rows.append((path, max(0, int(age))))
+        if selected_cursors is not None:
+            selected_cursors[path] = cursor
+        if len(rows) >= max_rows:
+            return rows, True, cursor
+    saturated = len(page) >= min(128, max_scan)
+    return rows, saturated, cursor if saturated else None
+
+
 class RowProcess(subprocess.Popen):
     """Own the row's session, including any ffmpeg decoder descendants."""
 
@@ -240,6 +382,7 @@ class RowProcess(subprocess.Popen):
 
 def launch_row(path, seconds, mode):
     script = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    started = time.monotonic()
     process = RowProcess(
         [sys.executable, str(script), '--row'],
         stdin=subprocess.PIPE,
@@ -252,7 +395,7 @@ def launch_row(path, seconds, mode):
         stop(process)
         raise RuntimeError('row input pipe unavailable')
     try:
-        payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode}).encode()
+        payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode, 'started': started}).encode()
         stdin.write(payload)
         stdin.close()
     except BaseException:
@@ -267,6 +410,73 @@ def stop(process):
     process.kill()
     process.wait()
     process.stdout.close()
+
+
+class RowOutput:
+    """Drain bounded JSON lines without waiting for a live child to close stdout."""
+
+    def __init__(self, process):
+        self.process, self.buffer = process, b''
+        self.result: dict[str, Any] = {}
+        self.profile: dict[str, Any] = {'stage': 'unknown'}
+        self.oversized = False
+        try:
+            self.fd = process.stdout.fileno()
+            os.set_blocking(self.fd, False)
+        except (AttributeError, OSError):
+            self.fd = None  # In-memory/old child adapters are read after exit only.
+
+    def accept(self, line):
+        try:
+            value = json.loads(line)
+            if not isinstance(value, dict):
+                return
+            if 'disposition' in value:
+                self.result = value
+            stage = value.get('stage')
+            if isinstance(stage, str) and stage in record_seal_profile.STAGES:
+                self.profile['stage'] = stage
+            timings = value.get('stage_ms', {})
+            if isinstance(timings, dict):
+                self.profile['stage_ms'] = {
+                    key: val
+                    for key, val in timings.items()
+                    if key in record_seal_profile.STAGES and type(val) is int and 0 <= val <= 3600000
+                }
+            for key in ('chunks', 'bytes', 'metadata_reloads'):
+                val = value.get(key)
+                if type(val) is int and 0 <= val <= 2**53:
+                    self.profile[key] = val
+        except (ValueError, TypeError):
+            pass
+
+    def drain(self, finished=False):
+        # A row sends only stage transitions and its final result. Bound work and
+        # memory even if an unexpected dependency writes to the private pipe.
+        for _ in range(16):
+            try:
+                data = (
+                    os.read(self.fd, 1025)
+                    if self.fd is not None
+                    else (self.process.stdout.read(1025) if finished else b'')
+                )
+            except BlockingIOError:
+                break
+            if not data:
+                break
+            for part in data.splitlines(keepends=True):
+                self.buffer += part
+                self.oversized |= len(self.buffer.rstrip(b'\n')) > 1024
+                if part.endswith(b'\n'):
+                    if not self.oversized:
+                        self.accept(self.buffer)
+                    self.buffer, self.oversized = b'', False
+                elif self.oversized:
+                    self.buffer = b''
+        if finished and self.buffer:
+            if not self.oversized:
+                self.accept(self.buffer)
+            self.buffer = b''
 
 
 def coordinate(
@@ -284,15 +494,18 @@ def coordinate(
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
-    gaps, partial_reasons = Counter(), Counter()
+    gaps, partial_reasons, blocker_outcomes = Counter(), Counter(), Counter()
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age = 0, 0
+    elapsed_by_disposition = Counter()
     try:
         while pending or active:
             now = clock()
             if now >= deadline:
                 counts['deferred'] += len(pending)
+                if pending:
+                    elapsed_by_disposition['deferred'] += 0
                 pending.clear()
             while pending and len(active) < workers and now < deadline:
                 path, age = pending.popleft()
@@ -301,22 +514,27 @@ def coordinate(
                 seconds = min(row_seconds, deadline - now)
                 try:
                     process = launch(path, seconds, mode)
-                    active.append((process, now + seconds, age))
+                    active.append((process, now + seconds, age, now, RowOutput(process)))
                 except Exception:
                     counts['error'] += 1
-            for process, expires, age in active[:]:
+                    elapsed_by_disposition['error'] += max(0, round((clock() - now) * 1000))
+            for process, expires, age, row_started, output in active[:]:
+                finished = process.poll() is not None
+                output.drain(finished)
                 disposition = None
                 reason = 'other'
                 gap = 'negative_or_unknown'
+                blocker = None
                 trimmed = 0
                 partial_reason = 'tail_lost_or_unproven'
-                if process.poll() is not None:
+                if finished:
                     try:
-                        payload = process.stdout.read(1025)
-                        result = json.loads(payload) if len(payload) <= 1024 else {}
+                        result = output.result
                         candidate = result.get('trimmed_divergent_overlaps', 0)
                         trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
+                        candidate = result.get('blocker')
+                        blocker = candidate if candidate in BLOCKERS else None
                         candidate = result.get('proof_reason')
                         reason = candidate if candidate in PROOF_REASONS else 'other'
                         candidate = result.get('tail_gap_bucket')
@@ -325,14 +543,18 @@ def coordinate(
                         partial_reason = candidate if candidate in partial_config.REASONS else 'tail_lost_or_unproven'
                     except Exception:
                         disposition = 'error'
-                    if process.returncode != 0 or disposition not in DISPOSITIONS:
+                    if process.returncode != 0 or not isinstance(disposition, str) or disposition not in DISPOSITIONS:
                         disposition = 'error'
                 elif clock() >= expires:
                     disposition = 'budget_exhausted'
                 if disposition:
+                    row_elapsed = max(0, round((clock() - row_started) * 1000))
                     stop(process)
-                    active.remove((process, expires, age))
+                    active.remove((process, expires, age, row_started, output))
+                    elapsed_by_disposition[disposition] += row_elapsed
                     counts[disposition] += 1
+                    if blocker:
+                        blocker_outcomes[f'{blocker}:{disposition}'] += 1
                     if disposition == 'partial_finished':
                         partial_reasons[partial_reason] += 1
                     if disposition == 'proof_refused':
@@ -346,7 +568,10 @@ def coordinate(
                     progress(
                         {
                             'event': 'record_seal_repair_row',
+                            'elapsed_ms': row_elapsed,
+                            **output.profile,
                             'count': 1,
+                            **({'blocker': blocker} if blocker else {}),
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
                             **({'partial_reason': partial_reason} if disposition == 'partial_finished' else {}),
@@ -362,31 +587,35 @@ def coordinate(
             if active:
                 pause(0.05)
     finally:
-        for process, _, _ in active:
+        for process, *_ in active:
             stop(process)
     return {
         'dispositions': dict(sorted(counts.items())),
+        'disposition_elapsed_ms': dict(sorted(elapsed_by_disposition.items())),
         'proof_reasons': dict(sorted(reasons.items())),
         'tail_gap_buckets': dict(sorted(gaps.items())),
         'partial_finishes': dict(sorted(partial_reasons.items())),
+        'blocker_outcomes': dict(sorted(blocker_outcomes.items())),
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,
     }
 
 
-def row_main(payload):
+def row_main(payload, *, progress=lambda _: None):
+    profile = record_seal_profile.RowProfile(payload.get('started', time.monotonic()), progress)
+    profile.enter('clients')
     from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
 
     result = 'error'
     reason = {}
     try:
         if not config.enabled():
-            return {'disposition': 'disabled'}
+            return {'disposition': 'disabled', **profile.snapshot()}
         config.require_runtime()
         if not 0 < payload['seconds'] <= 270 or payload['mode'] not in {'plan', 'apply'}:
             raise ValueError('invalid row controls')
-        with silent_dependencies():
+        with silent_dependencies(), profile.install():
             from database.batch_pipeline_store import FirestoreStore
             from utils.batch_pipeline.artifact_policy import artifacts_for
             from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof
@@ -395,10 +624,12 @@ def row_main(payload):
             budget = SweepBudget(payload['seconds'])
             with budget.interrupt_io():
                 store = FirestoreStore('batch_pipeline_prod')
+                storage = create_storage_client()
+                artifacts = artifacts_for(store, storage_client=storage)
                 result = repair_one(
                     store,
-                    create_storage_client(),
-                    artifacts_for(store),
+                    storage,
+                    artifacts,
                     payload['path'],
                     flags=config.server_flags(),
                     inventory=read_pusher_pod_proof,
@@ -410,7 +641,7 @@ def row_main(payload):
         result = 'budget_exhausted'
     except Exception:
         pass
-    return {'disposition': result, **reason}
+    return {'disposition': result, **reason, **profile.snapshot()}
 
 
 def run(*, progress=lambda _: None):
@@ -430,12 +661,25 @@ def run(*, progress=lambda _: None):
         with budget.interrupt_io():
             client = get_firestore_client()
             frontier = RepairCursor(client, config.cursor_secret())
-            selected_cursors = {}
+            selected_cursors, job_cursors = {}, {}
+            job_rows, jobs_saturated, jobs_cursor = [], False, None
+            jobs_frontier = None
+            if config.jobs_enabled():
+                jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
+                job_rows, jobs_saturated, jobs_cursor = discover_jobs(
+                    client,
+                    budget=budget,
+                    after=jobs_frontier.read(budget),
+                    max_rows=max(1, workers // 2),
+                    selected_cursors=job_cursors,
+                )
             rows, saturated, cursor = discover(
                 client,
                 budget=budget,
                 after=frontier.read(budget),
-                advance_rows=workers,
+                advance_rows=workers - len(job_rows),
+                max_rows=MAX_ROWS - len(job_rows),
+                max_scan=MAX_SCAN - (128 if jobs_frontier else 0),
                 selected_cursors=selected_cursors,
             )
             # Advance before slow proofs: refused, hung, deferred or killed rows
@@ -443,11 +687,18 @@ def run(*, progress=lambda _: None):
             # A preview never writes even this maintenance frontier.
             if mode == 'apply':
                 frontier.write(cursor, budget)
-    last_attempted = None
+                if jobs_frontier:
+                    jobs_frontier.write(jobs_cursor, budget)
+            rows = job_rows + [(path, age) for path, age in rows if path not in job_cursors]
+            saturated = saturated or jobs_saturated
+    last_attempted, last_job_attempted = None, None
 
     def attempted(path):
-        nonlocal last_attempted
-        last_attempted = selected_cursors[path]
+        nonlocal last_attempted, last_job_attempted
+        if path in job_cursors:
+            last_job_attempted = job_cursors[path]
+        else:
+            last_attempted = selected_cursors[path]
 
     report = coordinate(
         rows,
@@ -458,12 +709,15 @@ def run(*, progress=lambda _: None):
         progress=progress,
         attempted=attempted,
     )
-    if mode == 'apply' and last_attempted:
+    if mode == 'apply' and (last_attempted or last_job_attempted):
         # Preserve exact Firestore nanoseconds, not an age reconstructed clock.
         # The second point write (lead ruling 4cbd2a) advances past ALL attempts,
         # never past a deferred row. Initial checkpoint survives interruption;
         # end-of-pass wrap revisits even the oldest chronic/interrupted row.
         budget = SweepBudget(30)
         with silent_dependencies(), budget.interrupt_io():
-            frontier.write(last_attempted, budget)
+            if last_attempted:
+                frontier.write(last_attempted, budget)
+            if last_job_attempted and jobs_frontier is not None:
+                jobs_frontier.write(last_job_attempted, budget)
     return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}

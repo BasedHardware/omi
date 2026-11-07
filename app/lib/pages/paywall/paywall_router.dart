@@ -11,11 +11,10 @@ import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-/// Decides which paywall a surface opens. Every opener asks here first; when the reader is in a
-/// non-control arm the variant page is shown and the opener does nothing else. Control readers
-/// are exposed (they are the experiment's denominator) and the opener shows the `PlansSheet`
-/// exactly as before. Paid readers (the sheet owns upgrades, switches and cancellation) and App
-/// Review builds (subscription UI hidden) are not in the experiment at all.
+/// Decides which paywall a surface opens. Every opener asks here first; when the arm has a page it
+/// is shown and the opener does nothing else. Otherwise the opener shows the `PlansSheet`. Paid
+/// readers (the sheet owns upgrades, switches and cancellation) and App Review builds (subscription
+/// UI hidden) never get a variant page.
 abstract final class PaywallRouter {
   /// True when a variant paywall was shown and the opener must not open the `PlansSheet`.
   /// [record] replaces the exposure sink for tests.
@@ -30,7 +29,7 @@ abstract final class PaywallRouter {
     final usage = context.read<UsageProvider>();
     if (!usage.showSubscriptionUI) return false;
     if (usage.subscription?.subscription.plan.isPaid == true) return false;
-    final resolved = config ?? await PaywallExperiment.resolve();
+    final resolved = config ?? PaywallExperiment.current;
     if (!context.mounted) return false;
     if (!context.read<UsageProvider>().showSubscriptionUI) return false;
     // The trial page promises a free trial; only a reader the backend says can still get one sees

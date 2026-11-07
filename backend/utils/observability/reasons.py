@@ -45,6 +45,7 @@ class ServerBatchSuppressionReason(StrEnum):
 
 
 class ReasonFamily(StrEnum):
+    PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
@@ -73,6 +74,19 @@ class ReasonFamily(StrEnum):
     DELIVERY = 'delivery'
     BATCH_FINAL_PASS = 'batch_final_pass'
     RECURRING_VOICE = 'recurring_voice'
+
+
+class PusherPcmStage(StrEnum):
+    UNKNOWN = 'unknown'
+    LIVE = 'live'
+    TAIL = 'tail'
+
+
+class PusherPcmErrorReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ACQUIRE = 'acquire'
+    RELEASE = 'release'
+    LATE_STORAGE = 'late_storage'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -297,9 +311,18 @@ class BatchFinalPassOutcome(StrEnum):
 
     UNKNOWN = 'unknown'
     SKIPPED_BUDGET = 'skipped_budget'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SHARED_UNIT = 'skipped_shared_unit'
+    REQUEUE = 'failed_requeue'
+    SLOT_EXHAUSTED = 'skipped_slot_exhausted'
+    RETRY_EXHAUSTED = 'skipped_retry_exhausted'
+    FAILED_DEPENDENCY = 'failed_dependency'
+    SKIPPED_NO_CHANGES = 'skipped_no_changes'
     TOO_LONG = 'failed_too_long'
     READ_BUDGET = 'failed_read_budget'
     INCOMPLETE_COVERAGE = 'failed_incomplete_coverage'
+    PARTIAL_COVERAGE = 'partial_coverage'
     BATCH_AUDIO = 'failed_batch_audio'
     INCOMPATIBLE_SPACE = 'failed_incompatible_space'
     REVOKED = 'failed_revoked'

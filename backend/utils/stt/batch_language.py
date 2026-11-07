@@ -34,6 +34,7 @@ from utils.stt.vendor_guard import (
     record_breaker_quota_error,
     record_breaker_success,
     record_vendor_burn,
+    record_vendor_payload,
 )
 
 MAX_PROBE_SECONDS = 30
@@ -163,6 +164,7 @@ def _detect(audio: bytes, *, before_probe=None, **audio_options) -> tuple[Langua
             return decision, outcome
         with httpx.Client(timeout=httpx.Timeout(8, connect=2)) as client:
             sent = True
+            record_vendor_payload('modulate', 'lid', len(body))
             response = client.post(
                 LID_URL, headers={'X-API-Key': key}, files={'upload_file': ('language.wav', body, 'audio/wav')}
             )

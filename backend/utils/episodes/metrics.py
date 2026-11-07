@@ -16,6 +16,8 @@
   (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
+- closed-episode size by join-variant arm recorded when the episode opened, ``f`` or
+  ``control`` (``omi_episode_closed_members``, ``omi_episode_closed_span_seconds``)
 """
 
 from __future__ import annotations
@@ -77,6 +79,18 @@ BOUNDARY_OUTCOMES = frozenset(
         'jev_no_answer',
         'sync_rejoin',
         'sync_rejoin_member',
+        # Variant F (config.episodes.f_join_enabled_for): a recorded-time join marked for F, its
+        # answer, its fallback (no answer keeps today's join), and a kill-switched settle.
+        'f_pending',
+        'f_pending_conflict',
+        'f_pending_error',
+        'f_continue',
+        'f_close',
+        'f_no_answer',
+        'f_disabled',
+        'f_later_member',
+        'f_orphan',
+        'f_orphan_check_error',
     }
 )
 
@@ -109,6 +123,21 @@ EPISODE_CLOSED_TOTAL = reuse_or_create(
     Counter, 'omi_episode_closed_total', 'Episodes closed, by close reason.', ['reason']
 )
 CLOSE_CONFLICT_REASONS = frozenset({'recorded_window_overlap', 'recorded_window_incomplete', 'state_version_changed'})
+F_JOIN_ARMS = frozenset({'f', 'control'})
+EPISODE_CLOSED_MEMBERS = reuse_or_create(
+    Histogram,
+    'omi_episode_closed_members',
+    'Member conversations per closed episode, by episode-join variant arm (f|control).',
+    ['arm'],
+    buckets=(1, 2, 3, 4, 6, 8, 12, 20, 40),
+)
+EPISODE_CLOSED_SPAN_SECONDS = reuse_or_create(
+    Histogram,
+    'omi_episode_closed_span_seconds',
+    'Recorded span of a closed episode in seconds, by episode-join variant arm (f|control).',
+    ['arm'],
+    buckets=(60, 300, 900, 1800, 3600, 5400, 7200, 10800, 14400),
+)
 EPISODE_CLOSE_CONFLICT_TOTAL = reuse_or_create(
     Counter, 'omi_episode_close_conflict_total', 'Lazy episode closes deferred by a storage conflict.', ['reason']
 )
@@ -145,6 +174,7 @@ EPISODE_LIVE_SESSIONS_TOTAL = reuse_or_create(
 )
 COMPOSE_OUTCOMES = frozenset(
     {
+        'settling',
         'composed',
         'unchanged',
         'leased',
@@ -172,6 +202,13 @@ EPISODE_COMPOSE_SECONDS = reuse_or_create(
     'Wall time of a composer run, including its model call.',
     ['outcome'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
+)
+COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
+EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_trigger_skipped_total',
+    'Composer triggers skipped before scheduling or paying, by bounded reason. Never labeled by uid.',
+    ['reason'],
 )
 HOME_MEMBER_OUTCOMES = frozenset({'shown', 'hidden_below_floor'})
 EPISODE_HOME_MEMBERS_TOTAL = reuse_or_create(
@@ -223,9 +260,14 @@ def _prime() -> None:
             EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=_label(reason, CLOSE_REASON_LABELS))
         for seen in ('true', 'false'):
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
+        for arm in F_JOIN_ARMS:
+            EPISODE_CLOSED_MEMBERS.labels(arm=arm)
+            EPISODE_CLOSED_SPAN_SECONDS.labels(arm=arm)
         for outcome in COMPOSE_OUTCOMES:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+        for reason in COMPOSE_SKIP_REASONS:
+            EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
         for outcome in HOME_MEMBER_OUTCOMES:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label(outcome, HOME_MEMBER_OUTCOMES))
         for channel in CLIENT_CHANNELS:
@@ -264,6 +306,16 @@ def record_moment_update(
 def record_episode_closed(reason: str) -> None:
     try:
         EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS)).inc()
+    except Exception:
+        pass
+
+
+def record_closed_size(arm: str, members: int, span_seconds: float | None) -> None:
+    try:
+        label = _label(arm, F_JOIN_ARMS)
+        EPISODE_CLOSED_MEMBERS.labels(arm=label).observe(max(0, int(members)))
+        if span_seconds is not None and span_seconds >= 0:
+            EPISODE_CLOSED_SPAN_SECONDS.labels(arm=label).observe(span_seconds)
     except Exception:
         pass
 
@@ -324,6 +376,13 @@ def record_client_request(channel: str, outcome: str) -> None:
         pass
 
 
+def record_compose_trigger_skipped(reason: str) -> None:
+    try:
+        EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS)).inc()
+    except Exception:
+        pass
+
+
 def record_compose(outcome: str, seconds: float) -> None:
     try:
         EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
@@ -339,5 +398,20 @@ def record_home_members(*, shown: int, hidden: int) -> None:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('shown', HOME_MEMBER_OUTCOMES)).inc(shown)
         if hidden:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('hidden_below_floor', HOME_MEMBER_OUTCOMES)).inc(hidden)
+    except Exception:
+        pass
+
+
+EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_batch_pending_overdue_reads_total',
+    'Home member observations without a batch projection past the stamped 2h deadline. Not unique members.',
+    [],
+)
+
+
+def record_batch_pending_overdue() -> None:
+    try:
+        EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL.inc()
     except Exception:
         pass

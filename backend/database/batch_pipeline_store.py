@@ -15,12 +15,13 @@ from typing import Any, Callable, Protocol, TypeVar
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
-from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
 from config.firestore_read_levers import lever_enabled
+from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
+from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
+from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_recovery import quarantine_fenced
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -68,16 +69,58 @@ class Store(Protocol):
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
+# Reads that bypass the view cache and go through the raw transaction, by kind.
+_DIRECT_READ_KINDS = {
+    'first_pending': 'jobs_query',
+    'first_ready_pending': 'jobs_query',
+    'ready_predecessor': 'jobs_query',
+    'service_frontier': 'control_query',
+    'check_privacy': 'privacy',
+}
+
+
+def _note_direct_reads(view: 'FirestoreTransaction') -> None:
+    """Record, per attempt, which kinds of direct reads ran, so contention logs can name them.
+
+    Wraps the bound methods on this one view; the class methods stay untouched.
+    """
+    for name, kind in _DIRECT_READ_KINDS.items():
+        method = getattr(view, name)
+
+        def noted(*args, _method=method, _kind=kind, **kwargs):
+            view.direct_reads.add(_kind)
+            return _method(*args, **kwargs)
+
+        setattr(view, name, noted)
+
+
+def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
+    """Sorted table names a transaction attempt read and wrote. Table names only, never keys."""
+    read = sorted({table for table, _ in view.cache} | view.direct_reads)
+    wrote = {table for table, _ in (*view.writes, *view.patches)}
+    if view.external:
+        wrote.add('external')
+    if any(table == 'conversations' for table, _ in view.patches):
+        # The commit-boundary privacy fence writes one token per owner for conversation patches.
+        wrote.add('privacy_fence')
+    wrote = sorted(wrote)
+    return ','.join(read) or 'none', ','.join(wrote) or 'none'
+
+
 class FirestoreTransaction:
-    def __init__(self, client: Any, namespace: str, transaction: Any):
+    def __init__(self, client: Any, namespace: str, transaction: Any, *, read_budget=None):
         self.client = client
         self.namespace = namespace
         self.transaction = transaction
+        self.read_budget = read_budget
         self.cache: dict[tuple[str, str], dict] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
         # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
         self.external: dict[Any, tuple[Any, dict]] = {}
+        # Reads that go through the raw transaction instead of the cache (queries, privacy state):
+        # their kind only, so contention logs can name them.
+        self.direct_reads: set[str] = set()
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -96,7 +139,10 @@ class FirestoreTransaction:
     def get(self, table: str, key: str) -> dict:
         address = (table, key)
         if address not in self.cache:
-            snapshot = self._ref(table, key).get(transaction=self.transaction)
+            options = {}
+            if self.read_budget is not None:
+                options = dict(timeout=self.read_budget.timeout(10), retry=None)
+            snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
 
@@ -135,11 +181,8 @@ class FirestoreTransaction:
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         options = {}
-        if lever_enabled('batch_privacy_memoize', uid):
-            # FirestoreStore.run creates this view anew on every callback retry.
-            if not hasattr(self, '_privacy_memo'):
-                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction)
-            options['memo'] = self._privacy_memo
+        if self.read_budget is not None:
+            options['read_budget'] = self.read_budget
         return assert_batch_write_allowed(
             self.client,
             self.transaction,
@@ -209,10 +252,13 @@ class FirestoreStore:
 
     def run(self, body):
         client = self.client
+        last_view: list[FirestoreTransaction] = []
 
         @firestore.transactional
         def commit(transaction):
             view = FirestoreTransaction(client, self.namespace, transaction)
+            _note_direct_reads(view)
+            last_view[:] = [view]
             result = body(view)
             view.flush()
             return result
@@ -221,11 +267,26 @@ class FirestoreStore:
             return commit(client.transaction())
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
-        return run_with_transaction_contention_retry(
-            lambda: client.transaction(max_attempts=1),
-            commit,
-            operation_name=current_operation(),
-        )
+        operation = current_operation()
+        try:
+            return run_with_transaction_contention_retry(
+                lambda: client.transaction(max_attempts=1),
+                commit,
+                operation_name=operation,
+            )
+        except FirestoreContentionExhausted as error:
+            # Name the document kinds the last attempt read and wrote, never keys,
+            # so the contended document is visible without exposing owners.
+            read, wrote = contention_tables(last_view[0]) if last_view else ('none', 'none')
+            error.store_tables = f'read={read} wrote={wrote}'  # type: ignore[attr-defined]
+            logger.warning(
+                'event=batch_store_contention operation=%s reason=%s read_tables=%s write_tables=%s',
+                operation,
+                error.reason,
+                read,
+                wrote,
+            )
+            raise
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)
@@ -312,14 +373,18 @@ def projection_page(
     __name__ breaks committed_at ties (including siblings committed together).
     Cursor values are discovery hints, never authorization or ordering fences.
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
+    A seed cursor ``(committed_at, '')`` starts at that time, before every key
+    (the follow-up desync offset); keys are never empty.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
     query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
-    if after is not None:
+    if after is not None and after[1] == '':
+        query = query.start_at({'committed_at': after[0]})
+    elif after is not None:
         query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
-    size = max(1, min(limit, 100))
+    size = max(1, min(limit, 200))
     docs = list(query.limit(size).stream())
     # Wrap even when blocked rows remain. Rows inserted behind the cursor are
     # revisited on the next cycle; no durable obligation is skipped or mutated.
@@ -678,6 +743,7 @@ TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
 TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
 TIMELINESS_HOLD_SCAN_LIMIT = 20
 TIMELINESS_PROJECTION_SCAN_LIMIT = 50
+TIMELINESS_BACKLOG_COUNT_LIMIT = 10_000
 
 
 def is_timeliness_hold(job: dict[str, Any], now: float) -> bool:
@@ -695,11 +761,15 @@ def is_terminal_empty(job: dict[str, Any]) -> bool:
     )
 
 
+@read_origin('job:batch_pipeline_store:timeliness_sample')
 def timeliness_sample(
     client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
 ) -> dict[str, Any]:
     """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
-    new cohort, and backlog counts before ``epoch``.
+    new cohort, and backlog counts before ``epoch``. With ``batch_timeliness_leader`` on, each backlog
+    count is capped at 10,000 index entries: values at the cap are lower bounds. The assignment-held
+    backlog alert treats saturation as actionable stock, independently of its one-hour growth condition.
+    Lever 0 restores the exact, unbounded historical counts. Post-epoch counts stay exact.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
     leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
@@ -720,6 +790,11 @@ def timeliness_sample(
 
     def count(query):
         return int(query.count().get()[0][0].value)
+
+    def backlog_count(query):
+        if lever_enabled('batch_timeliness_leader'):
+            query = query.limit(TIMELINESS_BACKLOG_COUNT_LIMIT)
+        return count(query)
 
     def walk(query, field):
         docs = [doc.to_dict() for doc in query.order_by(field).limit(TIMELINESS_HOLD_SCAN_LIMIT).stream()]
@@ -779,6 +854,12 @@ def timeliness_sample(
         'projection': (projection, 'committed_at'),
         # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
         'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
+        'held_expired_rows': (
+            results.where('projection_state', '==', 'quarantine_held').where(
+                'held_expired_reason', '==', 'held_expired'
+            ),
+            'committed_at',
+        ),
         # A subset of quarantined, matching is_terminal_empty. Visible only.
         'terminal_empty': (
             quarantined.where('recovery_state', '==', 'failed_held')
@@ -806,21 +887,31 @@ def timeliness_sample(
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
     return {
+        # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
+        # limit(1) reads stay exact even when the stock is larger than a scan page.
+        'drain_oldest': first(projection, 'committed_at'),
+        'held_oldest': {
+            'quarantine_held': first(legs['quarantine_held_rows'][0], 'committed_at'),
+            'held_expired': first(legs['held_expired_rows'][0], 'committed_at'),
+            'assignment_held': first(legs['assignment_held'][0], 'enqueued_at'),
+            'record_pending': first(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
+        },
         'new_oldest': {
             'uncommitted': min((started for started, _ in walks if started is not None), default=None),
             'quarantined': quarantined_oldest,
             'assignment_held': first(legs['assignment_held'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
             'projection': projected,
+            'held_expired_rows': first(legs['held_expired_rows'][0].where('committed_at', '>=', epoch), 'committed_at'),
             'quarantine_held_rows': first(
                 legs['quarantine_held_rows'][0].where('committed_at', '>=', epoch), 'committed_at'
             ),
         },
         'new_over_sla': over_sla,
         'backlog': {
-            'uncommitted_incl_holds': count(
+            'uncommitted_incl_holds': backlog_count(
                 jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)
             ),
-            **{leg: count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
+            **{leg: backlog_count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
         },
         'truncated': {
             'uncommitted': any(truncated for _, truncated in walks),

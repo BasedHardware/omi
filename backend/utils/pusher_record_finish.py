@@ -2,14 +2,61 @@
 
 import asyncio
 import logging
+import os
 from collections import Counter
+from functools import lru_cache
+from typing import Callable
 
+from config.pusher_record import abandon_record_drain_cap
 from utils.executors import start_background_task
 from utils.other.audio_outbox import AudioProjection
 
 logger = logging.getLogger(__name__)
-MAX_CLOSED_RECORD_DRAINS = 32
+
+
+def closed_record_drain_cap() -> int:
+    try:
+        value = int(os.getenv('PUSHER_MAX_CLOSED_RECORD_DRAINS', '32'))
+    except ValueError:
+        value = 32
+    return max(8, min(128, value))
+
+
+MAX_CLOSED_RECORD_DRAINS = closed_record_drain_cap()
 _closed_record_drains: set[asyncio.Task] = set()
+MAX_ABANDON_RECORD_DRAINS = abandon_record_drain_cap()
+_abandon_record_drains: set[asyncio.Task] = set()
+
+
+@lru_cache(maxsize=1)
+def log_closed_record_drain_cap() -> None:
+    logger.info('event=record_closed_finish_cap value=%s', MAX_CLOSED_RECORD_DRAINS)
+    logger.info('event=record_abandon_cap value=%s', MAX_ABANDON_RECORD_DRAINS)
+
+
+def abandon_evicted_record_drain(task, barrier, futures) -> bool:
+    """A small metadata coordinator; never restart the evicted projection."""
+    # Even refusal must fence local reconnect recovery while late I/O settles.
+    # This removes only a hint; the durable producer token remains unchanged.
+    barrier.forget_evicted_tokens()
+    if len(_abandon_record_drains) >= MAX_ABANDON_RECORD_DRAINS:
+        logger.warning('event=record_closed_finish outcome=abandon_overflow')
+        return False  # No coordinator or abandon write; retain the producer fence.
+
+    async def abandon(worker):
+        await asyncio.wait([worker])  # Settlement, not cancellation, is the proof.
+        try:
+            worker.exception()  # Release a cancellation traceback's upload locals.
+        except asyncio.CancelledError:
+            pass
+        del worker  # Metadata retries must not retain a settled socket/PCM frame.
+        await futures.wait()
+        await barrier.abandon_recordings()
+
+    owner = start_background_task(abandon(task), name='pusher:abandon_evicted_record_tokens')
+    _abandon_record_drains.add(owner)
+    owner.add_done_callback(_abandon_record_drains.discard)
+    return True
 
 
 class ProjectionQueueWaitTimeout(TimeoutError):
@@ -76,11 +123,12 @@ class RecordProjectionQueue(asyncio.Queue[AudioProjection]):
         )
 
 
-def retain_closed_record_drain(task: asyncio.Task) -> bool:
+def retain_closed_record_drain(task: asyncio.Task, *, on_capacity: Callable[[], object] | None = None) -> bool:
     """Transfer an existing worker, never restart or certify its unfinished work.
 
-    At capacity the caller retains ownership and cancels as before: immutable
-    receipts and the durable producer token remain for repair. Shutdown cancels
+    At capacity the caller retains ownership and cancels as before. The optional
+    abandonment coordinator attests stoppage only after executor settlement;
+    immutable receipts and the token remain for repair's tail proof. Shutdown cancels
     the tracked owner and its worker; process death is still the repair proof.
     Only a closed outcome enum is logged, never exception text or task names.
     """
@@ -88,6 +136,8 @@ def retain_closed_record_drain(task: asyncio.Task) -> bool:
         return False
     if len(_closed_record_drains) >= MAX_CLOSED_RECORD_DRAINS:
         logger.warning('event=record_closed_finish outcome=capacity')
+        if on_capacity is not None and os.getenv('PUSHER_ABANDON_EVICTED_TOKENS', 'on').strip().lower() != 'off':
+            on_capacity()
         return False
     _closed_record_drains.add(task)
 

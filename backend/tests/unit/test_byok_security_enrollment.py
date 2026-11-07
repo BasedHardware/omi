@@ -137,7 +137,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
-        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription, **kwargs: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(
             users,
@@ -196,7 +196,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
-        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription, **kwargs: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(
             users,

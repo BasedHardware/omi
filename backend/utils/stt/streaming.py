@@ -1,3 +1,13 @@
+"""Live STT provider sockets: fallback connection chains, per-language/surface
+provider selection, and the process-local health circuit.
+
+The chain must advance to the next configured provider when a primary cannot
+open a socket -- one dead provider otherwise took entire deployments' live
+transcription down (#11695, #11752). The full incident narratives and routing
+rationale live in backend/utils/stt/ARCHITECTURE.md so this file stays under
+the product-file line ratchet.
+"""
+
 from utils.stt_cap_dispatch import live_provider
 import asyncio
 import inspect

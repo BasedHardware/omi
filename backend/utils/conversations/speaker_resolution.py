@@ -844,6 +844,8 @@ def resolve_speakers_for_processing(
     budget_seconds: Optional[float] = None,
     max_embedding_attempts: Optional[int] = None,
     allow_owner_audio_repair: bool = True,
+    final_pass_runner=None,
+    skip_automatic: bool = False,
 ) -> bool:
     """Resolve voices and return whether the manual receipt was read and applied."""
     trace = resolver_trace()
@@ -855,7 +857,7 @@ def resolve_speakers_for_processing(
         return False
     if trace is not None and trace.pass_name == 'first':
         record_retry('first', 'eligible', 'candidate')
-    evidence_token = speaker_evidence.begin(conversation)
+    evidence_token = None if skip_automatic else speaker_evidence.begin(conversation)
     resolver_reason('disabled')
     try:
         if match_scores.enabled():
@@ -892,7 +894,7 @@ def resolve_speakers_for_processing(
             conversation.transcript_segments
         )
         # The kill switch also stops linking/naming when speaker evidence serves.
-        if batch_record and not batch_resolution:
+        if batch_record and not batch_resolution and not skip_automatic:
             resolver_reason('batch_authoritative')
             # Legacy owner-safe abstention; manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
@@ -914,7 +916,7 @@ def resolve_speakers_for_processing(
                 (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
             )
         )
-        if resolution_enabled() and not final_record:
+        if resolution_enabled() and not final_record and not skip_automatic:
             _resolve(
                 uid,
                 conversation,
@@ -963,18 +965,20 @@ def resolve_speakers_for_processing(
                 )
         elif receipt_read:
             receipt_applied = True  # A successful read confirmed there is no manual receipt.
-        speaker_evidence.finish(evidence_token, uid, conversation, receipt if receipt_read else None)
+        if not skip_automatic:
+            speaker_evidence.finish(evidence_token, uid, conversation, receipt if receipt_read else None)
         # The whole pass is the last automatic authority, after the evidence
         # projection, and must have a successfully read manual receipt.
         if receipt_read and resolution_enabled() and budget_seconds is None:
             from utils.conversations.final_pass_batch import run_batch_final_pass
 
-            run_batch_final_pass(
+            (final_pass_runner or run_batch_final_pass)(
                 uid,
                 conversation,
                 receipt,
                 load_prints=load_voiceprints_for_resolution,
                 apply=apply_speaker_resolution,
+                requeue=None,
             )
     return receipt_applied
 

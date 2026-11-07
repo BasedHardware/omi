@@ -4,10 +4,13 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from prometheus_client import CollectorRegistry
 
-from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED
+from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED, timeliness_interval_seconds
 from database.batch_pipeline_store import TIMELINESS_HOLD_SCAN_LIMIT, timeliness_sample
+from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS
 from utils.batch_pipeline.metrics import QueueMetrics
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -128,6 +131,7 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
         'assignment_held': 1,
         'projection': 0,
         'quarantine_held_rows': 1,
+        'held_expired_rows': 0,
         'terminal_empty': 0,
     }
     assert sample['backlog'] == {
@@ -136,6 +140,7 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
         'assignment_held': 1,
         'projection': 0,
         'quarantine_held_rows': 1,
+        'held_expired_rows': 0,
         'terminal_empty': 0,
     }
     assert sample['new_oldest']['projection'] is None
@@ -282,6 +287,8 @@ def _store(monkeypatch, sample):
 
 
 SAMPLE = {
+    'drain_oldest': None,
+    'held_oldest': {'quarantine_held': NOW - 200_000, 'assignment_held': NOW - 100_000, 'record_pending': None},
     'new_oldest': {
         'uncommitted': None,
         'quarantined': NOW - 9000,
@@ -333,6 +340,7 @@ def test_failed_sample_keeps_values_and_freshness(monkeypatch):
     assert registry.get_sample_value('omi_batch_timeliness_observed_at_seconds') == NOW
     assert registry.get_sample_value('omi_batch_timeliness_new_over_sla_units', {'leg': 'quarantined'}) == 1
     assert registry.get_sample_value('omi_batch_timeliness_samples_total', {'outcome': 'error'}) == 1
+    assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': 'quarantine_held'}) == 200_000
 
 
 def test_kill_switch_skips_firestore_and_counts_disabled(monkeypatch):
@@ -367,3 +375,376 @@ def test_rules_page_on_new_delivery_breach_and_keep_diagnostics_agent_tier():
         else:
             assert rule['labels']['tier'] == 'agent'
             assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+
+
+def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
+    # The oldest row is before the timeliness epoch and far older than the lifecycle 24h cohort.
+    old = EPOCH - 3 * 86400
+    sample = _sample(
+        jobs=[
+            {'state': 'record_pending', 'enqueued_at': old},
+            {'state': 'record_pending', 'enqueued_at': NOW - 60},
+            {'state': 'committed', 'recovery_state': 'held', 'enqueued_at': old + 10},
+            {'state': 'committed', 'recovery_state': 'recovered', 'enqueued_at': old - 10},
+        ],
+        results=[
+            {'projection_state': 'quarantine_held', 'committed_at': old + 20},
+            {'projection_state': 'completed', 'committed_at': old - 20},
+        ],
+    )
+    assert sample['held_oldest'] == {
+        'record_pending': old,
+        'assignment_held': old + 10,
+        'quarantine_held': old + 20,
+        'held_expired': None,
+    }
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(monkeypatch, sample)
+    metrics.refresh_timeliness(store, NOW)
+    for leg, started in sample['held_oldest'].items():
+        assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': leg}) == (
+            NOW - started if started is not None else 0
+        )
+    # A subsequent empty stock must clear old series, rather than leave a latched age.
+    sample['held_oldest'] = dict.fromkeys(sample['held_oldest'])
+    metrics.refresh_timeliness(store, NOW + 301)
+    for leg in sample['held_oldest']:
+        assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': leg}) == 0
+
+
+def test_held_oldest_does_not_depend_on_stock_size_or_first_input_row():
+    old = EPOCH - 2 * 86400
+    sample = _sample(
+        jobs=[
+            *({'state': 'record_pending', 'enqueued_at': NOW - i} for i in range(1200)),
+            {'state': 'record_pending', 'enqueued_at': old},
+        ]
+    )
+    assert sample['held_oldest']['record_pending'] == old
+    assert sample['held_oldest']['assignment_held'] is None
+    assert sample['held_oldest']['quarantine_held'] is None
+
+
+def test_drain_age_excludes_held_only_stock_but_includes_pre_epoch_pending(monkeypatch):
+    held = {'projection_state': 'quarantine_held', 'committed_at': EPOCH - 86400}
+    assert _sample(results=[held])['drain_oldest'] is None
+    sample = _sample(results=[held, {'projection_state': 'pending', 'committed_at': EPOCH - 3600}])
+    assert sample['drain_oldest'] == EPOCH - 3600
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(monkeypatch, sample)
+    metrics.refresh_timeliness(store, NOW)
+    assert registry.get_sample_value('omi_batch_projection_drain_oldest_age_seconds') == NOW - EPOCH + 3600
+    sample['drain_oldest'] = None
+    metrics.refresh_timeliness(store, NOW + 301)
+    assert registry.get_sample_value('omi_batch_projection_drain_oldest_age_seconds') == 0
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+@pytest.mark.parametrize(
+    'row,leg',
+    [({'state': 'quarantined'}, 'quarantined'), ({'state': 'committed', 'recovery_state': 'held'}, 'assignment_held')],
+)
+def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled, row, leg):
+    from database.batch_pipeline_store import TIMELINESS_BACKLOG_COUNT_LIMIT
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'batch_timeliness_leader': 100 if enabled else 0}))
+    queries = []
+    original = _Query.count
+
+    def counted(query):
+        queries.append(query)
+        return original(query)
+
+    monkeypatch.setattr(_Query, 'count', counted)
+    stock = TIMELINESS_BACKLOG_COUNT_LIMIT + 123
+    sample = _sample(jobs=[{**row, 'enqueued_at': EPOCH - 1}] * stock)
+    historical = [q for q in queries if any(op == '<' and value == EPOCH for _, op, value in q.filters)]
+    assert len(historical) == 7
+    assert all(q._limit == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else None) for q in historical)
+    assert sample['backlog'][leg] == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else stock)
+    if leg == 'assignment_held':
+        rules = json.loads((BACKEND / 'charts/monitoring/alerts/critical-failures.json').read_text())
+        alarm = next(rule for rule in rules if rule['uid'] == 'omi-batch-held-backlog-growing')
+        stock_metric = (
+            'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} '
+            'and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900))'
+        )
+        assert f'({stock_metric} >= {TIMELINESS_BACKLOG_COUNT_LIMIT})' in alarm['data'][0]['model']['expr']
+    # Post-epoch counts remain exact and unbounded.
+    assert all(q._limit is None for q in queries if q not in historical)
+
+
+@pytest.mark.parametrize(
+    'configured,expected',
+    [
+        (None, 300),
+        ('', 300),
+        ('invalid', 300),
+        ('nan', 300),
+        ('0', 60),
+        ('59', 60),
+        ('60', 60),
+        ('300', 300),
+        ('600', 600),
+        ('601', 600),
+        ('3600', 600),
+    ],
+)
+def test_timeliness_interval_clamps_to_preserve_freshness_through_pending(monkeypatch, configured, expected):
+    monkeypatch.delenv('BATCH_TIMELINESS_INTERVAL_SECONDS', raising=False)
+    if configured is not None:
+        monkeypatch.setenv('BATCH_TIMELINESS_INTERVAL_SECONDS', configured)
+    assert timeliness_interval_seconds() == expected
+
+
+def _fleet(monkeypatch, interval=300):
+    from tests.unit.test_batch_pipeline_leader import Clock
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from utils.batch_pipeline.leader import LeaderLease, TIMELINESS_METRICS
+
+    monkeypatch.delenv('BATCH_PIPELINE_LEADER_LEASE_ENABLED', raising=False)
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    monkeypatch.setenv('BATCH_TIMELINESS_INTERVAL_SECONDS', str(interval))
+    clock, lease_store = Clock(NOW), MemoryStore()
+    effective_interval = timeliness_interval_seconds()
+    metrics = [
+        QueueMetrics(
+            CollectorRegistry(),
+            timeliness_leader=LeaderLease(lease_store, TIMELINESS_METRICS, ttl_seconds=effective_interval, clock=clock),
+        )
+        for _ in range(2)
+    ]
+    store = _store(monkeypatch, SAMPLE)
+    return metrics, store, clock
+
+
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
+def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, configured, interval):
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
+    first, second = metrics
+    for m in metrics:
+        assert list(m.timeliness_observed_at.collect()) == []
+        assert list(m.drain_age.collect()) == []
+    first.refresh_timeliness(store, clock.now)
+    second.refresh_timeliness(store, clock.now + 1)
+    assert store.timeliness.call_count == 1
+    assert list(second.timeliness_age.collect()) == []
+    assert list(second.timeliness_observed_at.collect()) == []
+    # Restarted replicas cannot create an extra sample inside the fleet interval.
+    from utils.batch_pipeline.leader import LeaderLease, TIMELINESS_METRICS
+
+    restart = QueueMetrics(
+        CollectorRegistry(),
+        timeliness_leader=LeaderLease(
+            first.timeliness_leader.store, TIMELINESS_METRICS, ttl_seconds=interval, clock=clock
+        ),
+    )
+    clock.now += interval - 1
+    restart.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 1
+    clock.now += 63  # The bounded refresh grace has also expired.
+    second.refresh_timeliness(store, clock.now)
+    first.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 2
+    assert list(first.timeliness_age.collect()) == []
+    assert list(first.timeliness_observed_at.collect()) == []
+    assert list(first.held_age.collect()) == []
+    assert list(first.drain_age.collect()) == []
+    assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+
+
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
+def test_follower_retries_after_refresh_grace_without_another_full_interval(monkeypatch, configured, interval):
+    from utils.batch_pipeline import metrics as metrics_module
+    from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS
+
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first, follower = metrics
+    follower.timeliness_leader.acquire = Mock(wraps=follower.timeliness_leader.acquire)
+    first.refresh_timeliness(store, clock.now)
+    clock.now = NOW + 1
+    follower.refresh_timeliness(store, clock.now)
+    assert list(first.timeliness_observed_at.collect())[0].samples[0].value == NOW
+    assert list(follower.timeliness_observed_at.collect()) == []
+
+    # The incumbent stops. This follower loses around the normal sample tick,
+    # when the old lease is still live for its fixed refresh grace.
+    clock.now = NOW + interval + 1
+    follower.refresh_timeliness(store, clock.now)
+    assert follower.timeliness_leader.acquire.call_count == 2
+    assert store.timeliness.call_count == 1
+    assert list(first.timeliness_age.collect())
+    assert list(follower.timeliness_age.collect()) == []
+
+    takeover = clock.now + TIMELINESS_LEASE_GRACE_SECONDS
+    while clock.now < takeover - 1:
+        clock.now += 1
+        follower.refresh_timeliness(store, clock.now)
+    # Even a fast supervisor cannot poll the lease more than once per minute.
+    assert follower.timeliness_leader.acquire.call_count == 2
+    assert store.timeliness.call_count == 1
+    assert list(first.timeliness_observed_at.collect()) == []
+    assert list(follower.timeliness_observed_at.collect()) == []
+
+    clock.now = takeover
+    follower.refresh_timeliness(store, clock.now)
+    assert follower.timeliness_leader.acquire.call_count == 3
+    assert store.timeliness.call_count == 2
+    assert list(follower.timeliness_observed_at.collect())[0].samples[0].value == takeover
+    assert list(first.timeliness_age.collect()) == []
+    # Taking over restores the full successful sampling cadence, not the
+    # follower retry cadence. The old leader's values remain absent throughout.
+    clock.now = takeover + interval - 1
+    follower.refresh_timeliness(store, clock.now)
+    assert follower.timeliness_leader.acquire.call_count == 3
+    assert store.timeliness.call_count == 2
+    assert list(follower.timeliness_age.collect())
+    clock.now += 1
+    follower.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 3
+    assert list(follower.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+    assert list(first.timeliness_observed_at.collect()) == []
+
+
+def test_lever_zero_restores_per_instance_sampling_without_lease_reads(monkeypatch):
+    metrics, store, clock = _fleet(monkeypatch)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+    for m in metrics:
+        m.timeliness_leader.acquire = Mock(side_effect=AssertionError('must bypass lease'))
+        m.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 2
+
+
+def test_lease_outage_fails_open_and_samples(monkeypatch):
+    metrics, store, clock = _fleet(monkeypatch)
+    for m in metrics:
+        m.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('down')))
+        m.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 2
+
+
+def test_alerts_aggregate_available_leader_and_keep_missing_sample_freshness():
+    rules = {rule['uid']: rule for rule in json.loads(PENDING.read_text())}
+    stale = rules['omi-batch-timeliness-sample-stale']
+    assert stale['noDataState'] == 'Alerting'
+    expression = stale['data'][0]['model']['expr']
+    assert 'max(omi_batch_timeliness_observed_at_seconds)' in expression
+    assert 'or vector(1e9)' in expression
+    assert any(q['model'].get('expression') == '$A >= 900' for q in stale['data'])
+    assert rules['omi-batch-timeliness-scan-blind']['noDataState'] == 'OK'
+
+
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
+@pytest.mark.parametrize('mode', ['elected', 'lever_zero', 'rollback'])
+def test_stalled_replica_expires_at_collection_without_refresh(monkeypatch, configured, interval, mode):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first, second = metrics
+    if mode == 'lever_zero':
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+        for sampler in metrics:
+            sampler.timeliness_leader.acquire = Mock(side_effect=AssertionError('must bypass lease'))
+    first.refresh_timeliness(store, clock.now)
+    assert list(first.timeliness_age.collect())
+    if mode == 'rollback':
+        # The old replica never refreshes after the lever changes. Collection
+        # must still enforce the deadline set by its elected sample.
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+        second.timeliness_leader.acquire = Mock(side_effect=AssertionError('must bypass lease'))
+    clock.now += interval + TIMELINESS_LEASE_GRACE_SECONDS - 1
+    assert list(first.timeliness_age.collect())
+    clock.now += 1  # Expiry is exclusive, even with election off.
+    second.refresh_timeliness(store, clock.now)
+    # A's supervisor never resumes: scraping alone must withdraw stale debt
+    # before max(age from A) can borrow max(timestamp from B)'s freshness.
+    for gauge in (
+        first.timeliness_age,
+        first.timeliness_over_sla,
+        first.timeliness_backlog,
+        first.timeliness_truncated,
+        first.timeliness_observed_at,
+        first.drain_age,
+        first.held_age,
+    ):
+        assert list(gauge.collect()) == []
+    assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+    assert store.timeliness.call_count == 2
+
+
+def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypatch):
+    from utils.batch_pipeline import metrics as metrics_module
+    from utils.batch_pipeline.leader import TIMELINESS_METRICS
+
+    factory = Mock(return_value=Mock(acquire=Mock(return_value=False)))
+    monkeypatch.setattr(metrics_module, 'LeaderLease', factory)
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    store = _store(monkeypatch, SAMPLE)
+    for scope in ('serving', 'worker'):
+        sampler = QueueMetrics(CollectorRegistry(), namespace=scope)
+        sampler.refresh_timeliness(store, NOW)
+    assert factory.call_count == 2
+    for call in factory.call_args_list:
+        assert call.args == (store, TIMELINESS_METRICS)
+        assert call.kwargs == {'ttl_seconds': 360.0}
+    store.timeliness.assert_not_called()
+
+
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
+@pytest.mark.parametrize('mode', ['elected', 'lever_zero', 'rollback'])
+def test_failed_retry_does_not_revive_expired_replica(monkeypatch, configured, interval, mode):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first, second = metrics
+    if mode == 'lever_zero':
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+    first.refresh_timeliness(store, clock.now)
+    if mode == 'rollback':
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+    clock.now += interval + TIMELINESS_LEASE_GRACE_SECONDS + 1
+    second.refresh_timeliness(store, clock.now)
+    assert list(first.timeliness_age.collect()) == []
+    first.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('lease store down')))
+    store.timeliness.side_effect = RuntimeError('sample failed')
+    first.refresh_timeliness(store, clock.now)
+    # Preserve the last stored timestamp without extending its visibility.
+    assert first.timeliness_observed_at._value.get() == NOW
+    assert list(first.timeliness_age.collect()) == []
+    assert list(first.timeliness_observed_at.collect()) == []
+    assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+    assert store.timeliness.call_count == 3  # Fail-open still attempts the sample.
+
+
+@pytest.mark.parametrize('configured', [60, 300, 600, 3600])
+def test_refresh_jitter_and_rpc_time_do_not_break_continuous_breach_visibility(monkeypatch, configured):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first = metrics[0]
+    first.refresh_timeliness(store, clock.now)
+
+    def slow_sample(*args, **kwargs):
+        # The sampler is on a supervised 15s tick and its RPCs also take time.
+        assert list(first.timeliness_age.collect())
+        clock.now += 10
+        assert list(first.timeliness_age.collect())
+        return SAMPLE
+
+    store.timeliness.side_effect = slow_sample
+    for _ in range(3):
+        clock.now = first._timeliness_due + 15
+        assert list(first.timeliness_age.collect())
+        first.refresh_timeliness(store, clock.now)
+        assert list(first.timeliness_age.collect())
+    assert store.timeliness.call_count == 4

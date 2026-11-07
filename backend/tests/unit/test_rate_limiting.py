@@ -267,6 +267,10 @@ def test_transcript_upload_budget_ignores_boost():
     assert get_effective_limit('import:upload', boost=100) == (30, 3600)
 
 
+def test_task_presence_keeps_its_read_budget_under_production_boost():
+    assert get_effective_limit('conversations:task-presence', boost=100) == (120, 3600)
+
+
 class TestShadowMode(unittest.TestCase):
     """Test shadow mode env var parsing."""
 

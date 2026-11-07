@@ -471,6 +471,7 @@ def run(
         patch.object(projection_drain, 'time', lanes.module()),
         patch.object(projection_drain, 'run_blocking', inline_blocking),
         patch.object(projection, 'projection_claim', claim),
+        patch.object(projection_drain, 'projection_claim_held', lambda *args: False),
         patch.object(projection, 'build_incoming', build_incoming),
         patch.object(projection_parts, 'split_result', lambda item, payload: [(item, payload)]),
         patch.object(context, 'resolve_context', resolve),

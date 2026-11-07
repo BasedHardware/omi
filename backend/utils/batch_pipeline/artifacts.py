@@ -63,6 +63,7 @@ class ArtifactStore:
         key_for_owner: Callable[[str], bytes],
         register_artifact: Callable[[WorkItem, str, str, ProtectionContext], None],
         shadow_result: Callable | None = None,
+        authorize_read: Callable | None = None,
     ) -> None:
         if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]', bucket):
             raise ValueError('explicit staging bucket required')
@@ -73,6 +74,7 @@ class ArtifactStore:
         self.bucket_name = bucket
         self.namespace = namespace
         self.authorize = authorize
+        self.authorize_read = authorize_read
         self.key_for_owner = key_for_owner
         self.register_artifact = register_artifact
         self.shadow_result = shadow_result
@@ -105,8 +107,13 @@ class ArtifactStore:
             identity['shadow'] = True
         return json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()
 
-    def _unchanged(self, item: WorkItem, context: ProtectionContext) -> None:
-        if self.authorize(item) != context:
+    def _authorize(self, item: WorkItem, read_budget=None):
+        if read_budget is not None and self.authorize_read is not None:
+            return self.authorize_read(item, read_budget=read_budget)
+        return self.authorize(item)
+
+    def _unchanged(self, item: WorkItem, context: ProtectionContext, *, read_budget=None) -> None:
+        if self._authorize(item, read_budget) != context:
             raise PermissionError('batch artifact policy changed during IO')
 
     def _seal(self, item: WorkItem, kind: str, context: ProtectionContext, body: bytes) -> bytes:
@@ -207,7 +214,7 @@ class ArtifactStore:
         return None
 
     def _read(self, item: WorkItem, uri: str, kind: str, limit: int, *, read_budget=None) -> bytes:
-        context = self.authorize(item)
+        context = self._authorize(item, read_budget)
         if item.privacy_generation is None or context.generation != item.privacy_generation:
             raise PermissionError('batch artifacts require the admitted privacy generation')
         name, generation = self._reference(item, uri, kind)
@@ -233,6 +240,7 @@ class ArtifactStore:
             retry=None,
         )
         if read_budget is not None:
+            read_budget.received_bytes += len(sealed)
             read_budget.timeout(60)
         if len(sealed) > limit + len(MAGIC) + 28 or not sealed.startswith(MAGIC):
             raise ValueError('invalid batch artifact envelope')
@@ -244,7 +252,7 @@ class ArtifactStore:
             sealed[offset + 12 :],
             self._aad(item, kind, context),
         )
-        self._unchanged(item, context)
+        self._unchanged(item, context, read_budget=read_budget)
         return body
 
     def persist_voice_evidence(self, item: WorkItem, payload: dict) -> str:
@@ -327,7 +335,7 @@ class ArtifactStore:
                     read_budget=read_budget,
                 ),
             )
-            self.authorize(item)
+            self._authorize(item, read_budget)
             return wav
         return body
 

@@ -18,6 +18,9 @@ def state(monkeypatch):
     from utils.enrichment import scan as enrichment_scan
 
     rows, tasks = {}, []
+    # Relative epoch clocks exercise coalescing independently of wall-clock
+    # history. The age-gate behavior suite explicitly enables its 72h policy.
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
 
     def mutate(key, operation):
         new, result = operation(deepcopy(rows.get(key)))
@@ -36,13 +39,15 @@ def state(monkeypatch):
     monkeypatch.setattr(enrichment_scan, 'finish', lambda *_: None)
 
     def empty_failure(_client, _collection, document_id, owner, token):
+        from database.summary_processing import EmptyFailureOutcome
+
         row = rows[document_id]
         assert row['owner'] == owner and row['task_token'] == token
         row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
         if row['summary_empty_failures'] == 3:
             row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
-            return True
-        return False
+            return EmptyFailureOutcome.BLOCKED
+        return EmptyFailureOutcome.RETRY
 
     # Actual multi-document failure persistence is exercised by the emulator.
     monkeypatch.setattr(reprocess, 'record_empty_failure', empty_failure)
@@ -442,7 +447,7 @@ def test_sweep_rebinds_poison_in_cas_and_fences_old_delivery(state, sweep_query,
     rows[key]['dispatch'] = poison
     assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
     repaired = rows[key]
-    assert repaired['dispatch'] == reprocess._dispatch_binding()
+    assert repaired['dispatch'] == reprocess.dispatch_binding()
     assert repaired['task_token'] != original['task_token']
     assert repaired['version'] == original['version'] and repaired['due_at'] == original['due_at']
     assert tasks[-1] == repaired  # The binding/token are durable before enqueue.
@@ -459,7 +464,7 @@ def test_sweep_repairs_each_missing_binding_field(state, sweep_query, field):
     reprocess.mark('u', 'c', 'en', now=0)
     rows[reprocess.key('u', 'c')]['dispatch'][field] = ''
     assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
-    assert rows[reprocess.key('u', 'c')]['dispatch'] == reprocess._dispatch_binding()
+    assert rows[reprocess.key('u', 'c')]['dispatch'] == reprocess.dispatch_binding()
 
 
 def test_unbound_host_leaves_claimable_obligation_without_error_storm(state, sweep_query, monkeypatch, caplog):
@@ -870,6 +875,22 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
     process.assert_not_called()
 
 
+def test_legacy_empty_output_owner_race_defers_without_spending_attempts(state, monkeypatch):
+    from database.summary_processing import EmptyFailureOutcome
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.OWNER_MISMATCH)
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    rows[key].update(summary_empty_failures=2)
+    assert reprocess.run(key, token, lambda *_: SimpleNamespace(structured={}), now=120) == 'deferred'
+    assert rows[key]['deferred_reason'] == 'summary_owner_changed'
+    assert rows[key]['summary_empty_failures'] == 2
+    assert rows[key]['lease_until'] == 0 and rows[key]['task_token'] != token
+
+
 def test_revision_changed_before_repair_claim_keeps_same_version_debt(state, monkeypatch):
     from utils.conversations.summary_delivery import SummaryRepairSuperseded
 
@@ -1262,3 +1283,75 @@ def test_later_summary_keeps_legacy_callback_validation_and_completion(state, mo
             reprocess.run(key, token, callback, now=120)
         assert not rows[key].get('dormant')
         assert rows[key]['lease_until'] == 1920
+
+
+@pytest.mark.parametrize(
+    'change', ['none', 'timestamps', 'text', 'span', 'visibility', 'missing_owner', 'off', 'finalize_owed', 'disabled']
+)
+def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, monkeypatch, change):
+    from datetime import datetime, timedelta, timezone
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    start = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    row = {
+        'id': 'c',
+        'source': 'omi',
+        'status': 'completed',
+        'episode_id': 'e',
+        'started_at': start,
+        'finished_at': start + timedelta(minutes=1),
+        'recorded_start': start,
+        'recorded_end': start + timedelta(minutes=1),
+        'discarded': False,
+        'transcript_segments': [{'id': 's', 'text': 'retained speech', 'start': 0, 'end': 60}],
+        'relevance_decision': {'trigger': 'sync_update', 'verdict': 'keep'},
+    }
+    if change == 'missing_owner':
+        row.pop('episode_id')
+    model = SimpleNamespace(**deepcopy(row), structured={}, language='en')
+    model.model_dump = lambda: {k: v for k, v in vars(model).items() if k != 'model_dump'}
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(pipeline, 'deserialize_conversation', lambda *_: model)
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    monkeypatch.setattr(pipeline.bridge_pending, 'live_finalization_owns', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'occasion_relevance_enabled', lambda: True)
+    monkeypatch.setattr(pipeline, 'is_silent_redrive', lambda *_: False)
+    features = Mock()
+    monkeypatch.setattr(pipeline, 'record_feature', features)
+    monkeypatch.setenv('EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED', 'false' if change == 'off' else 'true')
+    from utils.episodes import finalize
+
+    monkeypatch.setattr(finalize, 'episodes_enabled_for', lambda _: change != 'disabled')
+    monkeypatch.setattr(pipeline, 'episodes_enabled_for', lambda _: change != 'disabled')
+    if change in {'off', 'disabled'}:
+        monkeypatch.setattr(pipeline, 'process_snapshot', Mock(side_effect=AssertionError('comparison is disabled')))
+    monkeypatch.setattr(finalize, 'lifecycle_executor', lambda *a, **kw: object())
+    # An equal processing pass may skip only with completed current finalize proof.
+    proof = Mock(return_value=change in {'none', 'timestamps', 'off'})
+    monkeypatch.setattr(finalize, 'skip_unchanged_schedule', proof)
+    schedule = Mock()
+    monkeypatch.setattr(finalize, 'submit_with_context', schedule)
+    monkeypatch.setattr(pipeline, 'schedule_after_finalization', finalize.schedule_after_finalization)
+
+    def process(**kw):
+        # Deliberately mutate the exact object passed by the caller.
+        if change == 'text':
+            model.transcript_segments[0]['text'] = 'new retained speech'
+        elif change == 'span':
+            model.recorded_end += timedelta(minutes=1)
+        elif change == 'visibility':
+            model.discarded = True
+        elif change == 'timestamps':
+            model.finished_at += timedelta(minutes=1)
+        return model
+
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    token = pipeline.PROCESS_CONTEXT.set(None)
+    try:
+        pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    assert schedule.call_count == (0 if change in {'none', 'timestamps', 'disabled'} else 1)
+
+    assert features.call_count == (0 if change == 'disabled' else 1)

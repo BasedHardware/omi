@@ -12,9 +12,12 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud import firestore
 
+from config.episode_attach import optimizations_enabled
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
-from database import episodes
+from database import episodes, episode_batch_pending
+from utils.conversations.recorded_time import conversation_span
+from utils.conversations.fragment_visibility import is_relevance_discarded
 
 
 def _automatic(row):
@@ -140,21 +143,77 @@ def _state(template, window, previous, facts):
     return result
 
 
-def attach(uid, cid, source, start, end, *, candidates, template, choose, firestore_client, page_limit):
+def attach(
+    uid,
+    cid,
+    source,
+    start,
+    end,
+    *,
+    candidates,
+    template,
+    choose,
+    firestore_client,
+    page_limit,
+    transaction=None,
+    fence_row=None,
+    pending_at=None,
+):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
     root = client.collection('users').document(uid)
     collection = root.collection('episodes')
     fence = root.collection('episode_links').document('recorded_timeline')
 
-    @firestore.transactional
     def commit(transaction):
-        fence_row = fence.get(transaction=transaction).to_dict() or {}
+        revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
+        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
         if linked.get('episode_id'):
             owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
             if not _automatic(owner):
                 return None
+            # Proof is written only by a complete canonical repartition. A note,
+            # membership mutation invalidates it conservatively. The fence is
+            # still read: a concurrent topology writer must serialize with us.
+            # Unrelated windows need not invalidate this owner's proof.
+            # check_window rejects a new overlapping fixed window; converting
+            # this owner to a fixed boundary advances its revision instead.
+            proof = owner.get('recorded_partition') or {}
+            fact = (owner.get('recorded_members') or {}).get(cid)
+            if (
+                (optimizations_enabled() or pending_at is not None)
+                and proof.get('state_version') == owner.get('state_version')
+                and proof.get('members') == sorted(owner.get('conversation_ids') or [])
+                and set(owner.get('recorded_members') or {}) == set(proof.get('members') or [])
+                and not owner.get('recorded_merged_into')
+                and not owner.get('duplicate_conversation_ids')
+                and fact == {'start': start, 'end': end, 'source': source}
+            ):
+                # Do not trust the caller's stale row across a delete/discard or
+                # another WAL append. This get also joins the transaction read set.
+                member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict()
+                span = conversation_span(member) if member and pending_at is None else None
+                # Before transcription, committed archive bounds are the only
+                # audio clock. Legacy started_at/finished_at can be arrival time.
+                same_span = (
+                    episode_batch_pending.matches_closed_audio(member, start, end)
+                    if pending_at is not None
+                    else span is not None and span.recorded_start == start and span.recorded_end == end
+                )
+                if (
+                    same_span
+                    and member.get('episode_id') == linked['episode_id']
+                    and member.get('source') == source
+                    and not is_relevance_discarded(member)
+                    and not any(member.get(k) for k in ('deleted', 'sync_merged_into'))
+                ):
+                    full = episodes.unseal(uid, owner)
+                    if full is not None:
+                        if pending_patch:
+                            transaction.update(root.collection('conversations').document(cid), pending_patch)
+                        return {**full, '_recorded_windows': [full]}
+
         facts = {cid: {'start': start, 'end': end, 'source': source}}
         previous = {}
         lo, hi = start, end
@@ -220,6 +279,14 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)
+        # Audio-close replay idempotency is independent of sync read optimizations.
+        # Both paths require a current canonical-partition proof before skipping.
+        if optimizations_enabled() or pending_at is not None:
+            for row in result:
+                row['recorded_partition'] = {
+                    'state_version': row['state_version'],
+                    'members': sorted(row['conversation_ids']),
+                }
         new_ids = {row['id'] for row in result}
         assignments = {member: [row['id'] for row in result if member in row['conversation_ids']] for member in members}
         if any(not ids for ids in assignments.values()):
@@ -238,18 +305,23 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
         for member, (exists, old) in members.items():
             assigned = assignments[member]
             retained = [eid for eid in old.get('episode_ids') or [] if eid not in previous and eid not in new_ids]
-            transaction.set(
-                root.collection('episode_links').document(member),
-                {
-                    'episode_id': assigned[-1],
-                    'episode_ids': list(dict.fromkeys([*retained, *assigned])),
-                    'updated_at': template.get('created_at'),
-                },
+            episodes.write_membership(
+                transaction,
+                client,
+                uid,
+                member,
+                assigned[-1],
+                list(dict.fromkeys([*retained, *assigned])),
+                exists,
+                old,
+                template.get('created_at'),
             )
-            if exists:
-                transaction.update(root.collection('conversations').document(member), {'episode_id': assigned[-1]})
-        transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        if pending_patch:
+            transaction.update(root.collection('conversations').document(cid), pending_patch)
+        transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         incoming = [row for row in result if cid in row['conversation_ids']]
         return {**incoming[-1], '_recorded_windows': incoming}
 
-    return run_transactional(client, commit, transient=True)
+    if transaction is not None:
+        return commit(transaction)
+    return run_transactional(client, firestore.transactional(commit), transient=True)

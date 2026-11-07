@@ -7,11 +7,12 @@ onto the new row: only voices the caller actually labeled on the still-active
 provider scope carry, never an automatic match or a mapped suggestion.
 """
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from utils.manual_speaker_assignments import (
     _receipt_section,  # pyright: ignore[reportPrivateUsage]  # intentional shared receipt accessor
     manual_rejected_speakers,
+    recording_voice_decision,
 )
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL, canonical_speaker_label
 
@@ -49,6 +50,7 @@ def _winning(
         for decision in (
             _receipt_section(receipt, 'segments').get(segment.get('id')),
             _receipt_section(receipt, 'speakers').get(str(segment.get('speaker_id'))),
+            recording_voice_decision(segment, receipt),
         )
         if isinstance(decision, Mapping)
     ]
@@ -61,6 +63,27 @@ def _winning(
     if not candidates:
         return None
     return max(candidates, key=lambda decision: decision.get('generation', 0))
+
+
+def voice_segments(conversation: Mapping[str, Any], active_scope: Optional[str]) -> Dict[str, list]:
+    """The same conservative voice collection used by rollover and recording edits."""
+    voices: Dict[str, list] = {}
+    if not active_scope:
+        return voices
+    for segment in conversation.get('transcript_segments') or []:
+        if not isinstance(segment, Mapping):
+            continue
+        if (
+            segment.get('speaker_id_scope') != active_scope
+            or not isinstance(segment.get('speaker_id'), int)
+            or segment['speaker_id'] == OMI_SPEAKER_ID_SENTINEL
+            or not segment.get('speaker')
+            or segment.get('audio_alignment') == 'unplaced'
+        ):
+            continue
+        label = canonical_speaker_label(str(segment['speaker']))
+        voices.setdefault(label, []).append(segment)
+    return {label: rows for label, rows in voices.items() if len({s['speaker_id'] for s in rows}) == 1}
 
 
 def carried_receipt(conversation: Mapping[str, Any], active_scope: Optional[str]) -> Dict[str, Any]:
@@ -87,27 +110,9 @@ def carried_receipt(conversation: Mapping[str, Any], active_scope: Optional[str]
         'speakers': _active_entries(_receipt_section(raw, 'speakers'), active_scope),
     }
     rejected = manual_rejected_speakers(receipt)
-    voices: Dict[tuple, List[Mapping[str, Any]]] = {}
-    for segment in conversation.get('transcript_segments') or []:
-        if not isinstance(segment, Mapping):
-            continue
-        speaker_id = segment.get('speaker_id')
-        label = segment.get('speaker')
-        if (
-            segment.get('speaker_id_scope') != active_scope
-            or not isinstance(speaker_id, int)
-            or speaker_id == OMI_SPEAKER_ID_SENTINEL
-            or not label
-            or segment.get('audio_alignment') == 'unplaced'
-        ):
-            continue
-        voices.setdefault((active_scope, canonical_speaker_label(str(label))), []).append(segment)
-
     speakers: Dict[str, Dict[str, Any]] = {}
-    for (_scope, label), segments in voices.items():
+    for label, segments in voice_segments(conversation, active_scope).items():
         speaker_ids = {segment['speaker_id'] for segment in segments}
-        if len(speaker_ids) != 1:
-            continue
         decisions = [d for d in (_winning(receipt, rejected, s) for s in segments) if d is not None]
         if not decisions:
             continue
@@ -125,6 +130,7 @@ def carried_receipt(conversation: Mapping[str, Any], active_scope: Optional[str]
             'speaker_id_scope': active_scope,
             'stream_speaker': label,
             'carried_from_conversation_id': conversation.get('id'),
+            'decided_at': decision.get('decided_at', ''),
         }
         for key in _IDENTITY_KEYS:
             if key in decision:

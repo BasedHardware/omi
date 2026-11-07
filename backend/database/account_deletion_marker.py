@@ -38,22 +38,18 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     """Negative-only cache, generation-fenced by every marker writer."""
     from database import privacy_check_metrics as metrics
     from database.account_deletion_policy import account_deletion_blocks_access
-    from database.fsr_read_cache import cached_read, memo, plane_id, ttl
+    from database.fsr_read_cache import cached_read, plane_id, ttl
 
     metrics.called('deletion_marker')
     try:
         client = account_deletion_firestore_client(firestore_client=firestore_client)
-        status = memo(
+        status = cached_read(
+            'deletion_marker_cache',
             uid,
-            ('deletion', plane_id(client)),
-            lambda: cached_read(
-                'deletion_marker_cache',
-                uid,
-                'absent:' + plane_id(client),
-                lambda: _s4_read_deletion_status(uid, firestore_client=client),
-                seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
-                cacheable=lambda status: status is None,
-            ),
+            'absent:' + plane_id(client),
+            lambda: _s4_read_deletion_status(uid, firestore_client=client),
+            seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+            cacheable=lambda status: status is None,
         )
     except Exception:
         metrics.decision('deletion_marker', 'authority_unavailable')

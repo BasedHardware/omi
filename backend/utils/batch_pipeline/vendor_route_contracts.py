@@ -621,5 +621,7 @@ METRIC_BREAKER_STATE: Final = 'omi_batch_pipeline_vendor_breaker_state'  # {prov
 METRIC_AUDIO_HOURS_USED: Final = 'omi_batch_pipeline_vendor_audio_hours_used'  # {provider}  C
 METRIC_AUDIO_HOURS_CAP: Final = 'omi_batch_pipeline_vendor_audio_hours_cap'  # {provider}  C
 METRIC_CAP_HITS: Final = 'omi_batch_pipeline_vendor_cap_hits_total'  # {provider, reason}  C
+# Billed vendor audio seconds for units routed over a capable GPU, i.e. overflow (the $50/day spend alert).
+METRIC_OVERFLOW_AUDIO: Final = 'omi_batch_pipeline_vendor_overflow_audio_seconds_total'  # {route}  B (overflow)
 BREAKER_STATES: Final[frozenset[str]] = frozenset({'closed', 'degraded', 'open', 'half_open'})
 LATE_RESULT_OUTCOMES: Final[frozenset[str]] = frozenset({'ignored', 'reconciled'})

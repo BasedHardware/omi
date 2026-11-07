@@ -4,10 +4,14 @@ The receipt authorizes best-effort teaching; it is not an enrollment job.
 Inference must never create or replace these explicit user decisions.
 """
 
+from datetime import datetime, timezone
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, Mapping, Optional
 import uuid
 import math
+import json
+
+from utils.stt.speaker_identity import canonical_speaker_label
 
 from pydantic import BaseModel, Field, StrictStr
 
@@ -18,6 +22,7 @@ from config.audio_timeline import (
 )
 from models.capture_window_proof import CaptureWindowProof
 from database.read_boundary import parse_payload_strict
+from models.speaker_exclusion import receipt_rejected_speakers
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
@@ -69,6 +74,18 @@ def teaching_segment_ids(segments: list[dict], resolved: list[str], limit: int =
     return [sid for _, sid in ranked[:limit]]
 
 
+def recording_voice_key(scope: str, label: str) -> str:
+    return json.dumps([scope, canonical_speaker_label(label)], separators=(',', ':'))
+
+
+def recording_voice_decision(segment: Mapping, receipt: Mapping) -> Optional[dict]:
+    scope, label = segment.get('speaker_id_scope'), segment.get('speaker')
+    if not scope or not label:
+        return None
+    entry = _receipt_section(receipt, 'voices').get(recording_voice_key(scope, str(label)))
+    return entry if isinstance(entry, dict) else None
+
+
 def manual_assignment_decision(segment: Mapping, receipt: Mapping, rejected: Optional[dict] = None) -> Optional[dict]:
     """The same winning scoped receipt governs projection and correction scoring."""
     speakers = _receipt_section(receipt, 'speakers')
@@ -89,17 +106,21 @@ def manual_assignment_decision(segment: Mapping, receipt: Mapping, rejected: Opt
         and by_speaker.get('speaker_id_scope') != segment.get('speaker_id_scope')
     ):
         by_speaker = None
+    if by_speaker is not None and by_speaker.get('source') == 'recording_legacy' and segment.get('speaker_id_scope'):
+        by_speaker = None
     if negative is not None and negative.get('speaker_id_scope') is not None:
         if negative['speaker_id_scope'] != segment.get('speaker_id_scope'):
             negative = None
-    decisions = [value for value in (by_segment, by_speaker, negative) if value]
+    decisions = [
+        value for value in (by_segment, by_speaker, negative, recording_voice_decision(segment, receipt)) if value
+    ]
     return max(decisions, key=lambda value: value.get('generation', 0)) if decisions else None
 
 
 def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
     speakers = _receipt_section(receipt, 'speakers')
     overrides = _receipt_section(receipt, 'segments')
-    if not speakers and not overrides:
+    if not speakers and not overrides and not _receipt_section(receipt, 'voices'):
         return segments
     rejected = manual_rejected_speakers(receipt)
     result = None
@@ -144,37 +165,11 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
 def manual_rejected_speakers(receipt: Mapping) -> dict:
     """speaker_id -> its winning rejection decision, per the manual receipt.
 
-    Speaker entries carry the speaker id in their key; selected-segment
-    rejections carry the voice they were written against in ``speaker_id``.
-    A rejection only stands while no newer explicit positive decision
-    (an entry without ``rejection``) covers the same voice.
+    Thin alias: the walker is shared with the ``Conversation`` wire projection
+    (``models.speaker_exclusion``) so writers and clients can never disagree on
+    which voices a receipt still excludes.
     """
-    decisions: dict = {}
-    for key, entry in _receipt_section(receipt, 'speakers').items():
-        if not isinstance(entry, dict):
-            continue
-        try:
-            speaker_id = int(key)
-        except (TypeError, ValueError):
-            continue
-        decisions.setdefault(speaker_id, []).append(entry)
-    for entry in _receipt_section(receipt, 'segments').values():
-        if isinstance(entry, dict) and not entry.get('segment_only') and isinstance(entry.get('speaker_id'), int):
-            decisions.setdefault(entry['speaker_id'], []).append(entry)
-    rejected: dict = {}
-    for speaker_id, entries in decisions.items():
-        rejection = None
-        positive = -1
-        for entry in entries:
-            generation = entry.get('generation', 0)
-            if entry.get('rejection'):
-                if rejection is None or generation >= rejection.get('generation', 0):
-                    rejection = entry
-            else:
-                positive = max(positive, generation)
-        if rejection is not None and positive <= rejection.get('generation', 0):
-            rejected[speaker_id] = rejection
-    return rejected
+    return receipt_rejected_speakers(receipt)
 
 
 def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict:
@@ -277,6 +272,17 @@ def donor_selected_ids(
     return [s['id'] for s in selected if s.get('id')]
 
 
+def assignment_segments(conversation: Mapping[str, Any]) -> list[dict]:
+    """Use the same stable legacy identities for projection and receipt writes."""
+    segments = [dict(segment) for segment in conversation.get('transcript_segments') or []]
+    for index, segment in enumerate(segments):
+        if not segment.get('id') and conversation.get('id'):
+            segment['id'] = legacy_conversation_segment_id(conversation['id'], index)
+        if segment.get('speaker_id') is None:
+            segment['speaker_id'] = TranscriptSegment(**segment).speaker_id
+    return segments
+
+
 def manual_assignment(
     conversation: dict,
     *,
@@ -292,13 +298,7 @@ def manual_assignment(
 ) -> tuple[list[dict], dict, list[str], set[str]]:
     rejection = normalize_rejection(rejection)
     validate_assignment_range(time_range)
-    segments = [dict(segment) for segment in conversation.get('transcript_segments', [])]
-
-    for index, segment in enumerate(segments):
-        if not segment.get('id') and conversation.get('id'):
-            segment['id'] = legacy_conversation_segment_id(conversation['id'], index)
-        if segment.get('speaker_id') is None:
-            segment['speaker_id'] = TranscriptSegment(**segment).speaker_id
+    segments = assignment_segments(conversation)
     if segment_index is not None:
         indices = [segment_index] if 0 <= segment_index < len(segments) else []
     elif speaker_id is not None and not segment_ids:
@@ -330,7 +330,9 @@ def manual_assignment(
     receipt['speakers'] = dict(_receipt_section(receipt, 'speakers'))
     generation = receipt.get('generation', 0) + 1
     receipt['generation'] = generation
-    identity: dict = dict(generation=generation, person_id=person_id, is_user=is_user)
+    identity: dict = dict(
+        generation=generation, person_id=person_id, is_user=is_user, decided_at=datetime.now(timezone.utc).isoformat()
+    )
     if not use_for_speech_training or rejection:
         identity['use_for_speech_training'] = False
     if rejection:
@@ -564,3 +566,37 @@ def merge_live_segments(
         {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
         _kept_capture_proofs(combined.segments, result, capture_proofs, behind_tail=anchor != len(persisted) - 1),
     )
+
+
+def manual_voice_decision(receipt: Mapping, speaker_id: int, scope: Optional[str]) -> Optional[Mapping]:
+    """Winning explicit voice decision for the live reader, on its current scope."""
+    covering = (receipt.get('speakers') or {}).get(str(speaker_id))
+    candidates = [covering] if isinstance(covering, Mapping) else []
+    candidates += [
+        entry
+        for entry in (receipt.get('segments') or {}).values()
+        if isinstance(entry, Mapping) and not entry.get('segment_only') and entry.get('speaker_id') == speaker_id
+    ]
+    voice_scope = scope
+    candidates += [
+        entry
+        for entry in (receipt.get('voices') or {}).values()
+        if isinstance(entry, Mapping)
+        and entry.get('speaker_id') == speaker_id
+        and entry.get('speaker_id_scope') == voice_scope
+    ]
+    positive = [entry for entry in candidates if not entry.get('rejection')]
+    if not positive:
+        return None
+    decision = max(positive, key=lambda entry: entry.get('generation', 0))
+    decision_scope = decision.get('speaker_id_scope')
+    voice_scope = scope
+    if decision.get('source') == 'recording_legacy' and voice_scope:
+        return None
+    if (
+        decision.get('source') in {'carried', 'recording', 'recording_segment'}
+        and decision_scope is not None
+        and decision_scope != voice_scope
+    ):
+        return None
+    return decision

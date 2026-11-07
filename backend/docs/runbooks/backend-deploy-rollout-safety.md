@@ -87,18 +87,24 @@ kubectl -n prod-omi-backend get secret prod-omi-backend-secrets -o json \
 
 This checks only key names. It must not decode, log, or store secret values.
 
-## Check live Cloud Run env drift against the manifest
+## Check serving runtime env drift against the manifest
 
-`google-github-actions/deploy-cloudrun@v3` merges `env_vars` and `secrets` onto existing Cloud Run services rather than replacing the full environment map. To list live environment variable keys on each Cloud Run service (`backend`, `backend-sync`, `backend-sync-backfill`, `backend-integration`) that are absent from `backend/deploy/runtime_env.yaml`, run the read-only operator drift check:
+`google-github-actions/deploy-cloudrun@v3` merges `env_vars` and `secrets` onto existing Cloud Run services rather than replacing the full environment map, and traffic is pinned per revision, so a later `services update` creates a 0%-traffic revision. The read-only drift check therefore reads what is **serving**: the Cloud Run revisions in `status.traffic` (never `spec.template`) and, with `--gke`, the GKE ReplicaSets that hold ready pods for `backend-listen`, `pusher` and `batch-pipeline-worker`. It compares each serving env with `backend/deploy/runtime_env.yaml` (or the exact `--rendered-state`) and the chart values, by key name and by a truncated SHA-256 of each value or secret reference:
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 python3 backend/scripts/check_cloud_run_env_drift.py --env prod --project based-hardware
+# GKE too: copy your kubeconfig and name the context explicitly
+KUBECONFIG=<copied kubeconfig> python3 backend/scripts/check_cloud_run_env_drift.py --env prod \
+  --gke --kube-context gke_based-hardware_us-central1_prod-omi-gke --format json
 ```
 
 Interpretation:
 
-- Output contains **key names only**; literal values and Secret Manager payloads are never read, stored, or printed.
+- Output contains key names, counts and value hashes only; literal values and Secret Manager payloads are never printed. Hashes of sensitive-looking keys (UIDs, allowlists, secrets, tokens) print as `redacted`.
+- `Template = serving: no` means `spec.template` (or the Deployment template) differs from what serves traffic. Never conclude a deploy reset or restored a value from the template (10-18 23:50Z).
+- `Value mismatches` are keys whose serving value hash differs from the manifest: operator-owned values set out of band, or a deploy that did not apply. `Missing live` are manifest keys absent from the serving env. Keys bound at deploy time (`env_var`) are compared by name only unless `--rendered-state` is passed.
 - `Allowlisted live-managed keys` (`LIVE_MANAGED_ENV_ALLOWLIST` in `backend/scripts/check_cloud_run_env_drift.py`) covers keys intentionally managed outside `runtime_env.yaml`: per-revision provenance (`OMI_BACKEND_RELEASE_SHA`) and live-managed canary UID allowlists (`BATCH_PIPELINE_UID_ALLOWLIST`, `FIRST_SUMMARY_UID_ALLOWLIST`, `SYNC_BACKFILL_ORDER_UID_ALLOWLIST`, `FAIR_USE_EXEMPT_UIDS`, `DREAM_AGENT_FULL_CONTEXT_UIDS`). Any feature flag whose allowlist is live-managed must fail safe (deny all at `*_PERCENT=0` when the allowlist key is absent) so a service recreate cannot widen rollout.
 - `Unallowlisted live keys missing from manifest` lists keys surviving on the live service only because Cloud Run deploys merge env vars. Promote active runtime config into `backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml` (and regenerate `backend/deploy/runtime_env.yaml` with `python3 backend/deploy/compose_runtime_env.py`), or retire dead keys via `forbidden_env` / `--remove-env-vars`.
-- `.github/actions/deploy-backend-stack/action.yml` runs `check_cloud_run_env_drift.py` as a non-blocking report step after post-deploy runtime env validation and appends the table to `$GITHUB_STEP_SUMMARY`. Pass `--strict` when running as an enforcing gate.
+- GKE expected env comes from `helm template` when `helm` is on PATH (`--gke-render auto`, the default), else from the chart values `env` list; `batch-pipeline-worker` builds its env in the template, so values mode reports it as `INVENTORY`.
+- `.github/actions/deploy-backend-stack/action.yml` runs `check_cloud_run_env_drift.py` as a non-blocking report step after post-deploy runtime env validation and appends the table to `$GITHUB_STEP_SUMMARY`; that step runs before the traffic shift, so it reports the pre-promotion serving revisions. Pass `--strict` when running as an enforcing gate after a train: exit 1 on drift, 2 on fetch or render errors.

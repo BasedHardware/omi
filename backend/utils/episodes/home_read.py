@@ -9,6 +9,7 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from utils.conversations.transcribing_hold import transcription_presentation
 from utils.conversations import phase_shadow
 
 from config.episodes import (
@@ -27,6 +28,7 @@ from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_completed_below_floor
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, user_zone_provider
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +111,12 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'episode_transcription_pending_at',
+    'episode_transcription_deadline_at',
+    'server_batch_audio_start',
+    'server_batch_audio_end',
     *SETTLING_FIELDS,
+    *SUMMARY_DEBT_FIELDS,
 ]
 
 
@@ -266,6 +273,8 @@ def project_episode(
     by_id = members if members is not None else _read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
     hidden = 0
+    now = datetime.now(timezone.utc)
+    zone = user_zone_provider(uid)
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if row is None:
@@ -274,8 +283,13 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             hidden += 1
             continue
+        # A transcription-failed member stays projected with its "Couldn't
+        # transcribe" wire status so the user keeps the bounded recovery exit;
+        # the size-ceiling terminal's failed-status visibility exclusion does
+        # not apply to this episode member surface.
+        visibility_row = {**row, 'status': 'completed'} if row.get('status') == 'failed' else row
         if (
-            not conversations.is_visible_conversation(row, include_discarded=not list_row)
+            not conversations.is_visible_conversation(visibility_row, include_discarded=not list_row)
             or row.get('dream_duplicate_of')
             or conversations.bridge_pending.hidden(row)
             or is_relevance_discarded(row)
@@ -286,16 +300,39 @@ def project_episode(
         phase_shadow.observe('episode_member', row, True, episode=episode)
         from utils.conversations.home_titles import neutralize_minimum_title
 
-        row = neutralize_minimum_title(row)
+        row = neutralize_minimum_title(row, tz_name_provider=zone)
         structured: dict[str, Any] = row.get('structured') or {}
+        title = structured.get('title') or ''
+        status = row.get('status') or 'completed'
+        started = row.get('started_at') or row.get('created_at') or episode['started_at']
+        finished = row.get('finished_at')
+        deadline = utc(row.get('episode_transcription_deadline_at'))
+        if deadline is not None and not row.get('record_projection_revision'):
+            overdue = now >= deadline
+            failed = (
+                row.get('finalization_status') == 'dead_letter' or status == 'failed' or row.get('record_upload_failed')
+            )
+            title, status = transcription_presentation(deadline, failed=bool(failed), now=now)
+            # Audio bounds remain truthful even when finalization never filled its clocks.
+            for key, value in (
+                ('start', row.get('server_batch_audio_start')),
+                ('end', row.get('server_batch_audio_end')),
+            ):
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    if key == 'start':
+                        started = datetime.fromtimestamp(value, timezone.utc)
+                    else:
+                        finished = datetime.fromtimestamp(value, timezone.utc)
+            if overdue:
+                episode_metrics.record_batch_pending_overdue()
         retained.append(
             {
                 'id': cid,
-                'title': structured.get('title') or '',
+                'title': title,
                 'emoji': structured.get('emoji') or '',
-                'started_at': row.get('started_at') or row.get('created_at') or episode['started_at'],
-                'finished_at': row.get('finished_at'),
-                'status': row.get('status') or 'completed',
+                'started_at': started,
+                'finished_at': finished,
+                'status': status,
             }
         )
     if list_row:

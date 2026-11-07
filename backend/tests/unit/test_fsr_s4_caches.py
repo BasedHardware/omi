@@ -197,7 +197,7 @@ async def test_deletion_request_dedupe_counts_every_decision_but_only_issued_rea
             assert deletion.get_user_deletion_wipe_status('u') is None
     finally:
         await scope.aclose()
-    assert len(env[0].reads) == 1
+    assert len(env[0].reads) == 6  # Deletion marker is not memoized in request scope (Issue #24647)
     assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
     assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get() == decisions + 6
 
@@ -489,7 +489,7 @@ def test_real_users_endpoints_read_count_with_auth(env, monkeypatch, route, enab
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', lambda *args: None)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', lambda *args: None)
     monkeypatch.setattr(router, 'is_marketplace_reviewer', lambda uid: False)
-    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub: sub)
+    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub, **kwargs: sub)
     monkeypatch.setattr(router, 'get_paid_plan_definitions', lambda: [])
     monkeypatch.setattr(router, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(

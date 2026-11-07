@@ -923,7 +923,7 @@ void main() {
     addTearDown(provider.dispose);
 
     provider.conversations = [conversation];
-    provider.deleteConversationLocally(conversation, conversationLocalDayKey(conversation.createdAt));
+    provider.deleteConversationLocally(conversation);
     provider.deleteConversationOnServer(conversation.id);
 
     await provider.forceRefreshConversations();

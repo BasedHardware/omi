@@ -33,7 +33,7 @@ def test_every_bucket_names_known_holds_and_ceiling_sources():
 
 
 def test_bucket_env_names_are_the_ones_the_backend_reads():
-    source = '\n'.join(p.read_text() for d in ('utils', 'scripts') for p in (BACKEND / d).rglob('*.py'))
+    source = '\n'.join(p.read_text() for d in ('utils', 'scripts', 'config') for p in (BACKEND / d).rglob('*.py'))
     for bucket, spec in CONTRACT['buckets'].items():
         assert f"getenv('{spec['env']}'" in source, (bucket, spec['env'])
 

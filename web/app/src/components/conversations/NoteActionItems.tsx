@@ -1,5 +1,6 @@
 'use client';
 
+import { allDayDue } from '@/lib/taskDue';
 import { cn } from '@/lib/utils';
 import type { StructuredActionItem } from '@/types/conversation';
 import { noteAvatarToneIndex, noteParticipantInitials } from '@/lib/meetingNotes';
@@ -33,7 +34,8 @@ export function ActionItemRow({
       : '';
   const dueDate = item.due_at ? new Date(item.due_at) : null;
   const dueLabel =
-    dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString() : '';
+    allDayDue(item.due)?.text ??
+    (dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString() : '');
 
   return (
     <li
@@ -116,9 +118,10 @@ export function NextStepsList({
               : '';
           const dueDate = item.due_at ? new Date(item.due_at) : null;
           const dueLabel =
-            dueDate && !Number.isNaN(dueDate.getTime())
+            allDayDue(item.due)?.text ??
+            (dueDate && !Number.isNaN(dueDate.getTime())
               ? dueDate.toLocaleDateString()
-              : '';
+              : '');
           return (
             <li key={index} className="flex items-start gap-3 py-2.5">
               <span
