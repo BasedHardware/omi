@@ -18,7 +18,9 @@ import zlib
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap, aes_key_wrap
-from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
+from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config import object_lake as config
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -253,37 +255,41 @@ def put_space_object(
 
 
 def _record_upload_candidate(bucket: str, key: str) -> None:
-    """Durable discovery for C3's janitor, not authorization to delete an object.
+    """Commit discovery before put, serialized against durable deletion fences.
 
-    Entries deliberately survive successful commits too: the janitor must
-    establish absence of live AND historical references under a writer fence
-    before removing any object. No TTL may discard an unresolved candidate.
+    Intents survive successful commits and ambiguous uploads for C3's janitor.
+    A fence read in this transaction prevents a crashed, delayed writer from
+    recreating an owner-derived intent after account wipe's final scan.
     """
+    _, _, space_id, _, entity_id, _ = key.split('/')
     candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
-    candidate = space_keys.space_key_firestore_client().collection('lake_upload_candidates').document(candidate_id)
-    snapshot = candidate.get()
-    if not snapshot.exists:
-        try:
-            candidate.create({'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
+    client = space_keys.space_key_firestore_client()
+    candidate = client.collection('lake_upload_candidates').document(candidate_id)
+
+    @firestore.transactional
+    def record(transaction):
+        _assert_owner_write_allowed(space_id, entity_id, firestore_client=client, transaction=transaction)
+        snapshot = candidate.get(transaction=transaction)
+        if not snapshot.exists:
+            transaction.create(candidate, {'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
             return
-        except AlreadyExists:
-            # A concurrent writer must have made the SAME intent durable.
-            snapshot = candidate.get()
-    existing = snapshot.to_dict() or {}
-    if (
-        existing.get('bucket') != bucket
-        or existing.get('key') != key
-        or not isinstance(existing.get('created_at'), datetime)
-        or existing['created_at'].tzinfo is None
-    ):
-        raise LakeObjectConflict('Existing lake upload candidate is invalid')
+        existing = snapshot.to_dict() or {}
+        if (
+            existing.get('bucket') != bucket
+            or existing.get('key') != key
+            or not isinstance(existing.get('created_at'), datetime)
+            or existing['created_at'].tzinfo is None
+        ):
+            raise LakeObjectConflict('Existing lake upload candidate is invalid')
+
+    record(client.transaction())
 
 
-def _assert_owner_write_allowed(space_id, entity_id):
+def _assert_owner_write_allowed(space_id, entity_id, *, firestore_client=None, transaction=None):
     try:
         # Same customer plane as the key authority, never a cached negative.
-        client = space_keys.space_key_firestore_client()
-        marker = client.collection('account_deletions').document(space_id).get()
+        client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
+        marker = client.collection('account_deletions').document(space_id).get(transaction=transaction)
         if account_deletion_marker_blocks_access(
             marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
         ):
@@ -291,7 +297,7 @@ def _assert_owner_write_allowed(space_id, entity_id):
         tombstone = (
             client.collection('users').document(space_id).collection('deleted_conversations').document(entity_id)
         )
-        if tombstone.get().exists:
+        if tombstone.get(transaction=transaction).exists:
             raise LakeWriteFenced('Conversation deletion fences lake writes')
     except LakeWriteFenced:
         raise
@@ -317,6 +323,11 @@ def _check_put_authority(space_id, entity_id, blob, *, created):
             pass
         except Exception:
             raise LakeFetchError('Fenced lake upload cleanup unavailable') from None
+        try:
+            candidate_id = hashlib.sha256(f'{blob.bucket.name}/{blob.name}'.encode('utf-8')).hexdigest()
+            space_keys.space_key_firestore_client().collection('lake_upload_candidates').document(candidate_id).delete()
+        except Exception:
+            raise LakeFetchError('Fenced lake candidate cleanup unavailable') from None
         raise
 
 
@@ -422,6 +433,33 @@ def _purge_prefix(prefix: str) -> int:
         raise
     except Exception:
         raise LakeFetchError('Lake prefix deletion unavailable') from None
+
+
+def delete_space_upload_candidates(space_id: str, *, firestore_client=None) -> int:
+    """Erase user-derived intents after the fenced owner prefix is verified absent.
+
+    Key-range discovery also covers abandoned intents with no object or pointer.
+    No bucket filter: a config change must not strand the owner's old intents.
+    The release pin matches delete_space_prefix; widen both on a release bump.
+    """
+    prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
+    try:
+        client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
+        collection = client.collection('lake_upload_candidates')
+        query = collection.where(filter=FieldFilter('key', '>=', prefix)).where(
+            filter=FieldFilter('key', '<', prefix[:-1] + '0')
+        )
+        count = 0
+        for row in query.stream():
+            collection.document(row.id).delete()
+            count += 1
+        if next(iter(query.limit(1).stream()), None) is not None:
+            raise LakeFetchError('Lake upload candidates remain after purge')
+        return count
+    except ObjectLakeError:
+        raise
+    except Exception:
+        raise LakeFetchError('Lake upload candidate purge unavailable') from None
 
 
 def verify_space_object(ref: LakeObjectRef, *, deep: bool = False) -> bool:

@@ -15,19 +15,24 @@ def purge_owner_lake_content(uid: str) -> dict:
     """Fence, drain in-flight writers, then purge with verified absence."""
     if not config.bucket():
         return {'status': 'noop'}
-    if users_db.get_user_deletion_wipe_status(uid) != 'running':
+    status = users_db.get_user_deletion_wipe_status(uid)
+    if status != 'running':
         raise RuntimeError('lake purge requires a running account wipe')
-    if not account_deletion_blocks_access(users_db.get_user_deletion_wipe_status(uid)):
+    if not account_deletion_blocks_access(status):
         raise RuntimeError('lake purge requires a blocking deletion marker')
     time.sleep(config.wipe_drain_seconds())
     count = object_lake.delete_space_prefix(uid)
-    return {'status': 'purged', 'objects_deleted': count}
+    candidates = object_lake.delete_space_upload_candidates(uid)
+    return {'status': 'purged', 'objects_deleted': count, 'candidates_deleted': candidates}
 
 
 def destroy_owner_lake_keys(uid: str) -> dict:
     """LAST destructive wipe step, including when bucket configuration is absent."""
     if users_db.get_user_deletion_wipe_status(uid) != 'running':
         raise RuntimeError('lake key destroy requires a running account wipe')
+    # An absent bucket must not strand existing owner-derived Firestore intents.
+    if not config.bucket():
+        object_lake.delete_space_upload_candidates(uid)
     count = space_keys.destroy_space_keys(uid)
     return {'status': 'destroyed', 'versions_destroyed': count}
 

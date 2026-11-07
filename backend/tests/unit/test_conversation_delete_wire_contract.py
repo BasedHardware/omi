@@ -216,7 +216,7 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
 
 def _real_lake_delete(monkeypatch, tmp_path):
     from services import conversation_frame_evidence
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
     from utils.other import object_lake, space_keys
     from utils.other.local_storage import LocalStorageClient
 

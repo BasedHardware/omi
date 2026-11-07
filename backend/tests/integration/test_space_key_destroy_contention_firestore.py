@@ -46,6 +46,7 @@ def state(tmp_path, monkeypatch):
     try:
         yield client, uid, bucket
     finally:
+        lake.delete_space_upload_candidates(uid)
         for blob in bucket.list_blobs():
             blob.delete()
         client.collection('space_keys').document(uid).delete()
@@ -142,6 +143,7 @@ def test_inflight_put_self_deletes_during_purge_drain(state, monkeypatch):
         assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
+    assert lake.delete_space_upload_candidates(uid) == 0
 
 
 def test_conversation_upload_after_purge_final_listing_self_deletes(state, monkeypatch):
@@ -169,7 +171,69 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
                 client.collection('users').document(uid).collection('deleted_conversations').document('c').get().exists
             )
             assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
+    assert lake.delete_space_upload_candidates(uid) == 0
         finally:
             release.set()
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
+    assert lake.delete_space_upload_candidates(uid) == 0
+
+
+def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
+    client, uid, bucket = state
+    sibling = uid + '-sibling'
+    lake._record_upload_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest')
+    lake._record_upload_candidate(bucket.name, f'v1/spaces/{sibling}/transcript/keep/digest')
+    client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+    try:
+        assert lake_wipe.purge_owner_lake_content(uid)['candidates_deleted'] == 1
+        assert lake.delete_space_upload_candidates(uid) == 0
+        assert lake.delete_space_upload_candidates(sibling) == 1
+    finally:
+        lake.delete_space_upload_candidates(sibling)
+
+
+def test_delayed_candidate_cannot_reappear_after_wipe_scan(state, monkeypatch):
+    client, uid, bucket = state
+    paused, release = Event(), Event()
+    record = lake._record_upload_candidate
+
+    def delayed_record(*args):
+        paused.set()
+        assert release.wait(timeout=30)
+        return record(*args)
+
+    monkeypatch.setattr(lake, '_record_upload_candidate', delayed_record)
+
+    def put():
+        with pytest.raises(lake.LakeWriteFenced):
+            lake.put_space_object(uid, 'transcript', 'late', b'[]')
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        writer = pool.submit(put)
+        try:
+            assert paused.wait(timeout=30)
+            client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+            assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
+        finally:
+            release.set()
+        writer.result(timeout=60)
+    assert not list(bucket.list_blobs())
+    assert lake.delete_space_upload_candidates(uid) == 0
+
+
+def test_concurrent_upload_candidates_are_idempotent_under_real_transactions(state):
+    _, uid, _ = state
+    space_keys.get_or_create_space_key(uid)
+    barrier = Barrier(2)
+
+    def put():
+        barrier.wait(timeout=10)
+        return lake.put_space_object(uid, 'transcript', 'same', b'[]')
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        one, two = pool.submit(put), pool.submit(put)
+        first, second = one.result(timeout=60), two.result(timeout=60)
+    assert first == second
+    assert lake.get_space_object(first) == b'[]'
+    assert lake.delete_space_upload_candidates(uid) == 1

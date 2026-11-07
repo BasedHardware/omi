@@ -6,12 +6,12 @@ import zlib
 from unittest.mock import Mock, patch
 
 import pytest
-from google.api_core.exceptions import AlreadyExists
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 from google.api_core.exceptions import FailedPrecondition
 
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument, StrictFirestoreTransaction
+from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalStorageClient, LocalBlob
 
@@ -85,32 +85,19 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
 @pytest.mark.parametrize('operation', ['get', 'create'])
 def test_candidate_record_failure_prevents_upload(storage, monkeypatch, operation):
     bucket, _ = storage
-    original = getattr(StrictFirestoreDocument, operation)
+    cls = StrictFirestoreDocument if operation == 'get' else StrictFirestoreTransaction
+    original = getattr(cls, operation)
 
-    def fail_candidate(document, *args, **kwargs):
+    def fail_candidate(target, *args, **kwargs):
+        document = target if operation == 'get' else args[0]
         if document.path[0] == 'lake_upload_candidates':
             raise RuntimeError('synthetic candidate store failure')
-        return original(document, *args, **kwargs)
+        return original(target, *args, **kwargs)
 
-    monkeypatch.setattr(StrictFirestoreDocument, operation, fail_candidate)
+    monkeypatch.setattr(cls, operation, fail_candidate)
     with pytest.raises(lake.LakeFetchError, match='upload unavailable'):
         put()
     assert not list(bucket.list_blobs(prefix='v1/spaces/'))
-
-
-def test_concurrent_candidate_create_is_idempotent(storage, monkeypatch):
-    _, store = storage
-    original = StrictFirestoreDocument.create
-
-    def concurrent_create(document, data):
-        original(document, data)
-        if document.path[0] == 'lake_upload_candidates':
-            raise AlreadyExists('concurrent intent already committed')
-
-    monkeypatch.setattr(StrictFirestoreDocument, 'create', concurrent_create)
-    ref = put()
-    assert lake.get_space_object(ref)
-    assert len([path for path in store.rows if path[0] == 'lake_upload_candidates']) == 1
 
 
 def test_ambiguous_upload_retains_durable_candidate(storage, monkeypatch):
@@ -517,8 +504,11 @@ def test_delete_space_entity_transport_failure_is_retryable(storage, monkeypatch
         lake.delete_space_entity('s', 'c')
 
 
-def test_shredded_key_wins_over_purged_blob(storage):
-    ref = put()
+@pytest.mark.parametrize('envelope_version', [1, 2])
+def test_shredded_key_wins_over_purged_blob(storage, envelope_version):
+    bucket, store = storage
+    space_keys.get_or_create_space_key('s', firestore_client=store)
+    ref = legacy_object(bucket) if envelope_version == 1 else put()
     lake.delete_space_prefix('s')
     space_keys.destroy_space_keys('s')
     with pytest.raises(space_keys.SpaceKeyDestroyed):
@@ -564,6 +554,7 @@ def test_late_upload_self_deletes_after_conversation_purge_final_listing(storage
         put()
     assert events == ['absence-verified', 'upload-finished']
     assert not list(bucket.list_blobs())
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
     assert store.collection('users').document('s').collection('deleted_conversations').document('c').get().exists
     # Retry is still fenced; a sibling is unaffected.
     with pytest.raises(lake.LakeWriteFenced):
@@ -588,6 +579,7 @@ def test_create_only_retry_does_not_delete_reused_referenced_object(storage, mon
     with pytest.raises(lake.LakeWriteFenced):
         put()
     assert bucket.blob(ref.key).exists()
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
     # The deleting orchestrator, rather than the retry, owns referenced content.
     assert lake.delete_space_entity('s', 'c') == 1
 
@@ -614,3 +606,33 @@ def test_conversation_fences_all_donors_and_preserves_existing_bindings(storage)
     assert lake_wipe.purge_conversation_lake_objects('s', 'c', ['c', 'donor', 'donor', '']) == 0
     assert ref.get().to_dict() == row
     assert store.collection('users').document('s').collection('deleted_conversations').document('donor').get().exists
+
+
+def test_delayed_candidate_creation_refused_after_owner_purge(storage, monkeypatch):
+    from utils.other import lake_wipe
+
+    bucket, store = storage
+    record = lake._record_upload_candidate
+
+    def record_after_purge(bucket_name, key):
+        store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
+        monkeypatch.setattr(lake_wipe.users_db, 'get_user_deletion_wipe_status', lambda uid: 'running')
+        monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '0')
+        assert lake_wipe.purge_owner_lake_content('s')['status'] == 'purged'
+        record(bucket_name, key)
+
+    monkeypatch.setattr(lake, '_record_upload_candidate', record_after_purge)
+    with pytest.raises(lake.LakeWriteFenced):
+        put()
+    assert not list(bucket.list_blobs())
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_candidate_absence_verification_failure_is_retryable(storage, monkeypatch):
+    _, store = storage
+    put()
+    from tests.unit.fixtures.lake_firestore import CandidateDocument
+
+    monkeypatch.setattr(CandidateDocument, 'delete', lambda self: None)
+    with pytest.raises(lake.LakeFetchError, match='remain after purge'):
+        lake.delete_space_upload_candidates('s')

@@ -3644,7 +3644,7 @@ FIELD_SITES = {
     'utils/other/lake_wipe.py': [
         ('destroy_owner_lake_keys', 'status', "'destroyed'", ('status', 'versions_destroyed')),
         ('purge_owner_lake_content', 'status', "'noop'", ('status',)),
-        ('purge_owner_lake_content', 'status', "'purged'", ('objects_deleted', 'status')),
+        ('purge_owner_lake_content', 'status', "'purged'", ('candidates_deleted', 'objects_deleted', 'status')),
     ],
     'utils/other/daily_recap.py': [
         ('_state', 'status', 'status', ('created_at', 'date', 'generated_at', 'status')),

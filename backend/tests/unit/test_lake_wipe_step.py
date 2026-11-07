@@ -9,7 +9,7 @@ import pytest
 from config import object_lake as config
 from database import transcript_pointer as pointer
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
 from utils.other import lake_wipe, object_lake as lake, space_keys
 from utils.other.local_storage import LocalStorageClient
 
@@ -82,13 +82,13 @@ def test_marker_read_error_propagates(world, monkeypatch, step):
         step('owner')
 
 
-def test_fence_reread_must_block_before_listing(world, monkeypatch):
-    monkeypatch.setattr(lake_wipe.users_db, 'get_user_deletion_wipe_status', Mock(side_effect=['running', 'cancelled']))
-    purge = Mock()
-    monkeypatch.setattr(lake, 'delete_space_prefix', purge)
-    with pytest.raises(RuntimeError, match='blocking deletion marker'):
-        lake_wipe.purge_owner_lake_content('owner')
-    purge.assert_not_called()
+def test_purge_uses_one_authoritative_marker_read(world, monkeypatch):
+    _, store = world
+    marker(store)
+    read = Mock(return_value='running')
+    monkeypatch.setattr(lake_wipe.users_db, 'get_user_deletion_wipe_status', read)
+    lake_wipe.purge_owner_lake_content('owner')
+    read.assert_called_once_with('owner')
 
 
 def test_drain_is_between_fence_and_purge(world, monkeypatch):
@@ -99,8 +99,12 @@ def test_drain_is_between_fence_and_purge(world, monkeypatch):
     monkeypatch.setattr(lake_wipe.time, 'sleep', lambda seconds: events.append(('drain', seconds)))
     monkeypatch.setattr(lake, 'delete_space_prefix', lambda uid: events.append('purge') or 7)
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '2.5')
-    assert lake_wipe.purge_owner_lake_content('owner') == {'status': 'purged', 'objects_deleted': 7}
-    assert events == ['fence', 'fence', ('drain', 2.5), 'purge']
+    assert lake_wipe.purge_owner_lake_content('owner') == {
+        'status': 'purged',
+        'objects_deleted': 7,
+        'candidates_deleted': 0,
+    }
+    assert events == ['fence', ('drain', 2.5), 'purge']
 
 
 @pytest.mark.parametrize('value,expected', [(None, 5), ('-1', 0), ('70', 60), ('0', 0), ('1.25', 1.25)])
@@ -159,6 +163,8 @@ def test_lake_dark_still_tombstones_existing_or_absent_keys(world, monkeypatch, 
 
 @pytest.fixture
 def ceremony(monkeypatch, world):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+    monkeypatch.setenv('DIRECTORY_PG_DSN', 'synthetic-configured-directory')
     # Fake-before-import, as in test_delete_account_purge_storage. The ceremony
     # itself is real; only unrelated provider/Firestore operations are replaced.
     names = '''database database.directory database.directory.wipe database.messaging database.sync_jobs
@@ -257,6 +263,7 @@ def test_o1_wipe_coverage_gate_and_crash_retry(world, ceremony):
             'completed',
         ]
         assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
+        assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
         tombstone = store.collection('space_keys').document('owner').get().to_dict()
         assert set(tombstone) == {'space_id', 'state', 'destroyed_at'}
         assert tombstone['space_id'] == 'owner' and tombstone['state'] == 'destroyed' and tombstone['destroyed_at']
@@ -390,6 +397,7 @@ def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, 
     def delete(uid, cid, **kwargs):
         # Both lake entities must already be absent before any metadata deletion.
         assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
+        assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
         events.append(cid)
         rows.pop(cid, None)
 
@@ -398,3 +406,35 @@ def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, 
     evidence.delete_conversation_and_frame_evidence('owner', 'parent')
     assert rows == {}
     assert events == ['outbox', 'donor', 'parent']
+
+
+def test_candidate_purge_covers_orphans_old_bucket_and_owner_boundary(world):
+    _, store = world
+    lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest')
+    lake._record_upload_candidate('lake-c4-test', 'v1/spaces/owner-other/transcript/keep/digest')
+    marker(store)
+    result = lake_wipe.purge_owner_lake_content('owner')
+    assert result['objects_deleted'] == 0 and result['candidates_deleted'] == 1
+    remaining = [row['key'] for path, row in store.rows.items() if path[0] == 'lake_upload_candidates']
+    assert remaining == ['v1/spaces/owner-other/transcript/keep/digest']
+    assert lake_wipe.purge_owner_lake_content('owner')['candidates_deleted'] == 0
+
+
+def test_candidate_purge_failure_prevents_keys_and_firestore(world, ceremony, monkeypatch):
+    _, store = world
+    service, events = ceremony
+    lake.put_space_object('owner', 'transcript', 'c', b'[]')
+    monkeypatch.setattr(lake, 'delete_space_upload_candidates', Mock(side_effect=lake.LakeFetchError('candidate down')))
+    assert service.background_wipe_user_data('owner') is False
+    assert 'failed' in events and 'lake_keys' not in events and 'firestore' not in events
+    assert space_keys.get_space_keys('owner') is not None
+
+
+def test_lake_dark_key_step_also_erases_existing_upload_intents(world, monkeypatch):
+    _, store = world
+    lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest')
+    marker(store)
+    monkeypatch.delenv('BUCKET_OBJECT_LAKE')
+    lake_wipe.destroy_owner_lake_keys('owner')
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert store.rows[('space_keys', 'owner')]['state'] == 'destroyed'

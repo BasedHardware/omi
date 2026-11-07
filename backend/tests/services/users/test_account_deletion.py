@@ -1518,7 +1518,6 @@ def test_background_wipe_user_data_preserves_order(monkeypatch, routing_on):
     calls = []
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
 
-
     monkeypatch.setattr(account_deletion, 'purge_owner_lake_content', lambda uid: calls.append(('lake_prefix', uid)))
     monkeypatch.setattr(account_deletion, 'destroy_owner_lake_keys', lambda uid: calls.append(('lake_keys', uid)))
     if routing_on:
@@ -2502,7 +2501,7 @@ def test_worker_heartbeats_at_major_operation_boundaries(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1') is True
     for operation in ('billing', 'agent_vm', 'credentials', 'auth', 'derived', 'firestore'):
         assert calls[calls.index(operation) - 1] == 'heartbeat'
-    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat']
+    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat', 'heartbeat']
     account_deletion.users_db.mark_user_deletion_auth_deleted.assert_called_once_with('uid1')
 
 
@@ -2617,9 +2616,8 @@ def test_off_wipe_never_enters_cell_step(monkeypatch):
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', purge)
     assert account_deletion.background_wipe_user_data('uid1') is True
     purge.assert_not_called()
-    # The single legacy heartbeat before Firestore is still required. A new
-    # heartbeat for the skipped cell step would add a second event here.
-    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat']
+    # Lake purge and Firestore each heartbeat; the unconfigured cell is skipped.
+    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat', 'heartbeat']
 
 
 @pytest.mark.parametrize('routing_mode', ['off', 'new_owners'])
