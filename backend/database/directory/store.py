@@ -201,11 +201,11 @@ class DirectoryStore:
             > 0
         )
 
-    def is_active_member(self, space_id: str, uid: str) -> bool:
+    def is_active_owner(self, space_id: str, uid: str) -> bool:
         with self.pool.connection() as conn:
             return (
                 conn.execute(
-                    "SELECT 1 FROM memberships WHERE space_id=%s AND uid=%s AND state='active'",
+                    "SELECT 1 FROM memberships WHERE space_id=%s AND uid=%s AND state='active' AND role='owner'",
                     (space_id, uid),
                 ).fetchone()
                 is not None

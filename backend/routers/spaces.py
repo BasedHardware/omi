@@ -70,7 +70,8 @@ def _serving_space(sid: str, uid: str):
             raise _directory_unavailable()
         directory = directory_router.directory_store()
         space = directory.get_space(sid)
-        member = directory.is_active_member(sid, uid) if space else False
+        # Owner-only until shared-space role policy lands (W7); a 'member' row grants no sync access.
+        member = directory.is_active_owner(sid, uid) if space else False
     except Exception as error:
         raise _directory_unavailable() from error
     if space is None or not member:

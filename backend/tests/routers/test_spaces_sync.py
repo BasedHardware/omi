@@ -195,6 +195,18 @@ def test_gate_matrix(api, monkeypatch, endpoint, gate, status, code):
         api.limiter.assert_not_called()
 
 
+def test_member_role_gets_no_sync_access(api):
+    enroll(api)
+    member = api.sid + '-member'
+    api.directory.add_member(api.sid, member, now=time.time())
+    api.identity['uid'] = member
+    for endpoint in ['changes', 'snapshot', 'mutations', 'cursors']:
+        response = request(api, endpoint)
+        assert response.status_code == 404, endpoint
+        assert response.json()['detail'] == 'Space not found'
+    assert api.cell.read_doc(api.sid, 'notes', 'a') == {'text': 'original'}
+
+
 def test_invalid_sid_and_membership_refresh(api):
     enroll(api)
     assert api.client.get('/v1/spaces/invalid%20sid/changes').status_code == 404
