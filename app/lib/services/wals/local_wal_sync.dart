@@ -1580,7 +1580,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<List<Wal>> getMissingWals() async {
-    _reconcileCurrentOwnerSync();
+    await _reconcileAndPersistCurrentOwner();
     return _wals.where((w) => w.status == WalStatus.miss).toList();
   }
 
@@ -1814,7 +1814,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<List<Wal>> getAllWals() async {
-    _reconcileCurrentOwnerSync();
+    await _reconcileAndPersistCurrentOwner();
     if (!identical(_publishedSource, _activeWals) || _publishedRevision != _activeWals.revision) {
       _publishedSource = _activeWals;
       _publishedRevision = _activeWals.revision;

@@ -33,8 +33,6 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
   'batchAudioDir',
-  'localRecordingJobs',
-  'localRecordingJobsCorrupt',
   // Display and phone behaviour
   fcmRegistrationOrderKey,
   SharedPreferencesUtil.appearanceDefaultMigrationKey,

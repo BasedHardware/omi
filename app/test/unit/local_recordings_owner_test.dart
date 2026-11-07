@@ -126,24 +126,33 @@ void main() {
     await audio(name);
     final ledger = await custodyLedger();
     await ledger.intakeNativeRecordings();
-    // Simulate a pre-upgrade wals.json entry whose ownerUid was not yet stamped.
+    // Simulate a pre-upgrade wals.json entry whose ownerUid was not yet stamped on disk.
     final wal = (await ledger.getAllWals()).single;
     wal.ownerUid = null;
+    await ledger.persistRetryMetadata(wal);
 
-    final view = LocalRecordingsProvider(ledger: ledger, initialize: false);
-    await view.refresh();
-    expect(view.recordings.single.fileName, name);
-    expect(wal.ownerUid, 'owner');
-
-    // Simulate sign-out followed by same-account sign-in on the same singleton ledger/provider.
-    ledger.clearUserData();
-    view.clearUserData();
+    // Cold-start a fresh ledger and provider while signed out (e.g. after app update cleared auth).
     SharedPreferencesUtil().uid = '';
-    expect(view.recordings, isEmpty);
+    final coldLedger = await custodyLedger();
+    final coldView = LocalRecordingsProvider(ledger: coldLedger, initialize: false);
+    await coldView.refresh();
+    expect(coldView.recordings, isEmpty);
+
+    // Sign back into the same account on the cold-started singleton ledger/provider.
+    SharedPreferencesUtil().uid = 'owner';
+    await coldView.refresh();
+    expect(coldView.recordings.single.fileName, name);
+    expect((await coldLedger.getAllWals()).single.ownerUid, 'owner');
+
+    // Also verify in-session sign-out followed by same-account sign-in rehydrates from retired/foreign custody.
+    coldLedger.clearUserData();
+    coldView.clearUserData();
+    SharedPreferencesUtil().uid = '';
+    expect(coldView.recordings, isEmpty);
 
     SharedPreferencesUtil().uid = 'owner';
-    await view.refresh();
-    expect(view.recordings.single.fileName, name);
-    view.dispose();
+    await coldView.refresh();
+    expect(coldView.recordings.single.fileName, name);
+    coldView.dispose();
   });
 }

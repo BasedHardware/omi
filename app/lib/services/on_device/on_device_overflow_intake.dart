@@ -28,6 +28,7 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
         final info = BatchRecordingInfo.fromFileName(name);
         if (info != null) {
           final owner = await owners.resolve(entry, name, uid, timerStart: info.timerStart);
+          if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
           if (owner != null && owner.isNotEmpty) {
             existing.ownerUid = owner;
             needsPersist = true;
@@ -35,6 +36,7 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
         }
       }
       if (needsPersist || !await ledger.nativeWalIsDurable(existing, generation)) {
+        if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
         await ledger.persistRetryMetadata(existing);
       }
       continue;
@@ -42,7 +44,8 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
     final info = BatchRecordingInfo.fromFileName(name);
     if (info == null || !info.isOverflow) continue;
     final owner = await owners.resolve(entry, name, uid, timerStart: info.timerStart);
-    if (owner == null) continue;
+    if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
+    if (owner == null || owner.isEmpty) continue;
     final bytes = await entry.length();
     if (bytes == 0) continue;
     final frames = await countBatchRecordingFrames(entry.path);

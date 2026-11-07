@@ -107,13 +107,13 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     });
 
     if (restored.isNotEmpty) {
-      final existingIds = _wals.map((w) => w.id).toSet();
+      final existingKeys = _wals.map((w) => (w.id, w.codec, w.seconds, w.totalFrames, w.filePath)).toSet();
       final nextActive = List<Wal>.from(_wals);
       for (final wal in restored) {
         wal.isSyncing = false;
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
-        if (existingIds.add(wal.id)) {
+        if (existingKeys.add((wal.id, wal.codec, wal.seconds, wal.totalFrames, wal.filePath))) {
           nextActive.add(wal);
           changed = true;
         }
@@ -129,12 +129,16 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     return changed;
   }
 
-  Future<void> _rehydrateForCurrentUser() async {
-    await walReady;
+  Future<void> _reconcileAndPersistCurrentOwner() async {
     final generation = _sessionGeneration;
     if (_reconcileCurrentOwnerSync() && _isCurrent(generation)) {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
     }
+  }
+
+  Future<void> _rehydrateForCurrentUser() async {
+    await walReady;
+    await _reconcileAndPersistCurrentOwner();
   }
 }

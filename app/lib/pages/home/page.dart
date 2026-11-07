@@ -500,7 +500,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
       if (mounted) {
         unawaited(context.read<LocalRecordingsProvider>().refresh());
-        unawaited(context.read<SyncProvider>().refreshWals());
+        final syncProvider = context.read<SyncProvider>();
+        unawaited(syncProvider.initialized.then((_) {
+          if (mounted) unawaited(syncProvider.refreshWals());
+        }));
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {

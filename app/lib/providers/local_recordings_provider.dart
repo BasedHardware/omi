@@ -130,9 +130,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
     final recordings = <LocalRecording>[];
     for (final wal in wals) {
       if (wal.filePath == null) continue;
-      final isDeferredBatch = wal.filePath!.startsWith('audio_omibatch');
+      final isDeferredBatch = wal.filePath!.split('/').last.startsWith('audio_omibatch');
       if (wal.ownerUid == null && (currentUid.isEmpty || isDeferredBatch)) continue;
-      if (wal.ownerUid != null && wal.ownerUid != 'legacy' && currentUid.isNotEmpty && wal.ownerUid != currentUid) {
+      if (wal.ownerUid != null && wal.ownerUid != 'legacy' && wal.ownerUid != currentUid) {
         continue;
       }
       rows[wal.filePath!] = wal;

@@ -91,7 +91,18 @@ class NativeRecordingIntake {
       if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
       final name = entry.key, file = entry.value;
       final info = BatchRecordingInfo.fromFileName(name);
-      if (info == null || info.isOverflow) continue;
+      if (info == null) continue;
+      if (info.isOverflow) {
+        final existingOverflow = ledger.nativeWalForFileName(name);
+        if (existingOverflow == null ||
+            existingOverflow.ownerUid == null ||
+            existingOverflow.ownerUid!.isEmpty ||
+            existingOverflow.ownerUid == 'legacy' ||
+            !await ledger.nativeWalIsDurable(existingOverflow, generation)) {
+          complete = false;
+        }
+        continue;
+      }
       final existing = ledger.nativeWalForFileName(name);
       if (existing != null) {
         var needsPersist = false;
@@ -99,6 +110,7 @@ class NativeRecordingIntake {
           final owner = info.isWatch
               ? await watchRecordingOwner(dir, name)
               : await owners.resolve(file, name, uid, timerStart: info.timerStart);
+          if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
           if (owner == null || owner.isEmpty) {
             complete = false;
           } else {
@@ -115,6 +127,7 @@ class NativeRecordingIntake {
           needsPersist = true;
         }
         if (needsPersist || !await ledger.nativeWalIsDurable(existing, generation)) {
+          if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
           await ledger.persistRetryMetadata(existing);
         }
         jobs.remove(name);
