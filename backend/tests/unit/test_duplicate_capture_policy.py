@@ -387,7 +387,9 @@ def test_confirmed_group_notifies_episode_attachment_for_both_sources(harness, m
 async def test_completed_fanout_replay_still_delivers_grouped_row_to_episode_hook(harness, monkeypatch):
     capture = row('desktop', 'desktop', capture_group={'id': 'g', 'primary_id': 'pendant'})
     harness.rows[path('desktop')] = capture
-    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a, **kw: {'status': 'completed'})
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a, **kw: {'status': 'completed'}
+    )
     seen = []
 
     async def after(uid, cid, latest, trigger):
