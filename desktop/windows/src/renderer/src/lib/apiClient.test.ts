@@ -1,21 +1,32 @@
 // responseErrorHandler 401 path: force-refresh once + retry, else route to
 // reauth. ./firebase and ./authSession are mocked so no real Firebase SDK loads.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AxiosAdapter } from 'axios'
 
 type RefreshOutcome = { status: 'ok'; token: string } | { status: 'dead' } | { status: 'transient' }
 
 const h = vi.hoisted(() => ({
+  authObj: { currentUser: null as { getIdToken: () => Promise<string> } | null },
   refreshIdToken: vi.fn<() => Promise<RefreshOutcome>>(),
+  getAuthSessionGeneration: vi.fn(() => 0),
   forceReauth: vi.fn(async () => {})
 }))
 
-vi.mock('./firebase', () => ({ auth: { currentUser: null } }))
+vi.mock('./firebase', () => ({ auth: h.authObj }))
+vi.mock('./clientDevice', () => ({ getWindowsDeviceIdHash: async () => 'synthetic-device' }))
 vi.mock('./authSession', () => ({
   refreshIdToken: h.refreshIdToken,
+  getAuthSessionGeneration: h.getAuthSessionGeneration,
   forceReauth: h.forceReauth
 }))
 
-import { applyPlatformHeaders, responseErrorHandler, setAppVersion } from './apiClient'
+vi.mock('./authSessionScope', () => ({
+  getAuthSessionGeneration: h.getAuthSessionGeneration,
+  captureAuthRequestScope: (generation: number) => ({ __authGeneration: generation })
+}))
+
+import { captureAuthRequestScope } from './authSessionScope'
+import { applyPlatformHeaders, omiApi, responseErrorHandler, setAppVersion } from './apiClient'
 
 type HeaderConfig = { headers: Record<string, unknown> }
 
@@ -36,12 +47,108 @@ function err401(extra: Record<string, unknown> = {}): ErrorArg {
 }
 
 beforeEach(() => {
+  h.authObj.currentUser = null
   h.refreshIdToken.mockReset()
+  h.getAuthSessionGeneration.mockReturnValue(0)
   h.forceReauth.mockClear()
 })
 afterEach(() => vi.restoreAllMocks())
 
+describe('request session ownership', () => {
+  it('does not send a mutation after its token wait crosses a session change', async () => {
+    let tokenReady = (_token: string): void => {
+      throw new Error('token wait not started')
+    }
+    let started = (): void => {}
+    const start = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    h.authObj.currentUser = {
+      getIdToken: () =>
+        new Promise<string>((resolve) => {
+          tokenReady = resolve
+          started()
+        })
+    }
+    const adapter = vi.fn<AxiosAdapter>(async (config) => ({
+      data: {},
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config
+    }))
+    const previous = omiApi.defaults.adapter
+    omiApi.defaults.adapter = adapter
+    try {
+      const pending = expect(
+        omiApi.patch('/v3/memories/test', { value: 'draft' }, captureAuthRequestScope(0))
+      ).rejects.toThrow('sign-in changed')
+      await start
+      h.getAuthSessionGeneration.mockReturnValue(1)
+      tokenReady('old-session-token')
+      await pending
+      expect(adapter).not.toHaveBeenCalled()
+    } finally {
+      omiApi.defaults.adapter = previous
+    }
+  })
+
+  it('does not deliver a mutation response to a replacement authenticated session', async () => {
+    h.authObj.currentUser = { getIdToken: async () => 'synthetic-token' }
+    let started = (): void => {}
+    let finish = (): void => {
+      throw new Error('adapter wait not started')
+    }
+    const start = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const adapter: AxiosAdapter = (config) =>
+      new Promise((resolve) => {
+        finish = () =>
+          resolve({ data: { status: 'ok' }, status: 200, statusText: 'OK', headers: {}, config })
+        started()
+      })
+    const previous = omiApi.defaults.adapter
+    omiApi.defaults.adapter = adapter
+    try {
+      const pending = expect(
+        omiApi.patch('/v3/memories/test', { value: 'draft' }, captureAuthRequestScope(0))
+      ).rejects.toThrow('sign-in changed')
+      await start
+      h.getAuthSessionGeneration.mockReturnValue(1)
+      finish()
+      await pending
+    } finally {
+      omiApi.defaults.adapter = previous
+    }
+  })
+})
+
 describe('responseErrorHandler — 401 handling', () => {
+  it('does not refresh or sign out a replacement session for an old request', async () => {
+    const { client, calls } = fakeClient()
+    h.getAuthSessionGeneration.mockReturnValue(1)
+    await expect(responseErrorHandler(client, err401({ __authGeneration: 0 }))).rejects.toThrow(
+      'sign-in changed'
+    )
+    expect(h.refreshIdToken).not.toHaveBeenCalled()
+    expect(h.forceReauth).not.toHaveBeenCalled()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('does not sign out a new session when the old refresh finishes as dead', async () => {
+    const { client, calls } = fakeClient()
+    h.refreshIdToken.mockImplementationOnce(async () => {
+      h.getAuthSessionGeneration.mockReturnValue(1)
+      return { status: 'dead' }
+    })
+    await expect(responseErrorHandler(client, err401({ __authGeneration: 0 }))).rejects.toThrow(
+      'sign-in changed'
+    )
+    expect(h.forceReauth).not.toHaveBeenCalled()
+    expect(calls).toHaveLength(0)
+  })
+
   it('force-refreshes once and retries with the fresh token', async () => {
     h.refreshIdToken.mockResolvedValue({ status: 'ok', token: 'fresh-token' })
     const { client, calls } = fakeClient()
