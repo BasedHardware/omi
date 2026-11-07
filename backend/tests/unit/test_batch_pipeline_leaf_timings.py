@@ -8,7 +8,6 @@ import struct
 from types import SimpleNamespace
 import wave
 
-from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from prometheus_client import CollectorRegistry
 import pytest
@@ -17,6 +16,7 @@ from diarizer import batch_pipeline_models as models
 from diarizer.batch_pipeline_flight import FlightPyannote
 from tests.unit.test_batch_pipeline_artifacts import ObjectClient, item, setup
 from utils.batch_pipeline import leaf_timings
+from utils.batch_pipeline.artifacts import StagedArtifactInvalid
 from utils.batch_pipeline.stage_timings import StageTimings
 from utils.batch_pipeline.source_audio import read_reference
 
@@ -72,7 +72,9 @@ def test_authenticated_decryption_failure_is_counted_and_preserved(profile):
     generation, body = client.objects[name]
     client.objects[name] = (generation, body[:-1] + bytes([body[-1] ^ 1]))
     adapter = models.StagedAudio(artifacts.fetch_audio, timings_of=lambda: timings)
-    with pytest.raises(InvalidTag):
+    # The read boundary owns the fault class now: the same tampered byte
+    # surfaces typed, and the timing registry still counts the leaf call.
+    with pytest.raises(StagedArtifactInvalid):
         adapter.decode(staged)
     assert count(registry, 'decrypt') == 1
     assert count(registry, 'decode') is None

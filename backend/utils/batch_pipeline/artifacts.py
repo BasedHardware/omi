@@ -16,6 +16,7 @@ from typing import Any, Callable
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.cloud.storage.retry import DEFAULT_RETRY
 from google.api_core.exceptions import NotFound
@@ -55,6 +56,20 @@ class ProtectionContext:
             raise ValueError('cloud batch processing requires standard or enhanced protection')
         if type(self.generation) is not int or self.generation < 0:
             raise ValueError('invalid privacy generation')
+
+
+class StagedArtifactInvalid(ValueError):
+    """A staged artifact that can never be read from its pinned generation.
+
+    Deterministic on the immutable object bytes, the admitted reference and
+    the process key material: a retry re-downloads the same generation,
+    re-validates the same envelope and fails the same way, so the failure
+    must end the GPU chain at the fetch_decode boundary instead of walking
+    the bounded retry ladder (which re-transmits the artifact once per
+    attempt). Raise sites carry the type and the worker boundary reads the
+    type — never an exception message — so a new deterministic read fault
+    cannot silently drift back onto the ladder.
+    """
 
 
 class ArtifactStore:
@@ -184,7 +199,7 @@ class ArtifactStore:
             or not re.fullmatch(r'[0-9a-f]{32}\.enc', name[len(prefix) :])
             or not re.fullmatch(r'[1-9][0-9]{0,19}', parsed.fragment)
         ):
-            raise ValueError('artifact must be an owner/segment-bound generation-pinned staging reference')
+            raise StagedArtifactInvalid('artifact must be an owner/segment-bound generation-pinned staging reference')
         return name, int(parsed.fragment)
 
     def missing_audio_evidence(self, item: WorkItem, *, now: float) -> dict | None:
@@ -227,7 +242,7 @@ class ArtifactStore:
             retry=None,
         )
         if not blob.size or not 0 < blob.size <= limit + len(MAGIC) + 28:
-            raise ValueError('stored batch artifact exceeds bounded payload size')
+            raise StagedArtifactInvalid('stored batch artifact exceeds bounded payload size')
         if read_budget is not None:
             read_budget.reserve(blob.size)
         sealed = leaf_timings.call(
@@ -240,15 +255,22 @@ class ArtifactStore:
         if read_budget is not None:
             read_budget.timeout(60)
         if len(sealed) > limit + len(MAGIC) + 28 or not sealed.startswith(MAGIC):
-            raise ValueError('invalid batch artifact envelope')
+            raise StagedArtifactInvalid('invalid batch artifact envelope')
         offset = len(MAGIC)
-        body = leaf_timings.call(
-            'decrypt',
-            AESGCM(self.key_for_owner(item.owner_id)).decrypt,
-            sealed[offset : offset + 12],
-            sealed[offset + 12 :],
-            self._aad(item, kind, context),
-        )
+        try:
+            body = leaf_timings.call(
+                'decrypt',
+                AESGCM(self.key_for_owner(item.owner_id)).decrypt,
+                sealed[offset : offset + 12],
+                sealed[offset + 12 :],
+                self._aad(item, kind, context),
+            )
+        except (InvalidTag, ValueError) as error:
+            # Wrong key material or tampered/mismatched AAD fails identically
+            # on every attempt against the pinned generation: the read can
+            # never succeed by retrying, so the fault is terminal like the
+            # envelope faults above, not a transient provider error.
+            raise StagedArtifactInvalid('staged artifact authentication failed') from error
         self._unchanged(item, context)
         return body
 

@@ -6,11 +6,11 @@ import json
 import time
 from types import SimpleNamespace
 
-from cryptography.exceptions import InvalidTag
 from google.api_core.exceptions import NotFound
 import pytest
 
 from utils.batch_pipeline.artifacts import (
+    StagedArtifactInvalid,
     ArtifactStore,
     ProtectionContext,
     RESULT_LIMIT,
@@ -158,18 +158,22 @@ def test_owner_segment_capture_and_source_are_authenticated():
     original = item()
     staged = replace(original, audio_uri=store.stage_audio(original, b'audio'))
     result = store.persist_result(staged, {'words': []})
-    with pytest.raises(ValueError):
+    # Deterministic auth faults surface as the typed fetch_decode boundary
+    # since the artifact-read layer classifies them: a wrong owner/segment
+    # reference, a wrong capture binding, a tampered URI or bytes can never
+    # decrypt on retry, so they end the chain instead of riding the ladder.
+    with pytest.raises(StagedArtifactInvalid):
         store.fetch_audio(replace(staged, owner_id='other-owner'))
-    with pytest.raises(ValueError):
+    with pytest.raises(StagedArtifactInvalid):
         store.load_result(replace(staged, segment_id='other-segment'), result)
-    with pytest.raises(InvalidTag):
+    with pytest.raises(StagedArtifactInvalid):
         store.fetch_audio(replace(staged, capture_at=101.0))
-    with pytest.raises(InvalidTag):
+    with pytest.raises(StagedArtifactInvalid):
         store.load_result(replace(staged, audio_uri=staged.audio_uri + '0'), result)
     name = next(iter(client.objects))
     gen, encrypted = client.objects[name]
     client.objects[name] = (gen, encrypted[:-1] + bytes([encrypted[-1] ^ 1]))
-    with pytest.raises(InvalidTag):
+    with pytest.raises(StagedArtifactInvalid):
         store.fetch_audio(staged)
 
 
@@ -178,7 +182,7 @@ def test_privacy_generation_or_level_change_cannot_read_old_payload():
     original = item()
     staged = replace(original, audio_uri=store.stage_audio(original, b'audio'))
     state.context = ProtectionContext('standard', 0)
-    with pytest.raises(InvalidTag):
+    with pytest.raises(StagedArtifactInvalid):
         store.fetch_audio(staged)
     state.context = ProtectionContext('enhanced', 1)
     with pytest.raises(PermissionError):

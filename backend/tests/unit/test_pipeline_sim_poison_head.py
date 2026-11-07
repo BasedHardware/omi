@@ -113,17 +113,21 @@ def poison_payload(kind: str, head: str):
         if kind == 'payload:vad-spans-missing':
             return {key: value for key, value in SUCCESS_PAYLOAD.items() if key != 'speech_spans'}
         if kind == 'payload:corrupt-artifact':
-            # The real ArtifactStore seam: envelope/size/reference violations.
-            raise ValueError('invalid batch artifact envelope')
+            # The real ArtifactStore seam: envelope/size/reference violations
+            # carry the typed read boundary since the store classifies them.
+            from utils.batch_pipeline.artifacts import StagedArtifactInvalid
+
+            raise StagedArtifactInvalid('invalid batch artifact envelope')
         if kind == 'payload:non-object-result':
             # load_result is json.loads: a valid non-object body.
             return ['not', 'an', 'object']
         if kind == 'payload:tampered-artifact':
-            # Authenticated decryption of altered ciphertext: InvalidTag, not
-            # ValueError (Luna round 2).
-            from cryptography.exceptions import InvalidTag
+            # Authenticated decryption of altered ciphertext: the store wraps
+            # the raw cryptography fault as StagedArtifactInvalid (a ValueError
+            # subclass), so the walk's payload-contract predicate sees it.
+            from utils.batch_pipeline.artifacts import StagedArtifactInvalid
 
-            raise InvalidTag()
+            raise StagedArtifactInvalid('staged artifact authentication failed')
         return dict(SUCCESS_PAYLOAD)
 
     return load
@@ -292,6 +296,12 @@ def test_contention_shaped_value_error_stays_retryable_at_the_unit_level():
     from cryptography.exceptions import InvalidTag
 
     assert projection.payload_contract_violation(InvalidTag())  # tampered artifact body
+    from utils.batch_pipeline.artifacts import StagedArtifactInvalid
+
+    # The store wraps raw crypto faults as the typed read boundary; the
+    # predicate must disposition it through the ValueError family either way.
+    assert projection.payload_contract_violation(StagedArtifactInvalid('invalid batch artifact envelope'))
+    assert projection.payload_contract_violation(StagedArtifactInvalid('staged artifact authentication failed'))
     for permanent in (
         ValueError('result audio duration differs from admitted capture'),
         ValueError('successful batch result must contain words'),

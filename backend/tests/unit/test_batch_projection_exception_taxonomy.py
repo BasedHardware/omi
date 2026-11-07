@@ -69,7 +69,11 @@ TAXONOMY = {
     # A ValueError subclass family: retained audio that can never decode from
     # these pinned bytes (checksum, authentication, PCM shape, digest drift).
     'RetainedAudioInvalid': 'payload contract: quarantine_held (never contention)',
-    'InvalidTag': 'payload contract: quarantine_held (tampered artifact body)',
+    # A ValueError subclass: a staged artifact read that can never succeed
+    # from its pinned generation (size, envelope, reference, authentication).
+    'StagedArtifactInvalid': 'payload contract: quarantine_held (never contention)',
+    'InvalidTag': 'payload contract: quarantine_held (tampered artifact body; '
+    'the artifact store wraps it as StagedArtifactInvalid)',
     # Artifact authorization refusals (expired voice evidence, privacy
     # generation drift) are observable waits on the sweep, not dispositions.
     'PermissionError': 'authorization wait (observable, retried by the sweep)',

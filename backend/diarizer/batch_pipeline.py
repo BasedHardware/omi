@@ -70,6 +70,7 @@ from utils.batch_pipeline.stage_timings import StageTimings
 from utils.batch_pipeline.source_audio import RetainedAudioInvalid
 from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
+from utils.batch_pipeline.artifacts import StagedArtifactInvalid
 from utils.batch_pipeline.audio import StagedAudioInvalid
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage
@@ -700,12 +701,12 @@ class PipelineWorker:
                 # pinned stored bytes: a retry re-reads the same bytes and
                 # fails the same way, so it must end the chain instead of
                 # walking the bounded retry ladder on identical input. The
-                # raise sites carry the type (decode_pcm16_wav, with_context)
-                # and the boundary reads the type — never an exception
-                # message — so a new deterministic decode fault cannot
-                # silently drift back onto the ladder.
+                # raise sites carry the type (decode_pcm16_wav, with_context,
+                # the artifact read below) and the boundary reads the type —
+                # never an exception message — so a new deterministic decode
+                # fault cannot silently drift back onto the ladder.
                 staged_audio_invalid = stage == WorkerValidationStage.FETCH_DECODE.value and isinstance(
-                    exc, StagedAudioInvalid
+                    exc, (StagedAudioInvalid, StagedArtifactInvalid)
                 )
                 # Retained audio that can never decode is deterministic on the
                 # pinned stored bytes: a retry re-reads the same bytes and

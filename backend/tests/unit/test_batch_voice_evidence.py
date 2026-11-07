@@ -10,7 +10,6 @@ from unittest.mock import Mock
 import wave
 import weakref
 
-from cryptography.exceptions import InvalidTag
 import numpy as np
 import pytest
 
@@ -23,7 +22,7 @@ from models.transcript_segment import TranscriptSegment
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_artifacts import ObjectClient
 from utils.batch_pipeline import voice_centroids as schema, voice_evidence as evidence
-from utils.batch_pipeline.artifacts import ArtifactStore
+from utils.batch_pipeline.artifacts import ArtifactStore, StagedArtifactInvalid
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.contracts import WorkItem, Priority
 from utils.batch_pipeline.retention import batch_artifact_authorize, batch_artifact_register
@@ -200,7 +199,8 @@ def test_encryption_aad_and_no_audio_or_identity_payload(level):
         replace(item, duration_seconds=9),
         replace(item, conversation_id='other'),
     ):
-        with pytest.raises(InvalidTag):
+        # AAD binding mismatches are deterministic read faults: typed terminal.
+        with pytest.raises(StagedArtifactInvalid):
             artifacts.load_voice_evidence(changed, uri, expires_at=schema.deadline(changed.capture_at))
     assert not any('audio_files' in row for row in store.client.rows.values())
 
