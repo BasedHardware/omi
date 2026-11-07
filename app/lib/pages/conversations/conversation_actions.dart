@@ -20,6 +20,7 @@ import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUnt
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -190,38 +191,48 @@ Future<void> toggleConversationStarred(BuildContext context, ServerConversation 
 }
 
 /// Shares [conversation]'s link, the same way the conversation page does: a private conversation
-/// first asks ("Anyone with the link can view"), becomes shared, and goes back to private when the
-/// share sheet is dismissed without sharing.
+/// becomes shared for the link, and goes back to private when the share sheet is dismissed without
+/// sharing.
 Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
   final l10n = context.l10n;
   final wasPrivate = conversation.visibility != ConversationVisibility.shared;
-  if (wasPrivate) {
-    final confirmed = await showOmiConfirm(
-      context,
-      title: l10n.shareConversationQuestion,
-      message: l10n.anyoneWithLinkCanView,
-      confirmLabel: l10n.share,
-    );
-    if (!confirmed || !context.mounted) return;
-    final ok = await setConversationVisibility(conversation.id);
-    if (!context.mounted) return;
-    if (!ok) {
-      OmiFeedback.error(context, l10n.conversationUrlNotShared);
-      return;
+  var flippedToShared = false;
+  try {
+    if (wasPrivate) {
+      final ok = await conversationShareVisibilityUpdater(conversation.id);
+      if (!context.mounted) return;
+      if (!ok) {
+        OmiFeedback.error(context, l10n.conversationUrlNotShared);
+        return;
+      }
+      flippedToShared = true;
+      conversation.visibility = ConversationVisibility.shared;
     }
-    conversation.visibility = ConversationVisibility.shared;
-  }
-  final box = context.findRenderObject() as RenderBox?;
-  final outcome = await shareConversationLink(
-    conversation,
-    sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
-  );
-  if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-    final reverted = await setConversationVisibility(
-      conversation.id,
-      visibility: ConversationVisibility.private_.value,
+    final box = context.findRenderObject() as RenderBox?;
+    final outcome = await conversationLinkSharer(
+      conversation,
+      sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
     );
-    if (reverted) conversation.visibility = ConversationVisibility.private_;
+    if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
+      final reverted = await conversationShareVisibilityUpdater(
+        conversation.id,
+        visibility: ConversationVisibility.private_.value,
+      );
+      if (reverted) conversation.visibility = ConversationVisibility.private_;
+    }
+  } catch (e) {
+    Logger.debug('Failed to share conversation: $e');
+    if (flippedToShared) {
+      final reverted = await conversationShareVisibilityUpdater(
+        conversation.id,
+        visibility: ConversationVisibility.private_.value,
+      ).catchError((Object revertError) {
+        Logger.debug('Failed to revert conversation visibility: $revertError');
+        return false;
+      });
+      if (reverted) conversation.visibility = ConversationVisibility.private_;
+    }
+    if (context.mounted) OmiFeedback.error(context, l10n.conversationUrlNotShared);
   }
 }
 

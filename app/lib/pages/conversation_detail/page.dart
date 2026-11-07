@@ -849,42 +849,34 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     }
   }
 
-  /// Shares the conversation's link. A private conversation is made public only after the reader
-  /// agrees ("Anyone with the link can view"), and goes back to private if the share sheet reports
-  /// that it was dismissed without sharing.
+  /// Shares the conversation's link. A private conversation is made public for the link, and goes
+  /// back to private if the share sheet reports that it was dismissed without sharing.
   Future<void> _shareConversation(ConversationDetailProvider provider) async {
     HapticFeedback.mediumImpact();
     final conversation = provider.conversation;
     final wasPrivate = conversation.visibility != ConversationVisibility.shared;
-    if (wasPrivate) {
-      final confirmed = await showOmiConfirm(
-        context,
-        title: context.l10n.shareConversationQuestion,
-        message: context.l10n.anyoneWithLinkCanView,
-        confirmLabel: context.l10n.share,
-      );
-      if (!confirmed || !mounted) return;
-    }
+    var flippedToShared = false;
 
     setState(() => _isSharing = true);
     try {
       if (wasPrivate) {
-        final shared = await setConversationVisibility(conversation.id);
+        final shared = await conversationShareVisibilityUpdater(conversation.id);
         if (!mounted) return;
         if (!shared) {
           OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
           return;
         }
+        flippedToShared = true;
         provider.updateVisibilityLocally(ConversationVisibility.shared);
       }
       final origin = shareSheetOrigin(_shareButtonKey);
       // The sheet is up once the call is made; the button stops spinning while it is shown.
-      final result = shareConversationLink(conversation, sharePositionOrigin: origin);
+      final result = conversationLinkSharer(conversation, sharePositionOrigin: origin);
       await _delay(const Duration(milliseconds: 150));
       if (mounted) setState(() => _isSharing = false);
       final outcome = await result;
       if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-        final reverted = await setConversationVisibility(
+        final reverted = await conversationShareVisibilityUpdater(
           conversation.id,
           visibility: ConversationVisibility.private_.value,
         );
@@ -892,6 +884,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       }
     } catch (e) {
       Logger.debug('Failed to share conversation: $e');
+      if (flippedToShared) {
+        final reverted = await conversationShareVisibilityUpdater(
+          conversation.id,
+          visibility: ConversationVisibility.private_.value,
+        ).catchError((Object revertError) {
+          Logger.debug('Failed to revert conversation visibility: $revertError');
+          return false;
+        });
+        if (reverted && mounted) provider.updateVisibilityLocally(ConversationVisibility.private_);
+      }
       if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
     } finally {
       if (mounted && _isSharing) setState(() => _isSharing = false);
