@@ -499,6 +499,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await ForegroundUtil.stopForegroundTask();
       }
       if (mounted) {
+        unawaited(context.read<LocalRecordingsProvider>().refresh());
+        unawaited(context.read<SyncProvider>().refreshWals());
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {

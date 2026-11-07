@@ -449,6 +449,8 @@ class WalSyncs implements IWalSync {
     cancelSync();
   }
 
+  Future<void> rehydrateForCurrentUser() => _phoneSync.rehydrateForCurrentUser();
+
   bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 
   double get storageSpeedKBps => _ringSync.isSyncing ? _ringSync.currentSpeedKBps : _storageSync.currentSpeedKBps;

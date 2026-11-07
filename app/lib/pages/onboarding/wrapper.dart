@@ -38,6 +38,8 @@ import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/guided_voice_io.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
@@ -591,6 +593,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // so an in-session re-login would otherwise leave it null until the
           // Plan & Usage page is opened (missing Pro badge).
           context.read<UsageProvider>().fetchSubscription();
+          unawaited(context.read<LocalRecordingsProvider>().refresh());
+          unawaited(context.read<SyncProvider>().refreshWals());
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           // Consent is checked first regardless of server-side onboarding
           // state so a returning user signing in on a fresh install still

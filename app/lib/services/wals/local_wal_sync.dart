@@ -84,6 +84,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     await walReady;
     await intakeOnDeviceOverflow(this);
     await nativeIntake.scan();
+    await _rehydrateForCurrentUser();
   }
 
   /// A minute recovery receipt can arrive before the normal flush timer. Seal
@@ -605,9 +606,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (!await _purgeDeletedAccountWalsAtLoad(generation)) return;
 
     // Fix any inconsistent WAL states from old implementations
-    await WalFileManager.migrateInconsistentWals(_wals, persist: () async {
-      await _saveWalsToFile(generation);
-    });
+    await WalFileManager.migrateInconsistentWals(_wals, persist: () => _saveWalsToFile(generation));
     if (!_isCurrent(generation)) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
@@ -1418,6 +1417,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<int> purgeAccountWals(String uid) => _purgeAccountWals(uid);
+  @override
+  Future<void> rehydrateForCurrentUser() => _rehydrateForCurrentUser();
 
   Future<int> _removeExpiredSyncedCopies() async {
     final prefs = SharedPreferencesUtil();
@@ -1579,6 +1580,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<List<Wal>> getMissingWals() async {
+    _reconcileCurrentOwnerSync();
     return _wals.where((w) => w.status == WalStatus.miss).toList();
   }
 
@@ -1750,10 +1752,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   /// Persist retry metadata (retryCount, lastRetryAt) for a WAL after failed sync attempts.
-  Future<void> persistRetryMetadata(Wal wal) async {
-    final generation = _sessionGeneration;
-    await _saveWalsToFile(generation);
-  }
+  Future<void> persistRetryMetadata(Wal wal) => _saveWalsToFile(_sessionGeneration);
 
   /// Re-arm recordings that spent their transient retry budget when the
   /// network returns. Permanent audio/lookback failures use terminal statuses
@@ -1815,6 +1814,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<List<Wal>> getAllWals() async {
+    _reconcileCurrentOwnerSync();
     if (!identical(_publishedSource, _activeWals) || _publishedRevision != _activeWals.revision) {
       _publishedSource = _activeWals;
       _publishedRevision = _activeWals.revision;

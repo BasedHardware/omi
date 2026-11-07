@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -123,11 +124,17 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   Future<void> _readLedger() async {
     final generation = ++_generation;
+    final currentUid = SharedPreferencesUtil().uid;
     final wals = await _ledger.getAllWals();
     final rows = <String, Wal>{};
     final recordings = <LocalRecording>[];
     for (final wal in wals) {
-      if (wal.ownerUid == null || wal.filePath == null) continue;
+      if (wal.filePath == null) continue;
+      final isDeferredBatch = wal.filePath!.startsWith('audio_omibatch');
+      if (wal.ownerUid == null && (currentUid.isEmpty || isDeferredBatch)) continue;
+      if (wal.ownerUid != null && wal.ownerUid != 'legacy' && currentUid.isNotEmpty && wal.ownerUid != currentUid) {
+        continue;
+      }
       rows[wal.filePath!] = wal;
       if (!wal.holdForUser || wal.status == WalStatus.synced) continue;
       final path = await Wal.getFilePath(wal.filePath);

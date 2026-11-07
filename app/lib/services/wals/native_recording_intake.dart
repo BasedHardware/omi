@@ -94,14 +94,27 @@ class NativeRecordingIntake {
       if (info == null || info.isOverflow) continue;
       final existing = ledger.nativeWalForFileName(name);
       if (existing != null) {
+        var needsPersist = false;
+        if (existing.ownerUid == null || existing.ownerUid == 'legacy') {
+          final owner = info.isWatch
+              ? await watchRecordingOwner(dir, name)
+              : await owners.resolve(file, name, uid, timerStart: info.timerStart);
+          if (owner == null || owner.isEmpty) {
+            complete = false;
+          } else {
+            existing.ownerUid = owner;
+            needsPersist = true;
+          }
+        }
         // A previous save may have failed: migration removes its source only
         // after the ledger confirms this exact entry is durably indexed.
         if (jobs.containsKey(name) && existing.status == WalStatus.miss) {
           existing.status = WalStatus.uploaded;
           existing.jobId = jobs[name];
           existing.holdForUser = info.holdForUser;
+          needsPersist = true;
         }
-        if (jobs.containsKey(name) || !await ledger.nativeWalIsDurable(existing, generation)) {
+        if (needsPersist || !await ledger.nativeWalIsDurable(existing, generation)) {
           await ledger.persistRetryMetadata(existing);
         }
         jobs.remove(name);

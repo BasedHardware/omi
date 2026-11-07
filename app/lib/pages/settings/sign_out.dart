@@ -32,6 +32,9 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'omiButtonActionsEnabled',
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
+  'batchAudioDir',
+  'localRecordingJobs',
+  'localRecordingJobsCorrupt',
   // Display and phone behaviour
   fcmRegistrationOrderKey,
   SharedPreferencesUtil.appearanceDefaultMigrationKey,

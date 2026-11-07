@@ -120,4 +120,30 @@ void main() {
     expect(view.isLoading, isFalse);
     view.dispose();
   });
+
+  test('waiting recordings survive pre-upgrade unstamped index, signed-out cold start, and same-account re-login',
+      () async {
+    await audio(name);
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    // Simulate a pre-upgrade wals.json entry whose ownerUid was not yet stamped.
+    final wal = (await ledger.getAllWals()).single;
+    wal.ownerUid = null;
+
+    final view = LocalRecordingsProvider(ledger: ledger, initialize: false);
+    await view.refresh();
+    expect(view.recordings.single.fileName, name);
+    expect(wal.ownerUid, 'owner');
+
+    // Simulate sign-out followed by same-account sign-in on the same singleton ledger/provider.
+    ledger.clearUserData();
+    view.clearUserData();
+    SharedPreferencesUtil().uid = '';
+    expect(view.recordings, isEmpty);
+
+    SharedPreferencesUtil().uid = 'owner';
+    await view.refresh();
+    expect(view.recordings.single.fileName, name);
+    view.dispose();
+  });
 }

@@ -23,7 +23,20 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
     if (!name.startsWith('audio_omibatchoverflow_') || !name.endsWith('.bin')) continue;
     final existing = ledger.nativeWalForFileName(name);
     if (existing != null) {
-      if (!await ledger.nativeWalIsDurable(existing, generation)) await ledger.persistRetryMetadata(existing);
+      var needsPersist = false;
+      if (existing.ownerUid == null || existing.ownerUid == 'legacy') {
+        final info = BatchRecordingInfo.fromFileName(name);
+        if (info != null) {
+          final owner = await owners.resolve(entry, name, uid, timerStart: info.timerStart);
+          if (owner != null && owner.isNotEmpty) {
+            existing.ownerUid = owner;
+            needsPersist = true;
+          }
+        }
+      }
+      if (needsPersist || !await ledger.nativeWalIsDurable(existing, generation)) {
+        await ledger.persistRetryMetadata(existing);
+      }
       continue;
     }
     final info = BatchRecordingInfo.fromFileName(name);
