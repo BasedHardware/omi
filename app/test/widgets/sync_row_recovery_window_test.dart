@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -236,6 +237,12 @@ void main() {
     expect(find.text('Too large'), findsOneWidget, reason: 'the refusal label outranks the generic Failed banner');
     expect(find.text('Try Again'), findsNothing, reason: 'the same bytes are the same size');
     expect(find.text('Delete'), findsNothing, reason: 'a refusal is removed by swiping the row, after confirmation');
+  });
+
+  testWidgets('unsyncable recordings retain navigation affordance to allow detail inspection and export', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
+    expect(find.text('Delete'), findsOneWidget);
+    expect(find.byIcon(FontAwesomeIcons.chevronRight), findsOneWidget);
   });
 }
 

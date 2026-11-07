@@ -149,4 +149,30 @@ void main() {
     await tester.tap(find.text('Clear All'));
     expect(calls, ['synced', 'pending', 'all']);
   });
+
+  testWidgets('unsyncable category renders and fires clear callback when present', (tester) async {
+    bool clearedUnsyncable = false;
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: Scaffold(
+        body: OfflineSyncStorageSheet(
+          syncedCount: 0,
+          pendingCount: 0,
+          unsyncableCount: 4,
+          totalCount: 4,
+          onClearSynced: () {},
+          onClearPending: () {},
+          onClearUnsyncable: () => clearedUnsyncable = true,
+          onClearAll: () {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.text("Too old to sync — Omi can't accept it"), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
+    await tester.tap(find.text('Clear'));
+    expect(clearedUnsyncable, isTrue);
+  });
 }

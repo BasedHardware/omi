@@ -104,25 +104,32 @@ class WalListItem extends StatelessWidget {
         onPressed: () => syncProvider.syncWal(wal),
       );
     }
-    // No upload can resolve these, so offer removal rather than a chevron that
-    // leads to a detail page with nothing actionable on it. A refusal is not
-    // offered here: the swipe still removes it, after confirmation.
+    // No upload can resolve these, so offer removal while preserving chevron
+    // navigation to view details, playback audio, or export via Share Recording.
+    // A refusal is not offered here: the swipe still removes it, after confirmation.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
         state == WalSyncDisplayState.unsupportedAudio) {
-      return OmiButton.destructive(
-        label: context.l10n.delete,
-        size: OmiButtonSize.compact,
-        onPressed: () async {
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteRecording,
-            message: context.l10n.thisCannotBeUndone,
-            confirmLabel: context.l10n.delete,
-            destructive: true,
-          );
-          if (confirmed) await syncProvider.deleteWal(wal);
-        },
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OmiButton.destructive(
+            label: context.l10n.delete,
+            size: OmiButtonSize.compact,
+            onPressed: () async {
+              final confirmed = await showOmiConfirm(
+                context,
+                title: context.l10n.deleteRecording,
+                message: context.l10n.thisCannotBeUndone,
+                confirmLabel: context.l10n.delete,
+                destructive: true,
+              );
+              if (confirmed) await syncProvider.deleteWal(wal);
+            },
+          ),
+          const SizedBox(width: 8),
+          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
+        ],
       );
     }
     return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
@@ -383,6 +390,7 @@ class _SyncPageState extends State<SyncPage> {
       builder: (sheetContext) => OfflineSyncStorageSheet(
         syncedCount: provider.syncedWals.length,
         pendingCount: provider.pendingDeletableWals.length,
+        unsyncableCount: provider.corruptedStatusCount + provider.terminallyFailedWalsCount,
         totalCount: provider.clearableWalsCount,
         onClearSynced: () async {
           Navigator.of(sheetContext).pop();
@@ -413,6 +421,22 @@ class _SyncPageState extends State<SyncPage> {
             await provider.deleteAllPendingWals();
             if (context.mounted) {
               OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
+            }
+          }
+        },
+        onClearUnsyncable: () async {
+          Navigator.of(sheetContext).pop();
+          final confirmed = await showOmiConfirm(
+            context,
+            title: context.l10n.deleteRecording,
+            message: context.l10n.thisCannotBeUndone,
+            confirmLabel: context.l10n.clear,
+            destructive: true,
+          );
+          if (confirmed && context.mounted) {
+            await provider.deleteAllCorruptedWals();
+            if (context.mounted) {
+              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }
         },

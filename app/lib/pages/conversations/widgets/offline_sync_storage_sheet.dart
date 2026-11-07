@@ -8,18 +8,22 @@ import 'package:omi/utils/l10n_extensions.dart';
 class OfflineSyncStorageSheet extends StatelessWidget {
   final int syncedCount;
   final int pendingCount;
+  final int unsyncableCount;
   final int totalCount;
   final VoidCallback onClearSynced;
   final VoidCallback onClearPending;
+  final VoidCallback? onClearUnsyncable;
   final VoidCallback onClearAll;
 
   const OfflineSyncStorageSheet({
     super.key,
     required this.syncedCount,
     required this.pendingCount,
+    this.unsyncableCount = 0,
     required this.totalCount,
     required this.onClearSynced,
     required this.onClearPending,
+    this.onClearUnsyncable,
     required this.onClearAll,
   });
 
@@ -50,6 +54,18 @@ class OfflineSyncStorageSheet extends StatelessWidget {
             onClear: pendingCount > 0 ? onClearPending : null,
             clearLabel: context.l10n.clear,
           ),
+          if (unsyncableCount > 0) ...[
+            const SizedBox(height: 12),
+            _StorageRow(
+              icon: FontAwesomeIcons.triangleExclamation,
+              iconColor: Colors.redAccent,
+              title: context.l10n.failedStatus,
+              subtitle: context.l10n.syncStatusTooOld,
+              count: unsyncableCount,
+              onClear: onClearUnsyncable,
+              clearLabel: context.l10n.clear,
+            ),
+          ],
           if (totalCount > 0) ...[
             const SizedBox(height: 20),
             OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
