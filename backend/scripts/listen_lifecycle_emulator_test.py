@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from urllib.request import Request, urlopen
 
 PROJECT_ID = os.environ.setdefault('GOOGLE_CLOUD_PROJECT', os.environ.get('GCLOUD_PROJECT', 'demo-listen'))
@@ -400,38 +401,33 @@ def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: st
         'projection_shard': 0,
     }
     job_ref.set(job)
+    # This fixture selects shard zero explicitly; its document identity is the
+    # stored projection generation followed by the two-digit shard number.
     projection_ref = client.collection(finalization_jobs_db.FINALIZATION_PROJECTION_COLLECTION).document(
-        finalization_jobs_db._projection_shard_id(finalization_jobs_db.FINALIZATION_PROJECTION_GENERATION, 0)
+        f"{job['projection_generation']}-{job['projection_shard']:02d}"
     )
     projection_ref.set({'leased': 1, 'completed': 0, 'stale': 0, 'success': 0})
     restore_transaction = _hold_cleanup_parent_lock(uid, conversation_id)
     started, restored_committed = threading.Event(), threading.Event()
     result: dict[str, Any] = {}
+    real_document_get = firestore.DocumentReference.get
 
-    def conversation_after_restore(*_args: Any) -> Any:
-        # The claim has already read its job in a real SDK transaction. A
-        # parent read lock alone does not serialize two readers in Firestore;
-        # explicitly order the restore before this conversation snapshot.
-        started.set()
-        assert restored_committed.wait(timeout=10), 'restore did not release the conversation read'
-        return conversation_ref
-
-    @firestore.transactional
-    def claim_transaction(transaction: Any) -> Any:
-        return finalization_jobs_db._claim_finalization_fanout_txn(
-            transaction,
-            job_ref,
-            1,
-            1,
-            datetime.now(timezone.utc),
-            conversation_after_restore,
-            client.collection(finalization_jobs_db.FINALIZATION_PROJECTION_COLLECTION),
-            expected_discarded=True,
-        )
+    def conversation_after_restore(reference: firestore.DocumentReference, *args: Any, **kwargs: Any) -> Any:
+        transaction = kwargs.get('transaction', args[1] if len(args) > 1 else None)
+        if reference.path == conversation_ref.path and isinstance(transaction, firestore.Transaction):
+            # The public claim has already read its job in this real transaction.
+            # A parent read lock alone does not serialize two Firestore readers;
+            # order the restore before forwarding the conversation snapshot read.
+            started.set()
+            assert restored_committed.wait(timeout=10), 'restore did not release the conversation read'
+        return real_document_get(reference, *args, **kwargs)
 
     def claim_behind_restore() -> None:
         try:
-            result['claim'] = claim_transaction(client.transaction())
+            with patch.object(firestore.DocumentReference, 'get', conversation_after_restore):
+                result['claim'] = lifecycle_service.claim_finalization_fanout(
+                    job_id, 1, 1, expected_discarded=True, firestore_client=client
+                )
         except BaseException as error:
             result['error'] = error
 
