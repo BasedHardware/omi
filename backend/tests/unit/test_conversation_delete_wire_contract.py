@@ -231,7 +231,10 @@ def _real_lake_delete(monkeypatch, tmp_path):
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.delenv('OBJECT_LAKE_KMS_KEY', raising=False)
-    monkeypatch.setattr(space_keys, 'space_key_firestore_client', lambda: store)
+    monkeypatch.setattr(
+        space_keys, 'space_key_firestore_client', lambda supplied=None: store if supplied is None else supplied
+    )
+    monkeypatch.setattr(space_keys, '_cache', None)
     monkeypatch.setattr(object_lake, '_lake_bucket', lambda: bucket)
     monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *args: [])
     monkeypatch.setattr(
