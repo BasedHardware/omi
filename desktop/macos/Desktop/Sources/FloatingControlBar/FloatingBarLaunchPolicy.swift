@@ -38,6 +38,19 @@ enum FloatingBarPresentationPolicy {
       !isSnoozed
     }
   }
+
+  /// Passive background reveals (`showForLaunch`, snooze expiry, temporary
+  /// browser-tool overlay, demo restore) must order the non-activating panel in
+  /// with `orderFrontRegardless()` rather than `makeKeyAndOrderFront(nil)` so a
+  /// `canBecomeKey` panel never steals keyboard focus from the user's active app.
+  /// Explicit user actions (or an open AI input field awaiting typing) still
+  /// make the panel key.
+  static func shouldMakeKeyOnPresent(
+    request: FloatingBarPresentationRequest,
+    showingAIConversationInput: Bool = false
+  ) -> Bool {
+    request == .explicitUserAction || showingAIConversationInput
+  }
 }
 
 struct FloatingBarLaunchPolicy {
@@ -77,6 +90,34 @@ enum FloatingBarDurableVisibilityPolicy {
     isSnoozed: Bool
   ) -> Bool {
     isEnabled && !isSnoozed
+  }
+
+  /// Whether presenting a notification must arm `notificationWasTemporarilyShown`
+  /// so `dismissNotificationAndAdvanceQueue` orders the bar out once the
+  /// notification chain finishes (#6972, #24782).
+  ///
+  /// Any notification presented while the window is hidden, while the bar is
+  /// disabled, or while the bar is snoozed ("Hide for 2 hours", where
+  /// `isEnabled` stays true) is a temporary reveal and must re-hide afterward.
+  static func shouldArmTemporaryNotificationShow(
+    isWindowVisible: Bool,
+    isEnabled: Bool,
+    isSnoozed: Bool
+  ) -> Bool {
+    !isWindowVisible || !isEnabled || isSnoozed
+  }
+
+  /// Whether closing the floating AI conversation should order the bar out
+  /// completely instead of collapsing back to the idle pill/notch.
+  /// Both a disabled bar and a snoozed bar ("Hide for 2 hours") must re-hide
+  /// once no notification or conversation remains on screen.
+  static func shouldOrderOutAfterConversationClose(
+    isEnabled: Bool,
+    isSnoozed: Bool,
+    hasCurrentNotification: Bool,
+    showingAIConversation: Bool
+  ) -> Bool {
+    (!isEnabled || isSnoozed) && !hasCurrentNotification && !showingAIConversation
   }
 }
 
