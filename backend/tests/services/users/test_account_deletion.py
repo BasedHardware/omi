@@ -1512,6 +1512,7 @@ def test_account_deletion_status_reports_pre_delete_policy(monkeypatch, enabled,
 @pytest.mark.parametrize('routing_on', [False, True])
 def test_background_wipe_user_data_preserves_order(monkeypatch, routing_on):
     calls = []
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
     if routing_on:
         monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: calls.append(('cell', uid)))
     monkeypatch.setattr(
@@ -2490,6 +2491,7 @@ def test_worker_heartbeats_at_major_operation_boundaries(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1') is True
     for operation in ('billing', 'agent_vm', 'credentials', 'auth', 'derived', 'firestore'):
         assert calls[calls.index(operation) - 1] == 'heartbeat'
+    assert calls.count('heartbeat') == 10
     account_deletion.users_db.mark_user_deletion_auth_deleted.assert_called_once_with('uid1')
 
 
@@ -2575,6 +2577,7 @@ def test_account_wipe_requires_all_retained_vector_copies_to_be_removed(monkeypa
 
 
 def test_required_cell_purge_failure_retries_before_firestore(monkeypatch):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', MagicMock(side_effect=RuntimeError('directory down')))
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
@@ -2584,3 +2587,13 @@ def test_required_cell_purge_failure_retries_before_firestore(monkeypatch):
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
     account_deletion.users_db.delete_user_data.assert_not_called()
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+def test_off_wipe_never_enters_cell_step(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
+    purge = MagicMock(side_effect=AssertionError('off-mode cell wipe'))
+    monkeypatch.setattr(account_deletion, 'purge_owner_planes', purge)
+    assert account_deletion.background_wipe_user_data('uid1') is True
+    purge.assert_not_called()
+    assert account_deletion.users_db.heartbeat_user_deletion_wipe.call_count == 10

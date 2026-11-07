@@ -38,3 +38,8 @@ def cell_pool_size() -> int:
 
 def wipe_writer_drain_seconds() -> float:
     return _bounded('CELL_WIPE_WRITER_DRAIN_SECONDS', 5.0, 60.0)
+
+
+def cell_wipe_enabled() -> bool:
+    """Separate destructive-operation kill switch; routing alone never enables wipe."""
+    return os.getenv('CELL_DIRECTORY_WIPE_ENABLED', 'false').strip().lower() in {'true', '1', 'on', 'yes'}

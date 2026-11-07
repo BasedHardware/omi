@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from config import directory_routing
 from database.directory.wipe import purge_owner_planes
 
 from database.messaging import MessagingStore
@@ -437,9 +438,10 @@ def background_wipe_user_data(
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
-        current_operation = 'cell_directory_purge'
-        heartbeat()
-        purge_owner_planes(uid)
+        if directory_routing.routing_active():
+            current_operation = 'cell_directory_purge'
+            heartbeat()
+            purge_owner_planes(uid)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)

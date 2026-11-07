@@ -7,6 +7,7 @@ import threading
 from unittest.mock import Mock
 
 import pytest
+import fakeredis
 
 from database.directory import router, wipe
 from database.cells import CellStore
@@ -20,8 +21,10 @@ from testing.cells_fixtures import make_cell_store, make_directory
 def isolated(monkeypatch):
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
     monkeypatch.setenv('CELL_WIPE_WRITER_DRAIN_SECONDS', '0')
+    monkeypatch.setenv('CELL_DIRECTORY_WIPE_ENABLED', 'true')
     monkeypatch.setattr(wipe.users_db, 'get_user_deletion_wipe_status', lambda uid: 'running')
     monkeypatch.setattr(router, '_cache', {})
+    monkeypatch.setattr(router.redis_db, 'r', fakeredis.FakeRedis())
     monkeypatch.setattr(router.redis_db, 'get_generic_cache', lambda key: None)
     monkeypatch.setattr(router.redis_db, 'delete_generic_cache', lambda key: None)
 
@@ -197,5 +200,43 @@ def test_resolver_read_before_fence_cannot_enroll_after_purge(monkeypatch):
             cell.store.run(uid, lambda tx: tx.put('memories', 'late', {}), actor_uid=uid, now=3)
     finally:
         resume.set()
+        directory.close()
+        cell.close()
+
+
+@pytest.mark.parametrize('switch', [None, 'false', 'off', 'garbage'])
+def test_wipe_kill_switch_blocks_before_io(monkeypatch, switch):
+    if switch is None:
+        monkeypatch.delenv('CELL_DIRECTORY_WIPE_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('CELL_DIRECTORY_WIPE_ENABLED', switch)
+    monkeypatch.setattr(router, 'directory_store', Mock(side_effect=AssertionError('pool')))
+    monkeypatch.setattr(wipe.users_db, 'get_user_deletion_wipe_status', Mock(side_effect=AssertionError('marker')))
+    with pytest.raises(RuntimeError, match='wipe is disabled'):
+        wipe.purge_owner_planes('owner')
+
+
+@pytest.mark.parametrize(
+    'route,enrolled',
+    [('firestore', False), ('firestore', True), ('cell1', False), ('disabled', False), ('disabled', True)],
+)
+def test_no_destructive_work_without_explicit_enrollment(monkeypatch, route, enrolled):
+    directory, cell = make_directory(), make_cell_store()
+    uid = directory.uid()
+    cell.seeded.add(uid)
+    try:
+        directory.store.get_or_create_personal_space(uid, cell=route, now=1)
+        if enrolled:
+            cell.store.enroll_space(uid, now=1)
+        monkeypatch.setattr(router, 'directory_store', lambda: directory.store)
+        monkeypatch.setattr(wipe, 'cell_store', lambda: cell.store)
+        for name in ('tombstone_space', 'purge_space'):
+            monkeypatch.setattr(cell.store, name, Mock(side_effect=AssertionError('destructive cell call')))
+        monkeypatch.setattr(directory.store, 'set_routing', Mock(side_effect=AssertionError('route write')))
+        monkeypatch.setattr(directory.store, 'purge_owner', Mock(side_effect=AssertionError('directory purge')))
+        with pytest.raises(RuntimeError, match='requires .*enrollment'):
+            wipe.purge_owner_planes(uid)
+    finally:
+        monkeypatch.undo()
         directory.close()
         cell.close()
