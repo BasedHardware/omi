@@ -612,7 +612,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
         (uint32_t) atomic_get(&storage_status_used_bytes),
         (uint32_t) atomic_get(&storage_status_unread_packets),
         (uint32_t) atomic_get(&storage_status_free_bytes),
-        (uint32_t) atomic_get(&storage_status_rtc_valid),
+        (uint32_t) (rtc_is_valid() ? 1U : 0U),
     };
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, payload, sizeof(payload));

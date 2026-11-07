@@ -1,0 +1,3 @@
+{
+  "change": "Preserve ground-truth epoch timestamps for offline-captured audio instead of falling back to download buffer duration shift."
+}

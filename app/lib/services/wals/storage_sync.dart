@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -643,6 +644,10 @@ class StorageSyncImpl implements StorageSync {
           hasParseGap = true;
         }
         if (value.length > 4) {
+          final packetTs = RingProtocol.readRecordTimestamp(value);
+          if (RingProtocol.isUsableEpochTimestamp(packetTs) && wal.timerStart <= 0) {
+            wal.timerStart = packetTs;
+          }
           var audioData = value.sublist(4);
           var audioLen = audioData.length;
 
