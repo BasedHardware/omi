@@ -204,10 +204,10 @@ telemetry. `omi_stt_window_batch_pressure_fetch_failures_total{cause}` separates
 response bodies or addresses. Refresh outcome `reset_client` counts pool repair.
 
 The default-on `omi-stt-pressure-sampler-stuck` alert in the monitoring chart's
-live-STT exports fires per namespace/pod when `fresh == 0` continuously for five
+live-STT exports fires per namespace/pod when `fresh == 0` continuously for thirty
 minutes, without an admission-volume floor. The progress timestamp (sampler start
 or last valid response) also detects a stalled loop with a frozen positive gauge
-after 15 seconds plus five minutes. Critical delivery adds the existing 30-second
+after 15 seconds plus thirty minutes. Critical delivery adds the existing 30-second
 Telegram grouping wait. Provision the alert through the existing authorized
 monitoring workflow; source changes alone do not install it. Inspect failure
 causes and resets, check discovery/network health, and ask the rollout lead to

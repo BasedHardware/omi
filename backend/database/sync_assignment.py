@@ -65,6 +65,7 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
         uid,
         payload.get('data_protection_level') or 'enhanced',
         preserve_transcript_identity=bool(current and current.get('has_transcript_corrections')),
+        conversation_state=current,
     )
     if current is not None and OPEN_LOOP_EXTRACTIONS_FIELD in current:
         # The decoded plan never carries retained extractions (the encoded blob
@@ -103,7 +104,7 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
 
 
 def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str], *, retry_contention: bool = False):
-    from database._client import run_transactional
+    from database.transcript_pointer import run_preloaded_transactional as run_transactional
     from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
     if (

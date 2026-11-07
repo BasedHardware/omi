@@ -840,7 +840,11 @@ class SyncUploadHttpException implements Exception {
   /// server gave no pacing guidance (e.g. platform-generated 503s).
   final int? retryAfterSeconds;
 
-  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds, this.reasonCode});
+  /// Body pacing for one recording's wait; never an account cooldown.
+  final int? recordingWaitSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message,
+      {this.retryAfterSeconds, this.reasonCode, this.recordingWaitSeconds});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -1144,6 +1148,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         response.statusCode,
         'Server is temporarily unavailable',
         retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncUploadServerWaitReasonCode(response),
+        recordingWaitSeconds: syncUploadServerWaitSeconds(response),
       );
     }
     throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');

@@ -42,7 +42,7 @@ def run_assignment_transaction(client: Any, assign: Any, *, uid: str) -> Any:
             return assign(transaction, bookkeeping)
 
     try:
-        from database._client import run_transactional
+        from database.transcript_pointer import run_preloaded_transactional as run_transactional
 
         result = run_transactional(client, apply)
         for event in bookkeeping.recurring_events:
@@ -56,7 +56,7 @@ def run_assignment_transaction(client: Any, assign: Any, *, uid: str) -> Any:
             raise
     bookkeeping.enabled = False
     record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
-    from database._client import run_transactional
+    from database.transcript_pointer import run_preloaded_transactional as run_transactional
 
     result = run_transactional(client, apply, attempts=1)
     for event in bookkeeping.recurring_events:
