@@ -6,6 +6,7 @@ Verifies:
 """
 
 import importlib.util
+from contextlib import ExitStack
 import os
 import shutil as _shutil
 import sys
@@ -120,6 +121,24 @@ def _desktop_transcribe_isolation():
     # ``stub_modules`` teardown: evict new keys AND restore swapped values.
     _saved_modules = dict(_sys.modules)
     _saved_keys = set(_saved_modules)
+    # The real auth/timeit module now depends on directory routing. Keep this
+    # transcription-only harness off that persistence plane, just like its
+    # existing Firestore/provider collaborators.
+    directory = ModuleType('database.directory')
+    directory.__path__ = []
+    directory_router = ModuleType('database.directory.router')
+    directory_router.routing_active = lambda: False
+    directory_router.cached_plane = lambda _uid: 'firestore'
+    directory_router.DirectoryRoutingUnavailable = RuntimeError
+    directory_scope = ExitStack()
+    directory_scope.enter_context(
+        stub_modules(
+            {
+                'database.directory': directory,
+                'database.directory.router': directory_router,
+            }
+        )
+    )
     try:
         _restore_package_paths()
 
@@ -445,6 +464,7 @@ def _desktop_transcribe_isolation():
             _cur = _sys2.modules.get(_k)
             if _cur is not None and _cur is not _orig:
                 _sys2.modules[_k] = _orig
+        directory_scope.close()
 
 
 # ---------------------------------------------------------------------------
