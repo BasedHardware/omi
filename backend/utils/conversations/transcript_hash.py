@@ -367,7 +367,15 @@ def transcript_fence_sha256(segments: Iterable[Any] | None) -> str:
     """
     source = []
     for segment in segments or []:
-        kept = canonical_segment(segment)
+        # Match Pydantic's legacy coercion before hashing: raw Firestore dicts
+        # may contain values (for example is_user=1) that TranscriptSegment
+        # materializes differently.
+        normalized = (
+            TranscriptSegment.model_validate({'is_user': False, 'start': 0, 'end': 0, **segment})
+            if isinstance(segment, Mapping)
+            else segment
+        )
+        kept = canonical_segment(normalized)
         raw_speaker = _raw_field(segment, 'speaker')
         raw_person_id = _raw_field(segment, 'person_id')
         raw_text = _raw_field(segment, 'text')

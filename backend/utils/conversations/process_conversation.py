@@ -2639,13 +2639,24 @@ def process_conversation(
     speaker_summary_refresh: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    defer_discarded_restore: bool = False,
+    expected_document_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
-    the transcript last used for memories, tasks and goal progress.
+    the transcript last used for memories, tasks and goal progress. Discarded
+    user reprocesses can defer visibility restoration to the app-result commit.
     """
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    if defer_discarded_restore and (
+        trigger is not ProcessingTrigger.USER_REPROCESS
+        or expected_document_revision is None
+        or type(expected_user_lifecycle_revision) is not int
+        or expected_user_lifecycle_revision < 0
+    ):
+        raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
@@ -2822,16 +2833,36 @@ def process_conversation(
     # are committed together against current transcript/results after all LLMs
     # succeed, while every other summary reprocess keeps the released pipeline.
     if app_ids and is_reprocess and trigger is ProcessingTrigger.USER_REPROCESS:
-        speaker_receipt = conversations_db.get_manual_speaker_receipt(uid, conversation.id)
-        projected_segments = apply_manual_assignments(
-            [segment.dict() for segment in conversation.transcript_segments or []],
+        app_snapshot = conversations_db.get_user_reprocess_app_snapshot(uid, conversation.id)
+        if app_snapshot is None:
+            _current_user_reprocess_conversation(uid, conversation.id)
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
+        (
+            app_segments,
             speaker_receipt,
-        )
-        conversation.transcript_segments = [TranscriptSegment(**segment) for segment in projected_segments]
+            snapshot_update_time,
+            snapshot_user_lifecycle_revision,
+        ) = app_snapshot
+        if expected_user_lifecycle_revision is None and not defer_discarded_restore:
+            expected_user_lifecycle_revision = snapshot_user_lifecycle_revision
+        if (
+            type(expected_user_lifecycle_revision) is not int
+            or snapshot_user_lifecycle_revision != expected_user_lifecycle_revision
+            or (
+                defer_discarded_restore
+                and (
+                    expected_document_revision is None
+                    or snapshot_update_time != expected_document_revision
+                )
+            )
+        ):
+            _current_user_reprocess_conversation(uid, conversation.id)
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
+        conversation.transcript_segments = [TranscriptSegment(**segment) for segment in app_segments]
         if speaker_receipt_observer is not None:
             speaker_receipt_observer(True)
 
-        expected_transcript_fence_sha256 = transcript_fence_sha256(conversation.transcript_segments or [])
+        expected_transcript_fence_sha256 = transcript_fence_sha256(app_segments)
         expected_speaker_receipt_sha256 = conversations_db.manual_speaker_receipt_sha256(speaker_receipt)
         requested_ids = set(app_ids)
         person_ids = conversation.get_person_ids()
@@ -2861,16 +2892,20 @@ def process_conversation(
         batch_results = [
             result.dict() for result in conversation.apps_results if result.app_id in requested_ids
         ]
-        persisted = conversations_db.persist_template_batch_results(
+        persisted = lifecycle_service.commit_template_batch_results(
             uid,
             conversation.id,
             batch_results,
             expected_transcript_fence_sha256=expected_transcript_fence_sha256,
             expected_selected_results=expected_selected_results,
             expected_speaker_receipt_sha256=expected_speaker_receipt_sha256,
+            restore_discarded=defer_discarded_restore,
+            expected_lifecycle_revision=snapshot_update_time,
+            expected_user_lifecycle_revision=expected_user_lifecycle_revision,
         )
         if not persisted:
-            raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL)
+            _current_user_reprocess_conversation(uid, conversation.id)
+            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
         for app_id in app_ids:
             if app_id != DEFAULT_SUMMARY_APP_ID:
                 try:
@@ -3008,7 +3043,7 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
-    if user_kept and not conversation.discarded:
+    if user_kept and not conversation.discarded and not defer_discarded_restore:
         # Commit restore authority with visibility, before derived work can fail.
         payload['sync_relevance_user_kept'] = True
         if conversation.sync_relevance == 'review':
@@ -3054,6 +3089,11 @@ def process_conversation(
             'preserve_app_results': True,
             'allow_terminal_failure_recovery': True,
         }
+        if defer_discarded_restore:
+            user_reprocess_guard['defer_discarded_restore'] = True
+            user_reprocess_guard['expected_document_revision'] = expected_document_revision
+        if expected_user_lifecycle_revision is not None:
+            user_reprocess_guard['expected_user_lifecycle_revision'] = expected_user_lifecycle_revision
         if expected_user_notes_snapshot is not None:
             user_reprocess_guard['expected_notes_snapshot'] = expected_user_notes_snapshot
     if is_initial_creation:
@@ -3110,7 +3150,10 @@ def process_conversation(
     from utils.conversations.demand_processing import lazy_enrichment_enabled
 
     lazy_effects = lazy_enrichment_enabled(uid) and not discarded and not is_server_minimum(conversation)
-    if lazy_effects and not defer_derived_effects:
+    defer_lazy_user_reprocess_effects = (
+        trigger is ProcessingTrigger.USER_REPROCESS and bool(app_id or app_ids)
+    )
+    if lazy_effects and not defer_derived_effects and not defer_lazy_user_reprocess_effects:
         from utils.sync.reprocess import mark_effects
 
         mark_effects(
@@ -3186,6 +3229,8 @@ def process_conversation(
                 record_usage(uid, insights_gained=insights_gained)
             expected_app_transcript_fence = None
             expected_app_speaker_receipt_fence = None
+            expected_app_lifecycle_revision = None
+            expected_app_user_lifecycle_revision = None
             if user_reprocess:
                 app_snapshot = conversations_db.get_user_reprocess_app_snapshot(uid, conversation.id)
                 if app_snapshot is None:
@@ -3193,7 +3238,21 @@ def process_conversation(
                     raise HTTPException(
                         status_code=409, detail='Conversation changed during reprocessing. Please retry.'
                     )
-                app_segments, app_speaker_receipt = app_snapshot
+                (
+                    app_segments,
+                    app_speaker_receipt,
+                    expected_app_lifecycle_revision,
+                    app_user_lifecycle_revision,
+                ) = app_snapshot
+                if (
+                    expected_user_lifecycle_revision is not None
+                    and app_user_lifecycle_revision != expected_user_lifecycle_revision
+                ) or (defer_discarded_restore and expected_app_lifecycle_revision is None):
+                    _current_user_reprocess_conversation(uid, conversation.id)
+                    raise HTTPException(
+                        status_code=409, detail='Conversation changed during reprocessing. Please retry.'
+                    )
+                expected_app_user_lifecycle_revision = app_user_lifecycle_revision
                 conversation.transcript_segments = [TranscriptSegment(**segment) for segment in app_segments]
                 expected_app_transcript_fence = transcript_fence_sha256(app_segments)
                 expected_app_speaker_receipt_fence = conversations_db.manual_speaker_receipt_sha256(
@@ -3255,7 +3314,22 @@ def process_conversation(
                     result_id: prior_app_results.get(result_id) for result_id in selected_app_ids
                 }
                 selected_results = [row for row in generated_results if row['app_id'] in selected_app_ids]
-                if not conversations_db.persist_user_reprocess_app_results(
+                if app_id:
+                    generated_successfully = any(
+                        row.get('app_id') == app_id and (row.get('content') or '').strip()
+                        for row in generated_results
+                    )
+                elif app_ids:
+                    generated_successfully = all(
+                        any(
+                            row.get('app_id') == selected_id and (row.get('content') or '').strip()
+                            for row in generated_results
+                        )
+                        for selected_id in app_ids
+                    )
+                else:
+                    generated_successfully = bool(getattr(conversation.structured, 'overview', None))
+                if not lifecycle_service.commit_user_reprocess_app_results(
                     uid,
                     conversation.id,
                     suggested_summarization_apps=app_updates['suggested_summarization_apps'],
@@ -3264,6 +3338,19 @@ def process_conversation(
                     results=selected_results,
                     expected_transcript_fence_sha256=expected_app_transcript_fence,
                     expected_speaker_receipt_sha256=expected_app_speaker_receipt_fence,
+                    restore_discarded=(
+                        defer_discarded_restore and not explicit_selection_failures and generated_successfully
+                    ),
+                    expected_lifecycle_revision=expected_app_lifecycle_revision,
+                    expected_user_lifecycle_revision=expected_app_user_lifecycle_revision,
+                    schedule_lazy_effects=(
+                        lazy_effects
+                        and not defer_derived_effects
+                        and bool(app_id)
+                        and not explicit_selection_failures
+                        and generated_successfully
+                    ),
+                    lazy_effects_language=language_code,
                 ):
                     _current_user_reprocess_conversation(uid, conversation.id)
                     raise HTTPException(
@@ -3272,6 +3359,7 @@ def process_conversation(
             else:
                 app_updates['apps_results'] = generated_results
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
+            app_failed = bool(explicit_selection_failures)
             # Durable finalization owns indexing for deferred work and replays.
             if (
                 not lazy_effects
@@ -3292,15 +3380,14 @@ def process_conversation(
                 and derived_effects_transcript_sha256 is not None
                 and derived_effects_transcript_sha256 == effects_transcript
             )
-            # A selected template that failed must never rewrite the user's tasks
-            # or count goal progress again; the user will retry the template.
-            app_failed = bool(explicit_selection_failures)
+            # A selected template that failed must not rewrite tasks, extract
+            # memories, or count goal progress; the user will retry the template.
             if template_only:
                 logger.info(
                     'template-only reprocess: keeping derived effects uid=%s conversation=%s', uid, conversation.id
                 )
             memories_ran = False
-            if not lazy_effects and not defer_memory_extraction and not template_only:
+            if not lazy_effects and not defer_memory_extraction and not template_only and not app_failed:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.

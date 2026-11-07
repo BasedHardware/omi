@@ -799,7 +799,8 @@ def reprocess_conversation(
         )
     first_party_only = source == FIRST_PARTY_SUMMARY_SOURCE
     if first_party_only and selected_app_ids:
-        raise HTTPException(status_code=400, detail='app_ids and source=omi are mutually exclusive')
+        detail = 'app_id and source=omi are mutually exclusive' if app_id else 'app_ids and source=omi are mutually exclusive'
+        raise HTTPException(status_code=400, detail=detail)
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Reprocess force-processes a *discarded* conversation to revive it, but a
     # soft-deleted tombstone is invisible to the user and must not be reprocessed:
@@ -812,6 +813,8 @@ def reprocess_conversation(
     from database import processing_attention as attention_db
 
     input_generation = attention_db.generation(conversation)
+    expected_document_revision = conversation.get('updated_at')
+    expected_user_lifecycle_revision = conversation.get(conversations_db.USER_LIFECYCLE_REVISION_FIELD, 0)
     was_discarded = bool(conversation.get('discarded'))
     user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
     # A hidden conversation's derived effects are not trusted to be current.
@@ -854,6 +857,8 @@ def reprocess_conversation(
             derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
             app_ids=batch_app_ids,
             explicit_apps=explicit_apps if batch_app_ids else None,
+            expected_document_revision=expected_document_revision,
+            expected_user_lifecycle_revision=expected_user_lifecycle_revision,
         )
     except Exception:
         attention_db.finish(uid, operation, 'failed')
@@ -905,6 +910,8 @@ def execute_reprocess(
     derived_effects_transcript_sha256: Optional[str] = None,
     app_ids: Optional[List[str]] = None,
     explicit_apps: Optional[Dict[str, App]] = None,
+    expected_document_revision: Optional[datetime] = None,
+    expected_user_lifecycle_revision: Optional[int] = None,
 ):
     receipt_applied: list = []
 
@@ -927,19 +934,11 @@ def execute_reprocess(
         first_party_only=first_party_only,
         speaker_summary_refresh=speaker_summary_refresh,
         derived_effects_transcript_sha256=derived_effects_transcript_sha256,
+        defer_discarded_restore=was_discarded,
+        expected_document_revision=expected_document_revision,
+        expected_user_lifecycle_revision=expected_user_lifecycle_revision,
     )
 
-    # Reprocessing a hidden conversation is an explicit recovery: persist it as
-    # the user's choice (``restore_discarded``) so no later reassessment hides it
-    # again, including when the selected app supplies the summary.
-    if was_discarded and (app_ids or not processed_conversation.discarded):
-        restored = lifecycle_service.restore_discarded(uid, conversation_id)
-        if not restored:
-            _get_valid_conversation_by_id(uid, conversation_id)
-            raise HTTPException(status_code=409, detail='Conversation changed during reprocessing. Please retry.')
-        processed_conversation.discarded = False
-        if processed_conversation.sync_relevance == 'review':
-            processed_conversation.sync_relevance = 'keep'
 
     if app_ids:
         return processed_conversation

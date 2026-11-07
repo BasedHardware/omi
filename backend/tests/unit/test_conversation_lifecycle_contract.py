@@ -49,8 +49,10 @@ class _DocumentRef:
             parts = FieldPath.from_api_repr(field_path).parts
             parent = document
             for part in parts[:-1]:
-                if not isinstance(parent.get(part), dict):
+                if part not in parent:
                     parent[part] = {}
+                elif not isinstance(parent[part], dict):
+                    raise TypeError(f'cannot update nested field under non-map value {part!r}')
                 parent = parent[part]
             parent[parts[-1]] = value
         self.firestore.write_log.append((self.path, copy.deepcopy(updates)))
@@ -336,6 +338,46 @@ def test_soft_deleted_processing_owner_removes_search_projection(monkeypatch, li
     assert deleted == [('uid', 'tombstone')]
 
 
+def test_user_patch_lock_winning_after_initial_read_leaves_title_and_discard_untouched(
+    monkeypatch, lifecycle_store
+):
+    path = ('users', 'uid', 'conversations', 'atomic-user-patch')
+    lifecycle_store.put_conversation(
+        'uid',
+        'atomic-user-patch',
+        status=ConversationStatus.completed.value,
+        is_locked=False,
+        discarded=True,
+        sync_relevance_user_kept=False,
+        structured={'title': 'Original title'},
+    )
+    initial = lifecycle_store.conversation('uid', 'atomic-user-patch')
+    assert initial['is_locked'] is False
+    get = _DocumentRef.get
+
+    def lock_wins(document, transaction=None):
+        if transaction is not None and document.path == path:
+            lifecycle_store.conversation('uid', 'atomic-user-patch')['is_locked'] = True
+        return get(document, transaction)
+
+    monkeypatch.setattr(_DocumentRef, 'get', lock_wins)
+
+    with pytest.raises(lifecycle_service.ConversationLockedError):
+        lifecycle_service.apply_user_conversation_patch(
+            'uid',
+            'atomic-user-patch',
+            title='Updated title',
+            discarded=False,
+        )
+
+    stored = lifecycle_store.conversation('uid', 'atomic-user-patch')
+    assert stored['is_locked'] is True
+    assert stored['structured']['title'] == 'Original title'
+    assert stored['discarded'] is True
+    assert stored['sync_relevance_user_kept'] is False
+    assert lifecycle_store.write_log == []
+
+
 @pytest.mark.parametrize(('require_unlocked', 'persisted'), [(True, False), (False, True)])
 def test_processing_preserves_current_lock_and_user_reprocess_fences_it(
     monkeypatch, lifecycle_store, require_unlocked, persisted
@@ -368,7 +410,8 @@ def test_processing_preserves_current_lock_and_user_reprocess_fences_it(
 
 
 
-def test_user_reprocess_canonical_write_preserves_latest_app_results(lifecycle_store):
+def test_user_reprocess_canonical_write_preserves_latest_app_results(monkeypatch, lifecycle_store):
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_args: None)
     latest = [{'app_id': 'selected', 'content': 'user edit before canonical commit'}]
     lifecycle_store.put_conversation(
         'uid',

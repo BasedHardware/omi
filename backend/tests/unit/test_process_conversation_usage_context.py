@@ -646,6 +646,12 @@ def _run_explicit_selection_flow(
     *,
     user_reprocess_snapshot=None,
     app_result_fences=None,
+    app_restore_flags=None,
+    app_lifecycle_revisions=None,
+    persist_app_results_result=True,
+    current_user_reprocess_error=None,
+    discarded=False,
+    derived_effect_calls=None,
     **process_kwargs,
 ):
     """Drive process_conversation for an explicit app selection; appends each write to update_calls."""
@@ -653,18 +659,32 @@ def _run_explicit_selection_flow(
     input_conversation.source = "omi"
     input_conversation.get_person_ids.return_value = []
     completed = _explicit_selection_flow_conversation()
+    completed.discarded = discarded
     completed.transcript_segments = [TranscriptSegment(text='stale snapshot', is_user=False, start=0, end=1)]
 
     monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(
         process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
     )
-    monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
-    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
-    monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
-    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
-    snapshot = user_reprocess_snapshot or ([], {})
+    if derived_effect_calls is None:
+        monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
+        monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
+        monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    else:
+        def submit_with_context(_executor, function, *_args, **_kwargs):
+            if function is process_conversation.update_goal_progress:
+                derived_effect_calls.append('goals')
+
+        monkeypatch.setattr(process_conversation, "submit_with_context", submit_with_context)
+        monkeypatch.setattr(
+            process_conversation, "_save_action_items", lambda *_args, **_kwargs: derived_effect_calls.append('tasks')
+        )
+        monkeypatch.setattr(
+            process_conversation, "_extract_memories", lambda *_args, **_kwargs: derived_effect_calls.append('memories')
+        )
+    snapshot = user_reprocess_snapshot or ([], {}, None, 0)
     monkeypatch.setattr(
         process_conversation.conversations_db,
         'get_user_reprocess_app_snapshot',
@@ -677,17 +697,21 @@ def _run_explicit_selection_flow(
         assert kwargs['expected_speaker_receipt_sha256'] == 'receipt'
         if app_result_fences is not None:
             app_result_fences.append(kwargs['expected_transcript_fence_sha256'])
+        if app_restore_flags is not None:
+            app_restore_flags.append(kwargs['restore_discarded'])
+        if app_lifecycle_revisions is not None:
+            app_lifecycle_revisions.append(kwargs['expected_lifecycle_revision'])
         update_calls.append(
             {
                 'suggested_summarization_apps': suggested_summarization_apps,
                 'apps_results': kwargs['results'],
             }
         )
-        return True
+        return persist_app_results_result
 
     monkeypatch.setattr(
-        process_conversation.conversations_db,
-        'persist_user_reprocess_app_results',
+        process_conversation.lifecycle_service,
+        'commit_user_reprocess_app_results',
         persist_app_results,
     )
     monkeypatch.setattr(process_conversation, 'deserialize_conversation', lambda _row: completed)
@@ -696,11 +720,13 @@ def _run_explicit_selection_flow(
         'update_conversation',
         lambda uid, cid, updates: update_calls.append(updates),
     )
-    monkeypatch.setattr(
-        process_conversation,
-        '_current_user_reprocess_conversation',
-        lambda *_args: {'id': 'conversation-explicit-selection'},
-    )
+
+    def current_user_reprocess(*_args):
+        if current_user_reprocess_error is not None:
+            raise current_user_reprocess_error
+        return {'id': 'conversation-explicit-selection'}
+
+    monkeypatch.setattr(process_conversation, '_current_user_reprocess_conversation', current_user_reprocess)
 
     return process_conversation.process_conversation(
         "uid",
@@ -753,11 +779,38 @@ def test_user_reprocess_generates_apps_from_committed_identity_snapshot(monkeypa
         monkeypatch,
         _trigger_apps,
         [],
-        user_reprocess_snapshot=(canonical_segments, {}),
+        user_reprocess_snapshot=(canonical_segments, {}, None, 0),
         app_result_fences=app_result_fences,
     )
 
     assert app_result_fences == [process_conversation.transcript_fence_sha256(canonical_segments)]
+
+
+
+
+def test_single_discarded_reprocess_fences_against_post_commit_revision(monkeypatch):
+    request_revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    committed_revision = datetime(2026, 11, 6, 0, 0, 1, tzinfo=timezone.utc)
+    lifecycle_revisions = []
+    restore_flags = []
+
+    def trigger_apps(_uid, conversation, **kwargs):
+        conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+    _run_explicit_selection_flow(
+        monkeypatch,
+        trigger_apps,
+        [],
+        user_reprocess_snapshot=([], {}, committed_revision, 0),
+        app_restore_flags=restore_flags,
+        app_lifecycle_revisions=lifecycle_revisions,
+        defer_discarded_restore=True,
+        expected_document_revision=request_revision,
+        expected_user_lifecycle_revision=0,
+    )
+
+    assert lifecycle_revisions == [committed_revision]
+    assert restore_flags == [True]
 
 
 def test_explicit_selection_failure_surfaces_a_real_error_and_persists_as_today(monkeypatch):
@@ -773,12 +826,63 @@ def test_explicit_selection_failure_surfaces_a_real_error_and_persists_as_today(
         raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
 
     update_calls: list = []
+    from utils.conversations import demand_processing
+    from utils.sync import reprocess as reprocess_module
+
+    monkeypatch.setattr(demand_processing, 'lazy_enrichment_enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation, 'is_server_minimum', lambda *_: False)
+    mark_effects = MagicMock()
+    monkeypatch.setattr(reprocess_module, 'mark_effects', mark_effects)
+    revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    restore_flags = []
+    derived_effect_calls = []
     with pytest.raises(HTTPException) as exc_info:
-        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, update_calls)
+        _run_explicit_selection_flow(
+            monkeypatch,
+            _failing_trigger_apps,
+            update_calls,
+            user_reprocess_snapshot=([], {}, revision, 0),
+            app_restore_flags=restore_flags,
+            defer_discarded_restore=True,
+            expected_document_revision=revision,
+            expected_user_lifecycle_revision=0,
+            derived_effect_calls=derived_effect_calls,
+        )
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == 'Error processing conversation, please try again later'
     assert {'apps_results': [], 'suggested_summarization_apps': []} in update_calls
+    assert restore_flags == [False]
+    assert derived_effect_calls == []
+
+    mark_effects.assert_not_called()
+
+@pytest.mark.parametrize(('current_error', 'expected_status'), [(404, 404), (402, 402), (None, 409)])
+def test_user_reprocess_lost_restore_fence_preserves_current_error(monkeypatch, current_error, expected_status):
+    revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    error = (
+        HTTPException(status_code=current_error, detail='current row unavailable')
+        if current_error is not None
+        else None
+    )
+
+    def successful_trigger_apps(_uid, conversation, **kwargs):
+        conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+    with pytest.raises(HTTPException) as caught:
+        _run_explicit_selection_flow(
+            monkeypatch,
+            successful_trigger_apps,
+            [],
+            user_reprocess_snapshot=([], {}, revision, 0),
+            persist_app_results_result=False,
+            current_user_reprocess_error=error,
+            defer_discarded_restore=True,
+            expected_document_revision=revision,
+            expected_user_lifecycle_revision=0,
+        )
+
+    assert caught.value.status_code == expected_status
 
 
 def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
@@ -2118,15 +2222,21 @@ def test_batch_reprocess_rechecks_current_visibility_after_commit(monkeypatch, c
 
     conversation = _ledger_gate_conversation(f'conversation-race-{status_code}')
     conversation.status = ConversationStatus.completed
+    conversation.discarded = True
+    revision = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    transcript = [segment.model_dump() for segment in conversation.transcript_segments]
+    persist_batch = MagicMock(return_value=True)
     monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: False)
     monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: False)
-    monkeypatch.setattr(process_conversation.conversations_db, 'get_manual_speaker_receipt', lambda *_: {})
-    monkeypatch.setattr(process_conversation.conversations_db, 'manual_speaker_receipt_sha256', lambda *_: 'receipt')
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        'get_user_reprocess_app_snapshot',
+        lambda *_: (transcript, {}, revision, 0),
+    )
     monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
-    monkeypatch.setattr(process_conversation.conversations_db, 'persist_template_batch_results', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'commit_template_batch_results', persist_batch)
     monkeypatch.setattr(process_conversation.conversations_db, 'get_conversation', lambda *a, **k: current)
     monkeypatch.setattr(process_conversation, 'record_app_usage', lambda *a, **k: None)
-
     with pytest.raises(HTTPException) as error:
         process_conversation.process_conversation(
             'uid',
@@ -2134,9 +2244,14 @@ def test_batch_reprocess_rechecks_current_visibility_after_commit(monkeypatch, c
             conversation,
             app_ids=['selected'],
             trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+            defer_discarded_restore=True,
+            expected_document_revision=revision,
+            expected_user_lifecycle_revision=0,
         )
 
     assert error.value.status_code == status_code
+    assert persist_batch.call_args.kwargs['restore_discarded'] is True
+    assert persist_batch.call_args.kwargs['expected_user_lifecycle_revision'] == 0
 
 
 def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):

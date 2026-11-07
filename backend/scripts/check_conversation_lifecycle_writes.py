@@ -31,11 +31,14 @@ RAW_STORAGE_ALLOWLIST = {
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
     'persist_processing_result_with_lifecycle',
+    'persist_user_reprocess_app_results',
+    'persist_template_batch_results',
     'create_conversation_if_absent_with_lifecycle',
     'transition_conversation_status',
     'claim_conversation_status',
     'set_conversation_as_discarded',
     'restore_conversation_from_discarded',
+    'patch_user_conversation',
     'close_noise',
     'restore_noise',
 }
@@ -47,6 +50,7 @@ FINALIZATION_ADMISSION_METHODS = {
 LIFECYCLE_FIELDS = {
     'status',
     'discarded',
+    '_user_lifecycle_revision',
     'deferred',
     'finalization_job_id',
     'finalization_revision',
@@ -230,8 +234,8 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         # These rewrite current transactional content rather than caller snapshots.
         'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
         'create_conversation_if_absent_with_lifecycle': None,
-        # Result persistence is permitted only while reapplying the current receipt.
-        'persist_user_reprocess_app_results': 'apply_manual_assignments',
+        # Both result writers read and reapply the current transaction's receipt.
+        'persist_user_reprocess_app_results': '_effective_user_reprocess_app_source',
         'persist_template_batch_results': 'apply_manual_assignments',
         # Field-scoped display-only translation merge preserves raw text/projections.
         'materialize_translation': None,

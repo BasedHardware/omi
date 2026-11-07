@@ -118,7 +118,10 @@ def test_transcript_inventory_requires_overlay_on_both_processors():
 
 
 def test_result_writer_inventory_requires_current_speaker_receipt_application():
-    for name in ('persist_user_reprocess_app_results', 'persist_template_batch_results'):
+    for name, policy in (
+        ('persist_user_reprocess_app_results', '_effective_user_reprocess_app_source'),
+        ('persist_template_batch_results', 'apply_manual_assignments'),
+    ):
         source = (
             f"def {name}():\n"
             "    current.get('transcript_segments')\n"
@@ -127,7 +130,7 @@ def test_result_writer_inventory_requires_current_speaker_receipt_application():
         assert 'lacks current receipt policy' in violations(source, 'backend/database/conversations.py')[0]
         guarded = source.replace(
             '    transaction.update',
-            '    apply_manual_assignments(segments, current_receipt)\n    transaction.update',
+            f'    {policy}(uid, conversation_id, current, transaction)\n    transaction.update',
         )
         assert violations(guarded, 'backend/database/conversations.py') == []
 

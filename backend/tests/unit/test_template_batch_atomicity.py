@@ -1,54 +1,64 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from copy import deepcopy
 import hashlib
 import json
 
 import database.conversations as conversations_db
+from models.transcript_segment import TranscriptSegment
+from testing.import_isolation import fake_firestore_transactional
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.conversations.transcript_hash import transcript_fence_sha256, transcript_sha256_for_binding
+import utils.enrichment.outbox as enrichment_outbox
+import pytest
 
 
-class _Snapshot:
-    def __init__(self, row):
-        self.exists = row is not None
-        self._row = row
-
-    def to_dict(self):
-        return deepcopy(self._row)
+def test_legacy_user_flag_has_same_fence_before_and_after_model_parsing():
+    row = {'text': 'hello', 'speaker_id': 0, 'is_user': 1, 'start': 0, 'end': 1}
+    assert transcript_fence_sha256([row]) == transcript_fence_sha256([TranscriptSegment.model_validate(row)])
 
 
-class _Document:
-    def __init__(self, row):
-        self.row = row
-        self.writes = []
-
-    def get(self, transaction=None):
-        return _Snapshot(self.row)
-
-    def collection(self, _key):
-        return _Collection(self)
+_PATH = ('users', 'user', 'conversations', 'conversation')
 
 
-class _Collection:
-    def __init__(self, document):
-        self._document = document
+class _StoredConversation:
+    def __init__(self, firestore):
+        self.firestore = firestore
 
-    def document(self, _key):
-        return self._document
+    @property
+    def row(self):
+        return self.firestore.rows[_PATH]
 
-
-class _Database:
-    def __init__(self, document):
-        self._document = document
-
-    def collection(self, _key):
-        return _Collection(self._document)
+    @property
+    def writes(self):
+        return [patch for path, patch in self.firestore.transactions[-1].updates if path == _PATH]
 
 
-class _Transaction:
-    def update(self, document, patch):
-        document.writes.append(deepcopy(patch))
-        document.row.update(deepcopy(patch))
+def _strict_firestore(monkeypatch, row):
+    firestore = StrictFirestore({_PATH: row})
+    monkeypatch.setattr(conversations_db, 'db', firestore)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', fake_firestore_transactional)
+    monkeypatch.setattr(
+        conversations_db,
+        'run_transactional',
+        lambda client, function: function(client.transaction()),
+    )
+    return _StoredConversation(firestore)
+
+
+def _set_snapshot_revision(monkeypatch):
+    revisions = [datetime(2026, 11, 6, tzinfo=timezone.utc)]
+    get = StrictFirestoreDocument.get
+
+    def revisioned_get(document, *args, **kwargs):
+        snapshot = get(document, *args, **kwargs)
+        snapshot.update_time = revisions[0]
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', revisioned_get)
+    return revisions
+
 
 
 def _receipt_hash(receipt):
@@ -59,10 +69,7 @@ def _receipt_hash(receipt):
 
 def _persist(monkeypatch, row, *, transcript=None, selected_results=None):
     segments = row.get('transcript_segments', []) if transcript is None else transcript
-    document = _Document(row)
-    monkeypatch.setattr(conversations_db, 'db', _Database(document))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    monkeypatch.setattr(conversations_db, 'run_transactional', lambda _db, function: function(_Transaction()))
+    document = _strict_firestore(monkeypatch, row)
     persisted = conversations_db.persist_template_batch_results(
         'user',
         'conversation',
@@ -84,6 +91,12 @@ def _persist_app_results(
     suggested_summarization_apps=None,
     transcript=None,
     expected_speaker_receipt_sha256=None,
+    restore_discarded=False,
+    expected_lifecycle_revision=None,
+    expected_user_lifecycle_revision=None,
+    document=None,
+    schedule_lazy_effects=False,
+    lazy_effects_language=None,
 ):
     selected_app_ids = {'selected'} if selected_app_ids is None else selected_app_ids
     expected_selected_results = (
@@ -100,10 +113,7 @@ def _persist_app_results(
         if expected_speaker_receipt_sha256 is None
         else expected_speaker_receipt_sha256
     )
-    document = _Document(row)
-    monkeypatch.setattr(conversations_db, 'db', _Database(document))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    monkeypatch.setattr(conversations_db, 'run_transactional', lambda _db, function: function(_Transaction()))
+    document = _strict_firestore(monkeypatch, row) if document is None else document
     monkeypatch.setattr(conversations_db, '_prepare_conversation_for_write', lambda value, *_args: value)
     persisted = conversations_db.persist_user_reprocess_app_results(
         'user',
@@ -114,6 +124,11 @@ def _persist_app_results(
         results=results,
         expected_transcript_fence_sha256=expected_transcript_fence_sha256,
         expected_speaker_receipt_sha256=expected_speaker_receipt_sha256,
+        restore_discarded=restore_discarded,
+        expected_lifecycle_revision=expected_lifecycle_revision,
+        expected_user_lifecycle_revision=expected_user_lifecycle_revision,
+        schedule_lazy_effects=schedule_lazy_effects,
+        lazy_effects_language=lazy_effects_language,
     )
     return persisted, document
 
@@ -132,25 +147,229 @@ def test_user_reprocess_app_snapshot_reads_committed_speaker_identity(monkeypatc
             'end': 1,
         }
     ]
-    document = _Document(
+    document = _strict_firestore(
+        monkeypatch,
         {
             'status': 'completed',
             'discarded': False,
             'transcript_segments': segments,
             'manual_speaker_assignments': {},
-        }
+        },
     )
-    monkeypatch.setattr(conversations_db, 'db', _Database(document))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    monkeypatch.setattr(conversations_db, 'run_transactional', lambda _db, function: function(_Transaction()))
 
     snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
 
     assert snapshot is not None
-    effective_segments, receipt = snapshot
+    effective_segments, receipt, revision, lifecycle_revision = snapshot
+    assert revision is None
+    assert lifecycle_revision == 0
     assert effective_segments[0]['person_id'] == 'committed-person'
     assert effective_segments[0]['speaker_match_source'] == 'person_match'
     assert receipt == {}
+
+
+def test_reprocess_batch_does_not_restore_after_restore_then_discard_race(monkeypatch):
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': True,
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_: None)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+
+    assert conversations_db.restore_conversation_from_discarded('user', 'conversation') is True
+    conversations_db.set_conversation_as_discarded('user', 'conversation')
+
+    persisted, _ = _persist_app_results(
+        monkeypatch,
+        row,
+        document=document,
+        restore_discarded=True,
+        expected_lifecycle_revision=snapshot[2],
+        expected_user_lifecycle_revision=snapshot[3],
+    )
+
+    assert persisted is False
+    assert document.row['discarded'] is True
+    assert document.row[conversations_db.USER_LIFECYCLE_REVISION_FIELD] == 2
+    assert document.writes == []
+
+
+def test_reprocess_batch_commits_app_results_with_user_restore(monkeypatch):
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': True,
+        'sync_relevance': 'review',
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_: None)
+
+    persisted, _ = _persist_app_results(
+        monkeypatch,
+        row,
+        document=document,
+        restore_discarded=True,
+        expected_lifecycle_revision=snapshot[2],
+        expected_user_lifecycle_revision=snapshot[3],
+    )
+
+    assert persisted is True
+    assert document.row['discarded'] is False
+    assert document.row['sync_relevance_user_kept'] is True
+    assert document.row['sync_relevance'] == 'keep'
+    assert document.row['apps_results'] == [{'app_id': 'selected', 'content': 'new output'}]
+    assert len(document.writes) == 1
+
+
+def test_lazy_effect_obligation_commits_with_app_result_and_restore_before_enqueue_crash(monkeypatch):
+    outbox = enrichment_outbox
+    monkeypatch.setattr(outbox, 'owns_runtime', lambda: True)
+
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': True,
+        'sync_relevance': 'review',
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+
+    def crash_after_commit(_row):
+        raise RuntimeError('simulated post-commit crash')
+
+    monkeypatch.setattr(outbox, 'enqueue_staged_effects', crash_after_commit)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_: None)
+
+    with pytest.raises(RuntimeError):
+        _persist_app_results(
+            monkeypatch,
+            row,
+            document=document,
+            restore_discarded=True,
+            expected_lifecycle_revision=snapshot[2],
+            expected_user_lifecycle_revision=snapshot[3],
+            schedule_lazy_effects=True,
+            lazy_effects_language='en',
+        )
+    transaction = document.firestore.transactions[-1]
+
+    effects_paths = [
+        path
+        for path, document_data in transaction.sets
+        if document_data.get('effects_only') is True
+    ]
+    assert len(effects_paths) == 1
+    pending = document.firestore.rows[effects_paths[0]]
+    assert document.row['apps_results'] == [{'app_id': 'selected', 'content': 'new output'}]
+    assert document.row['discarded'] is False
+    assert pending['effects_only'] is True
+    assert pending['task_token']
+    assert pending['user_requested_at'] > 0
+    assert pending['due_at'] > 0
+    assert any(path == _PATH for path, _ in transaction.updates)
+
+
+def test_batch_reprocess_restores_legacy_rule_discard_projection(monkeypatch):
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'completed',
+        'discarded': False,
+        'is_locked': False,
+        'relevance_decision': {
+            'verdict': 'discard',
+            'decided_by': 'rule',
+            'reason': 'no_content_words',
+            'trigger': 'capture_end',
+            'rules_version': 3,
+        },
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_: None)
+
+    persisted = conversations_db.persist_template_batch_results(
+        'user',
+        'conversation',
+        [{'app_id': 'selected', 'content': 'new output'}],
+        expected_transcript_fence_sha256=transcript_fence_sha256([]),
+        expected_selected_results={},
+        expected_speaker_receipt_sha256=conversations_db.manual_speaker_receipt_sha256({}),
+        restore_discarded=True,
+        expected_lifecycle_revision=snapshot[2],
+        expected_user_lifecycle_revision=snapshot[3],
+    )
+
+    assert persisted is True
+    assert document.row['discarded'] is False
+    assert document.row['sync_relevance_user_kept'] is True
+    assert document.row['apps_results'] == [{'app_id': 'selected', 'content': 'new output'}]
+
+
+
+
+def test_batch_user_reprocess_recovers_dead_letter_with_results_and_restore(monkeypatch):
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'failed',
+        'is_locked': False,
+        'discarded': True,
+        'finalization_status': 'dead_letter',
+        'terminal_family': 'dead_letter',
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+    monkeypatch.setattr(conversations_db, '_terminal_family_serving', lambda *_: True)
+    monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args: None)
+
+    persisted = conversations_db.persist_template_batch_results(
+        'user',
+        'conversation',
+        [{'app_id': 'selected', 'content': 'new output'}],
+        expected_transcript_fence_sha256=transcript_fence_sha256([]),
+        expected_selected_results={},
+        expected_speaker_receipt_sha256=conversations_db.manual_speaker_receipt_sha256({}),
+        restore_discarded=True,
+        expected_lifecycle_revision=snapshot[2],
+        expected_user_lifecycle_revision=snapshot[3],
+    )
+
+    assert persisted is True
+    assert document.row['status'] == 'completed'
+    assert document.row['terminal_family'] == 'success'
+    assert document.row['finalization_status'] is None
+    assert document.row['discarded'] is False
+    assert document.row['apps_results'] == [{'app_id': 'selected', 'content': 'new output'}]
+    assert document.row[conversations_db.USER_LIFECYCLE_REVISION_FIELD] == 1
+
+
 
 
 def test_batch_transaction_merges_current_unselected_user_edits(monkeypatch):
@@ -306,6 +525,71 @@ def test_user_reprocess_app_result_transaction_rejects_lock_and_deletion(monkeyp
 
     assert locked is False and locked_doc.writes == []
     assert deleted is False and deleted_doc.writes == []
+
+
+def test_single_app_reprocess_commits_result_and_restore_atomically(monkeypatch):
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': True,
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_: None)
+
+    persisted, _ = _persist_app_results(
+        monkeypatch,
+        row,
+        document=document,
+        restore_discarded=True,
+        expected_lifecycle_revision=snapshot[2],
+        expected_user_lifecycle_revision=snapshot[3],
+    )
+
+    assert persisted is True
+    assert document.row['discarded'] is False
+    assert document.row['sync_relevance_user_kept'] is True
+    assert document.row[conversations_db.USER_LIFECYCLE_REVISION_FIELD] == 1
+    assert document.row['apps_results'] == [{'app_id': 'selected', 'content': 'new output'}]
+    assert len(document.writes) == 1
+
+
+def test_single_app_reprocess_does_not_restore_after_lifecycle_aba(monkeypatch):
+    _set_snapshot_revision(monkeypatch)
+    row = {
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': True,
+        'transcript_segments': [],
+        'manual_speaker_assignments': {},
+    }
+    document = _strict_firestore(monkeypatch, row)
+    monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args: None)
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+    assert snapshot is not None
+    assert conversations_db.restore_conversation_from_discarded('user', 'conversation') is True
+    conversations_db.set_conversation_as_discarded('user', 'conversation')
+
+    persisted, _ = _persist_app_results(
+        monkeypatch,
+        row,
+        document=document,
+        restore_discarded=True,
+        expected_lifecycle_revision=snapshot[2],
+        expected_user_lifecycle_revision=snapshot[3],
+    )
+
+    assert persisted is False
+    assert document.row['discarded'] is True
+    assert document.row[conversations_db.USER_LIFECYCLE_REVISION_FIELD] == 2
+    assert document.writes == []
 
 
 def test_user_reprocess_result_writer_only_updates_summary_fields(monkeypatch):

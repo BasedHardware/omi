@@ -269,6 +269,7 @@ def test_explicit_user_reprocess_recovers_visible_dead_letter(store):
 
     row = store.rows[PATH]
     assert row['status'] == 'completed'
+    assert row['discarded'] is False
     assert row['terminal_family'] == 'success'
     assert row['terminal_family_at'] > NOW
     assert row['finalization_status'] is None

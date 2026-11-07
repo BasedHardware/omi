@@ -4,202 +4,30 @@ Verifies that is_locked conversations/memories/action_items are properly guarded
 in the Developer API write endpoints and knowledge graph rebuild.
 """
 
-from unittest.mock import patch, MagicMock
-import os
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
 import pytest
-import sys
-from types import ModuleType, SimpleNamespace
+from tests.unit.dev_api_test_support import isolated_developer_api
 
-from tests.unit.memory_import_isolation import (
-    restore_sys_modules,
-    snapshot_sys_modules,
-)
-
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-
-# ---- Stub heavy deps before importing application code ----
-
-
-class _AutoMockModule(ModuleType):
-    """Module stub that returns MagicMock for any missing attribute."""
-
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
-
-
-_stubs = [
-    'database._client',
-    'database.redis_db',
-    'database.conversations',
-    'database.memories',
-    'database.action_items',
-    'database.folders',
-    'database.users',
-    'database.user_usage',
-    'database.vector_db',
-    'database.chat',
-    'database.apps',
-    'database.goals',
-    'database.notifications',
-    'database.mem_db',
-    'database.mcp_api_key',
-    'database.daily_summaries',
-    'database.fair_use',
-    'database.auth',
-    'database.knowledge_graph',
-    'firebase_admin',
-    'firebase_admin.messaging',
-    'firebase_admin.auth',
-    'google.cloud.firestore',
-    'google.cloud.firestore_v1',
-    'google.cloud.firestore_v1.FieldFilter',
-    'pinecone',
-    'typesense',
-    'opuslib',
-    'pydub',
-    'pusher',
-    'modal',
-    'utils.other.storage',
-    'utils.screen_frames.store',
-    'utils.other.endpoints',
-    'utils.stt.pre_recorded',
-    'utils.stt.vad',
-    'utils.fair_use',
-    'utils.subscription',
-    'utils.conversations.process_conversation',
-    'utils.notifications',
-    'utils.apps',
-    'utils.llm.memories',
-    'utils.llm.chat',
-    'utils.llm.knowledge_graph',
-    'services.conversation_frame_evidence',
-    'database.dev_api_key',
-]
-
-
-def _install_dev_api_lock_bypass_stubs() -> None:
-    for mod_name in _stubs:
-        stub = _AutoMockModule(mod_name)
-        sys.modules[mod_name] = stub
-        if '.' in mod_name:
-            parent_name, child_name = mod_name.rsplit('.', 1)
-            parent = sys.modules.get(parent_name)
-            if isinstance(parent, ModuleType):
-                setattr(parent, child_name, stub)
-
-    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
-
-
-def _repair_polluted_dev_api_lock_bypass_stubs() -> None:
-    for name in _DEV_API_REAL_IMPORT_MODULES:
-        sys.modules.pop(name, None)
-    for name in (
-        *_DEV_API_REAL_IMPORT_MODULES,
-        'google.api_core',
-        'google.api_core.exceptions',
-        'google.cloud',
-        'utils.cloud_tasks',
-        'utils.other.storage',
-        'utils.subscription',
-    ):
-        mod = sys.modules.get(name)
-        if mod is not None and getattr(mod, '__file__', None) is None:
-            sys.modules.pop(name, None)
-            if "." in name:
-                parent_name, child_name = name.rsplit(".", 1)
-                parent = sys.modules.get(parent_name)
-                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is mod:
-                    delattr(parent, child_name)
-    _install_dev_api_lock_bypass_stubs()
-    _rebind_memory_service_database_stubs()
-
-
-def _rebind_memory_service_database_stubs() -> None:
-    import importlib
-    import utils.memory.memory_service as memory_service_mod
-
-    memories = sys.modules.get('database.memories')
-    if memories is not None:
-        memory_service_mod.memories_db = memories
-    vector_db = sys.modules.get('database.vector_db')
-    if vector_db is not None:
-        memory_service_mod.vector_db = vector_db
-    importlib.reload(memory_service_mod)
-
-
-_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES = tuple(_stubs)
-
-_DEV_API_REAL_IMPORT_MODULES = (
-    'routers.developer',
-    'routers.knowledge_graph',
-    'utils.conversations.process_conversation',
-    'utils.llm.knowledge_graph',
-)
+developer_module = None
 
 
 @pytest.fixture(autouse=True)
-def _dev_api_lock_bypass_import_isolation():
-    tracked = tuple(
-        dict.fromkeys(
-            (
-                *_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES,
-                *_DEV_API_REAL_IMPORT_MODULES,
-                'google.api_core',
-                'google.api_core.exceptions',
-                'google.cloud',
-                'utils.cloud_tasks',
-                'utils.other.storage',
-                'utils.subscription',
-                'utils.memory.memory_service',
-            )
-        )
-    )
-    saved = snapshot_sys_modules(tracked)
-    sys.modules.pop('utils.memory.memory_service', None)
-    _repair_polluted_dev_api_lock_bypass_stubs()
-    yield
-    restore_sys_modules(saved)
+def _isolated_developer_router(monkeypatch):
+    global developer_module
+    with isolated_developer_api(monkeypatch) as api:
+        developer_module = api.developer
+        yield
 
 
 @pytest.fixture(autouse=True)
-def _authorized_memory_developer_for_lock_tests(monkeypatch, _dev_api_lock_bypass_import_isolation):
-    import routers.developer as developer_module
-
+def _authorized_memory_developer_for_lock_tests(monkeypatch, _isolated_developer_router):
     monkeypatch.setattr(
         developer_module,
         'authorize_memory_external_default_memory_write',
         MagicMock(return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})),
         raising=False,
-    )
-
-
-def _developer_memory_write_context(uid='test-uid'):
-    from utils.memory.product_authorization import ProductAuthorizationContext
-
-    return ProductAuthorizationContext(
-        uid=uid,
-        consumer='developer_api',
-        surface='developer_api',
-        app_id='test-app',
-        key_id='test-key',
-        scopes=('memories.write',),
-    )
-
-
-def _allow_developer_memory_write_grant():
-    import routers.developer as developer_module
-
-    developer_module.authorize_memory_external_default_memory_write = MagicMock(
-        return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})
     )
 
 
@@ -284,40 +112,53 @@ class TestDevApiConversationLockEnforcement:
         assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_patch_conversation_allows_unlocked(self):
-        """D1: PATCH should proceed for unlocked conversations."""
+        """D1: PATCH delegates title mutation to the lifecycle-owned atomic writer."""
         import database.conversations as conversations_db
+        from routers import developer as dev_routes
 
         conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
-        conversations_db.update_conversation_title = MagicMock()
+        with patch.object(dev_routes.lifecycle_service, 'apply_user_conversation_patch') as patch_user_conversation:
+            request = dev_routes.UpdateConversationRequest(title='New Title', discarded=False)
+            dev_routes.update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
 
-        from routers.developer import update_conversation_endpoint, UpdateConversationRequest
+        patch_user_conversation.assert_called_once_with(
+            'test-uid',
+            'conv-1',
+            title='New Title',
+            discarded=False,
+        )
 
-        request = UpdateConversationRequest(title='New Title')
-        update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
-        conversations_db.update_conversation_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
-
-
-    def test_patch_restore_fails_if_lock_wins_after_initial_read(self):
+    def test_patch_rejects_lock_that_wins_after_initial_read(self):
         from fastapi import HTTPException
         from routers import developer as dev_routes
 
+        locked_error = dev_routes.lifecycle_service.ConversationLockedError('conversation locked')
         with (
             patch.object(
                 dev_routes.conversations_db,
                 'get_conversation',
-                side_effect=[_make_conversation(locked=False), _make_conversation(locked=True)],
+                return_value=_make_conversation(locked=False),
             ),
-            patch.object(dev_routes.lifecycle_service, 'restore_discarded', return_value=False) as restore,
+            patch.object(
+                dev_routes.lifecycle_service,
+                'apply_user_conversation_patch',
+                side_effect=locked_error,
+            ) as patch_user_conversation,
         ):
             with pytest.raises(HTTPException) as exc_info:
                 dev_routes.update_conversation_endpoint(
                     conversation_id='conv-1',
-                    request=dev_routes.UpdateConversationRequest(discarded=False),
+                    request=dev_routes.UpdateConversationRequest(title='New Title', discarded=False),
                     uid='test-uid',
                 )
 
         assert exc_info.value.status_code == 402
-        restore.assert_called_once_with('test-uid', 'conv-1')
+        patch_user_conversation.assert_called_once_with(
+            'test-uid',
+            'conv-1',
+            title='New Title',
+            discarded=False,
+        )
 
     def test_delete_conversation_rejects_locked(self):
         """D2: DELETE /v1/dev/user/conversations/{id} must raise 402 for locked."""

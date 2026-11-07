@@ -126,7 +126,20 @@ logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
 
-_LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
+# Monotonic server-only fence so a restore-then-discard ABA cannot masquerade
+# as the original state while a reprocess generates template results.
+USER_LIFECYCLE_REVISION_FIELD = '_user_lifecycle_revision'
+_LIFECYCLE_FIELDS = frozenset({'status', 'discarded', USER_LIFECYCLE_REVISION_FIELD})
+
+
+def _user_lifecycle_revision(current: Mapping[str, Any]) -> Optional[int]:
+    value = current.get(USER_LIFECYCLE_REVISION_FIELD, 0)
+    return value if type(value) is int and value >= 0 else None
+
+
+def _is_hidden_user_reprocess_source(current: Mapping[str, Any]) -> bool:
+    return bool(current.get('discarded')) or is_completed_rule_discard(current)
+
 # Top-level fields behind the Typesense conversation projection (see
 # utils/conversations/typesense_index.py). A generic update re-syncs the index
 # only when it touches one of these roots — segment/photo/app-result writes
@@ -1291,6 +1304,9 @@ def persist_processing_result_with_lifecycle(
     require_unlocked: bool = False,
     preserve_app_results: bool = False,
     allow_terminal_failure_recovery: bool = False,
+    defer_discarded_restore: bool = False,
+    expected_document_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
     expected_notes_snapshot: Mapping[str, Any] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
@@ -1298,9 +1314,10 @@ def persist_processing_result_with_lifecycle(
     Deletion and stale sync transcript revisions are refused. With terminal-family
     serving, content merges without regressing completed status or superseding
     failure state. Only explicit user-restore or user-reprocess authority permits
-    failure to become success. Flag off retains the legacy lifecycle merge. The
-    current row may additionally need to remain unlocked, and current app results
-    are preserved rather than overwritten from the processor's stale snapshot.
+    failure to become success. Discarded user reprocesses stay hidden until their
+    app-result commit; an expected document revision rejects lifecycle changes
+    since the request snapshot. Current app results are preserved rather than
+    overwritten from a stale snapshot, and the current row may need to remain unlocked.
 
     ``on_first_completion`` runs after a successful commit that transitioned the
     existing row onto ``completed``. It must not raise; the persist outcome is
@@ -1355,6 +1372,21 @@ def persist_processing_result_with_lifecycle(
 
         if is_soft_deleted(existing):
             owner_gone = True
+            return False
+        if expected_document_revision is not None and firestore_revision_datetime(
+            getattr(existing_snapshot, 'update_time', None)
+        ) != expected_document_revision:
+            return False
+        if (
+            expected_user_lifecycle_revision is not None
+            and _user_lifecycle_revision(existing) != expected_user_lifecycle_revision
+        ):
+            return False
+        if defer_discarded_restore and (
+            expected_document_revision is None
+            or expected_user_lifecycle_revision is None
+            or not _is_hidden_user_reprocess_source(existing)
+        ):
             return False
         if preserve_app_results:
             if 'apps_results' in existing:
@@ -1584,6 +1616,10 @@ def persist_processing_result_with_lifecycle(
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
+        if defer_discarded_restore:
+            # Keep a discarded row hidden until the generated app results and
+            # the user's restore decision can commit atomically.
+            write_data['discarded'] = True
         if family_enabled:
             transaction.update(conversation_ref, _processing_result_update_fields(write_data))
         else:
@@ -2374,8 +2410,8 @@ def _effective_user_reprocess_app_source(
 
 def get_user_reprocess_app_snapshot(
     uid: str, conversation_id: str
-) -> tuple[list[dict[str, Any]], dict] | None:
-    """Read the effective canonical transcript and speaker receipt for app generation."""
+) -> tuple[list[dict[str, Any]], dict[str, Any], datetime | None, int] | None:
+    """Read the effective transcript, receipt and lifecycle fence for app generation."""
     conversation_ref = db.collection('users').document(uid).collection(conversations_collection).document(
         conversation_id
     )
@@ -2386,10 +2422,21 @@ def get_user_reprocess_app_snapshot(
         if not getattr(snapshot, 'exists', False):
             return None
         current = snapshot.to_dict() or {}
-        if current.get('is_locked') or not is_visible_conversation(current, include_discarded=True):
+        status = getattr(current.get('status'), 'value', current.get('status'))
+        visible = is_visible_conversation(current, include_discarded=True)
+        failed_visible = status == ConversationStatus.failed and is_visible_conversation(
+            {**current, 'status': ConversationStatus.completed.value}, include_discarded=True
+        )
+        if current.get('is_locked') or not (
+            visible or failed_visible or is_completed_rule_discard(current)
+        ):
+            return None
+        lifecycle_revision = _user_lifecycle_revision(current)
+        if lifecycle_revision is None:
             return None
         try:
-            return _effective_user_reprocess_app_source(uid, conversation_id, current, transaction)
+            segments, receipt = _effective_user_reprocess_app_source(uid, conversation_id, current, transaction)
+            return segments, receipt, getattr(snapshot, 'update_time', None), lifecycle_revision
         except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
             return None
 
@@ -2407,8 +2454,16 @@ def persist_user_reprocess_app_results(
     results: list[dict[str, Any]],
     expected_transcript_fence_sha256: str,
     expected_speaker_receipt_sha256: str,
+    restore_discarded: bool = False,
+    expected_lifecycle_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
+    schedule_lazy_effects: bool = False,
+    lazy_effects_language: str | None = None,
 ) -> bool:
     """Merge selected results if their source snapshot and owner remain current."""
+    if schedule_lazy_effects and not lazy_effects_language:
+        raise ValueError('lazy effects require a language')
+    staged_lazy_effects = None
     if set(expected_selected_results) != selected_app_ids:
         raise ValueError('selected app result expectations must cover every selected app')
     result_ids = [row.get('app_id') for row in results]
@@ -2420,22 +2475,39 @@ def persist_user_reprocess_app_results(
 
     @firestore.transactional
     def _persist(transaction) -> bool:
+        nonlocal staged_lazy_effects
+        staged_lazy_effects = None
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
-        if current.get('is_locked') or not is_visible_conversation(current, include_discarded=True):
+        if current.get('is_locked') or not (
+            is_visible_conversation(current, include_discarded=True) or is_completed_rule_discard(current)
+        ):
+            return False
+        if (
+            expected_user_lifecycle_revision is not None
+            and _user_lifecycle_revision(current) != expected_user_lifecycle_revision
+        ):
+            return False
+        if restore_discarded and (
+            expected_lifecycle_revision is None
+            or expected_user_lifecycle_revision is None
+            or firestore_revision_datetime(getattr(snapshot, 'update_time', None)) != expected_lifecycle_revision
+            or not _is_hidden_user_reprocess_source(current)
+            or getattr(current.get('status'), 'value', current.get('status')) != 'completed'
+        ):
             return False
         try:
             segments, current_receipt = _effective_user_reprocess_app_source(
                 uid, conversation_id, current, transaction
             )
+            if (
+                transcript_fence_sha256(segments) != expected_transcript_fence_sha256
+                or manual_speaker_receipt_sha256(current_receipt) != expected_speaker_receipt_sha256
+            ):
+                return False
         except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
-            return False
-        if (
-            transcript_fence_sha256(segments) != expected_transcript_fence_sha256
-            or manual_speaker_receipt_sha256(current_receipt) != expected_speaker_receipt_sha256
-        ):
             return False
         current_results = current.get('apps_results') or []
         if not isinstance(current_results, list):
@@ -2462,13 +2534,38 @@ def persist_user_reprocess_app_results(
                 ),
             ],
         }
+        if restore_discarded:
+            restore_updates = _user_restore_updates(current)
+            if restore_updates is None:
+                return False
+            result_updates.update(restore_updates)
         prepared = _prepare_conversation_for_write(
             result_updates, uid, current.get('data_protection_level', 'standard')
         )
+        if schedule_lazy_effects:
+            from utils.enrichment import outbox
+
+            staged_lazy_effects = outbox.stage_effects_in_transaction(
+                transaction,
+                db,
+                uid,
+                conversation_id,
+                lazy_effects_language,
+                immediate=True,
+                user_requested=True,
+            )
         transaction.update(conversation_ref, prepared)
         return True
 
-    return run_transactional(db, _persist)
+    persisted = run_transactional(db, _persist)
+    if persisted and restore_discarded:
+        invalidate_people_stats_cache(uid)
+        _sync_conversation_search_index(uid, conversation_id)
+    if persisted and staged_lazy_effects is not None:
+        from utils.enrichment import outbox
+
+        outbox.enqueue_staged_effects(staged_lazy_effects)
+    return persisted
 
 
 def manual_speaker_receipt_sha256(receipt: Mapping[str, Any]) -> str:
@@ -2477,6 +2574,7 @@ def manual_speaker_receipt_sha256(receipt: Mapping[str, Any]) -> str:
     ).hexdigest()
 
 
+@after_write('conversations')
 def persist_template_batch_results(
     uid: str,
     conversation_id: str,
@@ -2485,6 +2583,9 @@ def persist_template_batch_results(
     expected_transcript_fence_sha256: str,
     expected_selected_results: Dict[str, Any],
     expected_speaker_receipt_sha256: str,
+    restore_discarded: bool = False,
+    expected_lifecycle_revision: datetime | None = None,
+    expected_user_lifecycle_revision: int | None = None,
 ) -> bool:
     """Atomically merge a completed template batch into the current visible conversation.
 
@@ -2503,14 +2604,39 @@ def persist_template_batch_results(
     conversation_ref = db.collection('users').document(uid).collection(conversations_collection).document(
         conversation_id
     )
+    lifecycle_changed = False
 
     @firestore.transactional
     def _persist(transaction) -> bool:
+        nonlocal lifecycle_changed
+        lifecycle_changed = False
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
         if is_soft_deleted(current) or current.get('is_locked'):
+            return False
+        if (
+            expected_user_lifecycle_revision is not None
+            and _user_lifecycle_revision(current) != expected_user_lifecycle_revision
+        ):
+            return False
+        current_status = getattr(current.get('status'), 'value', current.get('status'))
+        if expected_user_lifecycle_revision is not None and current_status not in {
+            ConversationStatus.completed.value,
+            ConversationStatus.failed.value,
+        }:
+            return False
+        recover_terminal_failure = current_status == ConversationStatus.failed.value
+        if recover_terminal_failure and expected_user_lifecycle_revision is None:
+            return False
+        if restore_discarded and (
+            expected_lifecycle_revision is None
+            or expected_user_lifecycle_revision is None
+            or firestore_revision_datetime(getattr(snapshot, 'update_time', None)) != expected_lifecycle_revision
+            or not _is_hidden_user_reprocess_source(current)
+            or current_status not in {ConversationStatus.completed.value, ConversationStatus.failed.value}
+        ):
             return False
         try:
             current_receipt = decode_manual_speaker_assignments(
@@ -2535,10 +2661,10 @@ def persist_template_batch_results(
 
                 corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
                 segments = apply_entries(segments, corrections)
+            segments = apply_manual_assignments(segments, current_receipt)
+            if transcript_fence_sha256(segments) != expected_transcript_fence_sha256:
+                return False
         except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
-            return False
-        segments = apply_manual_assignments(segments, current_receipt)
-        if transcript_fence_sha256(segments) != expected_transcript_fence_sha256:
             return False
 
         current_results = current.get('apps_results') or []
@@ -2562,10 +2688,41 @@ def persist_template_batch_results(
                 if isinstance(row, dict) and row.get('app_id', row.get('appId')) not in requested
             ),
         ]
-        transaction.update(conversation_ref, {'apps_results': merged_results})
+        updates = {'apps_results': merged_results}
+        restore_updates = None
+        if restore_discarded:
+            restore_updates = _user_restore_updates(current)
+            if restore_updates is None:
+                return False
+            updates.update(restore_updates)
+        if recover_terminal_failure:
+            if current.get('finalization_status') == 'dead_letter':
+                updates['finalization_status'] = None
+            family_enabled = _terminal_family_serving(uid)
+            claimed = claim_conversation_status_in_txn(
+                current,
+                expected_status=current.get('status'),
+                claimed_status=ConversationStatus.completed.value,
+                extra_updates=updates,
+                allow_discarded=True,
+                terminal_family='success' if family_enabled else None,
+                terminal_family_at=datetime.now(timezone.utc) if family_enabled else None,
+            )
+            if claimed is None:
+                return False
+            if restore_updates is not None:
+                claimed['relevance_decision'] = restore_updates['relevance_decision']
+            updates = claimed
+        transaction.update(conversation_ref, updates)
+        lifecycle_changed = restore_discarded or recover_terminal_failure
         return True
 
-    return run_transactional(db, _persist)
+    persisted = run_transactional(db, _persist)
+    if persisted and lifecycle_changed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
+        invalidate_people_stats_cache(uid)
+        _sync_conversation_search_index(uid, conversation_id)
+    return persisted
 
 
 def claim_record_lane_owner(uid: str, conversation_id: str, owner: str, expected_updated_at, *, firestore_client=None):
@@ -2669,6 +2826,73 @@ def create_audio_files_from_chunks(
             audio_files.append(audio_file)
 
     return audio_files
+
+
+class ConversationLockedError(RuntimeError):
+    """The conversation became locked before an atomic user patch could commit."""
+
+
+@after_write('conversations')
+def patch_user_conversation(
+    uid: str,
+    conversation_id: str,
+    *,
+    title: str | None = None,
+    discarded: bool | None = None,
+) -> bool:
+    """Atomically apply a user's title/discard patch after current-state guards."""
+    if title is None and discarded is None:
+        raise ValueError('at least one conversation field must be provided')
+    conversation_ref = db.collection('users').document(uid).collection(conversations_collection).document(
+        conversation_id
+    )
+
+    @firestore.transactional
+    def _patch(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return 'not_found'
+        current = snapshot.to_dict() or {}
+        if is_soft_deleted(current):
+            return 'not_found'
+        if current.get('is_locked'):
+            return 'locked'
+
+        updates = {}
+        if title is not None:
+            updates.update({'structured.title': title, 'user_title': title})
+        if discarded is True:
+            revision = _user_lifecycle_revision(current)
+            if revision is None:
+                return 'conflict'
+            updates.update(
+                {
+                    'discarded': True,
+                    'sync_relevance_user_kept': False,
+                    USER_LIFECYCLE_REVISION_FIELD: revision + 1,
+                }
+            )
+        elif discarded is False:
+            restore_updates = _user_restore_updates(current)
+            if restore_updates is None:
+                return 'conflict'
+            updates.update(restore_updates)
+        transaction.update(conversation_ref, updates)
+        return 'updated'
+
+    outcome = run_transactional(db, _patch)
+    if outcome == 'not_found':
+        raise NotFound(f'Conversation {conversation_id} not found')
+    if outcome == 'locked':
+        raise ConversationLockedError('conversation is locked')
+    if outcome != 'updated':
+        return False
+    if discarded is True:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
+    if discarded is not None:
+        invalidate_people_stats_cache(uid)
+    _sync_conversation_search_index(uid, conversation_id)
+    return True
 
 
 @after_write('conversations')
@@ -3343,7 +3567,28 @@ def claim_conversation_status(
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'discarded': True, 'sync_relevance_user_kept': False})
+
+    @firestore.transactional
+    def _discard(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            raise NotFound(f'Conversation {conversation_id} not found')
+        current = snapshot.to_dict() or {}
+        revision = _user_lifecycle_revision(current)
+        if revision is None:
+            return False
+        transaction.update(
+            conversation_ref,
+            {
+                'discarded': True,
+                'sync_relevance_user_kept': False,
+                USER_LIFECYCLE_REVISION_FIELD: revision + 1,
+            },
+        )
+        return True
+
+    if not run_transactional(db, _discard):
+        return
     stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_id)
@@ -3385,7 +3630,17 @@ def rule_discard_outcome(
             and current.get('sync_content_revision') != expected_sync_content_revision
         ):
             return 'refused'
-        transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
+        revision = _user_lifecycle_revision(current)
+        if revision is None:
+            return 'refused'
+        transaction.update(
+            conversation_ref,
+            {
+                'discarded': True,
+                'relevance_decision': relevance_decision,
+                USER_LIFECYCLE_REVISION_FIELD: revision + 1,
+            },
+        )
         return 'discarded'
 
     outcome = run_transactional(db, _discard)
@@ -3416,6 +3671,34 @@ def discard_by_relevance(
     )
 
 
+def _user_restore_updates(current: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Fields for a user restore, shared by the standalone and atomic batch paths."""
+    revision = _user_lifecycle_revision(current)
+    if revision is None:
+        return None
+    updates = {
+        'discarded': False,
+        'sync_relevance_user_kept': True,
+        USER_LIFECYCLE_REVISION_FIELD: revision + 1,
+    }
+    if current.get('sync_relevance') == 'review':
+        updates['sync_relevance'] = 'keep'
+    relevance_decision = current.get('relevance_decision')
+    if (
+        current.get('discarded')
+        and isinstance(relevance_decision, Mapping)
+        and relevance_decision.get('verdict') == 'discard'
+        and relevance_decision.get('decided_by') == 'jev'
+    ):
+        updates['jev_discard_restored'] = True
+    from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+    restored = {**current, **updates}
+    stamp_terminal_decision(restored, path='user_restore')
+    updates['relevance_decision'] = restored['relevance_decision']
+    return updates
+
+
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -3429,29 +3712,9 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         if is_soft_deleted(current) or current.get('is_locked'):
             # A concurrent paid-lock transition fences transcript delivery too.
             return False
-        # A restore is the user's verdict and outranks every later relevance
-        # assessment (sync appends reassess the whole recording). Legacy review
-        # rows are also hidden by the read predicate, so they flip to keep.
-        updates = {'discarded': False, 'sync_relevance_user_kept': True}
-        if current.get('sync_relevance') == 'review':
-            updates['sync_relevance'] = 'keep'
-        relevance_decision = current.get('relevance_decision')
-        if (
-            current.get('discarded')
-            and isinstance(relevance_decision, Mapping)
-            and relevance_decision.get('verdict') == 'discard'
-            and relevance_decision.get('decided_by') == 'jev'
-        ):
-            # Restored-from-Jev stays countable after reassessment replaces
-            # relevance_decision; the marker is written once and never cleared.
-            updates['jev_discard_restored'] = True
-        # Only metadata: the existing tombstone fence and user restore state
-        # remain authoritative. Legacy restores must carry the user's verdict.
-        from utils.conversations.terminal_relevance import stamp_terminal_decision
-
-        restored = {**current, **updates}
-        stamp_terminal_decision(restored, path='user_restore')
-        updates['relevance_decision'] = restored['relevance_decision']
+        updates = _user_restore_updates(current)
+        if updates is None:
+            return False
         transaction.update(conversation_ref, updates)
         return True
 

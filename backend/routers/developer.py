@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
+from google.api_core.exceptions import NotFound
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_serializer
 
@@ -2561,23 +2562,21 @@ def update_conversation_endpoint(
     if request.title is None and request.discarded is None:
         raise HTTPException(status_code=422, detail="At least one field (title or discarded) must be provided")
 
-    if request.title is not None:
-        conversations_db.update_conversation_title(uid, conversation_id, request.title.strip())
-
-    if request.discarded is not None:
-        if request.discarded:
-            lifecycle_service.discard(uid, conversation_id)
-        else:
-            restored = lifecycle_service.restore_discarded(uid, conversation_id)
-            if not restored:
-                current = conversations_db.get_conversation(uid, conversation_id)
-                if not current or current.get('deleted'):
-                    raise HTTPException(status_code=404, detail="Conversation not found")
-                if current.get('is_locked', False):
-                    raise HTTPException(
-                        status_code=402, detail="A paid plan is required to access this conversation."
-                    )
-                raise HTTPException(status_code=409, detail="Conversation changed. Please retry.")
+    try:
+        updated = lifecycle_service.apply_user_conversation_patch(
+            uid,
+            conversation_id,
+            title=request.title.strip() if request.title is not None else None,
+            discarded=request.discarded,
+        )
+    except NotFound as error:
+        raise HTTPException(status_code=404, detail="Conversation not found") from error
+    except lifecycle_service.ConversationLockedError as error:
+        raise HTTPException(
+            status_code=402, detail="A paid plan is required to access this conversation."
+        ) from error
+    if not updated:
+        raise HTTPException(status_code=409, detail="Conversation changed. Please retry.")
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation or conversation.get('deleted', False):

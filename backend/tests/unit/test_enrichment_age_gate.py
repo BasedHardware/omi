@@ -1,5 +1,6 @@
 """Historical tasks relinquish queue slots without deleting durable custody."""
 
+import sys
 import time
 from unittest.mock import Mock
 
@@ -9,6 +10,26 @@ from tests.unit.test_enrichment_route import client, rows, KEY  # noqa: F401
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import age_gate, outbox
 from utils.enrichment import consumer as consumer_module
+
+import utils.conversations
+import utils.conversations.demand_processing as _DEMAND_PROCESSING_COLLECTOR_OWNER
+
+
+# Retain the real Prometheus collector owner when other suites clean module imports.
+
+@pytest.fixture(autouse=True)
+def _preserve_demand_processing_collector_owner(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules,
+        'utils.conversations.demand_processing',
+        _DEMAND_PROCESSING_COLLECTOR_OWNER,
+    )
+    monkeypatch.setattr(
+        utils.conversations,
+        'demand_processing',
+        _DEMAND_PROCESSING_COLLECTOR_OWNER,
+        raising=False,
+    )
 
 
 def test_old_wake_returns_200_without_calling_llm_and_preserves_debt(rows, client, monkeypatch):  # noqa: F811
@@ -49,6 +70,76 @@ def test_old_conversation_with_a_new_obligation_is_parked(rows, monkeypatch):
     rows[0][KEY]['first_pending_at'] = now - 60
     monkeypatch.setattr(age_gate, 'conversation_created_at', lambda *_: now - 73 * 3600)
     assert age_gate.park_if_expired(KEY, rows[0][KEY]['task_token'], now=now)
+
+
+
+def test_background_effects_for_old_conversation_remain_parked(rows, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = time.time()
+    row = rows[0][KEY]
+    row.update(effects_only=True, user_requested_at=None, first_pending_at=now - 60)
+    monkeypatch.setattr(age_gate, 'conversation_created_at', lambda *_: now - 73 * 3600)
+
+    assert age_gate.park_if_expired(KEY, row['task_token'], now=now)
+
+
+def test_background_mark_preserves_explicit_effect_request_deadline(monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(outbox, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(outbox, '_effects_binding', lambda: {'queue': 'sync-jobs'})
+    explicit = outbox._new_effects_row('u', 'c', 'en', True, user_requested=True)
+    background = outbox._new_effects_row('u', 'c', 'en', False)
+    pending = {**explicit, **background}
+    request_time = explicit['user_requested_at']
+
+    assert pending['user_requested_at'] == request_time
+    assert not age_gate.expired(pending, now=request_time + 71 * 3600)
+    assert age_gate.expired(pending, now=request_time + 73 * 3600)
+    assert 'user_requested_at' not in background
+
+
+def test_recent_explicit_effect_request_runs_for_old_conversation(rows, client, monkeypatch):
+    from utils.conversations import lazy_enrichment
+
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = time.time()
+    row = rows[0][KEY]
+    row.update(
+        effects_only=True,
+        user_requested_at=now,
+        first_pending_at=now - 73 * 3600,
+        latest_pending_at=now,
+    )
+    enrich = Mock()
+    monkeypatch.setattr(lazy_enrichment, 'enrich_settled', enrich)
+    monkeypatch.setattr(age_gate, 'conversation_created_at', lambda *_: now - 73 * 3600)
+
+    response = client.post(
+        '/v2/enrichment/run',
+        json={'kind': 'enrichment', 'key': KEY, 'task_token': row['task_token']},
+    )
+
+    assert response.status_code == 200
+    enrich.assert_called_once_with('u', 'c', 'en')
+
+
+def test_repair_keeps_recent_explicit_effect_request_for_old_conversation(rows, sweep_query, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = time.time()
+    row = rows[0][KEY]
+    row.update(
+        effects_only=True,
+        user_requested_at=now,
+        first_pending_at=now - 73 * 3600,
+        latest_pending_at=now,
+        due_at=now,
+        task_due_at=now,
+    )
+
+    result = outbox.sweep(now=now)
+
+    assert not rows[0][KEY].get('age_gate_parked')
+    assert result['repaired'] == 1
 
 
 def test_sweep_parks_old_work_and_never_rewakes_it(rows, sweep_query, monkeypatch):
