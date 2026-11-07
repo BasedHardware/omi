@@ -22,10 +22,10 @@ from database.ports.workstreams import (
 )
 
 
-from ._base import _WorkflowRepo, _atomic
+from ._base import WorkflowRepo, atomic
 
 
-class CellWorkstreams(_WorkflowRepo):
+class CellWorkstreams(WorkflowRepo):
     domain = 'workstreams'
     entity_type = WorkstreamEntity
     collection = 'workstreams'
@@ -40,11 +40,11 @@ class CellWorkstreams(_WorkflowRepo):
             raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
         return row
 
-    @_atomic
+    @atomic
     def get(self, workstream_id: str) -> WorkstreamEntity | None:
         return self._entity(self._read(workstream_id))
 
-    @_atomic
+    @atomic
     def create(self, draft: WorkstreamCreate, *, mutation_id: str | None = None) -> WorkstreamEntity:
         def build():
             data = deepcopy(draft.data)
@@ -54,7 +54,7 @@ class CellWorkstreams(_WorkflowRepo):
             )
             wid = data.get('workstream_id') or data.get('id') or 'workstream_' + uuid.uuid4().hex
             now = datetime.now(timezone.utc)
-            row = {
+            row: dict[str, Any] = {
                 **data,
                 'id': wid,
                 'workstream_id': wid,
@@ -72,7 +72,7 @@ class CellWorkstreams(_WorkflowRepo):
 
         return self._entity(self._idempotent('workstreams.create', mutation_id, draft.data, build))
 
-    @_atomic
+    @atomic
     def list_open(self, *, limit: int = 500, account_generation: int | None = None) -> list[WorkstreamEntity]:
         where, args = "q_status='open'", []
         if account_generation is not None:
@@ -85,7 +85,7 @@ class CellWorkstreams(_WorkflowRepo):
             )
         ]
 
-    @_atomic
+    @atomic
     def list_for_goal(
         self, goal_id: str, *, include_archived: bool = False, limit: int = 100
     ) -> list[WorkstreamEntity]:
@@ -94,9 +94,13 @@ class CellWorkstreams(_WorkflowRepo):
         rows = [
             self._entity({**row, 'id': eid}) for eid, row in rows if include_archived or row.get('status') != 'archived'
         ]
-        return sorted(rows, key=lambda row: row.updated_at, reverse=True)
+        return sorted(
+            rows,
+            key=lambda row: (row.model_extra or {}).get('updated_at') or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
 
-    @_atomic
+    @atomic
     def update(
         self, workstream_id: str, patch: WorkstreamUpdate, *, idempotency_key: str, account_generation: int
     ) -> WorkstreamEntity:
@@ -120,7 +124,7 @@ class CellWorkstreams(_WorkflowRepo):
         sequence = row.get('latest_event_sequence', 0) + 1
         eid = 'wse_' + uuid.uuid4().hex
         now = datetime.now(timezone.utc)
-        result = {
+        result: dict[str, Any] = {
             **deepcopy(event),
             'event_id': eid,
             'workstream_id': workstream_id,
@@ -132,7 +136,7 @@ class CellWorkstreams(_WorkflowRepo):
         row.update(latest_event_sequence=sequence, updated_at=now, last_meaningful_progress_at=now)
         return result
 
-    @_atomic
+    @atomic
     def append_event(
         self, workstream_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> WorkstreamEventEntity:
@@ -145,7 +149,7 @@ class CellWorkstreams(_WorkflowRepo):
         )
         return WorkstreamEventEntity.model_construct(**result)
 
-    @_atomic
+    @atomic
     def list_events(
         self, workstream_id: str, *, after_sequence: int = 0, limit: int = 100
     ) -> list[WorkstreamEventEntity]:
@@ -158,7 +162,7 @@ class CellWorkstreams(_WorkflowRepo):
         )
         return [WorkstreamEventEntity.model_construct(**deepcopy(row)) for _, row in rows]
 
-    @_atomic
+    @atomic
     def create_artifact_descriptor(
         self, workstream_id: str, proposal: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> ArtifactDescriptorEntity:
@@ -185,7 +189,7 @@ class CellWorkstreams(_WorkflowRepo):
                 if workstream_id + '/' + eid not in self.store.state['workstream_events']:
                     raise WorkstreamConflictError('artifact references a missing workstream event')
             aid = 'artifact_' + uuid.uuid4().hex
-            row = {
+            row: dict[str, Any] = {
                 **deepcopy(proposal),
                 'artifact_id': aid,
                 'workstream_id': workstream_id,
@@ -207,7 +211,7 @@ class CellWorkstreams(_WorkflowRepo):
             )
         )
 
-    @_atomic
+    @atomic
     def transition_artifact_status(
         self,
         workstream_id: str,
@@ -242,14 +246,14 @@ class CellWorkstreams(_WorkflowRepo):
             )
         )
 
-    @_atomic
+    @atomic
     def list_artifact_descriptors(self, workstream_id: str, *, limit: int = 100) -> list[ArtifactDescriptorEntity]:
         rows = self.store.query(
             'workstream_artifacts', "doc->>'workstream_id'=%s", [workstream_id], order="q_created_at DESC", limit=limit
         )
         return [ArtifactDescriptorEntity.model_construct(**deepcopy(row)) for _, row in rows]
 
-    @_atomic
+    @atomic
     def upsert_continuation_checkpoint(
         self, workstream_id: str, checkpoint: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> ContinuationCheckpointEntity:
@@ -263,7 +267,7 @@ class CellWorkstreams(_WorkflowRepo):
             previous = self.store.state['workstream_checkpoints'].get(key)
             if previous is not None and checkpoint['last_event_sequence'] < previous['last_event_sequence']:
                 raise WorkstreamConflictError('checkpoint cannot move backward')
-            result = {
+            result: dict[str, Any] = {
                 **deepcopy(checkpoint),
                 'checkpoint_id': cid,
                 'workstream_id': workstream_id,
@@ -281,7 +285,7 @@ class CellWorkstreams(_WorkflowRepo):
             )
         )
 
-    @_atomic
+    @atomic
     def list_continuation_checkpoints(self, workstream_id: str) -> list[ContinuationCheckpointEntity]:
         return [
             ContinuationCheckpointEntity.model_construct(**deepcopy(r))
@@ -289,7 +293,7 @@ class CellWorkstreams(_WorkflowRepo):
             if r['workstream_id'] == workstream_id
         ]
 
-    @_atomic
+    @atomic
     def resolve_candidate(self, candidate: dict[str, Any], account_generation: int) -> dict[str, Any]:
         self._generation(account_generation)
         if candidate.get('subject_kind') != 'workstream' or candidate.get('workstream_proposal') is None:
@@ -316,13 +320,14 @@ class CellWorkstreams(_WorkflowRepo):
             'resolved_at': receipt['created_at'],
         }
 
-    @_atomic
+    @atomic
     def resolve_work_intent(
         self, request: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> dict[str, Any]:
         self._generation(account_generation)
 
         def build():
+            tid = request.get('task_id', '')
             if request.get('origin') == 'task':
                 task = self.store.state['action_items'].get(request['task_id'])
                 if task is None:
@@ -344,8 +349,8 @@ class CellWorkstreams(_WorkflowRepo):
                 ws = self.create(
                     WorkstreamCreate(
                         data={
-                            'title': request.get('title') or task.get('description', 'Work'),
-                            'objective': request.get('objective') or task.get('description', 'Work'),
+                            'title': request.get('title') or (task or {}).get('description', 'Work'),
+                            'objective': request.get('objective') or (task or {}).get('description', 'Work'),
                             'goal_id': gid,
                         }
                     )
@@ -377,7 +382,7 @@ class CellWorkstreams(_WorkflowRepo):
 
         return self._idempotent('workstreams.intent', 'intent:' + idempotency_key, [request, account_generation], build)
 
-    @_atomic
+    @atomic
     def import_task_goal_links(
         self, request: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> dict[str, Any]:
@@ -422,7 +427,7 @@ class CellWorkstreams(_WorkflowRepo):
 
         return self._idempotent('workstreams.import', 'import:' + idempotency_key, [request, account_generation], build)
 
-    @_atomic
+    @atomic
     def get_goal_detail(self, goal_id: str) -> dict[str, Any]:
         goal = self.store.goals.get(goal_id)
         if goal is None:
@@ -434,7 +439,7 @@ class CellWorkstreams(_WorkflowRepo):
             'progress_events': [r.model_dump() for r in self.store.goals.list_progress_events(goal_id)],
         }
 
-    @_atomic
+    @atomic
     def get_workstream_detail(self, workstream_id: str) -> dict[str, Any]:
         row = self.get(workstream_id)
         if row is None:
@@ -445,7 +450,7 @@ class CellWorkstreams(_WorkflowRepo):
             'tasks': [r.model_dump() for r in self.store.action_items.iter_all() if r.workstream_id == workstream_id],
         }
 
-    @_atomic
+    @atomic
     def purge(self, space_id: str) -> int:
         count = super().purge(space_id)
         for entity in ('workstream_events', 'workstream_artifacts', 'workstream_checkpoints'):

@@ -11,7 +11,7 @@ import time
 from collections.abc import MutableMapping
 from contextlib import ExitStack
 from copy import deepcopy
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 from database.action_item_fence import ActionItemCommitFence
 from database.action_items_cache import bump_action_items_list_version
@@ -117,6 +117,11 @@ class _State:
 
 class CellSpaceTx:
     bound = True
+    folders: CellFolders
+    people: CellPeople
+    action_items: CellActionItems
+    goals: CellGoals
+    workstreams: CellWorkstreams
 
     def __init__(self, raw, registry):
         self.raw, self.space_id = raw, raw.space_id
@@ -152,7 +157,7 @@ class CellSpaceTx:
             # A relational overlay preserves read-your-writes without flushing
             # early or reading the entire collection into Python. LIMIT still
             # applies to the combined database + attempt-local view.
-            projections = {
+            projections: dict[str, Any] = {
                 'q_completed': "doc->'completed'='true'::jsonb",
                 'q_deleted': "doc->'deleted'='true'::jsonb",
                 'q_order': "doc->'order'",
@@ -238,7 +243,14 @@ class CellSpaceStore:
         except MutationIdReused as exc:
             raise MutationConflict(exc.client_mutation_id) from exc
         except BaseRevisionMismatch as exc:
-            raise RevisionConflict(self.space_id, 'cell', '', exc.current_rev or 0) from exc
+            pending = attempts[-1].raw.mutations if attempts else []
+            address = next((m for m in pending if m.expected_rev is not None), None)
+            raise RevisionConflict(
+                self.space_id,
+                address.entity if address else 'cell',
+                address.entity_id if address else '',
+                exc.current_rev or 0,
+            ) from exc
         finally:
             with ExitStack() as cleanup:
                 for index, tx in enumerate(attempts):

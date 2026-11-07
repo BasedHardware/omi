@@ -7,11 +7,14 @@ import json
 from copy import deepcopy
 from datetime import datetime
 from functools import wraps
+from typing import Any, Callable, Iterable, ParamSpec, TypeVar, cast
+
+from pydantic import BaseModel
 
 from database.ports.base import MutationConflict, RevisionConflict
 
 
-def _scalar_order(value):
+def scalar_order(value):
     if value is None:
         return (0, 0)
     if isinstance(value, bool):
@@ -25,19 +28,26 @@ def _scalar_order(value):
     return (5, repr(value))
 
 
-def _atomic(fn):
+P = ParamSpec('P')
+R = TypeVar('R')
+
+
+def atomic(fn: Callable[P, R]) -> Callable[P, R]:
     @wraps(fn)
-    def call(self, *args, **kwargs):
+    def call(*args: P.args, **kwargs: P.kwargs) -> R:
+        self: Any = args[0]
         if self.store.bound:
-            value = fn(self, *args, **kwargs)
-            return iter(list(value)) if fn.__name__ == 'iter_all' else value
-        return self.store.run(lambda tx: getattr(getattr(tx, self.domain), fn.__name__)(*args, **kwargs))
+            value = fn(*args, **kwargs)
+            return cast(R, iter(list(cast(Iterable[Any], value)))) if fn.__name__ == 'iter_all' else value
+        return self.store.run(lambda tx: getattr(getattr(tx, self.domain), fn.__name__)(*args[1:], **kwargs))
 
     return call
 
 
-class _Repo:
-    def __init__(self, store):
+class Repo:
+    domain: str
+
+    def __init__(self, store: Any):
         self.store = store
 
     def receipt(self, mutation_id, operation, data):
@@ -62,11 +72,12 @@ class _Repo:
         return revision
 
 
-class _WorkflowRepo(_Repo):
-    entity_type = None
+class WorkflowRepo(Repo):
+    entity_type: type[BaseModel]
+    generation_error: type[Exception]
     collection = ''
 
-    def _entity(self, row):
+    def _entity(self, row: Any) -> Any:
         return self.entity_type.model_construct(**deepcopy(row)) if row is not None else None
 
     def _rows(self):
@@ -93,7 +104,7 @@ class _WorkflowRepo(_Repo):
         self.save(key, digest, result)
         return result
 
-    @_atomic
+    @atomic
     def purge(self, space_id: str) -> int:
         if space_id != self.store.space_id:
             raise ValueError('purge must belong to this space')

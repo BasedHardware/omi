@@ -17,20 +17,20 @@ from database.ports.goals import (
 )
 
 
-from ._base import _WorkflowRepo, _atomic
+from ._base import WorkflowRepo, atomic
 
 
-class CellGoals(_WorkflowRepo):
+class CellGoals(WorkflowRepo):
     domain = 'goals'
     entity_type = GoalEntity
     collection = 'goals'
     generation_error = GoalConflictError
 
-    @_atomic
+    @atomic
     def get(self, goal_id: str) -> GoalEntity | None:
         return self._entity(self._read(goal_id))
 
-    @_atomic
+    @atomic
     def create(self, draft: GoalCreate, *, mutation_id: str | None = None) -> GoalEntity:
         def build():
             data = deepcopy(draft.data)
@@ -40,7 +40,7 @@ class CellGoals(_WorkflowRepo):
                 raise GoalConflictError('use explicit focus management after creating a goal')
             gid = data.get('goal_id') or data.get('id') or 'goal_' + uuid.uuid4().hex[:12]
             now = datetime.now(timezone.utc)
-            row = {
+            row: dict[str, Any] = {
                 **data,
                 'id': gid,
                 'goal_id': gid,
@@ -57,24 +57,24 @@ class CellGoals(_WorkflowRepo):
 
         return self._entity(self._idempotent('goals.create', mutation_id, draft.data, build))
 
-    @_atomic
+    @atomic
     def create_idempotent(self, draft: GoalCreate, *, idempotency_key: str, account_generation: int) -> GoalEntity:
         self._generation(account_generation)
         return self.create(draft, mutation_id='goal-create:' + str(account_generation) + ':' + idempotency_key)
 
-    @_atomic
+    @atomic
     def get_user_goal(self) -> GoalEntity | None:
         rows = self.get_user_goals(100)
         rows.sort(
             key=lambda r: (
                 0 if r.status == 'focused' else 1,
-                r.model_extra.get('focus_rank') if r.model_extra.get('focus_rank') is not None else 5,
-                r.model_extra.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                (r.model_extra or {}).get('focus_rank') if (r.model_extra or {}).get('focus_rank') is not None else 5,
+                (r.model_extra or {}).get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
             )
         )
         return rows[0] if rows else None
 
-    @_atomic
+    @atomic
     def get_user_goals(self, limit: int = 3) -> list[GoalEntity]:
         rows = self.store.query(
             'goals',
@@ -84,7 +84,7 @@ class CellGoals(_WorkflowRepo):
         )
         return [self._entity({**row, 'id': eid}) for eid, row in rows]
 
-    @_atomic
+    @atomic
     def get_all(self, *, include_inactive: bool = False, limit: int | None = None) -> list[GoalEntity]:
         where = (
             ''
@@ -98,7 +98,7 @@ class CellGoals(_WorkflowRepo):
             )
         ]
 
-    @_atomic
+    @atomic
     def update(
         self, goal_id: str, patch: GoalUpdate, *, expected_revision: int | None = None, mutation_id: str | None = None
     ) -> GoalEntity | None:
@@ -119,7 +119,7 @@ class CellGoals(_WorkflowRepo):
             self._idempotent('goals.update', mutation_id, [goal_id, patch.data, expected_revision], build)
         )
 
-    @_atomic
+    @atomic
     def focus(
         self,
         goal_id: str,
@@ -164,7 +164,7 @@ class CellGoals(_WorkflowRepo):
             )
         )
 
-    @_atomic
+    @atomic
     def unfocus(self, goal_id: str, *, idempotency_key: str, account_generation: int) -> GoalEntity:
         self._generation(account_generation)
 
@@ -179,7 +179,7 @@ class CellGoals(_WorkflowRepo):
             self._idempotent('goals.unfocus', f'unfocus:{goal_id}:{idempotency_key}', [account_generation], build)
         )
 
-    @_atomic
+    @atomic
     def transition_lifecycle(
         self, goal_id: str, *, status: str, relationship_disposition: str, idempotency_key: str, account_generation: int
     ) -> GoalEntity:
@@ -217,7 +217,7 @@ class CellGoals(_WorkflowRepo):
             )
         )
 
-    @_atomic
+    @atomic
     def append_progress_event(
         self, goal_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> GoalProgressEventEntity:
@@ -230,7 +230,13 @@ class CellGoals(_WorkflowRepo):
             now = datetime.now(timezone.utc)
             sequence = row.get('latest_progress_sequence', 0) + 1
             eid = 'gpe_' + uuid.uuid4().hex
-            data = {**deepcopy(event), 'event_id': eid, 'goal_id': goal_id, 'sequence': sequence, 'created_at': now}
+            data: dict[str, Any] = {
+                **deepcopy(event),
+                'event_id': eid,
+                'goal_id': goal_id,
+                'sequence': sequence,
+                'created_at': now,
+            }
             self.store.state['goal_events'][goal_id + '/' + eid] = data
             row.update(latest_progress_sequence=sequence, updated_at=now)
             if event.get('metric') is not None:
@@ -248,14 +254,14 @@ class CellGoals(_WorkflowRepo):
             **self._idempotent('goals.event', f'event:{goal_id}:{idempotency_key}', [event, account_generation], build)
         )
 
-    @_atomic
+    @atomic
     def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
         rows = self.store.query(
             'goal_events', "doc->>'goal_id'=%s", [goal_id], order="(doc->>'sequence')::bigint DESC", limit=limit
         )
         return [GoalProgressEventEntity.model_construct(**deepcopy(row)) for _, row in rows]
 
-    @_atomic
+    @atomic
     def update_progress(
         self,
         goal_id: str,
@@ -267,7 +273,7 @@ class CellGoals(_WorkflowRepo):
         row = self._read(goal_id)
         if row is None:
             return None
-        metric = {**(row.get('metric') or {'type': 'numeric', 'target': 0}), 'current': current_value}
+        metric: dict[str, Any] = {**(row.get('metric') or {'type': 'numeric', 'target': 0}), 'current': current_value}
         self.append_progress_event(
             goal_id,
             {'kind': 'metric_update', 'summary': 'Metric updated', 'metric': metric},
@@ -276,7 +282,7 @@ class CellGoals(_WorkflowRepo):
         )
         return self.get(goal_id)
 
-    @_atomic
+    @atomic
     def get_history(self, goal_id: str, *, days: int = 30) -> list[dict[str, Any]]:
         return [
             deepcopy(row)
@@ -285,7 +291,7 @@ class CellGoals(_WorkflowRepo):
             )
         ]
 
-    @_atomic
+    @atomic
     def delete(self, goal_id: str) -> bool:
         row = self._read(goal_id)
         if row is None:
@@ -300,15 +306,15 @@ class CellGoals(_WorkflowRepo):
         )
         return True
 
-    @_atomic
+    @atomic
     def read_control(self) -> dict[str, Any]:
         return deepcopy(self.store.state['task_intelligence_control'].get('state', {}))
 
-    @_atomic
+    @atomic
     def write_control(self, patch: dict[str, Any]) -> None:
         self.store.state['task_intelligence_control'].setdefault('state', {}).update(deepcopy(patch))
 
-    @_atomic
+    @atomic
     def begin_mutation(
         self, *, operation: str, idempotency_key: str, account_generation: int, request: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -316,7 +322,7 @@ class CellGoals(_WorkflowRepo):
         _, prior = self.receipt(f'{operation}:{account_generation}:{idempotency_key}', operation, request)
         return prior
 
-    @_atomic
+    @atomic
     def finish_mutation(
         self,
         *,
@@ -329,7 +335,7 @@ class CellGoals(_WorkflowRepo):
         digest, _ = self.receipt(f'{operation}:{account_generation}:{idempotency_key}', operation, request)
         self.save(f'{operation}:{account_generation}:{idempotency_key}', digest, result)
 
-    @_atomic
+    @atomic
     def purge(self, space_id: str) -> int:
         count = super().purge(space_id)
         for entity in (

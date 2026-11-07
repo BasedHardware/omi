@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from copy import deepcopy
 from datetime import datetime, timezone
 
 from database.ports.people import GenerationFence, PersonDraft, PersonEntity
 from models.other import VoiceReadiness, voice_readiness
 
-from ._base import _Repo, _atomic
+from ._base import Repo, atomic
 
 
-class CellPeople(_Repo):
+class CellPeople(Repo):
     domain = 'people'
 
-    @_atomic
+    @atomic
     def set_pinned(
         self,
         person_id: str,
@@ -37,7 +39,7 @@ class CellPeople(_Repo):
             self.save(mutation_id, digest, person_id)
         return PersonEntity.model_construct(**deepcopy(row))
 
-    @_atomic
+    @atomic
     def get_or_create_by_name(self, draft: PersonDraft, *, mutation_id: str | None = None) -> PersonEntity:
         digest, prior = self.receipt(mutation_id, 'people.create', draft.model_dump())
         if prior is not None:
@@ -47,7 +49,7 @@ class CellPeople(_Repo):
         )
         existing = self.store.state['people'].get(matches[0][0]) if matches else None
         if existing is None:
-            data = {**draft.model_dump(), 'revision': 1}
+            data: dict[str, Any] = {**draft.model_dump(), 'revision': 1}
             self.store.state['people'][draft.id] = {**data, 'is_user_created': True}
             self.store.state['generation'] += 1
         else:
@@ -68,7 +70,7 @@ class CellPeople(_Repo):
             data['voice_needed_seconds'] = None
         return data
 
-    @_atomic
+    @atomic
     def read_generation(self) -> GenerationFence | None:
         generation = self.store.state['generation']
         return GenerationFence(value=generation, token=str(generation)) if generation else None

@@ -19,19 +19,19 @@ from database.ports.action_items import (
 
 from database.ports.base import Page
 
-from ._base import _WorkflowRepo, _atomic
+from ._base import WorkflowRepo, atomic
 
 
-class CellActionItems(_WorkflowRepo):
+class CellActionItems(WorkflowRepo):
     domain = 'action_items'
     entity_type = ActionItemEntity
     collection = 'action_items'
 
-    @_atomic
+    @atomic
     def read_control(self) -> dict[str, Any]:
         return deepcopy(self.store.state['task_intelligence_control'].get('state', {}))
 
-    @_atomic
+    @atomic
     def validate_task_relationship(self, rule: TaskRelationshipRule) -> None:
         if rule.goal_id is not None:
             goal = self.store.goals.get(rule.goal_id)
@@ -53,7 +53,7 @@ class CellActionItems(_WorkflowRepo):
             if workstream.goal_id != rule.goal_id:
                 raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
 
-    @_atomic
+    @atomic
     def create(
         self,
         draft: ActionItemDraft,
@@ -103,7 +103,7 @@ class CellActionItems(_WorkflowRepo):
         self.save(mutation_id, digest, entity_id)
         return entity_id
 
-    @_atomic
+    @atomic
     def create_batch(self, drafts: list[ActionItemDraft], *, document_ids: list[str | None] | None = None) -> list[str]:
         if len(drafts) > 400 or (document_ids is not None and len(drafts) != len(document_ids)):
             raise ValueError('invalid task batch')
@@ -133,7 +133,7 @@ class CellActionItems(_WorkflowRepo):
             self._rows()[entity_id] = data
         return [entity_id for entity_id, _ in prepared]
 
-    @_atomic
+    @atomic
     def update(
         self,
         action_item_id: str,
@@ -189,7 +189,7 @@ class CellActionItems(_WorkflowRepo):
         self.save(mutation_id, digest, True)
         return True
 
-    @_atomic
+    @atomic
     def delete(self, action_item_id: str) -> bool:
         if action_item_id not in self._rows():
             return False
@@ -197,13 +197,13 @@ class CellActionItems(_WorkflowRepo):
         del self._rows()[action_item_id]
         return True
 
-    @_atomic
+    @atomic
     def delete_batch(self, ids: list[str]) -> list[str]:
         for entity_id in ids:
             self.delete(entity_id)
         return list(ids)
 
-    @_atomic
+    @atomic
     def retire_for_conversation(
         self, conversation_id: str, *, active_ids: list[str], replacements: dict[str, str] | None = None
     ) -> int:
@@ -225,22 +225,24 @@ class CellActionItems(_WorkflowRepo):
             )
         return len(rows)
 
-    @_atomic
+    @atomic
     def get(self, action_item_id: str) -> ActionItemEntity | None:
         row = self._read(action_item_id)
         return self._entity(prepare_action_item_for_read(deepcopy(row))) if row is not None else None
 
-    @_atomic
+    @atomic
     def get_by_ids(self, ids: list[str]) -> list[ActionItemEntity]:
         return [row for row in (self.get(i) for i in ids) if row is not None]
 
-    @_atomic
+    @atomic
     def iter_all(self) -> Iterator[ActionItemEntity]:
         for entity_id in sorted(self._rows(), key=lambda v: v.encode()):
             if not self._rows()[entity_id].get('deleted'):
-                yield self.get(entity_id)
+                row = self.get(entity_id)
+                if row is not None:
+                    yield row
 
-    @_atomic
+    @atomic
     def list(
         self,
         *,
@@ -299,7 +301,7 @@ class CellActionItems(_WorkflowRepo):
             ).decode()
         return Page(items, resume)
 
-    @_atomic
+    @atomic
     def find_active_by_description(self, description: str) -> ActionItemEntity | None:
         def normalized(value):
             return value.strip().removeprefix('[screen] ').removesuffix(' [screen]').strip().lower()
@@ -311,7 +313,7 @@ class CellActionItems(_WorkflowRepo):
             else None
         )
 
-    @_atomic
+    @atomic
     def list_ids(self, *, completed: bool | None = None) -> list[str]:
         return (
             sorted(self._rows(), key=lambda v: v.encode())
@@ -319,7 +321,7 @@ class CellActionItems(_WorkflowRepo):
             else [r.id for r in self.list(completed=completed).items]
         )
 
-    @_atomic
+    @atomic
     def sync_page(
         self, *, updated_since: datetime | None = None, limit: int = 100, cursor: str | None = None
     ) -> Page[ActionItemEntity]:
@@ -337,9 +339,9 @@ class CellActionItems(_WorkflowRepo):
             'action_items', ' AND '.join(filters), args, order='q_updated_at, entity_id COLLATE "C"', limit=limit + 1
         )
         items = [self._entity(prepare_action_item_for_read({**row, 'id': eid})) for eid, row in rows[:limit]]
-        resume = (
-            base64.urlsafe_b64encode(json.dumps([items[-1].updated_at.timestamp(), items[-1].id]).encode()).decode()
-            if len(rows) > limit
-            else None
-        )
+        resume = None
+        if len(rows) > limit:
+            last = items[-1]
+            assert last.updated_at is not None
+            resume = base64.urlsafe_b64encode(json.dumps([last.updated_at.timestamp(), last.id]).encode()).decode()
         return Page(items, resume)

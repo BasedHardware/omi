@@ -10,6 +10,11 @@ from uuid import uuid4
 
 import pytest
 
+from database.cells.adapters.space_store import CellSpaceStore
+from database.cells.store import CellStore
+from database.jobstore.connection import Pool
+from testing.cells_fixtures import cells_dsn
+
 from database.folders import FirestoreFolders
 from database.people import FirestorePeople
 from database.ports.base import SpaceStore
@@ -25,7 +30,7 @@ from testing.store_fixtures import (
     required_backends,
 )
 
-DOMAIN_BACKENDS = ('sim', 'emulator')
+DOMAIN_BACKENDS = ('sim', 'emulator', 'postgres')
 WORKFLOW_ENTITIES = (
     'action_items',
     'goals',
@@ -48,6 +53,7 @@ class DomainHarness:
     cleanup_steps: list[Callable[[], None]] = field(default_factory=list)
     _stores: dict[str, Any] = field(default_factory=dict)
     _client: Any = None
+    _pool: Any = None
 
     def uid(self, label: str) -> str:
         return f'port-test-{label}-{self.uid_suffix}'
@@ -59,6 +65,15 @@ class DomainHarness:
         if not space_id.endswith('-' + self.uid_suffix):
             raise ValueError('space must belong to this synthetic harness')
         if space_id not in self._stores:
+            if self.name == 'postgres':
+                # Explicit synthetic enrollment; compatible with B2 admission.
+                with self._pool.connection() as conn:
+                    conn.execute(
+                        'INSERT INTO space_heads (space_id,next_seq,epoch,updated_at) VALUES (%s,0,1,0) ON CONFLICT DO NOTHING',
+                        (space_id,),
+                    )
+                self._stores[space_id] = CellSpaceStore(self._pool, space_id)
+                return self._stores[space_id]
             self._stores[space_id] = (
                 SimSpaceStore(space_id)
                 if self.name == 'sim'
@@ -113,6 +128,10 @@ class DomainHarness:
         self.store(space_id)
         if self.name == 'sim':
             self._stores[space_id].state[entity][entity_id] = {**data, 'id': entity_id}
+        elif self.name == 'postgres':
+            self._stores[space_id].cell.run(
+                space_id, lambda tx: tx.put(entity, entity_id, {**data, 'id': entity_id}), actor_uid=space_id, now=0
+            )
         else:
             self._entity_ref(space_id, entity, entity_id).set(data)
 
@@ -127,6 +146,8 @@ class DomainHarness:
         if self.name == 'sim':
             row = self._stores[space_id].state[entity].get(entity_id)
             return dict(row) if row is not None else None
+        if self.name == 'postgres':
+            return self._stores[space_id].cell.read_doc(space_id, entity, entity_id) or None
         return self._entity_ref(space_id, entity, entity_id).get().to_dict()
 
     def close(self) -> None:
@@ -135,11 +156,21 @@ class DomainHarness:
 
 
 def build_backend(name: str) -> DomainHarness:
-    if name == 'postgres':
-        raise BackendUnavailable('postgres domain adapter lands with the cells store (B1)')
     if name not in DOMAIN_BACKENDS:
         raise ValueError(name)
     harness = DomainHarness(name)
+    if name == 'postgres':
+        harness._pool = Pool(cells_dsn(), size=2)
+
+        def cleanup():
+            try:
+                cell = CellStore(harness._pool)
+                for space_id in harness._stores:
+                    cell.purge_space(space_id)
+            finally:
+                harness._pool.close()
+
+        harness.cleanup_steps.append(cleanup)
     if name == 'emulator':
         harness._client = _emulator_client()
 
@@ -154,7 +185,7 @@ def build_backend(name: str) -> DomainHarness:
     return harness
 
 
-@pytest.fixture(params=DOMAIN_BACKENDS + (('postgres',) if 'postgres' in required_backends() else ()))
+@pytest.fixture(params=DOMAIN_BACKENDS)
 def domain_backend(request):
     try:
         harness = build_backend(request.param)

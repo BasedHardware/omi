@@ -1,6 +1,80 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/cells/adapters/action_items.py': [
+        (
+            'CellActionItems.retire_for_conversation',
+            'status',
+            "'superseded' if replacement else 'cancelled'",
+            ('completed', 'completed_at', 'deleted', 'status', 'superseded_by', 'updated_at'),
+        )
+    ],
+    'database/cells/adapters/goals.py': [
+        (
+            'CellGoals.create.build',
+            'status',
+            "data.get('status', 'background')",
+            (
+                'account_generation',
+                'created_at',
+                'focus_rank',
+                'goal_id',
+                'id',
+                'is_active',
+                'latest_progress_sequence',
+                'status',
+                'updated_at',
+            ),
+        ),
+        (
+            'CellGoals.delete',
+            'status',
+            "'abandoned'",
+            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+        ),
+        ('CellGoals.focus.build', 'status', "'background'", ('focus_rank', 'status', 'updated_at')),
+        ('CellGoals.focus.build', 'status', "'focused'", ('focus_rank', 'is_active', 'status', 'updated_at')),
+        (
+            'CellGoals.transition_lifecycle.build',
+            'status',
+            'status',
+            ('focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+        ),
+        ('CellGoals.unfocus.build', 'status', "'background'", ('focus_rank', 'status', 'updated_at')),
+    ],
+    'database/cells/adapters/workstreams.py': [
+        (
+            'CellWorkstreams.create.build',
+            'status',
+            "data.get('status', 'open')",
+            (
+                'account_generation',
+                'created_at',
+                'current_state_summary',
+                'id',
+                'latest_event_sequence',
+                'objective',
+                'revision',
+                'status',
+                'updated_at',
+                'workstream_id',
+            ),
+        ),
+        (
+            'CellWorkstreams.create_artifact_descriptor.build',
+            'status',
+            "'draft'",
+            ('artifact_id', 'created_at', 'status', 'workstream_id'),
+        ),
+        ('CellWorkstreams.create_artifact_descriptor.build', 'status', "'superseded'", ('status',)),
+        (
+            'CellWorkstreams.resolve_candidate',
+            'status',
+            "'accepted'",
+            ('candidate_id', 'newly_resolved', 'receipt_id', 'resolved_at', 'status', 'task_id', 'workstream_id'),
+        ),
+        ('CellWorkstreams.transition_artifact_status.build', 'status', 'target', ('status',)),
+    ],
     'database/_client.py': [
         ('run_transactional', 'status', "'exhausted'", ('status',)),
         ('run_transactional', 'status', "'retried_ok'", ('status',)),
