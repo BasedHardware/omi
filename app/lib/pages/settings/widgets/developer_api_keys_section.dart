@@ -13,7 +13,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// The "Developer API" section of Developer Settings: docs link, Create Key, and the key list.
 class DeveloperApiKeysSection extends StatelessWidget {
-  const DeveloperApiKeysSection({super.key});
+  const DeveloperApiKeysSection({super.key, this.provider});
+
+  final DevApiKeyProvider? provider;
 
   static const _docsUrl = 'https://docs.omi.me/doc/developer/api';
 
@@ -26,73 +28,80 @@ class DeveloperApiKeysSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => DevApiKeyProvider()..fetchKeys(),
-      child: Builder(
-        builder: (context) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            OmiSectionHeader(
-              context.l10n.developerApi,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  OmiButton.secondary(
-                    label: context.l10n.docs,
-                    size: OmiButtonSize.compact,
-                    onPressed: () {
-                      launchUrl(Uri.parse(_docsUrl));
-                      PlatformManager.instance.analytics.pageOpened('Developer API Docs');
-                    },
-                  ),
-                  const SizedBox(width: OmiSpacing.xs),
-                  OmiButton.secondary(
-                    label: context.l10n.createKey,
-                    leading: const FaIcon(FontAwesomeIcons.plus),
-                    size: OmiButtonSize.compact,
-                    onPressed: () {
-                      final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
-                      CreateDevApiKeySheet.show(context, provider);
-                    },
-                  ),
-                ],
-              ),
+    final content = Builder(
+      builder: (context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OmiSectionHeader(
+            context.l10n.developerApi,
+            trailing: Wrap(
+              spacing: OmiSpacing.xs,
+              runSpacing: OmiSpacing.xs,
+              children: [
+                OmiButton.secondary(
+                  label: context.l10n.docs,
+                  size: OmiButtonSize.compact,
+                  onPressed: () {
+                    launchUrl(Uri.parse(_docsUrl));
+                    PlatformManager.instance.analytics.pageOpened('Developer API Docs');
+                  },
+                ),
+                OmiButton.secondary(
+                  label: context.l10n.createKey,
+                  leading: const FaIcon(FontAwesomeIcons.plus),
+                  size: OmiButtonSize.compact,
+                  onPressed: () {
+                    final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
+                    CreateDevApiKeySheet.show(context, provider);
+                  },
+                ),
+              ],
             ),
+          ),
 
-            // API Keys List
-            Consumer<DevApiKeyProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading && provider.keys.isEmpty) {
-                  return _card(
-                    const Padding(
-                      padding: EdgeInsets.all(OmiSpacing.xl),
-                      child: Center(child: OmiSpinner()),
-                    ),
-                  );
-                }
-                if (provider.error != null) {
-                  return _card(
-                    OmiErrorState(
-                      message: context.l10n.couldNotLoadApiKeys,
-                      onRetry: () => provider.fetchKeys(force: true),
-                    ),
-                  );
-                }
-                if (provider.keys.isEmpty) {
-                  return _card(
-                    OmiEmptyState(
-                      glyph: const FaIcon(FontAwesomeIcons.key),
-                      title: context.l10n.noApiKeys,
-                      message: context.l10n.createAKeyToGetStarted,
-                    ),
-                  );
-                }
-                return OmiSettingsGroup(children: [for (final key in provider.keys) DevApiKeyListItem(apiKey: key)]);
-              },
-            ),
-          ],
-        ),
+          // API Keys List
+          Consumer<DevApiKeyProvider>(
+            builder: (context, provider, child) {
+              if (provider.isLoading && provider.keys.isEmpty) {
+                return _card(
+                  const Padding(
+                    padding: EdgeInsets.all(OmiSpacing.xl),
+                    child: Center(child: OmiSpinner()),
+                  ),
+                );
+              }
+              if (provider.error != null) {
+                return _card(
+                  OmiErrorState(
+                    message: context.l10n.couldNotLoadApiKeys,
+                    onRetry: () => provider.fetchKeys(force: true),
+                  ),
+                );
+              }
+              if (provider.keys.isEmpty) {
+                return _card(
+                  OmiEmptyState(
+                    glyph: const FaIcon(FontAwesomeIcons.key),
+                    title: context.l10n.noApiKeys,
+                    message: context.l10n.createAKeyToGetStarted,
+                  ),
+                );
+              }
+              return OmiSettingsGroup(children: [for (final key in provider.keys) DevApiKeyListItem(apiKey: key)]);
+            },
+          ),
+        ],
       ),
+    );
+    if (provider != null) {
+      return ChangeNotifierProvider<DevApiKeyProvider>.value(
+        value: provider!,
+        child: content,
+      );
+    }
+    return ChangeNotifierProvider<DevApiKeyProvider>(
+      create: (_) => DevApiKeyProvider()..fetchKeys(),
+      child: content,
     );
   }
 }
