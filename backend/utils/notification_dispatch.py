@@ -29,6 +29,7 @@ class NotificationKind(str, Enum):
     IMPORT_JOB = 'import_job'
     ACTION_ITEM_REMINDER = 'action_item_reminder'
     CONVERSATION_MERGE = 'conversation_merge'
+    FIRST_SUMMARY = 'first_summary'
 
 
 class NotificationPolicy(str, Enum):

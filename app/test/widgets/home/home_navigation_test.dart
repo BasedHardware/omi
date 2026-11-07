@@ -137,6 +137,42 @@ void main() {
       expect(find.text('conversation'), findsNothing);
     });
 
+    testWidgets('finishing onboarding keeps the new Home registered while the old route builds one on its way out',
+        (tester) async {
+      final navigatorKey = GlobalKey<NavigatorState>();
+      final onboarded = ValueNotifier(false);
+      addTearDown(onboarded.dispose);
+      final opened = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          // The root route becomes a Home once onboarding is complete, like MobileApp's product builder.
+          home: ValueListenableBuilder<bool>(
+            valueListenable: onboarded,
+            builder: (_, done, __) => done ? _RegisteringHome('root', opened) : const Text('onboarding'),
+          ),
+        ),
+      );
+
+      // Onboarding finishes: a new Home replaces the whole stack...
+      navigatorKey.currentState!.pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => _RegisteringHome('pushed', opened)),
+        (_) => false,
+      );
+      await tester.pump();
+      // ...while the old route, still on screen for the transition, rebuilds into a Home of its own.
+      onboarded.value = true;
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('pushed'), findsOneWidget);
+      expect(find.text('root'), findsNothing);
+      expect(HomeNavigation.isHomeMounted, isTrue);
+      final routeOpened = await HomeNavigation.openRoute('/conversation/first', navigator: navigatorKey.currentState);
+      expect(routeOpened, isTrue);
+      expect(opened, ['pushed:/conversation/first']);
+    });
+
     testWidgets('openRoute drops the link when no Home appears', (tester) async {
       await tester.runAsync(() async {
         final opened = await HomeNavigation.openRoute(
@@ -386,4 +422,38 @@ final List<String> _opened = [];
 Future<bool> _record(String route, {bool Function()? canOpen}) async {
   _opened.add(route);
   return true;
+}
+
+/// A Home stand-in that registers and unregisters exactly like the Home page.
+class _RegisteringHome extends StatefulWidget {
+  const _RegisteringHome(this.name, this.opened);
+
+  final String name;
+  final List<String> opened;
+
+  @override
+  State<_RegisteringHome> createState() => _RegisteringHomeState();
+}
+
+class _RegisteringHomeState extends State<_RegisteringHome> {
+  @override
+  void initState() {
+    super.initState();
+    HomeNavigation.register(_open);
+  }
+
+  @override
+  void dispose() {
+    HomeNavigation.unregister(_open);
+    super.dispose();
+  }
+
+  Future<bool> _open(String route, {bool Function()? canOpen}) async {
+    if (!mounted) return false;
+    widget.opened.add('${widget.name}:$route');
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(widget.name);
 }
