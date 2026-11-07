@@ -635,36 +635,50 @@ class MemoriesViewModel: ObservableObject {
         canonicalLifecycleCapabilityEstablished = true
         guard isCurrentScope(token) else { return }
       }
-      hasAuthoritativeServerProjection = !truncated
-      isTruncated = truncated
-      if truncated {
-        // A truncated cascade refresh must preserve existing projection, merging in partial rows
-        var merged = memories
-        for item in allFetched {
-          if let idx = merged.firstIndex(where: { $0.id == item.id }) {
-            merged[idx] = item
-          } else {
-            merged.append(item)
-          }
-        }
-        memories = merged
-      } else {
-        memories = MemoryPageProjection.visibleMemories(
-          cachedMemories: [],
-          serverMemories: allFetched,
-          source: .authoritativeServer,
-          lifecycleExposed: canonicalLifecycleExposed
-        )
-      }
-      currentOffset = memories.count
-      rawBackendOffset = memories.count
-      hasMoreMemories = false
-      recomputeFilteredMemories()
+      applyCascadeRefreshProjection(
+        allFetched: allFetched,
+        truncated: truncated,
+        lifecycleExposed: canonicalLifecycleExposed
+      )
       await loadTagCountsFromDatabase()
     } catch {
       logError("MemoriesViewModel: Failed to refresh after conversation delete", error: error)
       await loadMemories()
     }
+  }
+
+  func applyCascadeRefreshProjection(
+    allFetched: [ServerMemory],
+    truncated: Bool,
+    lifecycleExposed: Bool
+  ) {
+    hasAuthoritativeServerProjection = !truncated
+    isTruncated = truncated
+    let candidateRows: [ServerMemory]
+    if truncated {
+      // A truncated cascade refresh must preserve existing projection, merging in partial rows
+      var merged = memories
+      for item in allFetched {
+        if let idx = merged.firstIndex(where: { $0.id == item.id }) {
+          merged[idx] = item
+        } else {
+          merged.append(item)
+        }
+      }
+      candidateRows = merged
+    } else {
+      candidateRows = allFetched
+    }
+    memories = MemoryPageProjection.visibleMemories(
+      cachedMemories: [],
+      serverMemories: candidateRows,
+      source: .authoritativeServer,
+      lifecycleExposed: lifecycleExposed
+    )
+    currentOffset = memories.count
+    rawBackendOffset = memories.count
+    hasMoreMemories = false
+    recomputeFilteredMemories()
   }
 
   func resetSessionState() {

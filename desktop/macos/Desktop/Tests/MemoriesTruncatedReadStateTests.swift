@@ -85,4 +85,62 @@ final class MemoriesTruncatedReadStateTests: XCTestCase {
       "Normal page with nextCursor must allow pagination"
     )
   }
+
+  func testTruncatedCascadeRefreshRoutesMergedRowsThroughVisibleMemoriesProjection() {
+    let vm = MemoriesViewModel()
+    let existingVisible = makeMemory(id: "mem-existing", content: "Existing visible", tierIsExplicit: true)
+    let existingToUpdate = makeMemory(id: "mem-update", content: "Old content", tierIsExplicit: true)
+    vm.memories = [existingVisible, existingToUpdate]
+
+    let updatedVisible = makeMemory(id: "mem-update", content: "New content", tierIsExplicit: true)
+    let appendedVisible = makeMemory(id: "mem-appended-explicit", content: "Appended explicit", tierIsExplicit: true)
+    let appendedLegacyUnclassified = makeMemory(
+      id: "mem-appended-unclassified",
+      content: "Appended without explicit tier",
+      tierIsExplicit: false
+    )
+
+    vm.applyCascadeRefreshProjection(
+      allFetched: [updatedVisible, appendedVisible, appendedLegacyUnclassified],
+      truncated: true,
+      lifecycleExposed: true
+    )
+
+    XCTAssertTrue(vm.isTruncated, "Truncated cascade refresh must set isTruncated = true")
+    XCTAssertEqual(
+      vm.memories.map(\.id),
+      ["mem-existing", "mem-update", "mem-appended-explicit"],
+      "Truncated cascade refresh must preserve existing memories, merge updates, and filter appended rows through MemoryPageProjection.visibleMemories"
+    )
+    XCTAssertEqual(
+      vm.memories.first(where: { $0.id == "mem-update" })?.content,
+      "New content",
+      "Updated memory in truncated cascade refresh must reflect latest content"
+    )
+  }
+
+  private func makeMemory(id: String, content: String, tierIsExplicit: Bool) -> ServerMemory {
+    ServerMemory(
+      id: id,
+      content: content,
+      category: .system,
+      tier: .longTerm,
+      tierIsExplicit: tierIsExplicit,
+      createdAt: Date(timeIntervalSince1970: 1),
+      updatedAt: Date(timeIntervalSince1970: 2),
+      conversationId: nil,
+      reviewed: false,
+      userReview: nil,
+      visibility: "private",
+      manuallyAdded: false,
+      scoring: nil,
+      source: "desktop",
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isLocked: false,
+      isShared: false
+    )
+  }
 }
