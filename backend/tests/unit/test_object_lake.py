@@ -3,12 +3,13 @@
 from dataclasses import replace
 import hashlib
 import zlib
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from google.api_core.exceptions import AlreadyExists
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
+from google.api_core.exceptions import FailedPrecondition
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.other import object_lake as lake, space_keys
@@ -520,5 +521,15 @@ def test_shredded_key_wins_over_purged_blob(storage):
     ref = put()
     lake.delete_space_prefix('s')
     space_keys.destroy_space_keys('s')
+    with pytest.raises(space_keys.SpaceKeyDestroyed):
+        lake.get_space_object(ref)
+
+
+def test_disabled_kms_key_with_live_authority_remains_shredded(storage, monkeypatch):
+    ref = put()
+    space_keys.clear_space_key_cache()
+    kms = Mock()
+    kms.decrypt.side_effect = FailedPrecondition('key disabled')
+    monkeypatch.setattr(space_keys, '_kms', lambda: kms)
     with pytest.raises(space_keys.SpaceKeyDestroyed):
         lake.get_space_object(ref)

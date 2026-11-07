@@ -311,8 +311,10 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
     try:
         kek = space_keys.unwrap_space_dek(sid, ref.dek_version)
     except space_keys.SpaceKeyDestroyed:
-        # get_space_keys raises for a tombstone; a live missing version is corrupt.
-        if space_keys.get_space_keys(sid) is not None:
+        # A fabricated version in a live space is corrupt, while a destroyed
+        # authority remains the explicit shredded state.
+        keys = space_keys.get_space_keys(sid)
+        if keys is not None and all(version.version != ref.dek_version for version in keys.versions):
             raise LakeObjectCorrupt('Invalid lake key version') from None
         raise
     try:
