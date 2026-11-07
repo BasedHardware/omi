@@ -1678,6 +1678,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     before_probe=lambda: not cap_enforced()
                     or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
                     cohort_key=uid,
+                    user_language=user_language,
                 ),
             )
             if (
@@ -1746,6 +1747,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return_language=True,
                 language=req_language,
                 keywords=vocabulary if vocabulary else None,
+                user_language=user_language,
                 **recovery_dispatch,
             )
             if cap_enforced():
@@ -1753,7 +1755,15 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 record_cap_audio(
                     'sync', 'accepted', provider, get_wav_duration(path), allowance.reason == 'plan_allowance_exhausted'
                 )
-            language = user_language if (single_language_mode and user_language) else detected_language
+            language = (
+                user_language
+                if (single_language_mode and user_language)
+                else (
+                    detected_language
+                    if detected_language and detected_language not in {'', 'und', 'multi', 'unknown'}
+                    else (user_language or detected_language or 'en')
+                )
+            )
             phase = 'parse'
             transcript_segments = postprocess_words(words, 0) if words else []
             speech_offset = first_word_offset(words)
@@ -1781,7 +1791,15 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     if recovered is not None:
                         transcript_segments, recovered_language, speech_offset = recovered
                         provider, model = 'modulate', 'velma-2'
-                        language = user_language if (single_language_mode and user_language) else recovered_language
+                        language = (
+                            user_language
+                            if (single_language_mode and user_language)
+                            else (
+                                recovered_language
+                                if recovered_language and recovered_language not in {'', 'und', 'multi', 'unknown'}
+                                else (user_language or recovered_language or 'en')
+                            )
+                        )
                         recovered_via_retry = True
                         break
                 held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)

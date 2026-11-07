@@ -1274,12 +1274,15 @@ def prerecorded(
     keywords: Optional[Sequence[str]] = None,
     *,
     selected_service: Optional[Tuple[str, Optional[str], str]] = None,
+    user_language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
     if selected_service is None and language_guard_enabled() and language_class(language) == 'unknown':
         from utils.stt.batch_language import resolve_url
 
-        selected_service = resolve_url(language, audio_url, selector=get_prerecorded_service)
+        selected_service = resolve_url(
+            language, audio_url, selector=get_prerecorded_service, user_language=user_language
+        )
     provider = (
         get_prerecorded_provider(language, selected_service=selected_service)
         if selected_service is not None
@@ -1307,15 +1310,24 @@ def prerecorded_from_bytes(
     model: str = "nova-3",
     return_language: bool = False,
     keywords: Optional[Sequence[str]] = None,
+    *,
+    user_language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    from utils.stt.batch_language import resolve_language, select_decision
+    from utils.stt.batch_language import LanguageDecision, resolve_language, select_decision
 
-    decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
-    resolved = decision.language if decision.parakeet_safe else language
-    if not language_guard_enabled() or language_class(language) != 'unknown':
+    norm_user_lang = normalized_stt_language(user_language) if user_language else ''
+    if norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang):
+        decision = LanguageDecision('und', 0.0, 'unavailable')
         resolved = language
-    selected = select_decision(language, decision, get_prerecorded_service)
+    else:
+        decision = resolve_language(
+            language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding
+        )
+        resolved = decision.language if decision.parakeet_safe else language
+        if not language_guard_enabled() or language_class(language) != 'unknown':
+            resolved = language
+    selected = select_decision(language, decision, get_prerecorded_service, user_language=user_language)
     provider = get_prerecorded_provider(resolved, selected_service=selected)
     return provider.transcribe_bytes(
         audio_bytes,
