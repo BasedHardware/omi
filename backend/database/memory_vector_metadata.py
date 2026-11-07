@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Collection, Dict, Optional, cast
@@ -15,6 +18,8 @@ from models.knowledge_ledger_search import (
     validate_ledger_kinds,
 )
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryTier, MemoryItem
+
+logger = logging.getLogger(__name__)
 
 MEMORY_VECTOR_SCHEMA_VERSION = 1
 CANONICAL_MEMORY_PROVIDER_ID_PREFIX = "memproj"
@@ -148,16 +153,109 @@ def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_memory_vector_filter(uid, {"memory_layer": {"$eq": MemoryTier.archive.value}})
 
 
-def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorHit:
+def _is_truthy_flag(val: Any) -> bool:
+    if val is True:
+        return True
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return val == 1
+    if isinstance(val, bytes):
+        try:
+            val = val.decode("utf-8", errors="ignore")
+        except Exception as exc:
+            logger.error("Failed to decode bytes flag in _is_truthy_flag: %s", exc, exc_info=True)
+            raise
+    if isinstance(val, str):
+        return val.lower().strip() in {"true", "1", "yes"}
+    return False
+
+
+def is_tombstoned_or_deleted_metadata(metadata: Any) -> bool:
+    """Return True if metadata indicates a deleted, tombstoned, or purged entity."""
+    if metadata is None:
+        return False
+
+    if not isinstance(metadata, Mapping):
+        to_dict_meta = getattr(metadata, "to_dict", None)
+        if callable(to_dict_meta):
+            try:
+                md = to_dict_meta()
+            except Exception as exc:
+                logger.error(
+                    "Failed to extract metadata via to_dict() in is_tombstoned_or_deleted_metadata: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
+            if isinstance(md, Mapping):
+                metadata = md
+            else:
+                logger.error(
+                    "to_dict() returned non-mapping type %s in is_tombstoned_or_deleted_metadata",
+                    type(md).__name__,
+                )
+                raise TypeError(f"Expected mapping from to_dict(), got {type(md).__name__}")
+        elif hasattr(metadata, "__dict__"):
+            try:
+                metadata = vars(metadata)
+            except Exception as exc:
+                logger.error(
+                    "Failed to extract vars(metadata) in is_tombstoned_or_deleted_metadata: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
+        elif hasattr(metadata, "get") and callable(metadata.get):
+            pass
+        else:
+            return False
+
+    raw_status = metadata.get("status")
+    status = str(getattr(raw_status, "value", raw_status) or "").lower().strip()
+    raw_redaction = metadata.get("redaction_status")
+    redaction_status = str(getattr(raw_redaction, "value", raw_redaction) or "").lower().strip()
+    raw_source_state = metadata.get("source_state")
+    source_state = str(getattr(raw_source_state, "value", raw_source_state) or "").lower().strip()
+
+    return bool(
+        status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
+        or redaction_status
+        in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
+        or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
+        or _is_truthy_flag(metadata.get("deleted"))
+        or _is_truthy_flag(metadata.get("is_deleted"))
+        or _is_truthy_flag(metadata.get("tombstoned"))
+        or _is_truthy_flag(metadata.get("is_tombstoned"))
+        or _is_truthy_flag(metadata.get("soft_deleted"))
+        or _is_truthy_flag(metadata.get("is_soft_deleted"))
+        or _is_truthy_flag(metadata.get("purged"))
+        or _is_truthy_flag(metadata.get("is_purged"))
+    )
+
+
+def parse_memory_search_vector_hit(match: Any) -> ParsedMemoryVectorHit:
+    if not isinstance(match, dict):
+        return ParsedMemoryVectorHit(
+            hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
+        )
     raw_metadata = match.get("metadata")
     metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
+        if is_tombstoned_or_deleted_metadata(metadata):
+            return ParsedMemoryVectorHit(
+                hit=None, decision=SearchDecision.stale_vector, reason="tombstoned_or_deleted_vector"
+            )
         memory_id = _required_str(metadata, "memory_id")
         projection_commit_id = _required_str(metadata, "projection_commit_id")
         vector_updated_at = _parse_timestamp(_required_str(metadata, "vector_updated_at"))
-        score = float(match.get("score", 0.0))
+        raw_score = match.get("score")
+        if raw_score is None:
+            score = 0.0
+        else:
+            score = float(raw_score)
+            if math.isnan(score) or math.isinf(score):
+                raise ValueError("invalid_score")
         hit = SearchVectorHit(
             vector_id=_optional_match_id(match),
             memory_id=memory_id,
@@ -170,23 +268,37 @@ def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorH
             source_commit_id=_optional_str(metadata, "source_commit_id"),
             content_hash=_optional_str(metadata, "content_hash"),
         )
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError, KeyError):
         return ParsedMemoryVectorHit(
             hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
         )
     return ParsedMemoryVectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
 
 
-def parse_search_vector_hit(match: Dict[str, Any]) -> ParsedVectorHit:
+def parse_search_vector_hit(match: Any) -> ParsedVectorHit:
+    if not isinstance(match, dict):
+        return ParsedVectorHit(
+            hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
+        )
     raw_metadata = match.get("metadata")
     metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
+        if is_tombstoned_or_deleted_metadata(metadata):
+            return ParsedVectorHit(
+                hit=None, decision=SearchDecision.stale_vector, reason="tombstoned_or_deleted_vector"
+            )
         memory_id = _required_str(metadata, "memory_id")
         projection_commit_id = _required_str(metadata, "projection_commit_id")
         vector_updated_at = _parse_timestamp(_required_str(metadata, "vector_updated_at"))
-        score = float(match.get("score", 0.0))
+        raw_score = match.get("score")
+        if raw_score is None:
+            score = 0.0
+        else:
+            score = float(raw_score)
+            if math.isnan(score) or math.isinf(score):
+                raise ValueError("invalid_score")
         hit = SearchVectorHit(
             vector_id=_optional_match_id(match),
             memory_id=memory_id,
@@ -199,7 +311,7 @@ def parse_search_vector_hit(match: Dict[str, Any]) -> ParsedVectorHit:
             source_commit_id=_optional_str(metadata, "source_commit_id"),
             content_hash=_optional_str(metadata, "content_hash"),
         )
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError, KeyError):
         return ParsedVectorHit(
             hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
         )
@@ -279,6 +391,7 @@ __all__ = [
     "build_ledger_memory_vector_filter",
     "build_memory_vector_metadata",
     "canonical_memory_provider_id",
+    "is_tombstoned_or_deleted_metadata",
     "parse_memory_search_vector_hit",
     "parse_search_vector_hit",
     "strip_null_metadata_values",
