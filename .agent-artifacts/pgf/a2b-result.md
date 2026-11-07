@@ -1,6 +1,6 @@
 # A2b implementation result
 
-Status: implementation and focused validation committed; rerunning both full preflights after exposing the lazy public cell-composition API. This is a validation checkpoint, not a completed handoff.
+Status: A2b implementation complete and committed locally. Both final repository/PR-body preflights passed all 44 checks. The historical full backend run had two failed files; both corrections pass file-isolated replays, as detailed below. No whole-suite green is claimed.
 
 Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-a2b-upstream-keep-clean`. Branch: `lane/pgf-a2b`. Base: A2a tip `c2cbe8b53c04`; stacked on A1 #24800. Local commits only; no push, PR, deployment, production access, api.omi.me calls, or GCP tier.
 
@@ -59,7 +59,7 @@ Heavy commands use `backend/.venv/bin/python /tmp/a2b-run.py /Users/dazheng/work
 
 ### Terminal test outcomes
 
-Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest summaries and file receipts were parsed. The full command exited 1: 2,674 files passed, 2 files failed; 65,747 tests passed, 2 failed, 104 skipped, 2,130 deselected, 75 xfailed. The stale migration assertion is corrected (25-test file replay passed). Executor cold-dependency setup is corrected (36-test file replay passed, including a managed-gate repetition). No whole-run green is claimed. Repository-preflight results remain pending in this checkpoint.
+Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest summaries and file receipts were parsed. The full command exited 1: 2,674 files passed, 2 files failed; 65,747 tests passed, 2 failed, 104 skipped, 2,130 deselected, 75 xfailed. The stale migration assertion is corrected (25-test file replay passed). Executor cold-dependency setup is corrected (36-test file replay passed, including a managed-gate repetition). No whole-run green is claimed. Final repository and full PR-body preflights both passed: 44 checks each, 0 failures, in 1,105.24 s and 831.75 s respectively. They ran on the frozen source including the parallel-worker correction at 06938ea37f0f and the lazy public API export.
 
 | Context | Exact command after credential scrub (heavy launcher as described above) | Result |
 |---|---|---|
@@ -85,10 +85,13 @@ Terminal full-run evidence: 2026-11-07T03:51:21.337212+00:00. All 2,676 pytest s
 | root | `git show origin/main:docs/api-reference/app-client-openapi.json > /tmp/a2b-openapi-base.json && backend/.venv/bin/python backend/scripts/check_app_client_openapi_compatibility.py --base-spec /tmp/a2b-openapi-base.json --head-spec /tmp/a2b-openapi.json && cmp /tmp/a2b-openapi-base.json /tmp/a2b-openapi.json` | PASS; byte-identical to the fetched main baseline |
 | backend | `OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest -q tests/unit/test_cell_store_conformance.py` | After migration-version correction: 25 passed, 0 failed |
 | root | `OMI_REQUIRE_STORE_BACKENDS=postgres backend/.venv/bin/python /tmp/a2b-b2-compat.py` (temporary import overlay described below) | Final source with B2 store/purge/errors at `67894e0e15cc0c9ee55d1433d8014c202772d6e9`: 120 passed, 55 unavailable-emulator skips, 0 failed |
-| root | `scripts/pr-preflight --pr-body-file .agent-artifacts/pgf/a2b-pr-body.md --metadata-only` | 4 checks passed, 0 failed; 28.80 s |
-| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2b-executor-warm.txt BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=1 bash backend/test.sh` (credential-scrubbed short setup check) | Executor fixture correction: 36 passed, 0 failed; 12.43 s pytest / 23 s file wall. Two-second deadlines and all assertions unchanged. Managed repetition also passed: 36 passed in 8.61 s / 15 s file wall. Full gates are being rerun. |
+| root | `scripts/pr-preflight --pr-body-file .agent-artifacts/pgf/a2b-pr-body.md --metadata-only` | 4 checks passed, 0 failed; initial 28.80 s; final updated-draft metadata replay 29.52 s |
+| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2b-executor-warm.txt BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=1 bash backend/test.sh` (credential-scrubbed short setup check) | Executor fixture correction: 36 passed, 0 failed; 12.43 s pytest / 23 s file wall. Two-second deadlines and all assertions unchanged. Managed repetition also passed: 36 passed in 8.61 s / 15 s file wall. Both final full preflights passed all 44 checks. |
 | backend | `OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest -q tests/unit/test_cells_task_workflow_migration.py tests/unit/test_port_surface_parity.py` | Final lazy public export: 62 passed, 0 failed; 32.79 s. Includes 11 cell contracts and 51 parity cases. |
 | root | `backend/.venv/bin/python .github/scripts/check_dead_code.py --area backend` | PASS; 16 existing unreachable files at baseline/allowlist floor; no `.github` changes |
+| backend | `OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest -q tests/unit/test_cells_task_workflow_migration.py` | Final required-Postgres parallel-safety regression replay: 12 passed, 0 failed, 0 skipped; 78.01 s. Earlier identical test selection without the required-backend env also passed 12 tests in 24.64 s. |
+| root | `OMI_PR_BODY_FILE=.agent-artifacts/pgf/a2b-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | PASS: 44 checks, 0 failures; 1,105.24 s. |
+| root | `BACKEND_UNIT_FILE_BUDGET_SECONDS=900 scripts/pr-preflight --pr-body-file .agent-artifacts/pgf/a2b-pr-body.md` | PASS: 44 checks, 0 failures; 831.75 s. Both final preflights ran sequentially under one managed heavy admission after the queue cleared. |
 | root | `scripts/pr-preflight --suggest` | PASS; INV-TASK-2 and Failure-Class: none retained |
 | root | `black --line-length 120 --skip-string-normalization <changed Python files>` plus the pinned staged-file hook | PASS |
 
@@ -111,14 +114,18 @@ B2 compatibility uses a disposable package overlay under `/Volumes/Ephemeral/scr
 - First full CI-runner attempt stopped at typecheck: 56 errors / 76,605 warnings, so no full-suite pass was claimed. Fixed public helper names, decorator/heterogeneous-payload typing, explicit domain attributes and optional values. An incorrectly invoked narrow pyright command initially selected system Python 3.14 and added unrelated stdlib diagnostics; final commands specify the worktree's Python explicitly. Final adapter typecheck has zero errors.
 - A transient intermediate edit missed the new ParamSpec import, causing two collection errors. Corrected before the final tests/commit.
 - Broad run later exposed the old B1 `current_version == 1` assertion (24 other cell-store cases passed). Updated only the exact expectation to 3; the whole 25-test file passed replay. The same broad run also encountered a 2-second future timeout in unchanged `test_executors.py::test_submit_with_context_logs_byok_quota_halt_without_traceback`; the corrected fixture passes both direct and managed file-isolated replays (36 tests).
-- The first frozen-source `make preflight` stopped on `dead-code-ratchet` after 429.14 s: the conformance-only composition class had no production importer. Added a real lazy public export in the already authorized adapters package, migrated conformance imports to it, and added a no-pool/fresh-process import test. Focused backend ratchet and 62 public-API/parity tests pass; full gates are rerun. Other uncompleted checks from that failed run are not claimed passed.
+- The first frozen-source `make preflight` stopped on `dead-code-ratchet` after 429.14 s: the conformance-only composition class had no production importer. Added a real lazy public export in the already authorized adapters package, migrated conformance imports to it, and added a no-pool/fresh-process import test. Focused backend ratchet and 62 public-API/parity tests pass; both final full gates also pass all 44 checks. Other uncompleted checks from that failed run are not claimed passed.
 - Initial make preflight hit a runtime-image source-copy race: test-created `_segments`/`_speech_profiles` directories disappeared during copying. No source correction or safety bypass was made; final preflight is run after tests finish.
 
 ## Known gaps / integration gates
 
-- A1 #24800 and B2 #24805 were OPEN at the fresh check against main `0433d12e05d3b97363779c57495bb3e23965903f`; no conditional rebase was warranted then. Re-fetch and rebase the stack when its prerequisites merge; do not integrate A2b before A2a/A1. B2 is required for live write admission, tombstones and wipe integration.
+- A1 #24800 and B2 #24805 remain OPEN at the final fresh check against main `eb7d5eb2df2bb30907be8325fcdda214d3cba99f`; no conditional rebase is warranted. Re-fetch and rebase the stack when its prerequisites merge; do not integrate A2b before A2a/A1. B2 is required for live write admission, tombstones and wipe integration.
 - This is conformance-only validation. There is no deployed/runtime/user-facing cell acceptance claim and no enrollment. Stored columns must be applied before enrollment. Pooler/capacity/rollout decisions remain outside A2b.
-- The full command was non-green (two failed files). The final report records the corrected migration test and executor replay separately; it does not relabel that historical command as green. Preflight status will be finalized before handoff.
+- The full command was non-green (two failed files). The final report records the corrected migration test and executor replay separately; it does not relabel that historical command as green. Both final full preflights pass all 44 checks.
+
+## Final state and hygiene
+
+All A2b implementation and test corrections are in small conventional local commits; source correction tip is `06938ea37f0f` (parallel safety), followed by evidence-only updates. No push or PR was made. Final boundary comparison against the A2a base shows no forbidden-path changes. B2 0002 is still byte-identical to its specified worktree. The emulator and disposable Postgres test processes exited; the final managed preflight pipeline exited 0. The owned heartbeat is stopped during final cleanup; no other lane's process was signalled. No production data, production API, GCP identity or tier was used.
 
 ## Draft PR body
 
@@ -138,7 +145,7 @@ Promote doc-mode storage with expand-only generated query columns that decode ta
 
 Simulator, real disposable Postgres and Firestore emulator: 165 conformance tests passed; 12 legacy emulator regressions passed. Public API/cell contract/signature checks: 62 passed; the final 12-test cell-contract file also passes after correcting parallel-worker safety in the timestamp decoder. Task/query/lifecycle guard replay: 2,436 passed. Core adapters also passed 120 tests with B2's write-fenced store, with 55 optional emulator cases skipped in that Postgres-focused run. OpenAPI is byte-identical to the fetched main baseline.
 
-The full 2,676-file backend command exited 1 (65,747 passed / 2 failed): a stale migration-version assertion and a two-second executor dependency-initialization timeout. Both files are corrected and pass isolated replay (25 cell-store tests; 36 executor tests). No full-run green is claimed. Both full preflights are being rerun after adding the public lazy export required by the dead-code ratchet; the focused backend ratchet passes. Exact commands and all outcomes are in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
+The full 2,676-file backend command exited 1 (65,747 passed / 2 failed): a stale migration-version assertion and a two-second executor dependency-initialization timeout. Both files are corrected and pass isolated replay (25 cell-store tests; 36 executor tests). No full-run green is claimed. `make preflight` and the full PR-body preflight both passed all 44 checks after the final source corrections. Exact commands and all outcomes are in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
 
 ## Tests
 
