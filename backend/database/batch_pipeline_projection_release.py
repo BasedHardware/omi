@@ -32,6 +32,8 @@ from config.batch_pipeline import (
     projection_ghost_settle_cohort,
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
+from utils.backlog_metrics import record_transition
+from config.backlog_state_machine import MAX_PROJECTION_REARMS, held_redrive_budget_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -110,12 +112,21 @@ def ghost_class(entry, job, binding, segment_id: str, now: float) -> str:
     return 'eligible'
 
 
+def projection_rearms(entry: dict) -> int:
+    """Expiry re-arms already granted; malformed metadata counts as spent."""
+    if 'held_expired_rearms' not in entry:
+        return 0
+    count = entry['held_expired_rearms']
+    return count if type(count) is int and count >= 0 else MAX_PROJECTION_REARMS
+
+
 class ProjectionReleaseStore:
     """Operator-free reset of one held unit; every assignment fence still applies."""
 
     def __init__(self, store, *, ghost_budget: int = GHOST_SETTLE_MAX_PER_PASS):
         self.store = store
         self.expired = False
+        self.rearm_exhausted = False
         self.ghost_budget = max(0, min(ghost_budget, GHOST_SETTLE_MAX_PER_PASS))
         self.ghost_settled = False
         self.ghost_skip: str | None = None
@@ -242,16 +253,26 @@ class ProjectionReleaseStore:
                         )
                     elif finite_timestamp(deadline) and deadline <= now:
                         expiry = {'held_expired_reason': 'held_expired', 'held_expired_at': now}
+                        rearm_exhausted = False
                         if attempts >= MAX_RELEASE_ATTEMPTS:
-                            # Keep the old reader's state AND attempt eligibility.
-                            # This bounded, one-time CAS re-arms only an aged hold;
-                            # retain the previous counter for custody/audit.
-                            expiry.update(
-                                held_expired_release_attempts=attempts,
-                                projection_release_attempts=0,
-                            )
+                            rearms = projection_rearms(entry)
+                            if held_redrive_budget_enabled() and rearms >= MAX_PROJECTION_REARMS:
+                                # Terminal stop: the receipt stays retained as
+                                # held_expired but its release budget stays spent.
+                                expiry['held_rearm_exhausted_at'] = now
+                                rearm_exhausted = True
+                            else:
+                                # Keep the old reader's state AND attempt eligibility.
+                                # This bounded CAS re-arms only an aged hold; retain
+                                # the previous counter for custody/audit.
+                                expiry.update(
+                                    held_expired_release_attempts=attempts,
+                                    projection_release_attempts=0,
+                                )
+                                if held_redrive_budget_enabled():
+                                    expiry['held_expired_rearms'] = rearms + 1
                         transaction.update(self.store.ref('results', segment_id), expiry)
-                        return 'expired'
+                        return 'expired_rearm_exhausted' if rearm_exhausted else 'expired'
                 return False
             if attempts >= MAX_RELEASE_ATTEMPTS:
                 return False
@@ -296,7 +317,10 @@ class ProjectionReleaseStore:
         self.ghost_age = outcome[1] if isinstance(outcome, tuple) else None
         if self.ghost_settled and outcome[2]:
             logger.warning('event=batch_projection_ghost_cohort outcome=invalid_fallback count=1')
-        self.expired = outcome == 'expired'
+        self.rearm_exhausted = outcome == 'expired_rearm_exhausted'
+        self.expired = outcome == 'expired' or self.rearm_exhausted
+        if self.rearm_exhausted:
+            record_transition('projection_rearm_exhausted')
         released = outcome is True
         if released or self.expired or self.ghost_settled:
             try:

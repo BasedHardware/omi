@@ -4,6 +4,7 @@ import logging
 from typing import Any, Callable
 
 from config import refactor_modes
+from config.backlog_state_machine import retry_cap_enforced, sync_attempt_carry_enabled
 from utils.capture.retry_cap import DECISIONS, MODE, RetryCap, observe, retry_cap
 
 logger = logging.getLogger(__name__)
@@ -11,12 +12,23 @@ __all__ = ['DECISIONS', 'MODE', 'RetryCap', 'observe', 'retry_cap', 'dispatch_ca
 
 
 def dispatch_cap(uid: str, owner: dict) -> RetryCap | None:
-    if not refactor_modes.shadow_or_serve(MODE):
+    if not retry_cap_enforced() and not refactor_modes.shadow_or_serve(MODE):
         return None
     from utils.cloud_tasks import get_sync_tasks_max_attempts
 
     # dispatch_attempt is a zero-based task identity: initial dispatch is 0.
     return retry_cap(uid, int(owner.get('dispatch_attempt') or 0) + 1, get_sync_tasks_max_attempts())
+
+
+def running_attempt_carry(owner: dict[str, Any]) -> bool:
+    """Whether a running owner's lease expiry counts as a spent delivery.
+
+    A budget-deferral chain keeps its own count (active_budget_deferrals) and its
+    own terminal (budget_chain_exhausted), so it keeps the legacy reset.
+    """
+    deferrals = owner.get('active_budget_deferrals')
+    budget_chain = isinstance(deferrals, int) and not isinstance(deferrals, bool) and deferrals > 0
+    return not budget_chain and sync_attempt_carry_enabled()
 
 
 def reconcile_dispatch_cap(
@@ -27,9 +39,12 @@ def reconcile_dispatch_cap(
     *,
     registry: Any,
     finalize: Callable[..., bool],
-    kick: Callable[[], Any]
+    kick: Callable[[], Any],
+    lease_expired: bool = False,
 ) -> str | None:
-    if owner.get('active_state') != 'dispatching':
+    # A dispatching owner's retry deadline passed, or (with attempt carry on) a
+    # running job's lease expired without a run lock: both consumed a delivery.
+    if owner.get('active_state') != 'dispatching' and not (lease_expired and running_attempt_carry(owner)):
         return None
     decision = dispatch_cap(uid, owner)
     observe('sequencer_dispatch', decision)
@@ -47,6 +62,10 @@ def reconcile_dispatch_cap(
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'finalize_deferred'
     if registry.finish_expired_job(uid, owner['active_job_id'], epoch, 'dispatch_retry_cap_reached', now=current):
+        if owner.get('active_state') != 'dispatching':
+            from utils.backlog_metrics import record_transition
+
+            record_transition('sync_running_cap_reached')
         kick()
         return 'dispatch_retry_cap_reached'
     return 'raced'

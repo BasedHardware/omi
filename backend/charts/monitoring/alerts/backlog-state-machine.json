@@ -1,0 +1,534 @@
+[
+  {
+    "uid": "omi-backlog-retry-cap-quarantine-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Retry cap quarantine rate (enforced by default)",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Enforced retry caps are quarantining or failing more than 50 units in 30 minutes.",
+      "user_impact": "Affected recordings keep their audio but wait in a held state instead of retrying; sync uploads end failed and need a re-upload or operator redrive.",
+      "scope": "Counts committed cap decisions with outcome=quarantine across batch lease expiry and sync dispatch checks. Enforced for every uid by CAPTURE_RETRY_CAP_ENFORCED. Agent tier only.",
+      "verification": "Read omi_capture_retry_cap_total by check and outcome, then batch worker failure reasons and sync dispatch errors.",
+      "safe_next_action": "Find the failure that exhausts attempts (worker crash, OOM, provider outage) before requeueing; requeue only after the cause is fixed. Rollback: CAPTURE_RETRY_CAP_ENFORCED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">50 quarantines in 30m for 5m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 51 quarantine decisions in 30m.",
+      "evaluated_good": "Synthetic: 50 quarantine decisions in 30m, or would_quarantine only."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-retry-cap-quarantine-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-sync-running-cap-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Sync running-job attempt cap reached",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"sync_running_cap_reached\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "More than 10 running sync jobs reached the carried dispatch-attempt cap in 30 minutes.",
+      "user_impact": "These offline-sync uploads ended failed after repeated worker crashes instead of retrying forever.",
+      "scope": "Counts only running owners whose lease expired without a run lock and whose carried dispatch_attempt reached SYNC_TASKS_MAX_ATTEMPTS (SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED). Dispatching-owner caps count under the retry-cap rule. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"sync_running_cap_reached\"} and backend-sync-backfill worker crash and timeout logs.",
+      "safe_next_action": "Fix the worker crash cause first; the sync job is terminal failed and the client may re-upload. Rollback: SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">10 in 30m for 5m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 11 running-cap terminations in 30m.",
+      "evaluated_good": "Synthetic: 10 in 30m."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-sync-running-cap-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-exhausted-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Held re-drive budget exhausted",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=~\"held_exhausted|projection_rearm_exhausted\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 64",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "More than 64 held units or projection receipts exhausted their automatic re-drive budget in an hour.",
+      "user_impact": "These recordings keep audio and any partial results but no longer retry automatically; they have no published transcript until an operator requeues them.",
+      "scope": "held_exhausted: nightly re-drive found held_redrives>=3 and parked the unit as dead/held_exhausted. projection_rearm_exhausted: expiry stopped re-arming a receipt after 3 re-arms. BATCH_HELD_REDRIVE_BUDGET_ENABLED. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total for both transitions and inspect quarantine_reason and worker_failure on sampled rows with an authorized operator read.",
+      "safe_next_action": "Requeue through the private OIDC requeue-quarantined path only after resolving the failure cause. Never delete audio. Rollback: BATCH_HELD_REDRIVE_BUDGET_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">64 in 1h for 5m (two nightly 32-row pages); initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 65 exhausted transitions in 1h.",
+      "evaluated_good": "Synthetic: 64 in 1h."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-exhausted-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-record-barrier-dead-letter-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "record_pending barrier dead letters",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"record_barrier_dead_letter\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 100",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "More than 100 aged record_pending rows with unfinished conversations were parked as dead letters in an hour.",
+      "user_impact": "Recordings whose conversation never finished keep their audio but stop retrying admission, so they get no batch transcript until requeued.",
+      "scope": "Only rows older than 14 days whose conversation exists and is not completed, after 4 weekly re-drives (RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED). Missing conversations use the record_pending_repair cancel; completed ones use seal repair. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=~\"record_barrier_.*\"} and the conversation finalization dead-letter and stale-processing reconciler logs.",
+      "safe_next_action": "Fix conversation finalization first, then requeue with utils.batch_pipeline.live.requeue_barrier_dead_letter. Never clear upload tokens or delete audio. Rollback: RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">100 in 1h for 5m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 101 parks in 1h.",
+      "evaluated_good": "Synthetic: 100 parks in 1h, or weekly re-drives only."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-record-barrier-dead-letter-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  }
+]

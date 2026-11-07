@@ -31,6 +31,12 @@ from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
+from config.backlog_state_machine import (
+    HELD_EXHAUSTED_REASON,
+    MAX_HELD_REDRIVES,
+    RETAINED_DEAD_REASONS,
+    held_redrive_budget_enabled,
+)
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -940,7 +946,9 @@ class Scheduler:
     @staticmethod
     def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
         """Dormant worker holds only; never reopen an active paid/operator intent."""
-        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        # held_exhausted rows (automatic re-drive budget spent) stay requeueable
+        # by an operator; the nightly pass selects held_expired only.
+        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS
         state_ok = job.get('state') == 'quarantined' or held_dead
         lease_until = job.get('lease_until', 0)
         if (
@@ -984,8 +992,33 @@ class Scheduler:
         owner = tx.get('owners', job['owner_key'])
         owner['revision'] = owner.get('revision', 0) + 1
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        if held_redrive_budget_enabled():
+            # A re-drive is a new attempt budget. Keeping attempt at the cap made
+            # the first failure re-quarantine; history moves to explicit fields.
+            job['held_redrive_last_attempt'] = job.get('attempt', 0)
+            job['held_redrives'] = held_redrives(job) + 1
+            job['attempt'] = 0
         _append(tx, control, job)
         tx.put('owners', job['owner_key'], owner)
+        tx.put('jobs', job['segment_id'], job)
+        return True
+
+    @staticmethod
+    def exhaust_held_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+        """Terminal stop for automatic re-drive: retained, operator-requeueable.
+
+        Only an eligible held_expired dead letter whose re-drive budget is spent
+        moves; audio, results, intents and attempt history are untouched.
+        """
+        if (
+            not held_redrive_budget_enabled()
+            or job.get('state') != 'dead'
+            or job.get('dead_letter_reason') != 'held_expired'
+            or held_redrives(job) < MAX_HELD_REDRIVES
+            or not Scheduler.held_requeue_eligible(tx, job, now)
+        ):
+            return False
+        job.update(dead_letter_reason=HELD_EXHAUSTED_REASON, held_exhausted_at=now)
         tx.put('jobs', job['segment_id'], job)
         return True
 
@@ -1031,3 +1064,14 @@ class Scheduler:
             return True
 
         return self.store.run(commit)
+
+
+def held_redrives(job: dict) -> int:
+    """Automatic and operator re-drives already granted to this unit.
+
+    Malformed metadata counts as spent: it must never re-open an unbounded loop.
+    """
+    if 'held_redrives' not in job:
+        return 0
+    count = job['held_redrives']
+    return count if type(count) is int and count >= 0 else MAX_HELD_REDRIVES

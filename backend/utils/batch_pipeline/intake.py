@@ -159,8 +159,10 @@ def _terminally_held(job: dict) -> bool:
     Its encrypted artifacts stay server-side for a reviewed operator redrive, so
     a re-upload can neither change the outcome nor add a recovery path.
     """
+    from config.backlog_state_machine import RETAINED_DEAD_REASONS
+
     return (job.get('state') == 'quarantined' and job.get('recovery_state') == 'failed_held') or (
-        job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        job.get('state') == 'dead' and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS
     )
 
 

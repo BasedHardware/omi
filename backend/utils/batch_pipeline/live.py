@@ -30,6 +30,15 @@ from config.record_drain import (
     barrier_retry_delay,
     record_drain_barrier_backoff_enabled,
 )
+from config.backlog_state_machine import (
+    MAX_RECORD_BARRIER_REDRIVES,
+    RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS,
+    RECORD_BARRIER_DEAD_LETTER_REASON,
+    RECORD_BARRIER_PARK_SECONDS,
+    RECORD_BARRIER_REDRIVE_SECONDS,
+    record_barrier_dead_letter_enabled,
+)
+from utils.backlog_metrics import record_transition
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -58,6 +67,81 @@ OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
 # config.record_audio.require_record_audio_barrier: the capture is not finalized yet.
 BARRIER_NOT_CLOSED = 'capture upload/finalization barrier not closed'
+
+
+class RecordBarrierOpen(ValueError):
+    """The admission pre-check's barrier refusal, with the conversation it read.
+
+    Same message as the config.record_audio refusal, so every existing
+    ``str(error) == BARRIER_NOT_CLOSED`` match is unchanged.
+    """
+
+    def __init__(self, message: str, *, conversation_present: bool, conversation_status: Any):
+        super().__init__(message)
+        self.conversation_present = conversation_present
+        self.conversation_status = conversation_status if isinstance(conversation_status, str) else None
+
+
+def record_barrier_redrives(job: dict) -> int:
+    """Weekly barrier re-drives already spent; malformed metadata counts as spent."""
+    if 'barrier_redrives' not in job:
+        return 0
+    count = job['barrier_redrives']
+    return count if type(count) is int and count >= 0 else MAX_RECORD_BARRIER_REDRIVES
+
+
+def barrier_dead_letter_step(job: dict, *, age: float, error: BaseException | None, now: float) -> str | None:
+    """Owner/deadline for an aged record_pending row whose conversation never finished.
+
+    Mutates ``job`` and returns 'redrive' (weekly retry, counted) or
+    'dead_letter' (retained park, operator requeue only), or None to keep the
+    ordinary barrier ladder. Only a conversation that exists and is not
+    completed qualifies: a missing one belongs to the seven-day
+    record_pending_repair cancel, and a completed one with open upload
+    tokens belongs to seal repair. Never touches custody, tokens or audio.
+    """
+    if (
+        not isinstance(error, RecordBarrierOpen)
+        or not error.conversation_present
+        or error.conversation_status == 'completed'
+        or age < RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS
+        or job.get('barrier_dead_letter')
+        or not record_barrier_dead_letter_enabled()
+    ):
+        return None
+    spent = record_barrier_redrives(job)
+    if spent >= MAX_RECORD_BARRIER_REDRIVES:
+        job['barrier_dead_letter'] = {
+            'reason': RECORD_BARRIER_DEAD_LETTER_REASON,
+            'at': now,
+            'redrives': spent,
+            'conversation_status': error.conversation_status,
+        }
+        return 'dead_letter'
+    job['barrier_redrives'] = spent + 1
+    job['barrier_redrive_at'] = now
+    return 'redrive'
+
+
+def requeue_barrier_dead_letter(store, segment: str, now: float) -> bool:
+    """Operator exit for a parked record_pending row: one fresh re-drive budget."""
+
+    def commit(tx):
+        job = tx.get('jobs', segment)
+        if job.get('state') != 'record_pending' or not job.get('barrier_dead_letter'):
+            return False
+        job['barrier_dead_letter_history'] = [
+            *(job.get('barrier_dead_letter_history') or []),
+            job['barrier_dead_letter'],
+        ]
+        job.pop('barrier_dead_letter')
+        job.update(barrier_redrives=0, barrier_requeued_at=now, available_at=now)
+        tx.put('jobs', segment, job)
+        return True
+
+    return store.run(commit)
+
+
 # Literal admission refusals worth counting; any other text could carry a value
 # and is reported only as `other`.
 _RETRY_REASONS = frozenset(
@@ -315,8 +399,12 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     current = await run_blocking(db_executor, read_current)
     try:
         record_barrier = require_record_audio_barrier(current)
-    except ValueError:
+    except ValueError as error:
         phase_shadow.observe('batch_admission', current, False, now=now)
+        if str(error) == BARRIER_NOT_CLOSED:
+            raise RecordBarrierOpen(
+                BARRIER_NOT_CLOSED, conversation_present=bool(current), conversation_status=current.get('status')
+            ) from error
         raise
     phase_shadow.observe('batch_admission', current, True, now=now)
     client = await run_blocking(storage_executor, create_storage_client)
@@ -538,6 +626,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
         nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
+        barrier_error = None
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -553,6 +642,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
         except Exception as error:
             failed = True
             barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
+            barrier_error = error if barrier_open else None
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
@@ -570,22 +660,38 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             # so a no-op cannot monopolize every immediately repeated pass,
             # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
+            step = None
             if latest.get('state') == 'record_pending':
                 delay = 60
                 if not failed and (latest.get('partial_run') or {}).get('complete'):
                     delay = INVENTORY_POLL_SECONDS
-                elif barrier_open and record_drain_barrier_backoff_enabled():
-                    # The capture is not finalized yet: back off by how long it has waited.
+                elif barrier_open:
                     enqueued = latest.get('enqueued_at')
                     age = time.time() - enqueued if isinstance(enqueued, (int, float)) else 0.0
-                    delay = barrier_retry_delay(age)
+                    if record_drain_barrier_backoff_enabled():
+                        # The capture is not finalized yet: back off by how long it has waited.
+                        delay = barrier_retry_delay(age)
+                    step = barrier_dead_letter_step(latest, age=age, error=barrier_error, now=time.time())
+                    if step == 'redrive':
+                        delay = RECORD_BARRIER_REDRIVE_SECONDS
+                    elif step == 'dead_letter':
+                        delay = RECORD_BARRIER_PARK_SECONDS
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)
                 latest['available_at'] = max(0 if current == lease else current, time.time() + delay)
                 tx.put('jobs', segment, latest)
+            return step
 
-        await run_blocking(db_executor, store.run, defer)
+        step = await run_blocking(db_executor, store.run, defer)
+        # Count only the committed attempt, never inside the retryable callback.
+        if step == 'redrive':
+            record_transition('record_barrier_redrive')
+        elif step == 'dead_letter':
+            record_transition('record_barrier_dead_letter')
+            logger.warning(
+                'event=batch_live_admission outcome=barrier_dead_letter reason=%s', RECORD_BARRIER_DEAD_LETTER_REASON
+            )
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

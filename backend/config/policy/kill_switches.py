@@ -33,6 +33,11 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED': True,
     'BATCH_PIPELINE_HELD_PARTIAL_ENABLED': True,
+    # Backlog state machine (config/backlog_state_machine.py); safety switches, on unless set off.
+    'CAPTURE_RETRY_CAP_ENFORCED': True,
+    'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED': True,
+    'BATCH_HELD_REDRIVE_BUDGET_ENABLED': True,
+    'RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED': True,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 logger = logging.getLogger(__name__)

@@ -607,6 +607,7 @@ def reconcile_uid(
         registry=registry,
         finalize=_finalize_abandoned_budget_chain_job,
         kick=lambda: kick(uid, retire_limit=retire_limit, progress=progress),
+        lease_expired=outcome == 'lease_expired',
     )
     if capped is not None:
         return capped

@@ -64,6 +64,9 @@ def test_requeue_idempotent_and_usable_with_flag_off_retains_attempt_and_audio_h
     # Keep the strict document fake off query paths; the emulator covers a cold DRR ring.
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Attempt retention is the BATCH_HELD_REDRIVE_BUDGET_ENABLED rollback; the
+    # default fresh budget is covered in test_backlog_state_machine.py.
+    monkeypatch.setenv('BATCH_HELD_REDRIVE_BUDGET_ENABLED', 'false')
     recovery = RecoveryStore(store)
     assert recovery.requeue_quarantined('bad', 30)
     after = deepcopy(client.rows)
@@ -189,7 +192,7 @@ def test_flag_off_preserves_legacy_quarantine_and_sweep_is_zero_io(monkeypatch):
     assert store.run(lambda tx: expire_held_in_transaction(tx, tx.get('jobs', 'bad'), 10**9)) == 'disabled'
     assert store.rows == before
     untouched = Mock()
-    assert sweep.HeldDeadLetter(untouched).tick(10**9) == {'expired': 0, 'requeued': 0}
+    assert sweep.HeldDeadLetter(untouched).tick(10**9) == {'expired': 0, 'requeued': 0, 'exhausted': 0}
     assert not untouched.mock_calls
 
 
@@ -227,17 +230,17 @@ def test_nightly_bounded_cursor_survives_restart_and_double_delivery(monkeypatch
     store = model_store(monkeypatch)
     metrics = QueueMetrics(CollectorRegistry())
     runner = sweep.HeldDeadLetter(store, metrics=metrics)
-    assert runner.tick(86400) == {'expired': 32, 'requeued': 0}
+    assert runner.tick(86400) == {'expired': 32, 'requeued': 0, 'exhausted': 0}
     assert metrics.held_expired._value.get() == 32
     before = deepcopy(store.rows)
-    assert runner.tick(86400) == {'expired': 0, 'requeued': 0}
+    assert runner.tick(86400) == {'expired': 0, 'requeued': 0, 'exhausted': 0}
     assert store.rows == before
     # A fresh process continues the durable held cursor, then waits for midnight.
     runner = sweep.HeldDeadLetter(store, metrics=metrics)
-    assert runner.tick(86700) == {'expired': 3, 'requeued': 0}
-    assert runner.tick(172800) == {'expired': 0, 'requeued': 32}
+    assert runner.tick(86700) == {'expired': 3, 'requeued': 0, 'exhausted': 0}
+    assert runner.tick(172800) == {'expired': 0, 'requeued': 32, 'exhausted': 0}
     assert metrics.held_expired_stock._value.get() == 3
-    assert sweep.HeldDeadLetter(store).tick(173100) == {'expired': 0, 'requeued': 3}
+    assert sweep.HeldDeadLetter(store).tick(173100) == {'expired': 0, 'requeued': 3, 'exhausted': 0}
     assert not any(job['state'] == 'dead' for (table, _), job in store.rows.items() if table == 'jobs')
     assert metrics.held_expired._value.get() == 35
 
@@ -258,8 +261,8 @@ def test_crash_before_checkpoint_replays_without_duplicate_expiry(monkeypatch):
     monkeypatch.setattr(store, 'run', crash)
     with pytest.raises(RuntimeError, match='synthetic crash'):
         runner.tick(86400)
-    assert sweep.HeldDeadLetter(store).tick(86400) == {'expired': 0, 'requeued': 0}
-    assert sweep.HeldDeadLetter(store).tick(172800) == {'expired': 0, 'requeued': 1}
+    assert sweep.HeldDeadLetter(store).tick(86400) == {'expired': 0, 'requeued': 0, 'exhausted': 0}
+    assert sweep.HeldDeadLetter(store).tick(172800) == {'expired': 0, 'requeued': 1, 'exhausted': 0}
 
 
 def test_private_requeue_rpc_is_stage_bound_authenticated_and_idempotent(setup, monkeypatch):
@@ -341,11 +344,11 @@ def test_one_unreadable_row_does_not_pin_expiry_or_nightly_pages(monkeypatch, ca
 
     monkeypatch.setattr(RecoveryStore, 'checked', unreadable)
     runner = sweep.HeldDeadLetter(store)
-    assert runner.tick(86400) == {'expired': 1, 'requeued': 0}
+    assert runner.tick(86400) == {'expired': 1, 'requeued': 0, 'exhausted': 0}
     assert store.rows['jobs', 'held-000']['state'] == 'quarantined'
     # A corrupt old dead row is also skipped without blocking the next key.
     store.rows['jobs', 'held-000'].update(state='dead', dead_letter_reason='held_expired', held_expired_at=86400)
-    assert runner.tick(172800) == {'expired': 0, 'requeued': 1}
+    assert runner.tick(172800) == {'expired': 0, 'requeued': 1, 'exhausted': 0}
     assert store.rows['jobs', 'held-001']['state'] == 'ready'
     assert 'action=expire outcome=retry exception_type=RuntimeError' in caplog.text
     assert 'action=requeue outcome=retry exception_type=RuntimeError' in caplog.text

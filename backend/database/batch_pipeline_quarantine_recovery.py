@@ -17,7 +17,8 @@ from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
-from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.batch_pipeline.scheduler import Scheduler, held_redrives, owner_key
+from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -128,7 +129,11 @@ class RecoveryStore:
         return self.store.run(commit)
 
     def requeue_quarantined(self, segment_id, now, *, dead_before=None):
-        """Operator and nightly entry: retain the content/privacy ownership CAS."""
+        """Operator and nightly entry: retain the content/privacy ownership CAS.
+
+        Returns True on requeue, False on refusal, and 'exhausted' when the
+        nightly pass (dead_before set) parks a unit whose re-drive budget is spent.
+        """
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
@@ -142,6 +147,12 @@ class RecoveryStore:
                     or not math.isfinite(expired_at)
                     or expired_at >= dead_before
                 ):
+                    return False
+                # Automatic re-drive has a terminal stop; the operator path
+                # (dead_before=None) may still requeue an exhausted unit.
+                if Scheduler.exhaust_held_in_transaction(tx, job, now):
+                    return 'exhausted'
+                if held_redrive_budget_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES:
                     return False
             return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
 
