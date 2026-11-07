@@ -1329,7 +1329,7 @@
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
-      "if": "github.ref == 'refs/heads/main'",
+      "if": "github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
@@ -4766,6 +4766,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "import_grafana": {
+              "default": "true",
+              "description": "Import the live-STT Grafana alert rules into the selected environment. Default true keeps the existing behavior; set false to deploy the Helm and exporter changes without touching Grafana.",
+              "required": "false",
+              "type": "boolean"
             }
           }
         }
