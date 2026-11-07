@@ -350,8 +350,8 @@ def test_cohort_equality_only_counts_and_inert_non_ghost_rows(holds, monkeypatch
     # no composite index is declared. Emulator execution cannot prove prod's
     # composite-index enforcement; canary HTTP 400 stays UNKNOWN.
     cohort = FieldFilter('ghost_settled_cohort', '==', 'G_2-drain')
-    blocked = ('pending', 'persisted', 'quarantine_held', 'quarantined')
-    for index, state in enumerate(('completed', *blocked, 'erased')):
+    blocked = ('pending', 'persisted', 'quarantine_held')
+    for index, state in enumerate(('completed', *blocked, 'erased', 'quarantined')):
         results.document(f'cohort-count-{index}').set({'ghost_settled_cohort': 'G_2-drain', 'projection_state': state})
     results.document('other-cohort').set({'ghost_settled_cohort': 'g2', 'projection_state': 'ready'})
     queries = [
@@ -360,7 +360,7 @@ def test_cohort_equality_only_counts_and_inert_non_ghost_rows(holds, monkeypatch
         results.where(filter=And([cohort, FieldFilter('projection_state', '==', 'completed')])),
         results.where(filter=And([cohort, Or([FieldFilter('projection_state', '==', state) for state in blocked])])),
     ]
-    assert [q.count(alias='total').get()[0][0].value for q in queries] == [8, 2, 1, 4]
+    assert [q.count(alias='total').get()[0][0].value for q in queries] == [8, 2, 1, 3]
 
 
 def test_invalid_cohort_fallback_survives_real_transaction(holds, monkeypatch):

@@ -310,7 +310,7 @@ default. No cohort ceiling is added; lead2 controls rollout via the flag and cap
 
 Cohort counts use equality-only COUNT: cohort total, cohort + `ready`, cohort +
 `completed`, and cohort + an OR of blocked/incomplete state equalities (`pending`,
-`persisted`, `quarantine_held`, `quarantined`). Other/missing states (including
+`persisted`, `quarantine_held`). Other/missing states (including
 `erased`) are `total - ready - completed - blocked`, UNKNOWN if inconsistent.
 No new index: single-field equality index merging is the production assumption;
 the emulator executes these queries but does not enforce production composite
