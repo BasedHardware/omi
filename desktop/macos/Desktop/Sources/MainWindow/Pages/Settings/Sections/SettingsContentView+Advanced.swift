@@ -239,6 +239,10 @@ extension SettingsContentView {
             }
           }
 
+          if chatBridgeMode == AIProvider.local.bridgeModeRawValue {
+            localProviderFields
+          }
+
           if chatBridgeMode == "claudeCode" {
             GlassSeparator()
             claudeConnectionRow

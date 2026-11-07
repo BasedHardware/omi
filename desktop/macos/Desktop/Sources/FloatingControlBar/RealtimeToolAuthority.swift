@@ -48,7 +48,8 @@ enum RealtimeExternalRunTerminalPolicy {
       .explicitInterrupt, .cleanup:
       return .cancelled
     case .permissionDenied, .captureFailed, .captureNotReady, .transcriptionFailed,
-      .providerFailed, .noNetwork, .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
+      .transcriptionPlanLimit, .providerFailed, .noNetwork, .providerNoResponse,
+      .hubWarmTimeout, .deferredCommitTimeout,
       .bargeInReplacementTimeout, .toolTimeout, .playbackFailed, .journalFailed:
       return .failed
     }
@@ -122,7 +123,8 @@ enum VoiceTurnJournalStatusPolicy {
       return delivery == .delivered ? .completed : .failed
     case .tooShort, .silentRejected, .cancelled, .ownerChanged,
       .cleanup, .permissionDenied, .captureFailed, .captureNotReady,
-      .transcriptionFailed, .providerFailed, .noNetwork, .providerNoResponse, .hubWarmTimeout,
+      .transcriptionFailed, .transcriptionPlanLimit, .providerFailed, .noNetwork,
+      .providerNoResponse, .hubWarmTimeout,
       .deferredCommitTimeout, .bargeInReplacementTimeout, .toolTimeout, .playbackFailed,
       .journalFailed:
       return .failed

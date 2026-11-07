@@ -104,4 +104,14 @@ final class KernelJournalBackendReconcileTests: XCTestCase {
       "backend_reconcile_failed"
     )
   }
+
+  /// A backend 402 (billing/quota exhausted) on journal reconcile is a
+  /// permanent 4xx like any other, not a transient error to retry.
+  func testReconcileClassifies402AsBoundedHttp4xx() {
+    XCTAssertEqual(
+      KernelJournalBackendSyncDriver.boundedReconcileErrorCode(
+        for: APIError.httpError(statusCode: 402, detail: "payment required")),
+      "backend_reconcile_http_4xx"
+    )
+  }
 }

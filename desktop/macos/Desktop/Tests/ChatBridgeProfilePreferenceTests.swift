@@ -10,28 +10,39 @@ final class ChatBridgeProfilePreferenceTests: XCTestCase {
   }
 
   func testPinnedSessionOwnsQuotaAndTelemetryAcrossPreferenceFlips() {
-    let suite = "ChatBridgeProfilePreferenceTests.\(UUID().uuidString)"
-    let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
-    defer { defaults.removePersistentDomain(forName: suite) }
-
+    // `providerMode` is passed explicitly (the actual running provider at
+    // construction time), not re-derived from UserDefaults, so a run's
+    // accounting stays pinned to what was actually running even if the
+    // Settings preference (and later, the actually-running provider) moves
+    // on to something else before this policy is read again.
     let existingHermesRun = ChatRunAccountingPolicy(
-      pinnedAdapterID: AgentAdapterId.hermes.rawValue
+      pinnedAdapterID: AgentAdapterId.hermes.rawValue,
+      providerMode: "omi"
     )
-    defaults.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: "chatBridgeMode")
     XCTAssertFalse(existingHermesRun.usesOmiAccountQuota)
     XCTAssertFalse(existingHermesRun.recordsPersonalProviderUsage)
 
     let inFlightOmiRun = ChatRunAccountingPolicy(
-      pinnedAdapterID: AgentAdapterId.piMono.rawValue
+      pinnedAdapterID: AgentAdapterId.piMono.rawValue,
+      providerMode: "omi"
     )
-    defaults.set(ChatProvider.BridgeMode.openClaw.rawValue, forKey: "chatBridgeMode")
     XCTAssertTrue(inFlightOmiRun.usesOmiAccountQuota)
     XCTAssertFalse(inFlightOmiRun.recordsPersonalProviderUsage)
 
-    let existingPersonalClaudeRun = ChatRunAccountingPolicy(
-      pinnedAdapterID: AgentAdapterId.acp.rawValue
+    // Constructed as though the actual running provider were already
+    // "omi-local": even a piMono-pinned run must not bill Omi's quota once
+    // the running process has actually switched to Local.
+    let localRun = ChatRunAccountingPolicy(
+      pinnedAdapterID: AgentAdapterId.piMono.rawValue,
+      providerMode: "omi-local"
     )
-    defaults.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: "chatBridgeMode")
+    XCTAssertFalse(localRun.usesOmiAccountQuota)
+    XCTAssertFalse(localRun.recordsPersonalProviderUsage)
+
+    let existingPersonalClaudeRun = ChatRunAccountingPolicy(
+      pinnedAdapterID: AgentAdapterId.acp.rawValue,
+      providerMode: "omi"
+    )
     XCTAssertFalse(existingPersonalClaudeRun.usesOmiAccountQuota)
     XCTAssertTrue(existingPersonalClaudeRun.recordsPersonalProviderUsage)
   }

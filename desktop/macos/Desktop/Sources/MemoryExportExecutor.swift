@@ -373,9 +373,7 @@ enum MemoryExportExecutor {
   private static func spawnSetupAgent(task: (title: String, body: String)) async {
     _ = await TasksStore.shared.createTask(
       description: task.title, dueAt: Date(), priority: "high", tags: ["mcp-setup"])
-    let model =
-      ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+    let model = AIProvider.resolveQuickChatModel()
     let query = ProactiveTaskExecute.buildQuery(title: task.title, message: task.body)
     _ = AgentPillsManager.shared.spawn(
       query: query,

@@ -41,12 +41,20 @@ class ScreenCaptureManager {
     return data
   }
 
-  /// Returns WebP data for the screen under the mouse cursor at full Retina
-  /// resolution, compressed in memory via libwebp. No disk I/O.
+  /// Returns JPEG data for the screen under the mouse cursor at full Retina
+  /// resolution. No disk I/O.
+  ///
+  /// Was WebP (via libwebp) until this was found to break every local-model
+  /// vision request: LM Studio's mlx-vlm image decoding path rejects WebP
+  /// outright ("'url' field must be a base64 encoded image.") while
+  /// accepting PNG/JPEG fine (confirmed with a minimal request built by
+  /// hand, independent of any of our own code). JPEG keeps a comparable size
+  /// to WebP (PNG at full Retina resolution runs 15-25x larger) while being
+  /// universally decodable. Reuses the same encoder as `captureScreenJPEG`.
   static func captureScreenData() -> Data? {
     guard let image = captureScreenImage() else { return nil }
-    guard let data = encodeWebP(image) else { return nil }
-    log("ScreenCaptureManager: Screenshot captured \(image.width)x\(image.height), WebP \(data.count / 1024) KB")
+    guard let data = jpegData(from: image) else { return nil }
+    log("ScreenCaptureManager: Screenshot captured \(image.width)x\(image.height), JPEG \(data.count / 1024) KB")
     return data
   }
 
@@ -270,7 +278,7 @@ class ScreenCaptureManager {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
     let timestamp = formatter.string(from: Date())
-    let fileURL = directory.appendingPathComponent("screenshot-\(timestamp).webp")
+    let fileURL = directory.appendingPathComponent("screenshot-\(timestamp).jpg")
 
     do {
       try data.write(to: fileURL)
