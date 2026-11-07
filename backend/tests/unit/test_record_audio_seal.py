@@ -624,3 +624,17 @@ def test_partial_audio_does_not_clear_refusal_clock(records):
     assert records.rows[PATH]['record_seal_refused_at'] == 100
     assert not records.rows[PATH].get('record_audio_closed')
     assert not records.transactions[-1].updates
+
+
+def test_reopening_a_seal_never_restarts_the_first_close_clock(records, monkeypatch):
+    monkeypatch.setattr(record_audio_db.pipeline_attention, 'admitted', lambda _: True)
+    monkeypatch.setattr(record_audio_db.pipeline_attention, 'attention', lambda _: 'unwatched')
+    monkeypatch.setattr(record_audio_db.pipeline_attention.metrics, 'stage', lambda *_: None)
+    monkeypatch.setenv('PIPELINE_RECORD_FAST_ENABLED', 'false')
+    monkeypatch.setattr(record_audio_db.time, 'time', lambda: 100)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert records.rows[PATH]['pipeline_attention']['sealed_at'] == 100
+    records.rows[PATH]['record_audio_closed'] = False
+    monkeypatch.setattr(record_audio_db.time, 'time', lambda: 200)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert records.rows[PATH]['pipeline_attention']['sealed_at'] == 100

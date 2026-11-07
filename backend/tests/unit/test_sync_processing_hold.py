@@ -630,6 +630,7 @@ def test_pipeline_intentionally_blocked_minimum_is_not_empty_output(monkeypatch,
 
 @pytest.mark.parametrize('driver', ['legacy', 'envelope'])
 def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monkeypatch, driver):
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setattr(
         outbox, 'pipeline_snapshot', lambda *_: {'recorded_end': 100, 'record_lane_owner': 'batch_sync_v1'}

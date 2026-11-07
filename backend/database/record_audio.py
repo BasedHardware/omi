@@ -58,7 +58,8 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
                 patch[pipeline_policy.FIELD] = {
                     **(row.get(pipeline_policy.FIELD) or {}),
                     'attention': (row.get(pipeline_policy.FIELD) or {}).get('attention', observed),
-                    'sealed_at': time.time(),
+                    'sealed_at': pipeline_policy.seconds((row.get(pipeline_policy.FIELD) or {}).get('sealed_at'))
+                    or time.time(),
                 }
             tx.update(ref, patch)
             row.update(patch)
