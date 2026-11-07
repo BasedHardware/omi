@@ -289,11 +289,43 @@ part owes ordinary discovery, not held expiry. In the existing
 fails, recheck the hint, ready receipt, all parts, absence of a privacy refusal,
 segment/binding/owner identity, committed job with recovery state other than
 `held`, and finite `committed_at` at least 24 hours old. With
-`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, write **only**
-`projection_state=ready`, matching `hold_for_quarantine`'s ready-sibling write.
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, write
+`projection_state=ready` and `ghost_settled_cohort=<label>` in a **single
+transaction.update**. The hint matches `hold_for_quarantine`'s ready-sibling write.
 Receipts, parts, jobs, audio, attempt counters and watermarks stay intact. The
 existing discovery/completion/publication/acknowledgement path rechecks its own
 fences. This is never `held_expired`; nightly expiry does not settle ghosts.
+
+| Result field | Rule |
+| --- | --- |
+| `ghost_settled_cohort` | String marker only, written atomically with a ghost hint flip; never read by serving or release logic and never added to non-ghost rows. |
+
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT` defaults to `g1`; valid labels
+are 1-16 characters `[A-Za-z0-9_-]` (no trimming). Invalid values fall back to
+`g1`; each committed fallback emits aggregate-only
+`event=batch_projection_ghost_cohort outcome=invalid_fallback count=1`, outside
+transaction retries, without the rejected value or row identifiers. This string
+setting is not a kill switch. The selector's boolean kill switch stays OFF by
+default. No cohort ceiling is added; lead2 controls rollout via the flag and cap.
+
+Cohort counts use six separate equality-only COUNT requests: cohort total,
+cohort + `ready`, cohort + `completed`, and one cohort + state request for each
+blocked/incomplete state (`pending`, `persisted`, `quarantine_held`). Blocked is
+the sum of those three per-state counts, never an OR or IN query. If any per-state
+count is unavailable or invalid, the sum is UNKNOWN, never zero. Other/missing
+states (including `erased`) are `total - ready - completed - blocked`, UNKNOWN if
+any required count is unavailable or the counts are inconsistent. No new index
+is added: each conjunction uses only simple equality filters, supported by
+[single-field index merging](https://docs.cloud.google.com/firestore/native/docs/standard-index-overview#use_index_merging).
+The emulator exercises all six query shapes but does not establish production
+index availability. The canary fails closed to UNKNOWN on HTTP 400 or any
+unavailable count. `completed` is durable acknowledgement after ledger completion.
+Eligible sync rows traverse publication, but legitimate skip paths (for example
+`source_deleted`) still acknowledge without publishing. It is not proof of
+publication or user receipt. A current
+completed stock count compared with a windowed sync-publish proxy is informational
+only. Settled rows cannot be un-completed: flag rollback stops future flips but
+cannot undo completed ledger/publication effects.
 
 `GHOST_SETTLE_MAX_PER_PASS=16` is shared across both release legs. Default OFF
 is count-only: **no extra queries** or document reads, no ghost writes; classify
