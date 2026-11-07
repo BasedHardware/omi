@@ -190,6 +190,35 @@ def test_health_and_readiness_are_distinct_and_shutdown_closes_admission():
         server.server_close()
 
 
+def test_firestore_probe_is_served_by_every_child_before_parent_merge():
+    from prometheus_client.parser import text_string_to_metric_families
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+
+    FIRESTORE_BILLED_READS.labels('other', 'query', 'unattributed').inc(7)
+    FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'query', 'tests:batch_export').inc(7)
+    pages = []
+    for index in range(2):
+        registry = CollectorRegistry()
+        server = runtime.health_server(runtime.RuntimeState(), registry, 0, '127.0.0.1')
+        try:
+            assert FIRESTORE_BILLED_READS in registry._collector_to_names
+            assert FIRESTORE_BILLED_READS_BY_CALLER in registry._collector_to_names
+            with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+                pages.append((index, response.read()))
+        finally:
+            server.shutdown()
+            server.server_close()
+    samples = [
+        sample
+        for family in text_string_to_metric_families(runtime.merge_metrics(pages).decode())
+        for sample in family.samples
+    ]
+    for name in ('omi_firestore_billed_reads_total', 'omi_firestore_billed_reads_by_caller_total'):
+        observed = [s for s in samples if s.name == name and s.labels['collection'] == 'other']
+        assert {s.labels['worker_process'] for s in observed} == {'0', '1'}
+        assert all(s.value >= 7 for s in observed)
+
+
 def test_supervision_drains_after_stop_before_readiness_closes():
     async def check():
         state = runtime.RuntimeState()

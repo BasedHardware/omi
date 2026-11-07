@@ -429,6 +429,28 @@ class PostgresStore:
 
         return self.run(revoke)
 
+    def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
+        """Same fence recheck and available_at-only change as the Firestore privacy defer."""
+        from database.batch_pipeline_recovery import privacy_defer_update
+
+        def defer(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or job.get('state') != 'record_pending' or job.get('available_at', 0) > now:
+                return False
+            try:
+                tx.check_privacy(
+                    job['owner_id'],
+                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                    job.get('privacy_generation'),
+                )
+            except BatchPrivacyBlocked:
+                # A shallow field update, not a put: flush must not re-run the (failing) fence.
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, {**job, **privacy_defer_update(until)})
+                return True
+            return False
+
+        return self.run(defer)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
 
