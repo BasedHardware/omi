@@ -53,6 +53,10 @@ rebase later. This lane has no merge or deployment authority.
   the durable hold. Keep the existing text and truthful notes/episode pending
   state in responses. Call `pipeline_metrics.open_ready` only after that bounded
   snapshot is actually visible; this is **not** notes-complete latency.
+- The newer Home brief defers live episode member notes except recording detail,
+  while this approved policy escalates watched Home notes immediately. Coordinator
+  resolution is required before activation; the Home owner retains its central
+  `member_notes.before_notes` gate (bus `f19b93`). This PR does not override it.
 - Close-on-seal stays off until #24828's owner provides the verified 100% receipt.
   No producer-grace/repair changes from #24832/#24853/#24855 are copied here.
 
