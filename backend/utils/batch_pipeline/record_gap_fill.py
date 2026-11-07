@@ -56,6 +56,8 @@ from utils.other.storage import list_audio_chunks, owner_storage_write_gate, pri
 logger = logging.getLogger(__name__)
 
 RATE = 16000
+# validate_record_tail's own slack: a fill continues held audio within this.
+TAIL_TOLERANCE_SECONDS = 0.1
 RENDITION = 'gap-fill-v1'
 OUTCOMES = frozenset(
     {
@@ -67,6 +69,7 @@ OUTCOMES = frozenset(
         'skipped_retained',
         'skipped_no_gap',
         'skipped_no_audio',
+        'skipped_not_contiguous',
         'skipped_collision',
         'failed',
     }
@@ -170,10 +173,19 @@ def retained_end(uid, conversation_id, chunks, client, key) -> float | None:
     return end
 
 
-def _write_window(uid, conversation_id, paths, lower, upper, protection_level, metadata, bucket):
-    """Write WAL PCM inside [lower, upper) create-only; returns (written, collisions, seconds)."""
+def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, protection_level, metadata, bucket):
+    """Write WAL PCM inside [lower, upper) create-only, contiguous from ``anchor``.
+
+    Returns (written, collisions, seconds, gapped). Admission checks only the
+    final end, so a fill that skipped ahead would let a record admit with a
+    hole the drain could never fill again. Writing stops at the first WAL
+    sample more than ``tolerance`` after the audio already held (the retained
+    end or the previous written piece); a later upload continues from there.
+    """
     written = collisions = 0
     budget = MAX_FILL_SECONDS * RATE
+    expected = anchor
+    gapped = False
     for unit in decode_units(paths):
         if budget <= 0:
             break
@@ -183,6 +195,11 @@ def _write_window(uid, conversation_id, paths, lower, upper, protection_level, m
         # fill object never starts before it under any sample rounding.
         first = 0 if lower is None else max(0, math.ceil((lower - unit.capture_at) * RATE - 1e-6))
         last = min(frames, math.floor((upper - unit.capture_at) * RATE + 1e-6), first + budget)
+        if first >= last:
+            continue
+        if unit.capture_at + first / RATE - expected > tolerance:
+            gapped = True
+            break
         cursor = first
         while cursor < last:
             count = min(last - cursor, PIECE_SECONDS * RATE)
@@ -202,8 +219,10 @@ def _write_window(uid, conversation_id, paths, lower, upper, protection_level, m
                 written += 1
             budget -= count
             cursor += count
+        expected = unit.capture_at + last / RATE
+        tolerance = TAIL_TOLERANCE_SECONDS
         del pcm
-    return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE
+    return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE, gapped
 
 
 def _gates(uid, conversation_id, row, record, segment, wal, store, now):
@@ -269,19 +288,36 @@ def _write(uid, conversation_id, row, paths, record, wal, storage_client, bucket
         return 'skipped_retained', 0.0
     if end is not None and end + 0.1 >= finish:
         return 'skipped_no_gap', 0.0
-    started = _epoch(row.get('started_at'))
-    lower = end if end is not None else (started - FINISH_SLACK_SECONDS if started is not None else None)
+    if end is not None:
+        lower, anchor, tolerance = end, end, TAIL_TOLERANCE_SECONDS
+    else:
+        started = _epoch(row.get('started_at'))
+        if started is None:
+            return 'skipped_gate', 0.0
+        # Nothing retained: the fill must begin at the capture's own start.
+        lower, anchor, tolerance = started - FINISH_SLACK_SECONDS, started, FINISH_SLACK_SECONDS
     if protection_level is None:
         protection_level = users_db.get_data_protection_level(uid)
     metadata = {'source': 'phone_wal', 'rendition': RENDITION, 'record': record[:16], 'wal': wal[:16]}
     if bucket is None:
         bucket = gap_fill_bucket(uid, client)
-    written, collisions, seconds = _write_window(
-        uid, conversation_id, paths, lower, finish + FINISH_SLACK_SECONDS, protection_level, metadata, bucket
+    written, collisions, seconds, gapped = _write_window(
+        uid,
+        conversation_id,
+        paths,
+        lower,
+        finish + FINISH_SLACK_SECONDS,
+        anchor,
+        tolerance,
+        protection_level,
+        metadata,
+        bucket,
     )
     if written:
         return 'written', seconds
-    return ('skipped_collision' if collisions else 'skipped_no_audio'), seconds
+    if collisions:
+        return 'skipped_collision', seconds
+    return ('skipped_not_contiguous' if gapped else 'skipped_no_audio'), seconds
 
 
 def _keys(uid, conversation_id, wal_content_id):

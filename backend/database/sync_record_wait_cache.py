@@ -12,6 +12,7 @@ fail open to the full check (a pure cache miss, no mode change).
 from typing import Optional
 
 from database.redis_connection import create_bounded_redis_client
+from utils.observability.fallback import record_fallback
 from database.redis_db import delete_generic_cache, get_generic_cache, set_generic_cache
 
 RECORD_WAIT_CACHE_SECONDS = 30
@@ -57,4 +58,11 @@ def claim_gap_fill_marker(record_key: str, wal_key: str, ttl: int) -> bool:
     try:
         return bool(_marker_client().set(f'sync:record_gap_fill:v1:{record_key}:{wal_key}', '1', ex=ttl, nx=True))
     except Exception:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='gap_fill_marker',
+            to_mode='create_only_write',
+            reason='unavailable',
+            outcome='degraded',
+        )
         return True

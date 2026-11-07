@@ -340,6 +340,40 @@ def test_empty_retained_set_fills_from_capture_start_and_wal_proves_coverage(wor
     assert live_upload._covered(['synthetic-wal.bin'], jobs, artifacts) is False
 
 
+def test_a_wal_that_skips_ahead_of_held_audio_writes_nothing(world):
+    # Newest-first uploads: the last minutes arrive before the earlier ones.
+    # Writing them would let admission pass on the final end with a hole.
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(107.0, ramp(5))]
+    assert fill(world) == 'skipped_not_contiguous'
+    assert not fills(world)
+    world.bucket.objects.clear()
+    world.wal['units'] = [audio_unit(103.0, ramp(9))]
+    assert fill(world, wal_content_id='later-wal') == 'skipped_not_contiguous'
+    assert not fills(world)
+
+
+def test_fill_stops_at_a_hole_inside_the_wal_and_resumes_on_a_later_upload(world):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    early, late = ramp(2), ramp(3, offset=7)
+    world.wal['units'] = [audio_unit(105.0, early), audio_unit(108.0, late)]
+    assert fill(world) == 'written'
+    assert list(fills(world)) == [f'chunks/{UID}/{CID}/105.000000.bin']
+    with pytest.raises(ValueError, match='tail not durable'):
+        validate_record_tail(admitted_units(world)[1], closed_row()['finished_at'])
+    # The phone's next WAL fills from the new held end.
+    world.wal['units'] = [audio_unit(107.0, ramp(4, offset=3))]
+    assert fill(world, wal_content_id='next-wal') == 'written'
+    _, units = admitted_units(world)
+    validate_record_tail(units, closed_row()['finished_at'])
+
+
+def test_empty_retained_set_without_a_start_is_never_filled(world):
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world, closed_row(started_at=None)) == 'skipped_gate'
+    assert not fills(world)
+
+
 def test_enhanced_protection_writes_an_encrypted_object_admission_decrypts(world):
     world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
     wal_pcm = ramp(12)
@@ -472,9 +506,20 @@ def test_marker_skips_a_repeat_and_redis_errors_fall_through(world, monkeypatch)
         calls.append((args, kwargs))
         raise ConnectionError('synthetic redis outage')
 
+    fallbacks = []
     monkeypatch.setattr(sync_record_wait_cache, '_marker_client', lambda: SimpleNamespace(set=broken))
+    monkeypatch.setattr(sync_record_wait_cache, 'record_fallback', lambda **kw: fallbacks.append(kw))
     assert sync_record_wait_cache.claim_gap_fill_marker('a' * 64, 'b' * 64, 600) is True
     assert calls and calls[0][1] == {'ex': 600, 'nx': True}
+    assert fallbacks == [
+        {
+            'component': 'sync_dispatch',
+            'from_mode': 'gap_fill_marker',
+            'to_mode': 'create_only_write',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+        }
+    ]
     assert UID not in calls[0][0][0] and CID not in calls[0][0][0]
 
 

@@ -28,12 +28,18 @@ discarded or sync-disabled; finished, and the row unwritten, for at least 300 s
 `record_pending` job for this record (so the drain will retry admission; a
 record that registration refused, such as server-batch-only without server
 audio, is never filled); a (record, WAL) Redis marker for 600 s on a client
-bounded to 0.5 s. A Redis error lets the attempt through, which is safe because
-the write is create-only. Then, on the storage pool, admission's own retained
+bounded to 0.5 s. A Redis error lets the attempt through (recorded with
+`record_fallback`), which is safe because the write is create-only. Then, on the storage pool, admission's own retained
 walk must end more than 0.1 s before `finished_at`.
 
 Written: the decoded WAL PCM inside `[retained end, finished_at + 1 s]`, or from
-`started_at - 1 s` when nothing is retained; at most 3600 s per request, in
+`started_at - 1 s` when nothing is retained (no `started_at`, no fill). The fill
+must be contiguous with the audio already held: its first sample within 0.1 s of
+the retained end (1 s of `started_at` when nothing is retained), and it stops at
+the first WAL hole longer than 0.1 s. Admission checks only the final end, so a
+fill that skipped ahead (the phone uploads newest first) would let a record
+admit with a hole; a later upload continues from the new held end. At most
+3600 s per request, in
 objects of at most 300 s. Each object is lossless PCM16 at
 `chunks/{uid}/{cid}/{start:.6f}.bin` (`.enc` for enhanced protection), with
 span metadata and `source=phone_wal`, `rendition=gap-fill-v1`, `record=` and
@@ -53,8 +59,8 @@ fill waits 300 s after the last row write, and the stuck records were refused
 on every retry for the full window, so the refusal is a missing tail, not
 listing lag.
 
-Telemetry: `event=sync_record_gap_fill outcome=<written|skipped_gate|skipped_recent|skipped_marker|skipped_retained|skipped_no_gap|skipped_no_audio|skipped_collision|failed> record=<16 hex> seconds_bucket=<0-10|10-60|60-600|600+>`
-and `omi_record_gap_fill_total{outcome}` (`skipped_no_pending` also counted). No uid, conversation id, audio or
+Telemetry: `event=sync_record_gap_fill outcome=<written|skipped_gate|skipped_recent|skipped_marker|skipped_retained|skipped_no_gap|skipped_no_audio|skipped_not_contiguous|skipped_no_pending|skipped_collision|failed> record=<16 hex> seconds_bucket=<0-10|10-60|60-600|600+>`
+and `omi_record_gap_fill_total{outcome}`. No uid, conversation id, audio or
 error text is logged.
 
 Ramp: 1, 10, 50, 100 percent, at least 30 minutes per step, with lead2's go at
