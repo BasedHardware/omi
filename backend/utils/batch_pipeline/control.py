@@ -35,7 +35,7 @@ def activate(tx: Transaction, control: dict, priority: int, now: float, key: str
         # Rejoining starts at the persistent frontier, never ancient or reset
         # credit. Indexed read only: no shared write clock or control hotspot.
         control[field(priority, 'service')] = max(control[field(priority, 'service')], tx.service_frontier(priority))
-        note = getattr(tx, 'note_hinted_activation', None)
+        note = getattr(tx, '_note_hinted_activation', None)
         if key is not None and note is not None and lever_enabled('admission_frontier_hint'):
             # The frontier above was read outside this transaction (admission_frontier_hint),
             # so pulls committed meanwhile are unseen. The store re-seeds the shard right after

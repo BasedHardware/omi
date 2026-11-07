@@ -142,7 +142,7 @@ def test_activation_notes_the_shard_only_with_the_lever_on(monkeypatch):
     from utils.batch_pipeline import control
 
     noted = []
-    tx = SimpleNamespace(service_frontier=lambda p: 5.0, note_hinted_activation=lambda k, p: noted.append((k, p)))
+    tx = SimpleNamespace(service_frontier=lambda p: 5.0, _note_hinted_activation=lambda k, p: noted.append((k, p)))
     fresh = lambda: {'p2_active': False, 'p2_service': 0.0, 'p2_batch_available_at': 9e9, 'p2_live_available_at': 9e9}
     monkeypatch.delenv(levers.ENV_KEY, raising=False)
     doc = fresh()

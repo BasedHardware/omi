@@ -127,7 +127,7 @@ class FirestoreTransaction:
         # re-seeds each one after this transaction commits (reseed_hinted_activation).
         self.hinted_activations: set[tuple[str, int]] = set()
 
-    def note_hinted_activation(self, key: str, priority: int) -> None:
+    def _note_hinted_activation(self, key: str, priority: int) -> None:
         self.hinted_activations.add((key, int(priority)))
 
     def _ref(self, table: str, key: str):
