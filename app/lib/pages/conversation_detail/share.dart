@@ -1,11 +1,23 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 
-import 'package:omi/utils/conversations/conversation_title.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/share_links.dart';
+
+/// Updates a conversation's visibility; tests inject a stub.
+@visibleForTesting
+Future<bool> Function(String conversationId, {String visibility}) conversationShareVisibilityUpdater =
+    setConversationVisibility;
+
+/// Opens the system share sheet for a conversation link; tests inject a stub.
+@visibleForTesting
+Future<ShareResult> Function(ServerConversation conversation, {Rect? sharePositionOrigin}) conversationLinkSharer =
+    shareConversationLink;
 
 /// Opens the system share sheet with the conversation's public link. Resolves with the platform's
 /// result: [ShareResultStatus.dismissed] means the reader closed the sheet without sharing

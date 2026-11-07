@@ -855,26 +855,28 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     HapticFeedback.mediumImpact();
     final conversation = provider.conversation;
     final wasPrivate = conversation.visibility != ConversationVisibility.shared;
+    var flippedToShared = false;
 
     setState(() => _isSharing = true);
     try {
       if (wasPrivate) {
-        final shared = await setConversationVisibility(conversation.id);
+        final shared = await conversationShareVisibilityUpdater(conversation.id);
         if (!mounted) return;
         if (!shared) {
           OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
           return;
         }
+        flippedToShared = true;
         provider.updateVisibilityLocally(ConversationVisibility.shared);
       }
       final origin = shareSheetOrigin(_shareButtonKey);
       // The sheet is up once the call is made; the button stops spinning while it is shown.
-      final result = shareConversationLink(conversation, sharePositionOrigin: origin);
+      final result = conversationLinkSharer(conversation, sharePositionOrigin: origin);
       await _delay(const Duration(milliseconds: 150));
       if (mounted) setState(() => _isSharing = false);
       final outcome = await result;
       if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-        final reverted = await setConversationVisibility(
+        final reverted = await conversationShareVisibilityUpdater(
           conversation.id,
           visibility: ConversationVisibility.private_.value,
         );
@@ -882,6 +884,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       }
     } catch (e) {
       Logger.debug('Failed to share conversation: $e');
+      if (flippedToShared) {
+        final reverted = await conversationShareVisibilityUpdater(
+          conversation.id,
+          visibility: ConversationVisibility.private_.value,
+        ).catchError((Object revertError) {
+          Logger.debug('Failed to revert conversation visibility: $revertError');
+          return false;
+        });
+        if (reverted && mounted) provider.updateVisibilityLocally(ConversationVisibility.private_);
+      }
       if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
     } finally {
       if (mounted && _isSharing) setState(() => _isSharing = false);

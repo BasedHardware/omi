@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -31,8 +34,25 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  tearDown(() {
+    conversationShareVisibilityUpdater = setConversationVisibility;
+    conversationLinkSharer = shareConversationLink;
+  });
+
   group('Sharing a conversation (#19242)', () {
-    testWidgets('detail page Share button does not ask "Share Conversation?" before the share sheet', (tester) async {
+    testWidgets('detail page Share button opens share sheet directly without asking "Share Conversation?"',
+        (tester) async {
+      final visibilityCalls = <(String, String)>[];
+      final sharedIds = <String>[];
+      conversationShareVisibilityUpdater = (id, {visibility = 'shared'}) async {
+        visibilityCalls.add((id, visibility));
+        return true;
+      };
+      conversationLinkSharer = (conversation, {sharePositionOrigin}) async {
+        sharedIds.add(conversation.id);
+        return const ShareResult('com.apple.UIKit.activity.CopyToPasteboard', ShareResultStatus.success);
+      };
+
       final conversation = _conversation('conv-1');
       final conversationProvider = ConversationProvider(
         conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -68,10 +88,73 @@ void main() {
 
       expect(find.text('Share Conversation?'), findsNothing);
       expect(find.text('Anyone with the link can view'), findsNothing);
+      expect(visibilityCalls, [('conv-1', 'shared')]);
+      expect(sharedIds, ['conv-1']);
+      expect(detailProvider.conversation.visibility, ConversationVisibility.shared);
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('long-press Share action does not ask "Share Conversation?" before the share sheet', (tester) async {
+    testWidgets('detail page Share button reverts visibility to private if share call throws', (tester) async {
+      final visibilityCalls = <(String, String)>[];
+      conversationShareVisibilityUpdater = (id, {visibility = 'shared'}) async {
+        visibilityCalls.add((id, visibility));
+        return true;
+      };
+      conversationLinkSharer = (conversation, {sharePositionOrigin}) async {
+        throw StateError('share sheet failed');
+      };
+
+      final conversation = _conversation('conv-err');
+      final conversationProvider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        isSignedIn: () => true,
+      )..conversations = [conversation];
+      final detailProvider = ConversationDetailProvider()..updateConversation(conversation);
+      addTearDown(conversationProvider.dispose);
+      addTearDown(detailProvider.dispose);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ConversationDetailProvider>.value(value: detailProvider),
+            ChangeNotifierProvider<ConversationProvider>.value(value: conversationProvider),
+            ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
+            ChangeNotifierProvider<FolderProvider>(create: (_) => FolderProvider()),
+            ChangeNotifierProvider<AppProvider>(create: (_) => AppProvider()),
+            ChangeNotifierProvider<SpeechProfileProvider>(create: (_) => SpeechProfileProvider()),
+            ChangeNotifierProvider<PeopleProvider>(create: (_) => PeopleProvider(autoInitialize: false)),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ConversationDetailPage(conversation: conversation),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.byKey(const Key('conversation_share')));
+      await tester.pumpAndSettle();
+
+      expect(visibilityCalls, [('conv-err', 'shared'), ('conv-err', 'private')]);
+      expect(detailProvider.conversation.visibility, ConversationVisibility.private_);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('long-press Share action opens share sheet directly without asking "Share Conversation?"',
+        (tester) async {
+      final visibilityCalls = <(String, String)>[];
+      final sharedIds = <String>[];
+      conversationShareVisibilityUpdater = (id, {visibility = 'shared'}) async {
+        visibilityCalls.add((id, visibility));
+        return true;
+      };
+      conversationLinkSharer = (conversation, {sharePositionOrigin}) async {
+        sharedIds.add(conversation.id);
+        return const ShareResult('com.apple.UIKit.activity.CopyToPasteboard', ShareResultStatus.success);
+      };
+
       final conversation = _conversation('conv-2');
       final conversationProvider = ConversationProvider(
         conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -107,9 +190,24 @@ void main() {
 
       expect(find.text('Share Conversation?'), findsNothing);
       expect(find.text('Anyone with the link can view'), findsNothing);
+      expect(visibilityCalls, [('conv-2', 'shared')]);
+      expect(sharedIds, ['conv-2']);
+      expect(conversation.visibility, ConversationVisibility.shared);
     });
 
-    testWidgets('shareConversation helper proceeds directly without confirmation modal', (tester) async {
+    testWidgets('shareConversation helper updates visibility, invokes share sheet, and reverts on error',
+        (tester) async {
+      final visibilityCalls = <(String, String)>[];
+      final sharedIds = <String>[];
+      conversationShareVisibilityUpdater = (id, {visibility = 'shared'}) async {
+        visibilityCalls.add((id, visibility));
+        return true;
+      };
+      conversationLinkSharer = (conversation, {sharePositionOrigin}) async {
+        sharedIds.add(conversation.id);
+        throw StateError('share sheet error');
+      };
+
       final conversation = _conversation('conv-3');
       late BuildContext capturedContext;
 
@@ -133,6 +231,9 @@ void main() {
 
       expect(find.text('Share Conversation?'), findsNothing);
       expect(find.text('Anyone with the link can view'), findsNothing);
+      expect(sharedIds, ['conv-3']);
+      expect(visibilityCalls, [('conv-3', 'shared'), ('conv-3', 'private')]);
+      expect(conversation.visibility, ConversationVisibility.private_);
     });
   });
 }

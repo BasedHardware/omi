@@ -177,32 +177,43 @@ Future<void> toggleConversationStarred(BuildContext context, ServerConversation 
 Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
   final l10n = context.l10n;
   final wasPrivate = conversation.visibility != ConversationVisibility.shared;
-  if (wasPrivate) {
-    final ok = await setConversationVisibility(conversation.id).catchError((Object e) {
-      Logger.debug('Failed to share conversation: $e');
-      return false;
-    });
-    if (!context.mounted) return;
-    if (!ok) {
-      OmiFeedback.error(context, l10n.conversationUrlNotShared);
-      return;
+  var flippedToShared = false;
+  try {
+    if (wasPrivate) {
+      final ok = await conversationShareVisibilityUpdater(conversation.id);
+      if (!context.mounted) return;
+      if (!ok) {
+        OmiFeedback.error(context, l10n.conversationUrlNotShared);
+        return;
+      }
+      flippedToShared = true;
+      conversation.visibility = ConversationVisibility.shared;
     }
-    conversation.visibility = ConversationVisibility.shared;
-  }
-  final box = context.findRenderObject() as RenderBox?;
-  final outcome = await shareConversationLink(
-    conversation,
-    sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
-  );
-  if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-    final reverted = await setConversationVisibility(
-      conversation.id,
-      visibility: ConversationVisibility.private_.value,
-    ).catchError((Object e) {
-      Logger.debug('Failed to revert conversation visibility: $e');
-      return false;
-    });
-    if (reverted) conversation.visibility = ConversationVisibility.private_;
+    final box = context.findRenderObject() as RenderBox?;
+    final outcome = await conversationLinkSharer(
+      conversation,
+      sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
+    );
+    if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
+      final reverted = await conversationShareVisibilityUpdater(
+        conversation.id,
+        visibility: ConversationVisibility.private_.value,
+      );
+      if (reverted) conversation.visibility = ConversationVisibility.private_;
+    }
+  } catch (e) {
+    Logger.debug('Failed to share conversation: $e');
+    if (flippedToShared) {
+      final reverted = await conversationShareVisibilityUpdater(
+        conversation.id,
+        visibility: ConversationVisibility.private_.value,
+      ).catchError((Object revertError) {
+        Logger.debug('Failed to revert conversation visibility: $revertError');
+        return false;
+      });
+      if (reverted) conversation.visibility = ConversationVisibility.private_;
+    }
+    if (context.mounted) OmiFeedback.error(context, l10n.conversationUrlNotShared);
   }
 }
 

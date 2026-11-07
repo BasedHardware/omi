@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
+import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -213,7 +215,23 @@ void main() {
     expect(separated, ['b'], reason: 'the other recording, never the row itself');
   });
 
-  testWidgets('Share on a private row does not ask a confirmation dialog first', (tester) async {
+  testWidgets('Share on a private row makes it shared for the sheet without confirmation and reverts on dismissal',
+      (tester) async {
+    final visibilityCalls = <(String, String)>[];
+    ConversationVisibility? visibilityDuringSheet;
+    conversationShareVisibilityUpdater = (id, {visibility = 'shared'}) async {
+      visibilityCalls.add((id, visibility));
+      return true;
+    };
+    conversationLinkSharer = (conversation, {sharePositionOrigin}) async {
+      visibilityDuringSheet = conversation.visibility;
+      return const ShareResult('', ShareResultStatus.dismissed);
+    };
+    addTearDown(() {
+      conversationShareVisibilityUpdater = setConversationVisibility;
+      conversationLinkSharer = shareConversationLink;
+    });
+
     final a = _conversation('a');
     provider.conversations = [a];
     await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
@@ -223,6 +241,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Share Conversation?'), findsNothing);
     expect(find.text('Anyone with the link can view'), findsNothing);
+    expect(visibilityDuringSheet, ConversationVisibility.shared);
+    expect(a.visibility, ConversationVisibility.private_);
+    expect(visibilityCalls, [('a', 'shared'), ('a', 'private')]);
   });
 
   group('row titles (hub audit #21)', () {
