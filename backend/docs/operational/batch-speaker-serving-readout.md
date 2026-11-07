@@ -9,9 +9,9 @@ measurement when reporting cost. Do not copy changing figures into the runbook.
 
 | Evidence | Record at serving / T+2h |
 | --- | --- |
-| Serving release SHA / image digest | Image `0433d12`. The full sha256 image digest is pending from the cl2d-1107a deploy record; `dedf61c0` is only a prefix and is not enough for audit or rollback. Fix commit `08b33b93` (#24691) is an ancestor of `0433d12` (verified by compare, 353 commits ahead). |
+| Serving release SHA / image digest | Image `0433d12`. Full digest `gcr.io/based-hardware/backend@sha256:dedf61c09819a7ba5827a19a577a36e8b6657d198b76f11f0183ac29ab6d6949`, read on ro-prod from revision `backend-0433d12-42329148500-1` (train cl2d-1107a). Fix commit `08b33b93` (#24691) is an ancestor of `0433d12` (verified by compare, 353 commits ahead). |
 | GKE backend-listen / Pusher / installed sync worker identities and ready times | Not captured in this readout. Pending, from the deploy record. |
-| Cloud Run backend / sync / sync-backfill / integration traffic revision identities | `backend-integration`, `backend`, `backend-sync`, `backend-sync-backfill` all on `0433d12` revisions at 100%, per the 02:51Z deploy check. Exact revision names pending. |
+| Cloud Run backend / sync / sync-backfill / integration traffic revision identities | `backend-integration`, `backend`, `backend-sync`, `backend-sync-backfill` all on `0433d12` revisions at 100%, per the 02:51Z deploy check. Revision `backend-0433d12-42329148500-1` is the `backend` revision read for the digest above; the other services' revision names are not yet recorded. |
 | All-runtime serving timestamp (UTC) | About 02:34Z, 2026-11-07 (train cl2d-1107a, hand-finished after an env-fold timeout). |
 | Readout due (serving + 2 hours, UTC) | About 04:34Z, 2026-11-07. This readout was produced late, at about 19:40Z. |
 | Observation window and measurement timestamp (UTC) | Window about 02:34Z to 19:40Z, 2026-11-07. Measured about 19:40Z. |
