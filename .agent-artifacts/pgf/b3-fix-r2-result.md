@@ -1,6 +1,6 @@
 # B3 review fixes, round 2
 
-Status: implementation and required verification committed/passed; broad selector and isolated timeout retry in progress. Report checkpoint: 2026-11-07T20:44:02.214994+00:00.
+Status: code, the three named suites (136 tests), and preflight (44 checks) are complete; the required full selector and serialized retries are still in progress. Report checkpoint: 2026-11-07T20:44:02.214994+00:00.
 
 Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b3-upstream-keep-clean`. Branch: `lane/pgf-b3`. Started at `5d656b64eee`; no rebase, push, PR creation, production access, or GCP tier used. No messages or asks sent to David/ANX, per assignment.
 
@@ -42,7 +42,7 @@ The requested external draft `/Volumes/Ephemeral/scratch/pgf-b3-pr-body-final.md
 
 All commands use worktree-local Python 3.11 (`backend/.venv/bin/python`) and private disposable PostgreSQL on `/Volumes/Ephemeral`. The evidence wrapper `.agent-artifacts/pgf/b3-fix-r2-verification/run-safe.py` removes `GOOGLE_APPLICATION_CREDENTIALS`, every `CLOUDSDK_*`, `SERVICE_ACCOUNT_JSON`, `FIREBASE_AUTH_CREDENTIALS_PATH`, and inherited remote/IAM PostgreSQL settings before invoking commands. It sets a synthetic 32-plus-character test `ENCRYPTION_SECRET`, a dummy OpenAI key, `OMI_REQUIRE_STORE_BACKENDS=postgres`, and an Ephemeral PG root. No real credentials or production data were used.
 
-The following commands ran through the credential-scrubbing wrapper. Let `PY` be this worktree's absolute `backend/.venv/bin/python`, `SAFE` be `.agent-artifacts/pgf/b3-fix-r2-verification/run-safe.py` (absolute path), and `HEAVY` be `/Users/dazheng/workspace/omi/bin/omi-heavy`. A command marked heavy was invoked as `"$PY" "$SAFE" "$HEAVY" run -- <command>`; other commands were invoked as `"$PY" "$SAFE" <command>`. The retry adds `--wait 3600` to heavy admission. The wrapper source is reproduced below for reproducibility.
+The following commands ran through the credential-scrubbing wrapper. Let `PY` be this worktree's absolute `backend/.venv/bin/python`, `SAFE` be `.agent-artifacts/pgf/b3-fix-r2-verification/run-safe.py` (absolute path), and `HEAVY` be `/Users/dazheng/workspace/omi/bin/omi-heavy`. Test, environment-preflight, backend type-check, async-scan, and make-preflight commands were invoked as `"$PY" "$SAFE" "$HEAVY" run -- <command>`; selector, formatter, and PR-metadata commands were invoked as `"$PY" "$SAFE" <command>`. The first retry added `--wait 3600` to heavy admission; it timed out acquiring a slot (exit 75, zero tests run). The requeued retry uses `--wait 21600`. The wrapper source is reproduced below for reproducibility.
 
 | Cwd | Command after the safety/heavy prefix | Result |
 | --- | --- | --- |
@@ -53,13 +53,23 @@ The following commands ran through the credential-scrubbing wrapper. Let `PY` be
 | backend | `env PYTHON=.venv/bin/python bash test-preflight.sh` | **18 passed, 0 failed, 8 optional warnings** (26 checks). |
 | backend | `env PYRIGHT_PYTHON=.venv/bin/python bash scripts/typecheck.sh` | **0 errors**, 75,439 warnings; exit 0. |
 | repo | `backend/.venv/bin/python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils` | **0 selected blocking findings**, exit 0. |
-| repo | `make preflight` | First attempt: 43 checks passed, Firestore guard timed out on `test_firestore_query_shapes.py` at 300 seconds (status 124); exit 2. |
+| repo | `make preflight` | First attempt: one reported failing check; Firestore guard timed out on `test_firestore_query_shapes.py` at 300 seconds (status 124); exit 2. |
 | repo | `env OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/pgf-b3-pr-body-final.md OMI_CHECKS_JOBS=1 BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | **44 checks passed**, 0 failed; exit 0 (3640.41 seconds). This resolves the earlier guard timeout. |
 | repo | `scripts/pr-preflight --suggest` | Exit 0. |
 | repo | `scripts/pr-preflight --pr-body-file /Volumes/Ephemeral/scratch/pgf-b3-pr-body-final.md --metadata-only` | Initial and final: **4 checks passed**, 0 failed; exit 0. Final metadata run: 14.47 seconds. |
 | repo | `backend/.venv/bin/python backend/scripts/select_backend_unit_tests.py --changed-files .agent-artifacts/pgf/b3-fix-r2-verification/changed-files.txt --output .agent-artifacts/pgf/b3-fix-r2-verification/selected-tests.txt --reason-output .agent-artifacts/pgf/b3-fix-r2-verification/selector-reason.txt` | Selected **2,687 files**; reason: `backend/database/cells/store.py requires the full backend unit suite`. Exit 0. |
-| backend | `env BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b3-upstream-keep-clean/.agent-artifacts/pgf/b3-fix-r2-verification/selected-tests.txt bash test.sh` | **In progress**. One reported wall timeout: `test_batch_vendor_outage_drills.py` at 900 seconds (status 124); no failed assertion reported before termination. Remaining files continue. |
-| backend | `env BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b3-upstream-keep-clean/.agent-artifacts/pgf/b3-fix-r2-verification/retry-tests.txt bash test.sh` | Isolated vendor-drill retry **in flight**, through `omi-heavy run --wait 3600`. |
+| backend | `env BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b3-upstream-keep-clean/.agent-artifacts/pgf/b3-fix-r2-verification/selected-tests.txt bash test.sh` | **Original phase intentionally drained/stopped to correct the native Opus loader environment: 916 files completed, 911 passed, 5 nonzero.** Two reported wall timeouts: `test_batch_vendor_outage_drills.py` and `test_cross_service_deploy_contract.py`, each at 900 seconds (status 124); no failed assertion reported before termination. Two other files passed all assertions but exceeded the CPU guard (`duplicate_capture_policy`: 1.12s; `enrichment_route`: 1.01s, each versus 1.00s). `empty_capture_recovery` had 7 failures because native Opus could not be found; 61 other assertions passed. Continuation below covers that file and every remaining selected file. |
+| backend | `env BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b3-upstream-keep-clean/.agent-artifacts/pgf/b3-fix-r2-verification/retry-tests.txt bash test.sh` | Retry manifest contains both timed-out files, `test_duplicate_capture_policy.py`, and `test_enrichment_route.py`. CPU/wall guards remain unchanged. First retry: admission timeout after 3,600 seconds, exit 75, **zero tests run**. Requeued through `omi-heavy run --wait 21600`; in flight. |
+
+Additional continuation command (backend cwd, safety/heavy prefix, `--wait 21600`):
+
+```bash
+env DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b3-upstream-keep-clean/.agent-artifacts/pgf/b3-fix-r2-verification/continuation-tests.txt bash test.sh
+```
+
+Continuation is **in flight**, 1,772 files (the native Opus retry first, then all 1,771 remaining files). Together, 911 previously passing files + 4 serialized retries + 1,772 continuation files exactly cover the 2,687-file selector. The installed `/opt/homebrew/lib/libopus.dylib` loads successfully with the explicit fallback path; neither a package install nor a host/venv configuration change was made. New safety-wrapper invocations also set this fallback path; the three named suites ran before that verification-only addition.
+
+The old scheduler's TERM trap only logs cancellation, so an initial TERM/CONT resumed scheduling. It was paused again; after confirming zero live descendants, only owned scheduler PID 39763 (parent 39674, `bash test.sh`) was stopped with SIGKILL. All workers drained normally; no worker or other lane's process was signaled. The intentionally stopped original wrapper exited 247.
 
 Formatting: `"$PY" -m black --line-length 120 --skip-string-normalization` ran over all eight changed Python files, then over `store.py` and `test_spaces_sync.py` after the timestamp follow-up. All commits also passed the installed staged formatter. `git diff --check 5d656b64eee..HEAD` passed.
 
@@ -83,6 +93,7 @@ for name in list(clean):
     }:
         clean.pop(name, None)
 clean.update(
+    DYLD_FALLBACK_LIBRARY_PATH='/opt/homebrew/lib',
     ENCRYPTION_SECRET='pgf-b3-round-two-hermetic-test-secret-2026',
     OPENAI_API_KEY='test-openai-key-not-real',
     OMI_TEST_PG_ROOT='/Volumes/Ephemeral/scratch',
