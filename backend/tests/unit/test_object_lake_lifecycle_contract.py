@@ -131,14 +131,16 @@ def test_enabled_write_requires_real_bindings(enabled):
     bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
     bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = '1'
     errors = validator.validate_runtime_binding(document, contract())
-    assert any('OBJECT_LAKE_WRITE_ENABLED' in error and 'per-object DEKs' in error for error in errors)
-    assert any('OBJECT_LAKE_WRITE_PERCENT' in error and 'per-object DEKs' in error for error in errors)
+    assert any('OBJECT_LAKE_WRITE_ENABLED' in error and 'C4 wipe-coverage' in error for error in errors)
+    assert any('OBJECT_LAKE_WRITE_PERCENT' in error and 'C4 wipe-coverage' in error for error in errors)
+    for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
+        assert any(f'enabled writes require a real {name}' in error for error in errors)
 
 
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
 @pytest.mark.parametrize('plane,service', validator.EXPECTED_SERVICES)
 @pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '0.01'), ('true', '100')])
-def test_provisioned_deploy_bindings_cannot_enable_writes(stage, plane, service, enabled, percent):
+def test_provisioned_deploy_bindings_allow_dev_but_require_c4_for_prod(stage, plane, service, enabled, percent):
     document = runtime()
     env = document['environments'][stage][plane]
     bindings = (env['services'] if plane == 'cloud_run' else env)[service]['env']
@@ -146,7 +148,11 @@ def test_provisioned_deploy_bindings_cannot_enable_writes(stage, plane, service,
     bindings['OBJECT_LAKE_KMS_KEY']['value'] = 'projects/p/locations/l/keyRings/r/cryptoKeys/k'
     bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
     bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = percent
-    assert any('per-object DEKs' in error for error in validator.validate_runtime_binding(document, contract()))
+    errors = validator.validate_runtime_binding(document, contract())
+    if stage == 'dev':
+        assert errors == []
+    else:
+        assert any('C4 wipe-coverage' in error for error in errors)
 
 
 def test_validator_cli_is_offline_by_default_and_rejects_mutations(tmp_path):
