@@ -186,7 +186,7 @@ extension _CaptureLiveRecovery on CaptureController {
   void _restartFromOrphanAudio(DateTime now) {
     final last = _liveRecovery.lastOrphanRestartAt;
     if (last != null && now.difference(last) < _orphanRestartInterval) return;
-    if (SyncWakeScope.syncOnly || isPaused || _preferences.batchModeEnabled) return;
+    if (SyncWakeScope.syncOnly || isPaused) return;
     _liveRecovery.lastOrphanRestartAt = now;
     if (_capture.stagedReadModel.phase == CapturePhase.pendantLive) {
       _kickLiveRecovery('orphan_audio');
@@ -208,11 +208,8 @@ extension _CaptureLiveRecovery on CaptureController {
 
   bool get _idlePendantNeedsCapture {
     final device = _recordingDevice;
-    if (_captureControllerDisposed || device == null || device.id.isEmpty) return false;
-    if (device.type != DeviceType.omi && device.type != DeviceType.openglass) return false;
-    if (_liveRecovery.deviceStoppedByCaller || _pendantSuspension != null) return false;
-    final staged = _capture.stagedReadModel;
-    return staged.phase == CapturePhase.idle && !staged.phoneOwnsCapture && !staged.callActive;
+    if (_captureControllerDisposed || device == null || !_orphanAudioAdmitted(device.id)) return false;
+    return _capture.stagedReadModel.phase == CapturePhase.idle && !isPaused;
   }
 
   Future<void> _ensureConnectedPendantSessionIfIdle() async {
@@ -221,6 +218,7 @@ extension _CaptureLiveRecovery on CaptureController {
     if (_captureControllerDisposed ||
         device == null ||
         device.id.isEmpty ||
+        (device.type != DeviceType.omi && device.type != DeviceType.openglass) ||
         _liveRecovery.deviceStoppedByCaller ||
         _pendantSuspension != null ||
         staged.phase != CapturePhase.idle ||

@@ -146,6 +146,13 @@ void main() {
     final limitless = pendant.copyWith(type: DeviceType.limitless);
     expect(EpisodePresentation.canPause(world.controller, connectedDevice: limitless), isFalse);
 
+    // Foregrounding while capturePolicy.muted is true must not auto-start an idle pendant.
+    world.controller.updateRecordingDevice(pendant);
+    world.controller.onAppForegrounded();
+    await world.settle();
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(world.deviceConnection!.openAudioSubscriptions, 0);
+
     await world.controller.streamDeviceRecording(device: pendant);
     await world.settle();
 

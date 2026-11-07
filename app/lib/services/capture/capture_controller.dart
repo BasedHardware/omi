@@ -2539,7 +2539,9 @@ class CaptureController extends ChangeNotifier
     if (device == null || device.id.isEmpty || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) return;
     final deviceId = device.id;
     if (_fenceUplinkForSync()) {
-      updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
+      if (!_captureControllerDisposed) {
+        updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
+      }
       return;
     }
     final deviceRevision = _deviceIdentityRevision;

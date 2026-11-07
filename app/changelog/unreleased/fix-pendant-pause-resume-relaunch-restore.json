@@ -1,4 +1,3 @@
 {
-  "change": "Restore iOS pendant Pause and Resume controls after app relaunch.",
-  "platforms": ["ios"]
+  "change": "Restore pendant Pause and Resume controls after app relaunch."
 }

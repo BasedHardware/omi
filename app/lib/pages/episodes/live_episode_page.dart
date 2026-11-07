@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -18,6 +19,7 @@ import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -92,6 +94,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     setState(() => _mutePending = true);
     try {
       OmiHaptics.medium();
+      final connected = context.read<DeviceProvider?>()?.connectedDevice;
+      if (connected != null && !provider.havingRecordingDevice) {
+        provider.updateRecordingDevice(connected);
+      }
       final phone = provider.liveCaptureSource == 'phone';
       if (provider.isPaused) {
         await provider.resumeCapture();
@@ -139,8 +145,11 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   @override
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider?>();
+    final connectedDevice = context.select<DeviceProvider?, BtDevice?>((d) => d?.connectedDevice);
     if (episodes == null || !episodes.enabled) {
-      return Consumer<CaptureProvider>(builder: (context, provider, child) => _legacyPage(context, provider));
+      return Consumer<CaptureProvider>(
+        builder: (context, provider, child) => _legacyPage(context, provider, connectedDevice),
+      );
     }
     // The shell rebuilds only when its own state changes (anything capturing, the listening
     // state, pausability). Segment, photo, metric and progress notifies land in the selects
@@ -150,10 +159,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       (c) => (
         EpisodePresentation.isListening(EpisodePresentation.displayState(c)),
         c.liveCaptureSource != null ||
-            EpisodePresentation.hasActiveOrPausedPendantCapture(c) ||
+            EpisodePresentation.hasActiveOrPausedPendantCapture(c, connectedDevice: connectedDevice) ||
             c.segments.isNotEmpty ||
             c.photos.isNotEmpty,
-        EpisodePresentation.canPause(c),
+        EpisodePresentation.canPause(c, connectedDevice: connectedDevice),
       ),
     );
     return _episodePage(context, episodes, listening, hasCapture, canPause);
@@ -161,7 +170,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   // --------------------------------------------------------------------------- episodes off
 
-  Widget _legacyPage(BuildContext context, CaptureProvider provider) {
+  Widget _legacyPage(BuildContext context, CaptureProvider provider, BtDevice? connectedDevice) {
     final effectivelyMuted = provider.isPaused || provider.isCallActive;
     return Scaffold(
       backgroundColor: OmiColors.surface0,
@@ -179,14 +188,14 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
       floatingActionButton: (provider.liveCaptureSource != null ||
-              EpisodePresentation.hasActiveOrPausedPendantCapture(provider) ||
+              EpisodePresentation.hasActiveOrPausedPendantCapture(provider, connectedDevice: connectedDevice) ||
               provider.segments.isNotEmpty ||
               provider.photos.isNotEmpty)
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (EpisodePresentation.canPause(provider)) ...[
+                    if (EpisodePresentation.canPause(provider, connectedDevice: connectedDevice)) ...[
                       OmiIconButton.filled(
                         key: const Key('capture_pause_button'),
                         icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
@@ -417,6 +426,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   Future<void> _resume(CaptureProvider provider) async {
     try {
+      final connected = context.read<DeviceProvider?>()?.connectedDevice;
+      if (connected != null && !provider.havingRecordingDevice) {
+        provider.updateRecordingDevice(connected);
+      }
       await provider.resumeCapture();
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
