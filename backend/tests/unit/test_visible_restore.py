@@ -259,6 +259,32 @@ async def test_visibility_change_during_dial_discards_candidate(harness):
 
 
 @pytest.mark.asyncio
+async def test_retired_dial_error_does_not_suppress_subsequent_visible_dwell(harness):
+    h = harness
+    observe(h, True)
+    h.now[0] += 15
+
+    async def dial(*args):
+        observe(h, False)
+        raise RuntimeError('late provider dial failure after hide')
+
+    h.dial.side_effect = dial
+    await flush(h)
+
+    assert h.dial.await_count == 1
+    assert not h.restore.failed
+
+    observe(h, True)
+    h.now[0] += 15
+    h.dial.side_effect = None
+    await flush(h)
+
+    assert h.dial.await_count == 2
+    assert h.receiver.stt_socket is not None
+    assert not h.restore.failed
+
+
+@pytest.mark.asyncio
 async def test_kill_switch_and_malformed_reports_fail_closed(harness, monkeypatch):
     h = harness
     observe(h, True)

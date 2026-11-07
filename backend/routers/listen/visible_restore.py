@@ -86,14 +86,17 @@ class VisibleRestore:
         await self.drain()
 
     async def _open_background(self):
+        generation = self.generation
         try:
             await self.receiver._open_deferred_stream()
         except asyncio.CancelledError:
             raise
         except Exception:
-            self.fail()  # An optional preview task cannot end raw capture.
+            self.fail(generation)  # An optional preview task cannot end raw capture.
 
-    def fail(self):
+    def fail(self, generation: int | None = None):
+        if generation is not None and generation != self.generation:
+            return
         if not self.failed:
             self.failed = True
             OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL.labels(outcome='failed').inc()
@@ -110,7 +113,7 @@ class VisibleRestore:
         if self.socket is not None:
             if not live_stt_socket_is_dead(self.socket):
                 return True
-            self.fail()
+            self.fail(generation)
             return False
         receiver = self.receiver
         admission = getattr(receiver, 'cap_admission', None)
@@ -160,7 +163,7 @@ class VisibleRestore:
         except asyncio.CancelledError:
             raise
         except Exception:
-            self.fail()
+            self.fail(generation)
             return False
         finally:
             current_visible_restore.reset(token)
