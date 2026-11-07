@@ -80,7 +80,14 @@ def ghost_class(entry, job, binding, segment_id: str, now: float) -> str:
         return 'receipt_not_ready'
     if any(part.get('state') == 'quarantined' for part in (entry.get('projection_parts') or {}).values()):
         return 'part_quarantined'
-    if entry.get('projection_privacy_refusal'):
+    if (
+        entry.get('projection_privacy_refusal')
+        or (entry.get('projection') or {}).get('privacy_reason') == 'conversation_deleted'
+        or any(
+            part.get('privacy_reason') == 'conversation_deleted'
+            for part in (entry.get('projection_parts') or {}).values()
+        )
+    ):
         return 'privacy'
     if (
         binding is None

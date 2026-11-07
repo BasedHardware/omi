@@ -500,6 +500,12 @@ def test_ghost_repair_is_hint_only_with_identical_two_document_reads(monkeypatch
         ('result', {'projection': {'state': 'persisted'}}, 'receipt_not_ready'),
         ('result', {'projection_parts': {'0': {'state': 'quarantined'}}}, 'part_quarantined'),
         ('result', {'projection_privacy_refusal': {'version': 1}}, 'privacy'),
+        ('result', {'projection': {'state': 'ready', 'privacy_reason': 'conversation_deleted'}}, 'privacy'),
+        (
+            'result',
+            {'projection_parts': {'0': {'state': 'ready', 'privacy_reason': 'conversation_deleted'}}},
+            'privacy',
+        ),
         ('result', {'owner_key': 'wrong'}, 'binding'),
         ('result', {'segment_id': 'other'}, 'binding'),
         ('job', {'projection_binding': None}, 'binding'),
