@@ -27,13 +27,17 @@ void main() {
     expect(waits.isWaiting('stuck-conversation'), isFalse);
   });
 
-  test('missing or non-positive waits are ignored', () {
-    final waits = RecordingWaitDeferrals(() => DateTime.utc(2026, 11, 7, 12));
+  test('a recognized wait without server pacing still holds for the default', () {
+    var now = DateTime.utc(2026, 11, 7, 12);
+    final waits = RecordingWaitDeferrals(() => now);
 
-    waits.defer('a', null);
-    waits.defer('b', 0);
-    waits.defer(null, 30);
+    expect(waits.defer('a', null), isTrue);
+    expect(waits.defer('b', 0), isTrue);
+    expect(waits.defer(null, 30), isFalse);
 
+    expect(waits.isWaiting('a'), isTrue);
+    expect(waits.isWaiting('b'), isTrue);
+    now = now.add(const Duration(seconds: RecordingWaitDeferrals.defaultWaitSeconds));
     expect(waits.isWaiting('a'), isFalse);
     expect(waits.isWaiting('b'), isFalse);
   });

@@ -2362,9 +2362,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
-        final recordingWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
-        if (recordingWait) _recordingWaits.defer(batchConversationId, e.recordingWaitSeconds);
-        if (e.statusCode >= 500 && (e.retryAfterSeconds ?? 0) <= 0 && !recordingWait) {
+        final scopedWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
+        final recordingWait =
+            scopedWait && _recordingWaits.defer(batchConversationId, e.recordingWaitSeconds ?? e.retryAfterSeconds);
+        if (e.statusCode >= 500 && !recordingWait && (scopedWait || (e.retryAfterSeconds ?? 0) <= 0)) {
           // Unscoped 5xx (e.g. platform shedding under load): the server gave
           // no pacing, so the drain pauses briefly and grows the pause with
           // each consecutive refusal instead of immediately re-uploading the
