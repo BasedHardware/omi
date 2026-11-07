@@ -307,10 +307,11 @@ def test_page_selection_cannot_authorize_changed_ghost(holds, monkeypatch, kind,
     assert {name: projection.ref(name, segment).get().to_dict() for name in before} == before
 
 
-def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch):
+def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch, caplog):
     from google.api_core.exceptions import Aborted
     from google.cloud.firestore_v1.transaction import Transaction
 
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'invalid/label')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
     segment = GHOSTS[0]
     monkeypatch.setattr(release_module, 'held_page_ids', lambda *a: [segment])
@@ -332,6 +333,7 @@ def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch):
     assert len(attempts) == 2
     assert counts['error'] == 0 and counts['ghost_settled'] == counts['ghost_classified'] == 1
     assert counts['ghost_age_30d_plus'] == 1
+    assert sum('event=batch_projection_ghost_cohort' in r.getMessage() for r in caplog.records) == 1
     row = holds.projector.store.ref('results', segment).get().to_dict()
     assert row['projection_state'] == 'ready'
     assert row['ghost_settled_cohort'] == 'g1'

@@ -315,8 +315,10 @@ Cohort counts use equality-only COUNT: cohort total, cohort + `ready`, cohort +
 No new index: single-field equality index merging is the production assumption;
 the emulator executes these queries but does not enforce production composite
 index requirements. The canary fails closed to UNKNOWN on HTTP 400 or any
-unavailable count. `completed` is durable acknowledgement after ledger completion
-and publication; it is not independent evidence of user receipt. A cumulative
+unavailable count. `completed` is durable acknowledgement after ledger completion.
+Eligible sync rows traverse publication, but legitimate skip paths (for example
+`source_deleted`) still acknowledge without publishing. It is not proof of
+publication or user receipt. A cumulative
 completed count compared with a windowed sync-publish proxy is informational
 only. Settled rows cannot be un-completed: flag rollback stops future flips but
 cannot undo completed ledger/publication effects.
