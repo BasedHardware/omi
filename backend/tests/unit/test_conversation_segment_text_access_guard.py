@@ -139,3 +139,27 @@ def test_patch_conversation_segment_text_rejects_nonexistent_segment_with_404(mo
     assert response.status_code == 404
     assert response.json()["detail"] == "Segment not found"
     assert updated_calls == []
+
+
+def test_successful_edit_does_not_call_retired_transcript_index(monkeypatch, client):
+    from database import vector_db
+
+    updated_calls = _setup_mock_db(monkeypatch)
+    provider_calls = []
+
+    def unavailable_provider(*args, **kwargs):
+        provider_calls.append((args, kwargs))
+        raise RuntimeError("Vector provider must not run during a segment edit")
+
+    # A stale deployment value must not revive the writer retired by main.
+    monkeypatch.setenv("TRANSCRIPT_CHUNK_INDEXING_ENABLED", "true")
+    monkeypatch.setattr(vector_db, "index", object())
+    monkeypatch.setattr(vector_db, "upsert_transcript_chunk_vectors", unavailable_provider)
+    response = client.patch(
+        f"/v1/conversations/{CONV_VALID}/segments/text",
+        json={"segment_id": "seg-3", "text": "Updated text"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"status": "Ok"}
+    assert updated_calls == [(CONV_VALID, "seg-3", "Updated text")]
+    assert provider_calls == []

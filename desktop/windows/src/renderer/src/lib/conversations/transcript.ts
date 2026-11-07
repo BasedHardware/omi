@@ -16,6 +16,13 @@ export function buildTranscriptText(segments: TranscriptSegment[]): string {
     .join('\n')
 }
 
+/** A segment's text can be corrected only when the backend gave it an id — the
+ *  segments/text endpoint addresses segments by id and older conversations have
+ *  none. Never fabricate one (speakers.ts has the same rule for naming). */
+export function canEditSegmentText(segment: Pick<TranscriptSegment, 'id'>): boolean {
+  return typeof segment.id === 'string' && segment.id.length > 0
+}
+
 /** Load a conversation's transcript text starting from a list row. Cloud rows
  *  fetch the full conversation and build from its segments; local rows read the
  *  stored transcript string. The open detail view already holds this data — this

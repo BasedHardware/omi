@@ -1,5 +1,6 @@
 import { Pencil, X } from 'lucide-react'
 import type { Person, TranscriptSegment } from '../../lib/omiApi.generated'
+import { canEditSegmentText } from '../../lib/conversations/transcript'
 import {
   avatarFill,
   avatarInitial,
@@ -51,11 +52,13 @@ function fillAt50(hex: string): string {
 function SegmentBubble({
   segment,
   people,
-  onNameSpeaker
+  onNameSpeaker,
+  onEditText
 }: {
   segment: TranscriptSegment
   people: Person[]
   onNameSpeaker: (segment: TranscriptSegment) => void
+  onEditText?: (segment: TranscriptSegment) => void
 }): React.JSX.Element {
   const isUser = segment.is_user
   const speakerId = speakerIdOf(segment)
@@ -63,10 +66,11 @@ function SegmentBubble({
   const label = speakerLabel(speakerId, isUser, name)
   const fill = bubbleColor(speakerId, isUser)
   const translation = segment.translations?.[0]?.text
+  const editable = onEditText != null && canEditSegmentText(segment)
 
   return (
     <li
-      className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`group/segment flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 72px' }}
     >
       <span
@@ -96,6 +100,18 @@ function SegmentBubble({
             <span className="font-mono text-[10px] text-text-quaternary">
               {formatTime(segment.start)}
             </span>
+          )}
+          {editable && (
+            // Hover-revealed like the speaker pencil; always in the tab order so
+            // keyboard users can reach it without hovering.
+            <button
+              onClick={() => onEditText(segment)}
+              className="rounded p-0.5 text-text-quaternary opacity-0 transition-opacity hover:text-white focus:opacity-100 group-hover/segment:opacity-100"
+              title="Edit text"
+              aria-label="Edit segment text"
+            >
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
           )}
         </div>
 
@@ -129,13 +145,16 @@ export function TranscriptDrawer({
   segments,
   people,
   onClose,
-  onNameSpeaker
+  onNameSpeaker,
+  onEditText
 }: {
   open: boolean
   segments: TranscriptSegment[]
   people: Person[]
   onClose: () => void
   onNameSpeaker: (segment: TranscriptSegment) => void
+  /** Omit to render a read-only transcript (e.g. a live/pending conversation). */
+  onEditText?: (segment: TranscriptSegment) => void
 }): React.JSX.Element {
   return (
     <div
@@ -181,6 +200,7 @@ export function TranscriptDrawer({
                   segment={s}
                   people={people}
                   onNameSpeaker={onNameSpeaker}
+                  onEditText={onEditText}
                 />
               ))}
             </ul>
