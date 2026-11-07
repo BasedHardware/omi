@@ -12,6 +12,7 @@ That wipe is destructive and irreversible, so the script never runs unattended.
 """
 
 import argparse
+import json
 import os
 import sys
 from collections import Counter
@@ -20,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import firebase_admin  # noqa: E402
+import firebase_admin.credentials  # noqa: E402,F401
 from firebase_admin import auth as firebase_auth  # noqa: E402
 
 from database import users as users_db  # noqa: E402
@@ -27,17 +29,22 @@ from database.account_deletion_statusless import is_statusless_marker  # noqa: E
 from utils.cloud_tasks import enqueue_account_deletion_wipe  # noqa: E402
 
 ENV_GATE = 'ACCOUNT_DELETION_STATUSLESS_REDRIVE'
-PROJECT_ENV = 'FIREBASE_PROJECT_ID'
+SERVICE_ACCOUNT_ENV = 'SERVICE_ACCOUNT_JSON'
 
 
 def _init_firebase() -> None:
-    """Initialize the default Admin app. Auth lookups fail without it."""
+    """Initialize the default Admin app with the customer service account.
+
+    Mirrors the non-emulator path in main.py. It requires SERVICE_ACCOUNT_JSON and
+    never falls back to ambient ADC, which can point at another project.
+    """
     if firebase_admin._apps:  # type: ignore[attr-defined]
         return
-    project = os.environ.get(PROJECT_ENV, '').strip()
-    if not project:
-        raise SystemExit(f'{PROJECT_ENV} must name the Firebase project; refusing to guess')
-    firebase_admin.initialize_app(options={'projectId': project})  # type: ignore[reportUnknownMemberType]
+    raw = os.environ.get(SERVICE_ACCOUNT_ENV, '').strip()
+    if not raw:
+        raise SystemExit(f'{SERVICE_ACCOUNT_ENV} must hold the customer service account; refusing to use ambient ADC')
+    certificate = firebase_admin.credentials.Certificate(json.loads(raw))  # type: ignore[reportUnknownMemberType]
+    firebase_admin.initialize_app(certificate)  # type: ignore[reportUnknownMemberType]
 
 
 def _auth_user_gone(uid: str) -> bool:
