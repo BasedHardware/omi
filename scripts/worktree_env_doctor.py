@@ -525,7 +525,7 @@ def run_all_checks(
     report.checked.append("backend/.venv")
     report.findings += check_backend_venv(root, ("bootstrap",), ("pyright", "pytest"), which, probe)
     if which("flutter"):
-        report.skipped.append("app dependencies (deferred: the first flutter command resolves them; the pre-push check still requires them for Dart formatting and Flutter generated output)")
+        report.skipped.append("app dependencies (deferred: flutter run, test and build resolve them on first use, or run `(cd app && flutter pub get)`; the pre-push check still requires them for Dart formatting and Flutter generated output)")
     else:
         report.skipped.append("app dependencies (flutter is not on PATH)")
     if which("xcrun"):
