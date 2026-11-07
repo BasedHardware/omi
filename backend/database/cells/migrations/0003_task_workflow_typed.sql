@@ -4,8 +4,9 @@
 -- The shared codec stores datetimes as {"$datetime": "ISO8601+offset"}, not text.
 -- Fixed timezone/DateStyle and an explicit offset make this parser immutable;
 -- malformed legacy values yield NULL rather than aborting unrelated writes.
+-- The exception handler opens a subtransaction, which parallel workers forbid.
 CREATE FUNCTION cell_query_timestamp(value jsonb) RETURNS timestamptz
-LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+LANGUAGE plpgsql IMMUTABLE PARALLEL UNSAFE
 SET timezone = 'UTC' SET datestyle = 'ISO, YMD'
 AS $$
 DECLARE encoded text;

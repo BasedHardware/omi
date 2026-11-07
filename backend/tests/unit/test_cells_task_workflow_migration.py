@@ -55,7 +55,7 @@ def test_expand_only_numbering_and_b2_dependency():
     assert 'depends on B2 0002_write_fence.sql' in sql
     assert 'GENERATED ALWAYS AS' in sql
     assert 'ACCESS EXCLUSIVE' in sql
-    assert migrations[2].checksum == '2b3a8b455d4f27a3bc1835257003b25050f93632e23ecaa202f98aaf8fa520c8'
+    assert migrations[2].checksum == '1a52e25772bca09cd5ee56757eef54c511a3947c3bc210e71b7f2adda0d6a025'
 
 
 def test_fresh_apply_reapply_and_codec_query_columns(pg):
@@ -75,6 +75,24 @@ def test_fresh_apply_reapply_and_codec_query_columns(pg):
         finally:
             conn.execute('SET search_path TO public')
             conn.execute(f'DROP SCHEMA {schema} CASCADE')
+
+
+def test_timestamp_decoder_excludes_parallel_workers(pg):
+    with configure(dial(cells_dsn())) as conn:
+        setting = conn.execute(
+            "SELECT name FROM pg_settings WHERE name IN ('debug_parallel_query', 'force_parallel_mode')"
+        ).fetchone()[0]
+        conn.execute(f'SET {setting}=on')
+        query = (
+            "SELECT cell_query_timestamp(jsonb_build_object("
+            "'$datetime', '2026-11-07T00:00:00+00:00', 'input', g)) FROM generate_series(1, 2) g"
+        )
+        # A PARALLEL SAFE declaration produces a Gather and fails in its worker:
+        # the decoder's EXCEPTION block needs a subtransaction even for valid input.
+        plan = conn.execute('EXPLAIN ' + query).fetchall()
+        assert not any('Gather' in row[0] for row in plan)
+        rows = conn.execute(query).fetchall()
+        assert rows == [(datetime(2026, 11, 7, tzinfo=timezone.utc),)] * 2
 
 
 def test_one_bump_per_uow_and_no_bump_for_reads_or_replay(pg, monkeypatch):
