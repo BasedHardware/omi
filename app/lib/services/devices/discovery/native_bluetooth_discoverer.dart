@@ -36,7 +36,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
     BleBridge.instance.peripheralDiscoveredCallback = (BlePeripheral peripheral) {
       final candidate = normalizeScannedPeripheral(peripheral);
-      if (candidate != null) {
+      if (candidate != null && (peripheral.name.isNotEmpty || !results.any((p) => p.uuid == peripheral.uuid))) {
         // Deduplicate by UUID
         results.removeWhere((p) => p.uuid == candidate.uuid);
         results.add(candidate);

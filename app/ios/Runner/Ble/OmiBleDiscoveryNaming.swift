@@ -39,7 +39,7 @@ enum OmiBleDiscoveryNaming {
         return ""
     }
 
-    /// PLAUD manufacturer id with the NotePin payload or PLAUD service UUID (1910).
+    /// PLAUD manufacturer id with the NotePin payload, or the PLAUD service UUID (1910) shared across PLAUD devices.
     static func isNotePinAdvertisement(_ advertisementData: [String: Any]) -> Bool {
         if let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
             if serviceUUIDs.contains(plaudServiceUuid16) || serviceUUIDs.contains(plaudServiceUuid128) {
