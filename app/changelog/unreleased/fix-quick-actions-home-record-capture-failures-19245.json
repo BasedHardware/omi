@@ -1,5 +1,3 @@
 {
-  "title": "Show error feedback when Quick Actions mute/unmute or Home stop recording fails",
-  "pr": 19245,
-  "area": "capture"
+  "change": "Show an error notification when muting, unmuting, or stopping a phone recording fails instead of dropping the error silently."
 }
