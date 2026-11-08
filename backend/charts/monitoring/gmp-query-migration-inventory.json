@@ -119,6 +119,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
+      "file": "alerts/backlog-state-machine.json",
+      "issues": [],
+      "metrics": [
+        "omi_capture_retry_cap_total"
+      ],
+      "owner_title": "Retry cap quarantine rate (enforced by default)",
+      "owner_uid": "omi-backlog-retry-cap-quarantine-rate",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
       "file": "alerts/batch-held-dead-letter.json",
       "issues": [],
@@ -3960,7 +3973,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 265
+    "query_consumers": 266
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

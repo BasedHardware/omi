@@ -1,6 +1,9 @@
 """Capture-mode retry caps (dependency-free core).
 
-Shadow decisions never consume or terminalize work. Kept free of Cloud Tasks and other sync-only
+The cap enforces for every uid by default (CAPTURE_RETRY_CAP_ENFORCED, on unless
+set off; see config/backlog_state_machine.py). With the switch off, the legacy
+CAPTURE_COVERAGE_MODE cohort decides, and shadow decisions never consume or
+terminalize work. Kept free of Cloud Tasks and other sync-only
 imports so the GPU batch worker image can use it (its dependency closure has no google-cloud-tasks).
 """
 
@@ -10,6 +13,7 @@ import logging
 from prometheus_client import Counter
 
 from config import refactor_modes
+from config.backlog_state_machine import retry_cap_enforced
 
 logger = logging.getLogger(__name__)
 MODE = 'CAPTURE_COVERAGE_MODE'
@@ -22,10 +26,13 @@ class RetryCap:
     serving: bool
 
 
-def retry_cap(uid: str, attempts: int, maximum: int) -> RetryCap | None:
-    if not refactor_modes.shadow_or_serve(MODE):
+def retry_cap(uid: str, attempts: int, maximum: int, *, enforce: bool = True) -> RetryCap | None:
+    """``enforce=False`` keeps the legacy cohort decision for a cap whose count
+    is not evidence of failed work (a sync dispatch retry deadline)."""
+    enforced = enforce and retry_cap_enforced()
+    if not enforced and not refactor_modes.shadow_or_serve(MODE):
         return None
-    return RetryCap(attempts >= max(1, maximum), refactor_modes.serving_for(MODE, uid))
+    return RetryCap(attempts >= max(1, maximum), enforced or refactor_modes.serving_for(MODE, uid))
 
 
 def observe(check: str, decision: RetryCap | None) -> None:

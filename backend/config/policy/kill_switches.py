@@ -34,8 +34,19 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED': True,
     'BATCH_PIPELINE_HELD_PARTIAL_ENABLED': True,
+    # Backlog state machine (config/backlog_state_machine.py). Defaults follow the
+    # lead2 rule: ON only where the change just cuts wasted work or retries, OFF
+    # where it changes custody, settle or expiry semantics.
+    'CAPTURE_RETRY_CAP_ENFORCED': False,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
+# Parsed literally (true means on); never re-read through the capture-coverage
+# serve-mode parser, which treats an unset default-off switch as on.
+BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
+    {
+        'CAPTURE_RETRY_CAP_ENFORCED',
+    }
+)
 logger = logging.getLogger(__name__)
 
 
@@ -62,7 +73,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
-    if name not in {
+    if name not in BACKLOG_STATE_MACHINE_SWITCHES and name not in {
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',

@@ -16,7 +16,9 @@ def dispatch_cap(uid: str, owner: dict) -> RetryCap | None:
     from utils.cloud_tasks import get_sync_tasks_max_attempts
 
     # dispatch_attempt is a zero-based task identity: initial dispatch is 0.
-    return retry_cap(uid, int(owner.get('dispatch_attempt') or 0) + 1, get_sync_tasks_max_attempts())
+    # A passed dispatch retry deadline is queue delay, not failure: this cap
+    # keeps the CAPTURE_COVERAGE_MODE cohort decision even with class 1 on.
+    return retry_cap(uid, int(owner.get('dispatch_attempt') or 0) + 1, get_sync_tasks_max_attempts(), enforce=False)
 
 
 def reconcile_dispatch_cap(
