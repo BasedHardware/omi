@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: batch-pipeline-tuning-disclosure
+    command: ["python3", ".github/scripts/check_batch_tuning_disclosure.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}", "--run-tests"]
+    triggers: ["backend/config/batch_pipeline.py", "backend/utils/batch_pipeline/**", "backend/charts/batch-pipeline-worker/**", "backend/charts/pusher/**", "backend/utils/pusher_*.py", ".github/scripts/*check_batch_tuning_disclosure.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "Retro P6 / #24481 retune: numeric capacity changes disclose before/after values and new pipeline states name an exit; explicit reasoned waivers keep this a disclosure ratchet"
   - id: cv1-tested-release-contract-tests
     command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
     triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
