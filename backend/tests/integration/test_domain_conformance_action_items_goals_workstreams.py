@@ -838,7 +838,8 @@ def test_event_lists_skip_malformed_legacy_sequences(domain_backend, malformed):
 
 
 @pytest.mark.parametrize('domain', ['goal', 'workstream'])
-def test_event_limit_precedes_payload_validation(domain_backend, domain):
+@pytest.mark.parametrize('malformed_field', ['kind', 'summary', 'parent_id'])
+def test_event_limit_precedes_payload_validation(domain_backend, domain, malformed_field):
     h = domain_backend
     sid, goal, ws = workflow(h, 'event-window-' + domain)
     if domain == 'goal':
@@ -854,10 +855,15 @@ def test_event_limit_precedes_payload_validation(domain_backend, domain):
             parent, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
         )
         read = lambda limit: repo.list_events(parent, limit=limit)
-        bad_sequence = 0.5  # ASC, > 0, but not an integer: consumes the first slot.
-    h.seed(
-        sid, entity, parent + '/bad', {**good.model_dump(), 'event_id': 'bad', 'sequence': bad_sequence, 'kind': 'bad'}
-    )
+        good = good.model_copy(update={'sequence': 2})
+        h.seed(sid, entity, parent + '/' + good.event_id, good.model_dump())
+        bad_sequence = 1  # ASC: malformed payload consumes the first slot.
+    bad = {**good.model_dump(), 'event_id': 'bad', 'sequence': bad_sequence}
+    if malformed_field == 'parent_id':
+        bad.pop('goal_id' if domain == 'goal' else 'workstream_id')
+    else:
+        bad[malformed_field] = 'bad' if malformed_field == 'kind' else ''
+    h.seed(sid, entity, parent + '/bad', bad)
     assert read(1) == []
     assert [event.event_id for event in read(2)] == [good.event_id]
     # Missing ordered fields never enter Firestore's window.
