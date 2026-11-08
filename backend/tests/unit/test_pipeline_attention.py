@@ -110,12 +110,12 @@ def test_accepted_deadline_dispatch_does_not_need_redis(serving, monkeypatch):
     assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1770)[0]
 
 
-def test_patient_wait_and_absolute_deadline_cannot_slide(serving):
+def test_ready_patient_notes_beat_absolute_ceiling_without_sliding_it(serving):
     row = sealed()
     obligation = {'pipeline_dispatch_at': 1770}
     runtime.observe_surface('u', 'background', {'foreground': False}, now=1700)
     assert policy.dispatch_at(sealed(recorded_end=1000), obligation) == 1770
-    assert decision('u', row, obligation, now=1700) == (False, 1760, policy.seal_snapshot(row))
+    assert decision('u', row, obligation, now=1700) == (True, None, policy.seal_snapshot(row))
     assert decision('u', row, obligation, now=1770)[0]
     assert policy.dispatch_at(sealed(recorded_end=None), {}) is None
 
@@ -125,11 +125,11 @@ def test_shadow_does_not_change_due_times_or_paid_work(serving, monkeypatch):
     assert decision('u', sealed(), {}, now=2000) == (False, None, None)
 
 
-def test_accepted_patient_obligation_drains_after_kill(serving, monkeypatch):
+def test_mode_off_restores_legacy_for_accepted_obligations(serving, monkeypatch):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
     obligation = {'pipeline_dispatch_at': 1770}
-    assert decision('u', sealed(), obligation, now=1770)[0]
-    assert not decision('u', sealed(), {}, now=1770)[0]
+    assert decision('u', sealed(), obligation, now=1770) == (False, None, None)
+    assert decision('u', sealed(), obligation, projected=False, now=100) == (False, None, None)
 
 
 def test_late_producer_fences_the_real_persistence_predicate(serving):
@@ -230,14 +230,10 @@ def test_naive_clock_is_utc_and_missing_seal_proof_cannot_compare_equal():
 
 
 @pytest.mark.parametrize('mode', ['shadow', 'serve'])
-def test_accepted_deadline_survives_partial_flag_kill(serving, monkeypatch, mode):
+def test_seal_flag_kill_restores_legacy_for_accepted_deadline(serving, monkeypatch, mode):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
     monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'false')
-    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=100) == (
-        False,
-        1770,
-        policy.seal_snapshot(sealed()),
-    )
+    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=100) == (False, None, None)
 
 
 def test_no_episode_does_not_invent_early_patient_settlement(serving, monkeypatch):
@@ -265,20 +261,25 @@ def test_episode_deadline_conflict_keeps_existing_hold_path(serving, monkeypatch
     assert not pipeline_settlement.settle('u', 'c', sealed(), 1770, now=1000)
 
 
-def test_accepted_patient_policy_survives_expired_presence(serving, monkeypatch):
+def test_ready_notes_beat_deadline_after_expired_presence(serving, monkeypatch):
     monkeypatch.setattr(runtime, 'attention', lambda *_a, **_k: 'unknown')
     monkeypatch.setattr(runtime, 'promoted', lambda *_a, **_k: False)
     assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, now=1000) == (
-        False,
-        1060,
+        True,
+        None,
         policy.seal_snapshot(sealed()),
     )
 
 
-def test_deadline_never_authorizes_an_unresolved_producer(serving):
+def test_unresolved_producer_wait_is_bounded_before_legacy_fallback(serving):
     assert decision('u', sealed(record_audio_closed=False), {'pipeline_dispatch_at': 1770}, now=1770) == (
         False,
         1830,
+        None,
+    )
+    assert decision('u', sealed(record_audio_closed=False), {'pipeline_dispatch_at': 1770}, now=3690) == (
+        False,
+        None,
         None,
     )
 
@@ -287,6 +288,7 @@ def test_deadline_never_authorizes_an_unresolved_producer(serving):
 def test_new_policy_deadline_cannot_bypass_unfinished_projection(serving, projected):
     runtime.begin_promotion('u', trigger='api_read', now=1770)
     assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, projected=projected, now=1770) == (False, 1830, None)
+    assert decision('u', sealed(), {'pipeline_dispatch_at': 1770}, projected=projected, now=3690) == (False, None, None)
 
 
 def test_pre_policy_intake_keeps_legacy_timing(serving):
@@ -439,14 +441,34 @@ def test_note_clocks_use_admitted_audio_extent_and_unknown_stays_unknown(serving
     assert write[policy.FIELD]['capture_end'] == 1000
 
 
-def test_accepted_projection_gate_survives_kill_without_minting_a_deadline(serving, monkeypatch):
+def test_mode_off_removes_projection_wait_for_accepted_record(serving, monkeypatch):
     monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
     monkeypatch.setattr(runtime, 'attention', lambda *a, **k: pytest.fail('rollback needs no presence'))
     context = {'pipeline_record': True}
-    assert decision('u', sealed(), context, projected=False, now=100) == (False, 160, None)
-    assert decision('u', sealed(), context, projected=True, now=100) == (False, None, policy.seal_snapshot(sealed()))
+    assert decision('u', sealed(), context, projected=False, now=100) == (False, None, None)
+    assert decision('u', sealed(), context, projected=True, now=100) == (False, None, None)
 
 
 def test_unknown_clock_retains_legacy_hold_after_full_projection(serving):
     runtime.observe_surface('u', 'background', {'foreground': False}, now=100)
     assert decision('u', sealed(), {'pipeline_record': True}, now=100) == (False, None, policy.seal_snapshot(sealed()))
+
+
+@pytest.mark.parametrize('changed', [{'record_audio_partial': {'barrier': True}}, {'record_upload_failed': True}])
+def test_partial_or_failed_seal_wait_cannot_outlive_original_hour(serving, changed):
+    obligation = {'first_pending_at': 100, 'pipeline_dispatch_at': 1770, 'pipeline_record': True}
+    assert decision('u', sealed(**changed), obligation, now=3699) == (False, 3700, None)
+    assert decision('u', sealed(**changed), obligation, now=3700) == (False, None, None)
+    assert obligation['first_pending_at'] == 100
+
+
+@pytest.mark.parametrize('mode,seal', [('off', 'true'), ('serve', 'false')])
+def test_pipeline_kills_ignore_accepted_episode_deadline(serving, monkeypatch, mode, seal):
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', seal)
+    monkeypatch.setattr(
+        pipeline_settlement.episodes,
+        'get_episode_for_conversation',
+        lambda *a: pytest.fail('kill must retain the legacy episode path'),
+    )
+    assert not pipeline_settlement.settle('u', 'c', sealed(), 1770, now=1770)

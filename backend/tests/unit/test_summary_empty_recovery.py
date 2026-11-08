@@ -269,3 +269,29 @@ def test_redirect_custody_cannot_reopen_either_empty_budget(store, monkeypatch, 
     pending = store.rows[OUTBOX]
     assert pending['dormant'] and pending['due_at'] is None
     assert pending['summary_blocked_reason'] == reason and pending['summary_empty_failures'] == 3
+
+
+def test_pipeline_empty_output_budget_is_durable_with_first_summary_flag_off(store, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    store.rows[OUTBOX].update(
+        dormant=False,
+        summary_empty_failures=0,
+        sync_hold=True,
+        pipeline_record=True,
+        pipeline_dispatch_at=1780,
+    )
+    store.rows[OUTBOX].pop('first_summary_policy', None)
+    store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)
+    before = deepcopy(store.rows[CONVERSATION]['structured'])
+    outcomes = [
+        summary_processing.record_empty_failure(store, outbox.COLLECTION, KEY, 'worker', 'old-token') for _ in range(3)
+    ]
+    assert outcomes == [
+        summary_processing.EmptyFailureOutcome.RETRY,
+        summary_processing.EmptyFailureOutcome.RETRY,
+        summary_processing.EmptyFailureOutcome.BLOCKED,
+    ]
+    assert store.rows[OUTBOX]['dormant'] and store.rows[OUTBOX]['due_at'] is None
+    assert store.rows[OUTBOX]['summary_empty_failures'] == 3
+    assert store.rows[CONVERSATION]['summary_blocked_reason'] == 'empty_output_exhausted'
+    assert store.rows[CONVERSATION]['structured'] == before

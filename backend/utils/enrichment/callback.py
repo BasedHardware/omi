@@ -120,9 +120,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
 
     pipeline_fast = False
     accepted_deadline = pipeline_policy.seconds(context.get('pipeline_dispatch_at')) if context is not None else None
-    if context is not None and (
-        pipeline_attention.admitted(uid) or accepted_deadline or context.get('pipeline_record')
-    ):
+    if context is not None and pipeline_policy.seal_fast_enabled() and pipeline_attention.admitted(uid):
         deadline = accepted_deadline
         record = record_attention.receipt(uid, conversation_id, conversation_data)
         projected = record.projected
@@ -130,7 +128,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
             context['pipeline_capture_end'] = record.capture_end
         settled = (
             pipeline_settlement.settle(uid, conversation_id, conversation_data, deadline)
-            if projected is True and (pipeline_attention.serving(uid) or accepted_deadline)
+            if projected is True and pipeline_attention.serving(uid)
             else False
         )
         pipeline_fast, pipeline_due, proof = pipeline_attention.hold_decision(
@@ -300,7 +298,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
 
     if (
         context
-        and context.get('pipeline_seal')
+        and (context.get('pipeline_seal') or context.get('pipeline_record'))
         and not context.get('hold_budget_denied_at_max')
         and not context.get('blocked_reason')
         and not processed_conversation.discarded

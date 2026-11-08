@@ -9,7 +9,7 @@ from utils.episodes import service
 
 
 def settle(uid, conversation_id, row, deadline, *, now=None):
-    if (not pipeline_attention.serving(uid) and deadline is None) or policy.seal_snapshot(row) is None:
+    if not pipeline_attention.notes_serving(uid) or policy.seal_snapshot(row) is None:
         return False
     now = time.time() if now is None else now
     episode = episodes.get_episode_for_conversation(uid, conversation_id)

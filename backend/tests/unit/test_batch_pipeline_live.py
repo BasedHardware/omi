@@ -1006,3 +1006,52 @@ async def test_privacy_fenced_claim_does_not_stop_the_worker(monkeypatch):
     assert await live.drain_recordings(store) is False
     assert admitted == ['b-ok']
     assert store.rows['jobs', 'a-fenced']['available_at'] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mode,flag,cohort,expected',
+    [
+        ('off', True, True, 1060),
+        ('shadow', True, True, 1060),
+        ('serve', False, True, 1060),
+        ('serve', True, False, 1060),
+        ('serve', True, True, 1065),
+    ],
+)
+async def test_deferred_record_clock_is_legacy_unless_record_flag_and_cohort_serve(
+    monkeypatch, mode, flag, cohort, expected
+):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 0,
+        'enqueued_at': 900,
+    }
+    clock = [1000]
+    monkeypatch.setattr(live.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(live.pipeline_policy, 'mode', lambda: mode)
+    monkeypatch.setattr(live.pipeline_policy, 'record_fast_enabled', lambda: flag)
+    monkeypatch.setattr(live.record_attention.attention, 'serving', lambda _: cohort)
+    monkeypatch.setattr(live.record_attention.attention, 'admitted', lambda _: cohort)
+    monkeypatch.setattr(live.record_attention, 'select', lambda rows, limit: rows)
+    monkeypatch.setattr(live.record_attention, 'defer', Mock())
+    monkeypatch.setattr(live.record_attention, 'completed', Mock())
+    monkeypatch.setattr(live, 'batch_held_dead_letter_enabled', lambda: False)
+    monkeypatch.setattr(live, 'record_drain_barrier_backoff_enabled', lambda: True)
+
+    def delay(age):
+        assert age == 100
+        clock[0] += 5
+        return 60
+
+    async def admission(*args):
+        raise ValueError(live.BARRIER_NOT_CLOSED)
+
+    monkeypatch.setattr(live, 'barrier_retry_delay', delay)
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic']['available_at'] == expected

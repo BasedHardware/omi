@@ -9489,7 +9489,11 @@ pending markers, with generated-ready and client-visible clocks separate.
 Firestore remains authority. Redis record/demand hints never authorize a seal,
 erase retained audio, replace a privacy fence or cancel durable obligations.
 Accepted `pipeline_dispatch_at` metadata is the minimum immutable captured-end
-deadline plus 1,680 seconds and survives retry/join/rollback. Notes and snapshot
-close re-read both upload/content revision proofs in their existing transactions.
+deadline plus 1,680 seconds and is retained across retry/join/rollback. It is
+enforced only with serving mode, owner grant and the seal switch on; ready notes
+may run earlier. Mode/seal kills restore legacy scheduling. Seal/projection waits
+end at the original obligation +3,600 seconds and use normal notes admission.
+Accelerated notes and snapshot close re-read upload/content revision proofs in
+their existing transactions; recovery never fabricates a seal or erases raw audio.
 See the [change note](./listen_pusher_pipeline/changes/2026-11-07-pipeline-attention.md)
 for source clocks, accounting inputs, owner hooks, risk register and ramp gates.

@@ -583,6 +583,7 @@ def test_seal_fast_skips_quiet_only_and_preserves_watermark_proof():
 
 
 def test_optional_pipeline_snapshot_failure_does_not_drop_obligation(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
     monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
     monkeypatch.setattr(
@@ -696,6 +697,7 @@ def test_promotion_keeps_due_time_while_projection_siblings_are_pending(state, m
 
 
 def test_full_intake_clock_is_pinned_before_projection_and_survives_worker_envelope(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     from tests.unit.test_pipeline_attention import sealed
 
     monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
@@ -732,6 +734,7 @@ def test_full_intake_clock_is_pinned_before_projection_and_survives_worker_envel
 
 
 def test_missing_intake_clock_never_uses_preview_as_capture_end(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     from tests.unit.test_pipeline_attention import sealed
 
     rows, _ = state
@@ -749,6 +752,7 @@ def test_missing_intake_clock_never_uses_preview_as_capture_end(state, monkeypat
 
 
 def test_unknown_presence_after_double_lease_expiry_still_gets_absolute_deadline(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     from tests.unit.test_pipeline_attention import sealed
 
     rows, _ = state
@@ -772,6 +776,7 @@ def test_unknown_presence_after_double_lease_expiry_still_gets_absolute_deadline
 
 @pytest.mark.asyncio
 async def test_durable_record_registration_and_intake_precede_deadline_creation(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     from database.batch_pipeline_staging import artifact_id
     from tests.unit.test_batch_pipeline_live import recording
     from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -839,3 +844,228 @@ async def test_durable_record_registration_and_intake_precede_deadline_creation(
     outbox.mark('u', 'record', 'en', now=300)
     assert rows[key]['pipeline_capture_end'] == 101
     assert rows[key]['pipeline_dispatch_at'] == 101 + 1680
+
+
+@pytest.fixture
+def pipeline_notes(state, monkeypatch):
+    from database import _client
+    from tests.unit.test_pipeline_attention import sealed
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    clock = [100]
+    monkeypatch.setattr(callback.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(outbox.pipeline_attention, 'client', lambda: fakeredis.FakeRedis())
+    monkeypatch.setattr(
+        outbox.pipeline_attention.omi_flags,
+        'resolve',
+        lambda key, uid: SimpleNamespace(enabled=key == 'pipeline_attention'),
+    )
+    world = World(monkeypatch)
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: world.store)
+    world.add(
+        'parent',
+        0,
+        1,
+        **{
+            **sealed(id='parent'),
+            'sync_content_revision': 2,
+            'started_at': datetime.fromtimestamp(10, timezone.utc),
+            'created_at': datetime.fromtimestamp(10, timezone.utc),
+            'finished_at': datetime.fromtimestamp(100, timezone.utc),
+            'structured': {'title': 'Pending', 'overview': ''},
+            hold.FIELD: {'pending_since': 100, 'last_content_at': 100, 'held': True},
+        }
+    )
+    snapshot = Mock(side_effect=world.get)
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', snapshot)
+    receipt = Mock(return_value=outbox.record_attention.RecordReceipt(True, True, 100))
+    monkeypatch.setattr(outbox.record_attention, 'receipt', receipt)
+    monkeypatch.setattr(callback.pipeline_settlement, 'settle', lambda *a, **k: False)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *a: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
+
+    def persist(**kwargs):
+        current = world.get('user-1', 'parent')
+        current['structured'] = {'title': 'Recovered notes', 'overview': 'Synthetic retained preview notes'}
+        world.raw('parent')['structured'] = current['structured']
+        return callback.deserialize_conversation(current)
+
+    process = Mock(side_effect=persist)
+    monkeypatch.setattr(callback, 'process_conversation', process)
+    return world, clock, process, snapshot, receipt
+
+
+@pytest.mark.parametrize('mode,seal', [('serve', 'false'), ('off', 'true'), ('shadow', 'true')])
+@pytest.mark.parametrize('requested_hold', [False, True])
+def test_new_obligation_flags_off_preserve_legacy_hold_and_notes_timing(
+    state, pipeline_notes, monkeypatch, mode, seal, requested_hold
+):
+    rows, _ = state
+    world, clock, process, snapshot, receipt = pipeline_notes
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', seal)
+    outbox.mark('user-1', 'parent', 'en', now=100, sync_hold=requested_hold)
+    key = outbox.key('user-1', 'parent')
+    assert rows[key]['due_at'] == 700
+    assert not rows[key].get('pipeline_record') and 'pipeline_dispatch_at' not in rows[key]
+    assert bool(rows[key].get('sync_hold')) is requested_hold
+    snapshot.assert_not_called()
+    receipt.assert_not_called()
+    clock[0] = 699
+    assert outbox.run(key, rows[key]['task_token'], callback.enrich_conversation, now=699) == 'deferred'
+    process.assert_not_called()
+    clock[0] = 700
+    assert outbox.run(key, rows[key]['task_token'], callback.enrich_conversation, now=700) == 'processed'
+    process.assert_called_once()
+    assert world.get('user-1', 'parent')['structured']['overview'] == 'Synthetic retained preview notes'
+    assert key not in rows
+
+
+@pytest.mark.parametrize('failure', ['partial', 'failed', 'projection'])
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+def test_pipeline_wait_reaches_normal_notes_and_terminal_state_after_one_hour(state, pipeline_notes, failure, driver):
+    rows, _ = state
+    world, clock, process, _, receipt = pipeline_notes
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    if failure == 'partial':
+        world.raw('parent')['record_audio_partial'] = {'reason': 'tail_lost_or_unproven'}
+    elif failure == 'failed':
+        world.raw('parent')['record_upload_failed'] = True
+    receipt.return_value = outbox.record_attention.RecordReceipt(True, False, 100)
+
+    def deliver():
+        token = rows[key]['task_token']
+        if driver == 'legacy':
+            return outbox.run(key, token, callback.enrich_conversation, now=clock[0])
+        return run_push(
+            EnrichmentConsumer(ENRICHMENT_OUTBOX, process=callback.enrich_conversation),
+            ENRICHMENT_OUTBOX,
+            key,
+            token,
+            now=clock[0],
+        ).outcome
+
+    clock[0] = 700
+    assert deliver() == 'deferred'
+    assert rows[key]['due_at'] == 760
+    process.assert_not_called()
+    clock[0] = 3699
+    assert deliver() == 'deferred'
+    assert rows[key]['due_at'] == 3700 and rows[key]['first_pending_at'] == 100
+    process.assert_not_called()
+    clock[0] = 3700
+    assert deliver() in {'processed', 'done'}
+    process.assert_called_once()
+    assert world.get('user-1', 'parent')['structured']['overview'] == 'Synthetic retained preview notes'
+    assert key not in rows
+
+
+@pytest.mark.parametrize('reason', ['pipeline_seal_pending', 'pipeline_projection_pending'])
+def test_pipeline_pending_reasons_use_existing_slow_retry_classification(reason):
+    now = outbox.STUCK_DEFER_GRACE_SECONDS + 100
+    assert outbox.custody_defer_until({'defer_reason': reason, 'defer_until': now + 60}, 100, now) == now + 3600
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+@pytest.mark.parametrize('recovery', ['hour_bound', 'mode_off'])
+def test_pipeline_empty_after_seal_and_recovery_exhausts_three_attempts(
+    state, pipeline_notes, monkeypatch, driver, recovery
+):
+    from database import summary_processing
+
+    rows, _ = state
+    world, clock, process, _, _ = pipeline_notes
+    contexts = []
+
+    def empty(**kwargs):
+        contexts.append(dict(PROCESS_CONTEXT.get()))
+        return callback.deserialize_conversation(world.get('user-1', 'parent'))
+
+    process.side_effect = empty
+    # The atomic implementation is covered with StrictFirestore in test_summary_empty_recovery.
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', outbox.record_empty_failure)
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    clock[0] = 700
+    for attempt in range(3):
+        if attempt == 1 and recovery == 'mode_off':
+            monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+        token = rows[key]['task_token']
+        if driver == 'legacy':
+            if attempt < 2:
+                with pytest.raises(callback.SummaryOutputUnavailable):
+                    outbox.run(key, token, callback.enrich_conversation, now=clock[0])
+            else:
+                assert outbox.run(key, token, callback.enrich_conversation, now=clock[0]) == 'blocked'
+        else:
+            result = run_push(
+                EnrichmentConsumer(ENRICHMENT_OUTBOX, process=callback.enrich_conversation),
+                ENRICHMENT_OUTBOX,
+                key,
+                token,
+                now=clock[0],
+            )
+            assert result.outcome == ('retry' if attempt < 2 else 'stale')
+        assert rows[key]['summary_empty_failures'] == attempt + 1
+        clock[0] = max(clock[0] + 1801, rows[key].get('lease_until', 0) + 1)
+    assert process.call_count == 3
+    assert contexts[0].get('pipeline_seal') and not contexts[-1].get('pipeline_seal')
+    assert rows[key]['dormant'] and rows[key]['due_at'] is None
+    assert rows[key]['summary_blocked_reason'] == 'empty_output_exhausted'
+
+
+def _pipeline_delivery(rows, key, driver, now):
+    token = rows[key]['task_token']
+    if driver == 'legacy':
+        return outbox.run(key, token, callback.enrich_conversation, now=now)
+    return run_push(
+        EnrichmentConsumer(ENRICHMENT_OUTBOX, process=callback.enrich_conversation),
+        ENRICHMENT_OUTBOX,
+        key,
+        token,
+        now=now,
+    ).outcome
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+def test_ready_notes_run_before_dispatch_ceiling_without_presence(state, pipeline_notes, driver):
+    rows, _ = state
+    _, clock, process, _, _ = pipeline_notes
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    assert rows[key]['pipeline_dispatch_at'] == 1780
+    clock[0] = 700
+    assert _pipeline_delivery(rows, key, driver, 700) in {'processed', 'done'}
+    process.assert_called_once()
+    assert key not in rows
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+@pytest.mark.parametrize('kill', ['mode', 'seal', 'cohort'])
+def test_pipeline_kill_resumes_existing_projection_wait_on_legacy_timing(
+    state, pipeline_notes, monkeypatch, driver, kill
+):
+    rows, _ = state
+    _, clock, process, _, receipt = pipeline_notes
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    receipt.return_value = outbox.record_attention.RecordReceipt(True, False, 100)
+    clock[0] = 700
+    assert _pipeline_delivery(rows, key, driver, 700) == 'deferred'
+    process.assert_not_called()
+    if kill == 'mode':
+        monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+    elif kill == 'seal':
+        monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'false')
+    else:
+        monkeypatch.setattr(outbox.pipeline_attention.omi_flags, 'resolve', lambda *a: SimpleNamespace(enabled=False))
+    clock[0] = 760
+    assert _pipeline_delivery(rows, key, driver, 760) in {'processed', 'done'}
+    process.assert_called_once()
+    assert key not in rows

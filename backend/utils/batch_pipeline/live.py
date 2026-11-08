@@ -538,7 +538,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             if cap_owner:
                 admitted_owners.add(owner)
             await run_blocking(db_executor, record_attention.defer, segment, lease)
-            await admit_and_defer(segment, pending, lease)
+            await admit_and_defer(segment, pending, lease, fast_clock=cap_owner)
         finally:
             busy_owners.discard(owner)
 
@@ -576,7 +576,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         tx.put('jobs', segment, latest)
         return lease
 
-    async def admit_and_defer(segment, pending, lease):
+    async def admit_and_defer(segment, pending, lease, *, fast_clock: bool):
         nonlocal partial_count, privacy_blocked
         attempt_started = time.monotonic()
         instrument = pipeline_policy.mode() != 'off' and await run_blocking(
@@ -656,7 +656,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)
-                latest['available_at'] = max(0 if current == lease else current, time.time() + delay)
+                retry_at = time.time() if fast_clock else now
+                latest['available_at'] = max(0 if current == lease else current, retry_at + delay)
                 latest.pop('pipeline_record_lease_until', None)
                 if pipeline_policy.record_fast_enabled() and pipeline_policy.mode() == 'serve':
                     latest['pipeline_record_deferred'] = True

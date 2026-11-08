@@ -19,14 +19,16 @@ is insufficient. Existing retained-tail validation, privacy, producer grace and
 projection/member readiness proofs remain authoritative. Unchanged hold snapshots
 still settle once without another paid processing attempt.
 
-Unwatched sealed work waits for episode settlement. The existing durable enrichment
+With the seal switch and serving owner grant on, the existing durable enrichment
 obligation carries `pipeline_dispatch_at`: captured span end plus 1,680 seconds,
 leaving a 120-second processing reserve within the 30-minute target. Appends and
 joins take the earlier accepted deadline. At that instant only a fully sealed
 bounded member snapshot can close; its membership, activity and each seal are
-rechecked in the close transaction. Unresolved producers stay blocked. The
-composer's settle wait is clamped to the same deadline. Accepted deadlines drain
-on rollback; they are not job cancellations or custody closure receipts.
+rechecked in the close transaction. Ready, proven notes can run before this ceiling.
+Unconfirmed seal/projection waits end after 3,600 seconds from the original obligation
+and resume normal notes admission. The composer uses the deadline only while the
+notes policy is serving and within that bound. Mode/seal rollback restores legacy
+scheduling; persisted deadline metadata and durable jobs are retained.
 
 The record fast lane uses bounded Redis hints and wakes over the existing
 Firestore jobs. Age comes from original enqueue time, not retry availability.
@@ -110,7 +112,7 @@ Broad rollout additionally needs measured pendant life >=24h and phone drain
 acceptance on Wi-Fi/cellular. The 120s work reserve is proposed, not proven.
 
 Rollback: set attention mode off, seal/record/close switches false; let durable
-jobs and accepted deadlines drain through their original claims. Kill capture
+jobs drain through their original claims using legacy scheduling; saved deadlines are inert while killed. Kill capture
 reporting and mark its prior report stale. Already-running calls may finish once.
 Reverting this lane's code needs a reviewed PR; never erase audio or receipts,
 cancel jobs, revert another owner's PR or roll back user data.
@@ -125,9 +127,9 @@ cancel jobs, revert another owner's PR or roll back user data.
 | Lost existing composer scheduling on process kill | medium / high | Canonical Firestore episode stays closed/uncomposed; existing read/member-finalize reschedules after lease expiry. No durable immediate compose wake is added here. Owner recovery proof and provider-to-Home crash acceptance are required before ramp. |
 | Patient rewrites or deadline miss | medium / high | Immutable deadline/fingerprint and one obligation; track durable versions, pending age and composer calls. Reserve needs staging proof. |
 | Fresh traffic starves old owners | high / high | Oldest reserve, original enqueue age, owner cap; loaded-aging tests and oldest-age/control comparison. |
-| Stale/multiple sessions or Redis loss | medium / medium | Session leases and conservative unknown-state fallback; expiry/logout/fault tests; pause ramp if indexing is unavailable. |
+| Stale/multiple sessions or Redis loss | medium / medium | Session leases select fast scheduling; unknown presence retains the absolute deadline; expiry/logout/fault tests; pause ramp if indexing is unavailable. |
 | Realtime consumers stop silently | high / high | No provider suppression in this PR; #23498 owns English notice and exception proofs before its flag. |
-| Sole transcript is suppressed | medium / critical | Handoff only for retained batch-covered server-batch captures; onboarding/BYOK/non-Omi unchanged; coverage parity acceptance. |
+| Sole transcript is suppressed | medium / critical | Handoff only with notes policy serving, after durable record registration and durable preview-notes fallback; failed/dead-lettered batch still gets normal notes; onboarding/BYOK/non-Omi unchanged; coverage parity acceptance. |
 | Cellular/preview battery loss | medium / high | No firmware or client preview change here; owner Wi-Fi policy/device tests before expansion; >=24h pendant floor. |
 | Denominator omission/duplication | high / high | Replayable physical-frame union, unknown coverage, captured-day reconciliation; overlap/midnight/rate fixtures. |
 | Cross-owner contract drift | high / medium | Sequence on #24731, owner hooks and current-head recheck; no pg-short dependency or owner-branch edits. |
@@ -165,11 +167,15 @@ content-free `pipeline_capture_end` travels with the existing durable obligation
 and worker envelope into the consumer's processing context, alongside the
 `pipeline_record` gate, matching the legacy runner. A later unit cannot move the
 accepted deadline; missing or invalid intake ranges retain legacy hold timing.
-Every enrolled capture with a valid intake clock gets the absolute capture-end
+With serving mode, owner grant and seal switch on, every enrolled capture with a valid intake clock gets the absolute capture-end
 +1,680s dispatch deadline regardless of presence, per David's 2026-11-08 ruling.
 Presence only chooses fast scheduling; unknown presence cannot remove the deadline.
-The accepted `pipeline_record` gate still waits for complete projection, including
-after rollback; clock availability never authorizes partial-text notes.
+The `pipeline_record` projection wait is bounded by the original one-hour obligation
+clock. Rollback or exhaustion uses normal notes admission; it never fabricates a
+seal, projection receipt or custody closure. Repeated empty results terminate after
+three owned attempts using the existing atomic budget, including after recovery.
 First-note capture latency and capture-to-seal use this same physical extent;
 recorded-span/finished-to-seal remain separately named clocks. No range query,
 index, historical backfill, or producer-grace bypass is introduced.
+
+The [review-bound correction](2026-11-08-pipeline-review-bounds.md) records the binding kill, ceiling, retry and preview-fallback rules.

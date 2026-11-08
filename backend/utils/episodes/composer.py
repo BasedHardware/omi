@@ -609,9 +609,15 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
     state, members = _members(uid, episode, c)
     if state == 'waiting':
         return 'waiting'
-    if pipeline_seconds(episode.get('pipeline_dispatch_at')) is not None and any(
-        record_attention.receipt(uid, str(row['id']), row, firestore_client=c.firestore_client).projected is False
-        for row in members
+    retry_limit = pipeline_attention.retry_deadline(episode)
+    if (
+        pipeline_attention.notes_serving(uid)
+        and retry_limit is not None
+        and time.time() < retry_limit
+        and any(
+            record_attention.receipt(uid, str(row['id']), row, firestore_client=c.firestore_client).projected is False
+            for row in members
+        )
     ):
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
@@ -666,7 +672,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
         observed = _observe_evidence(uid, episode, c, _evidence(members))
         if observed is not None:
             episode = observed
-            delay = settle_delay(episode)
+            delay = settle_delay(uid, episode)
             if delay > 0:
                 if _defer(uid, episode_id, c, delay):
                     return 'settling'
@@ -842,7 +848,7 @@ def _observe_evidence(
         return None
 
 
-def settle_delay(episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> float:
+def settle_delay(uid: str, episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> float:
     """A ten-minute quiet window, bounded by 25 minutes from the first uncomposed arrival."""
     now = now or datetime.now(timezone.utc)
     first = _utc(episode.get('compose_pending_since')) or now
@@ -858,8 +864,11 @@ def settle_delay(episode: Mapping[str, Any], *, now: Optional[datetime] = None) 
         activity + timedelta(seconds=COMPOSER_SETTLE_SECONDS), first + timedelta(seconds=COMPOSER_MAX_SETTLE_SECONDS)
     )
     deadline = pipeline_seconds(episode.get('pipeline_dispatch_at'))
-    if deadline is not None:
-        # An accepted deadline also drains after its producer is killed.
+    if (
+        deadline is not None
+        and pipeline_attention.notes_serving(uid)
+        and now.timestamp() < (pipeline_attention.retry_deadline(episode) or 0)
+    ):
         due = min(due, datetime.fromtimestamp(deadline, timezone.utc))
     return max(0.0, (due - now).total_seconds())
 

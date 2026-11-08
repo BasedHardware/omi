@@ -32,6 +32,19 @@ def serving(uid: str) -> bool:
     return policy.mode() == 'serve' and admitted(uid)
 
 
+def notes_serving(uid: str) -> bool:
+    return policy.seal_fast_enabled() and serving(uid)
+
+
+def retry_deadline(obligation) -> float | None:
+    """The original obligation owns the one-hour recovery budget, never a retry."""
+    since = policy.seconds(obligation.get('first_pending_at')) or policy.seconds(obligation.get('pipeline_capture_end'))
+    accepted = policy.seconds(obligation.get('pipeline_dispatch_at'))
+    if since is None and accepted is not None:
+        since = max(0, accepted - policy.DISPATCH_AFTER_SECONDS)
+    return since + policy.MAX_RETRY_SECONDS if since is not None else None
+
+
 @cache
 def client():
     return create_bounded_redis_client(0.5)
@@ -105,39 +118,33 @@ def begin_promotion(uid, *, trigger, now=None, redis=None) -> bool:
 
 
 def hold_decision(uid, row, obligation, *, projected: bool | None, settled=False, now=None):
-    """Return (bypass, due, proof); refused proof preserves legacy admission."""
+    """Ready notes may beat the ceiling; kills and exhausted waits use legacy admission."""
     now = time.time() if now is None else now
+    if policy.mode() == 'shadow':
+        if admitted(uid):
+            metrics.event('shadow')
+        return False, None, None
+    if not notes_serving(uid):
+        return False, None, None
     accepted = policy.seconds(obligation.get('pipeline_dispatch_at'))
     record = bool(obligation.get('pipeline_record'))
-    if not admitted(uid) and not accepted and not record:
+    limit = retry_deadline(obligation)
+    if limit is not None and now >= limit:
         return False, None, None
     proof = policy.seal_snapshot(row)
     if proof is None:
         metrics.event('seal_denied')
-        return False, now + 60 if accepted or record else None, None
-    if policy.mode() == 'shadow' and not accepted and not record:
-        metrics.event('shadow')
-        return False, None, None
+        return False, min(now + 60, limit) if (accepted or record) and limit is not None else None, None
     if projected is not True:
         if projected is None and not accepted and not record:
             return False, None, None  # Untagged old intakes retain their legacy policy.
         metrics.event('projection_pending')
-        return False, now + 60, None
-    if record and not accepted and not serving(uid):
-        return False, None, proof  # Accepted projection debt drains under legacy timing.
-    if accepted and now >= accepted:
-        return True, None, proof  # Durable accepted work must survive Redis loss/kill.
-    if accepted and (policy.mode() != 'serve' or not policy.seal_fast_enabled() or not admitted(uid)):
-        return False, accepted, proof
+        return False, min(now + 60, limit) if limit is not None else None, None
+    if accepted is not None:
+        return True, None, proof  # The durable deadline is a ceiling, never a minimum wait.
     state = attention(uid, now=now)
     fast = state == 'watched' or promoted(uid)
-    if state == 'unknown' and not fast and not accepted:
-        return False, None, proof if record else None
-    deadline = accepted
-    if not fast and not settled and deadline is not None and now < deadline:
-        metrics.event('patient_wait')
-        return False, min(now + 60, deadline), proof
-    bypass = policy.seal_fast_enabled() and (fast or settled or deadline is not None and now >= deadline)
+    bypass = fast or settled
     if bypass:
         metrics.event('fast' if fast else 'deadline')
     return bypass, None, proof if bypass or record else None

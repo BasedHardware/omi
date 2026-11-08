@@ -832,6 +832,7 @@ def test_pipeline_close_rechecks_member_seal_and_snapshot_in_strict_transaction(
 
 
 def test_flag_on_close_on_seal_closes_fully_projected_capture_early(monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
     import fakeredis
     from tests.unit.test_pipeline_attention import sealed
     from utils.conversations import pipeline_attention

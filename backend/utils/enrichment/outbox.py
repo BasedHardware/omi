@@ -67,7 +67,14 @@ LIVE_DEFER_SECONDS = 120
 # has deferred a row past the grace (``deferred_since``), it polls hourly;
 # custody, sweep repair and the eventual resume are unchanged.
 STUCK_DEFER_REASONS = frozenset(
-    {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
+    {
+        'redirect_unresolved',
+        'conversation_missing',
+        'open_live_target',
+        'pending_live_bridge',
+        'pipeline_seal_pending',
+        'pipeline_projection_pending',
+    }
 )
 STUCK_DEFER_GRACE_SECONDS = 6 * 3600
 STUCK_DEFER_POLL_SECONDS = 3600
@@ -503,7 +510,11 @@ def mark_update(
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
             )
 
-        deadline = pipeline_policy.seconds(row.get('pipeline_dispatch_at'))
+        deadline = (
+            pipeline_policy.seconds(row.get('pipeline_dispatch_at'))
+            if pipeline_policy.mode() == 'serve' and pipeline_policy.seal_fast_enabled()
+            else None
+        )
         if pipeline_snapshot is not None:
             row['pipeline_record'] = True
             row['sync_hold'] = True  # Projection gating does not depend on a usable clock.
@@ -542,7 +553,7 @@ def mark_update(
 
 
 def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
-    if not pipeline_attention.serving(uid):
+    if not pipeline_attention.notes_serving(uid):
         return None
     try:
         row = conversations_db.get_conversation_raw_snapshot(
