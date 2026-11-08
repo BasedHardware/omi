@@ -577,16 +577,18 @@ Persisted dispositions and existing logs are unchanged.
 `quarantine_held_rows`, `assignment_held`, and `projection`. These are exact stock
 counts across all epochs and ages, including units younger than the SLA. They
 reuse the existing Firestore COUNT aggregation path: three unbounded count
-aggregations per successful elected timeliness refresh, no document scan and
-no queries on scrape. The timeliness alarm, cadence, election, freshness and
-existing epoch-scoped gauge remain unchanged. This companion is diagnostic;
-there is no alert or production metric-inventory requirement for it.
-Companion counts run only after all legacy sample reads succeed. Each failed
-count logs its bounded leg and exception type, omits that series, and leaves
-other legs available. A refresh removes previously exported failed-leg values;
-it never substitutes zero. Companion failures do not prevent epoch gauges or
-their freshness from refreshing. A legacy sample failure keeps its existing
-error behavior and runs no companion counts.
+aggregations per successful refresh by the leader, no document scan and no
+queries on scrape. The companion requires `batch_timeliness_leader` on and this
+replica's lease; with election off, or on a follower, no companion COUNT runs.
+The timeliness alarm, cadence, election, freshness and existing epoch-scoped
+gauge remain unchanged. This companion is diagnostic; there is no alert or
+production metric-inventory requirement for it.
+Companion counts run only after the legacy sample has succeeded and the epoch
+gauges have published, so a slow or failed COUNT cannot delay or stale them.
+Each failed count logs its bounded leg and exception type, omits that series,
+and leaves other legs available. A refresh removes previously exported
+failed-leg values; it never substitutes zero. A legacy sample failure keeps its
+existing error behavior and runs no companion counts.
 
 Both controls are registered in `config/policy/kill_switches.py`,
 `config/feature-flags.yaml`, and `config/flag_budget.json`. They require `true`

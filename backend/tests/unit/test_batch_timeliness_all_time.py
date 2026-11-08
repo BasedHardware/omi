@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 from prometheus_client import CollectorRegistry, generate_latest
 
-from database.batch_pipeline_store import timeliness_sample
+from database.batch_pipeline_store import timeliness_all_time_counts, timeliness_sample
 from tests.unit.test_batch_pipeline_timeliness import _Client, _Query, EPOCH, NOW, SLA
 from utils.batch_pipeline import metrics as metrics_module
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -33,7 +33,25 @@ def client():
     )
 
 
-def test_companion_adds_only_three_unbounded_count_aggregations(monkeypatch):
+class _Lease:
+    """Stands in for LeaderLease: ``held`` decides whether this replica wins the lease."""
+
+    held = True
+
+    def __init__(self, store, name, ttl_seconds):
+        self.ttl_seconds = ttl_seconds
+
+    def acquire(self):
+        return _Lease.held
+
+
+def _leader(monkeypatch, *, lever=True, held=True):
+    monkeypatch.setattr(metrics_module, 'lever_enabled', lambda name: lever and name == 'batch_timeliness_leader')
+    monkeypatch.setattr(metrics_module, 'LeaderLease', _Lease)
+    monkeypatch.setattr(_Lease, 'held', held)
+
+
+def test_all_time_counts_are_three_unbounded_count_aggregations(monkeypatch):
     calls, streams = [], []
     count, stream = _Query.count, _Query.stream
 
@@ -47,20 +65,12 @@ def test_companion_adds_only_three_unbounded_count_aggregations(monkeypatch):
 
     monkeypatch.setattr(_Query, 'count', counted)
     monkeypatch.setattr(_Query, 'stream', streamed)
-    baseline = timeliness_sample(client(), 'ns', EPOCH, NOW, SLA)
-    base_calls, base_streams = list(calls), list(streams)
-    calls.clear()
-    streams.clear()
-    enabled = timeliness_sample(client(), 'ns', EPOCH, NOW, SLA, all_time_counts=True)
-    assert enabled.pop('all_time') == LEGS
-    assert enabled == baseline
-    assert streams == base_streams
-    extra = list(calls)
-    for call in base_calls:
-        extra.remove(call)
-    assert len(extra) == 3
-    assert all(limit is None for _, limit in extra)
-    assert {field for filters, _ in extra for field, _, _ in filters} == {'state', 'recovery_state', 'projection_state'}
+    assert timeliness_all_time_counts(client(), 'ns') == LEGS
+    # No epoch cutoff, no document walk: only three COUNT aggregations.
+    assert streams == []
+    assert len(calls) == 3
+    assert all(limit is None for _, limit in calls)
+    assert {field for filters, _ in calls for field, _, _ in filters} == {'state', 'recovery_state', 'projection_state'}
 
 
 @pytest.mark.parametrize('value', [None, 'false', 'true'])
@@ -69,7 +79,7 @@ def test_off_has_no_new_series_and_on_exports_fake_store_counts(monkeypatch, val
     if value is not None:
         monkeypatch.setenv(FLAG, value)
     monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
-    monkeypatch.setattr(metrics_module, 'lever_enabled', lambda _: False)
+    _leader(monkeypatch)
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
     store = SimpleNamespace(client=client(), namespace='ns')
@@ -110,7 +120,7 @@ def _epoch_series(registry):
 @pytest.mark.parametrize('failed_legs', [*(frozenset({leg}) for leg in LEGS), frozenset(LEGS)])
 def test_companion_count_failures_refresh_epoch_and_remove_failed_series(monkeypatch, caplog, failed_legs):
     monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
-    monkeypatch.setattr(metrics_module, 'lever_enabled', lambda _: False)
+    _leader(monkeypatch)
     store = SimpleNamespace(client=client(), namespace='ns')
     baseline_registry, registry = CollectorRegistry(), CollectorRegistry()
     baseline, metrics = QueueMetrics(baseline_registry), QueueMetrics(registry)
@@ -161,13 +171,87 @@ def test_companion_count_failures_refresh_epoch_and_remove_failed_series(monkeyp
     )
 
 
+@pytest.mark.parametrize(
+    ('lever', 'held'),
+    [(False, True), (True, False)],
+    ids=['election-off-no-companion', 'leader-without-lease-no-companion'],
+)
+def test_companion_counts_need_leader_mode_and_the_lease(monkeypatch, caplog, lever, held):
+    monkeypatch.setenv(FLAG, 'true')
+    monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
+    _leader(monkeypatch, lever=lever, held=held)
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    clear = Mock(wraps=metrics.timeliness_all_time.clear)
+    monkeypatch.setattr(metrics.timeliness_all_time, 'clear', clear)
+    companion = Mock()
+    count = _Query.count
+
+    def counted(query):
+        if _companion_count(query):
+            companion()
+            raise AssertionError('a replica without leader mode and the lease ran a companion count')
+        return count(query)
+
+    monkeypatch.setattr(_Query, 'count', counted)
+    metrics.refresh_timeliness(SimpleNamespace(client=client(), namespace='ns'), NOW)
+    companion.assert_not_called()
+    clear.assert_not_called()
+    assert METRIC.encode() not in generate_latest(registry)
+    observed = registry.get_sample_value('omi_batch_timeliness_observed_at_seconds')
+    assert (observed == NOW) if held else (observed != NOW)
+
+
+def test_companion_counts_run_only_after_epoch_gauges_publish(monkeypatch):
+    monkeypatch.setenv(FLAG, 'true')
+    monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
+    _leader(monkeypatch)
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    seen = []
+    count = _Query.count
+
+    def counted(query):
+        if _companion_count(query):
+            # A slow or failed companion COUNT must find the epoch series already published.
+            seen.append(registry.get_sample_value('omi_batch_timeliness_observed_at_seconds'))
+        return count(query)
+
+    monkeypatch.setattr(_Query, 'count', counted)
+    metrics.refresh_timeliness(SimpleNamespace(client=client(), namespace='ns'), NOW + 601)
+    assert seen == [NOW + 601] * 3
+    assert registry.get_sample_value(METRIC, {'leg': 'projection'}) == LEGS['projection']
+
+
+def test_companion_leg_failure_does_not_block_the_next_epoch_refresh(monkeypatch):
+    monkeypatch.setenv(FLAG, 'true')
+    monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
+    _leader(monkeypatch)
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = SimpleNamespace(client=client(), namespace='ns')
+    count = _Query.count
+
+    def failing(query):
+        if _companion_count(query):
+            return Mock(get=Mock(side_effect=RuntimeError('private payload')))
+        return count(query)
+
+    monkeypatch.setattr(_Query, 'count', failing)
+    metrics.refresh_timeliness(store, NOW)
+    metrics.refresh_timeliness(store, NOW + 601)
+    assert registry.get_sample_value('omi_batch_timeliness_observed_at_seconds') == NOW + 601
+    assert registry.get_sample_value('omi_batch_timeliness_samples_total', {'outcome': 'ok'}) == 2
+    assert not any(sample.name == METRIC for family in registry.collect() for sample in family.samples)
+
+
 @pytest.mark.parametrize('value', [None, 'false'])
 def test_off_runs_no_companion_counts_or_series_updates(monkeypatch, caplog, value):
     monkeypatch.delenv(FLAG, raising=False)
     if value is not None:
         monkeypatch.setenv(FLAG, value)
     monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
-    monkeypatch.setattr(metrics_module, 'lever_enabled', lambda _: False)
+    _leader(monkeypatch)
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
     clear = Mock(wraps=metrics.timeliness_all_time.clear)
@@ -197,7 +281,7 @@ def test_off_runs_no_companion_counts_or_series_updates(monkeypatch, caplog, val
 def test_epoch_failure_keeps_legacy_values_and_never_runs_companion_counts(monkeypatch, caplog, enabled):
     monkeypatch.setenv(FLAG, str(enabled).lower())
     monkeypatch.setattr(metrics_module, 'timeliness_epoch', lambda: EPOCH)
-    monkeypatch.setattr(metrics_module, 'lever_enabled', lambda _: False)
+    _leader(monkeypatch)
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
     store = SimpleNamespace(client=client(), namespace='ns')
