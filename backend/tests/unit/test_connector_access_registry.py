@@ -49,3 +49,9 @@ def test_grants_and_key_endpoints_serve_registry_even_without_grants_or_keys(mon
         assert created.status_code == 200
         assert created.json()["connector_access"] == expected["mcp_api_key"]
         assert created.json()["scopes"] == ["goals.read"]
+
+
+def test_grants_response_decodes_without_connector_access_from_older_clients():
+    # Older clients and recorded responses predate the field; it must stay optional.
+    assert "connector_access" not in mcp.McpOauthGrantsResponse.model_json_schema().get("required", [])
+    assert mcp.McpOauthGrantsResponse(grants=[]).connector_access == {}

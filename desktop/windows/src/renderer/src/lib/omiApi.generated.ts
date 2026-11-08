@@ -3481,7 +3481,7 @@ export interface McpCreateActionItem {
 }
 
 export interface McpOauthGrantsResponse {
-  connector_access: Record<string, ConnectorAccess>;
+  connector_access?: Record<string, ConnectorAccess>;
   grants?: Array<Record<string, unknown>>;
 }
 

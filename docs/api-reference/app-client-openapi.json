@@ -21866,6 +21866,7 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/ConnectorAccess"
             },
+            "default": {},
             "title": "Connector Access",
             "type": "object"
           },
@@ -21879,9 +21880,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "connector_access"
-        ],
         "title": "McpOauthGrantsResponse",
         "type": "object"
       },

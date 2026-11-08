@@ -3854,7 +3854,7 @@ public enum OmiAPI {
 
 
   public struct McpOauthGrantsResponse: Codable {
-    public let connectorAccess: [String: ConnectorAccess]
+    public let connectorAccess: [String: ConnectorAccess]?
     public let grants: [[String: OmiAnyCodable]]?
 
     private enum CodingKeys: String, CodingKey {
@@ -3864,11 +3864,11 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
-      connectorAccess = try c.decode([String: ConnectorAccess].self, forKey: .connectorAccess)
+      connectorAccess = try c.decodeIfPresent([String: ConnectorAccess].self, forKey: .connectorAccess)
       grants = try c.decodeIfPresent([[String: OmiAnyCodable]].self, forKey: .grants)
     }
 
-    public init(connectorAccess: [String: ConnectorAccess], grants: [[String: OmiAnyCodable]]? = nil) {
+    public init(connectorAccess: [String: ConnectorAccess]? = nil, grants: [[String: OmiAnyCodable]]? = nil) {
       self.connectorAccess = connectorAccess
       self.grants = grants
     }

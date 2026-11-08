@@ -199,7 +199,7 @@ class McpStatusResponse(BaseModel):
 
 class McpOauthGrantsResponse(BaseModel):
     grants: List[Dict[str, Any]] = []
-    connector_access: Dict[str, ConnectorAccess]
+    connector_access: Dict[str, ConnectorAccess] = {}
 
 
 class McpScreenActivityRow(BaseModel):
