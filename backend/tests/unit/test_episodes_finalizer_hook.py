@@ -141,7 +141,9 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
     assert not member_notes.waits('u', row, ProcessingTrigger.FIRST_OPEN)
     if enabled is not False:
         with pytest.raises(ProcessingDeferred, match='live_episode_notes'):
-            member_notes.before_notes('u', SimpleNamespace(id='c1'), ProcessingTrigger.SYNC_UPDATE)
+            member_notes.before_notes(
+                'u', SimpleNamespace(id='c1', transcript_segments=[{'text': 'Speech'}]), ProcessingTrigger.SYNC_UPDATE
+            )
         mark.assert_called_once_with('u', 'c1', 'en', sync_hold=True)
         redis.get.return_value = 'detail-open'
         assert not member_notes.waits('u', row)
@@ -229,7 +231,7 @@ async def test_live_member_finalization_closes_boundary_before_budget_free_wait(
     monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
 
     async def loaded(*args):
-        return None, {'id': 'c1'}, SimpleNamespace()
+        return None, {'id': 'c1', 'transcript_segments': [{'text': 'Speech'}]}, SimpleNamespace()
 
     monkeypatch.setattr(finalizer, '_load_admitted_conversation', loaded)
     monkeypatch.setattr(member_notes, 'waits', lambda *args: True)
@@ -307,3 +309,136 @@ async def test_boundary_close_releases_live_member_without_another_client_read(m
         )
     close.assert_called_once()
     retry.assert_not_called()
+
+
+@pytest.mark.parametrize('elapsed', [300, 599, 600, 601, 3601, 4201])
+def test_detail_intent_survives_quiet_window_and_expiry_restores_wait(monkeypatch, elapsed):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+    from utils.sync import processing_hold
+    from utils.enrichment import callback
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    now = [10000.0]
+    monkeypatch.setattr(member_notes.time, 'time', lambda: now[0])
+    monkeypatch.setattr(
+        member_notes.episodes, 'get_episode_owner_snapshot', lambda *a: {'status': 'live', 'conversation_ids': ['c1']}
+    )
+    leases = {}
+    redis = Mock()
+    redis.get.side_effect = lambda key: '1' if leases.get(key, 0) > now[0] else None
+    redis.set.side_effect = lambda key, value, ex: leases.__setitem__(key, now[0] + ex)
+    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: redis)
+    enqueue = Mock()
+    monkeypatch.setattr(member_notes.ENRICHMENT_OUTBOX, 'enqueue', enqueue)
+    row = {
+        'id': 'c1',
+        'status': 'completed',
+        'transcript_segments': [{'text': 'Speech'}],
+        processing_hold.FIELD: {'pending_since': now[0], 'last_content_at': now[0]},
+    }
+    member_notes.open_recording('u', row)
+    enqueue.assert_called_once()
+    assert redis.set.call_args.kwargs['ex'] > processing_hold.MAX_HOLD_SECONDS
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a: row)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: None)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *a: True)
+    monkeypatch.setattr(
+        callback, 'deserialize_conversation', lambda raw: SimpleNamespace(**raw, language='en', discarded=False)
+    )
+    monkeypatch.setattr(callback, 'episodes_enabled_for', lambda uid: False)
+    notes = Mock()
+
+    class ReachedNotes(Exception):
+        pass
+
+    def process(**kwargs):
+        member_notes.before_notes('u', kwargs['conversation'], kwargs['trigger'])
+        notes()
+        raise ReachedNotes()
+
+    monkeypatch.setattr(callback, 'process_conversation', process)
+    now[0] += elapsed
+    token = PROCESS_CONTEXT.set({'sync_hold': True, 'first_pending_at': 10000.0})
+    try:
+        if elapsed < processing_hold.QUIET_SECONDS:
+            callback.enrich_conversation('u', 'c1', 'en')
+            assert PROCESS_CONTEXT.get()['defer_reason'] == 'quiet_wait'
+        elif elapsed < member_notes.DETAIL_LEASE_SECONDS:
+            with pytest.raises(ReachedNotes):
+                callback.enrich_conversation('u', 'c1', 'en')
+            notes.assert_called_once()
+        else:
+            with pytest.raises(member_notes.LiveMemberNotesDeferred):
+                callback.enrich_conversation('u', 'c1', 'en')
+        if elapsed < processing_hold.QUIET_SECONDS or elapsed >= member_notes.DETAIL_LEASE_SECONDS:
+            notes.assert_not_called()
+    finally:
+        PROCESS_CONTEXT.reset(token)
+
+
+def test_empty_batch_preview_passes_notes_gate_before_transcript_custody(monkeypatch):
+    import inspect
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from utils.conversations import process_conversation as pc
+    from utils.episodes import member_notes
+
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+    waits = Mock(return_value=True)
+    monkeypatch.setattr(member_notes, 'waits', waits)
+    mark = Mock()
+    monkeypatch.setattr(member_notes.outbox, 'mark', mark)
+    notes = Mock()
+    monkeypatch.setattr(pc, '_get_structured', notes)
+
+    class ReachedCustody(Exception):
+        pass
+
+    custody = Mock(side_effect=ReachedCustody)
+    monkeypatch.setattr(pc, 'bind_generation', custody)
+    conversation = SimpleNamespace(id='c1', transcript_segments=[], structured={'title': 'Preview'})
+    with pytest.raises(ReachedCustody):
+        inspect.unwrap(pc.process_conversation)('u', 'en', conversation, trigger=ProcessingTrigger.SYNC_UPDATE)
+    custody.assert_called_once()
+    waits.assert_not_called()
+    mark.assert_not_called()
+    notes.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('photo_only', [False, True])
+async def test_finalizer_without_transcripts_reaches_evidence_before_notes_wait(monkeypatch, photo_only):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from models.conversation import ConversationStatus
+    from utils.episodes import member_notes
+
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+    row = {'id': 'c1', 'transcript_segments': [], 'photos': [{'id': 'photo'}] if photo_only else []}
+
+    async def loaded(*a):
+        return None, row, SimpleNamespace(status=ConversationStatus.processing)
+
+    monkeypatch.setattr(finalizer, '_load_admitted_conversation', loaded)
+    monkeypatch.setattr(finalizer, '_episode_at_finalization_start', _no_episode_start)
+    waits = Mock(return_value=True)
+    monkeypatch.setattr(member_notes, 'waits', waits)
+
+    async def evidence(*a, **kw):
+        raise RuntimeError('reached_evidence_before_notes')
+
+    monkeypatch.setattr(finalizer, 'await_meeting_evidence', evidence)
+    with pytest.raises(RuntimeError, match='reached_evidence_before_notes'):
+        await finalizer.finalize_persisted_conversation(
+            'u', 'c1', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+        )
+    waits.assert_not_called()
+
+
+async def _no_episode_start(*a, **kw):
+    pass

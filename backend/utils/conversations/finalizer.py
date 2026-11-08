@@ -246,6 +246,15 @@ def _record_registration_required(row: dict[str, Any]) -> bool:
     )
 
 
+async def _register_before_notes_wait(uid: str, row: dict) -> None:
+    # A preview is enough for the notes gate, but not retained-audio custody.
+    # Registration is idempotent and must precede every scheduling exit.
+    if _record_registration_required(row) and not await run_blocking(db_executor, register_recording, uid, row):
+        RECORD_REGISTER_REFUSED.inc()
+        logger.warning('event=register_refused owner=batch_live_v1')
+        raise ConversationFinalizationError('record_registration_refused')
+
+
 async def _yield_live_member_notes(job_id: str, generation: int, lease_epoch: int):
     yielded = await run_blocking(
         db_executor,
@@ -323,9 +332,12 @@ async def finalize_persisted_conversation(
             raise RuntimeError('desktop batch completion fenced')
         return ConversationFinalizationDisposition.completed
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
-    if live_member_notes_enabled(uid) and await run_blocking(
-        db_executor, member_notes.waits, uid, conversation_data, trigger
+    if (
+        conversation_data.get('transcript_segments')
+        and live_member_notes_enabled(uid)
+        and await run_blocking(db_executor, member_notes.waits, uid, conversation_data, trigger)
     ):
+        await _register_before_notes_wait(uid, conversation_data)
         return await _yield_live_member_notes(finalization_job_id, dispatch_generation, lease_epoch)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
@@ -710,6 +722,7 @@ async def finalize_persisted_conversation(
     except member_notes.LiveMemberNotesDeferred:
         # A smart-merge survivor can become linked after the initial admission
         # check. Keep its new wait out of the provider-failure attempt budget.
+        await _register_before_notes_wait(uid, conversation_data)
         return await _yield_live_member_notes(finalization_job_id, dispatch_generation, lease_epoch)
     except ConversationAbsorbed:
         # The absorb transaction fenced the job lease and replaced the donor

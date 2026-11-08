@@ -21,13 +21,19 @@ PAGE_SIZE_HEADER = 'X-Omi-Conversation-Page-Size'
 SUPPRESSED_HEADER = 'X-Omi-Home-Suppressed-Ids'
 
 
+def acknowledged_members(held: str) -> set[tuple[str, str]]:
+    pairs = held.split(',')
+    if len(pairs) > 50 or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,200}:[A-Za-z0-9_-]{1,200}', pair) for pair in pairs):
+        return set()
+    return {(eid, cid) for eid, cid in (pair.split(':') for pair in pairs)}
+
+
 def suppress_held_members(uid: str, rows: list[dict], held: str) -> list[dict]:
     if not held or not home_hide_episode_members_enabled() or not episodes_enabled_for(uid):
         return rows
-    pairs = held.split(',')
-    if len(pairs) > 50 or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,200}:[A-Za-z0-9_-]{1,200}', pair) for pair in pairs):
+    acknowledged = acknowledged_members(held)
+    if not acknowledged:
         return rows
-    acknowledged = {tuple(pair.split(':')) for pair in pairs}
     try:
         if not client_gate.client_seen(uid):
             return rows
@@ -79,6 +85,7 @@ def live_suppression_for(uid: str, request) -> bool:
         and not query.get('start_date')
         and not query.get('end_date')
         and client_channel_admitted(request.headers.get(APP_CHANNEL_HEADER))
+        and bool(acknowledged_members(request.headers.get(HELD_EPISODES_HEADER, '')))
     )
 
 
@@ -88,13 +95,22 @@ def project_list(uid: str, rows: list[dict], request, response, *, filtered: boo
     if filtered:
         return rows
     owner = live_owner(uid) if live_suppression_for(uid, request) else None
+    # A capability alone proves no replacement exists on this client. A failed
+    # snapshot read or a different current episode must leave recordings visible.
+    acknowledged = acknowledged_members(request.headers.get(HELD_EPISODES_HEADER, '')) if request else set()
+    if owner and not any(eid == owner.get('id') for eid, _ in acknowledged):
+        owner = None
     if not held and owner is None:
         return rows
     if response is not None:
         response.headers[PAGE_SIZE_HEADER] = str(len(rows))
     held_retained = suppress_held_members(uid, rows, held)
-    retained = [row for row in held_retained if not owns_recording(owner, row)]
+    retained = [
+        row
+        for row in held_retained
+        if not (owner and (owner['id'], row['id']) in acknowledged and owns_recording(owner, row))
+    ]
     if response is not None:
-        kept = {row['id'] for row in held_retained}
+        kept = {row['id'] for row in retained}
         response.headers[SUPPRESSED_HEADER] = ','.join(row['id'] for row in rows if row['id'] not in kept)
     return retained

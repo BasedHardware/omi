@@ -645,7 +645,8 @@ def test_pending_work_endpoint_dedupes_live_and_listed_owners(http_client, monke
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, enabled):
+@pytest.mark.parametrize('metadata', ['present', 'empty', 'missing'])
+def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, enabled, metadata):
     from database import sync_jobs
     from utils.episodes import home_processing
 
@@ -664,10 +665,14 @@ def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, en
             'created_at': NOW.timestamp(),
             'updated_at': NOW.timestamp(),
             'result': None,
-            'target_conversation_id': 'c1',
-            'recording_ids': ['r1', 'r2', 'r3'],
+            **(
+                {'target_conversation_id': 'c1', 'recording_ids': ['r1', 'r2', 'r3']}
+                if metadata == 'present'
+                else {'target_conversation_id': None, 'recording_ids': []} if metadata == 'empty' else {}
+            ),
         },
     )
+    enabled = enabled and metadata == 'present'
     items = sync_jobs.pending_sync_jobs(UID)
     assert items[0]['conversation_ids'] == (['c1'] if enabled else [])
     assert items[0].get('recording_count', 1) == (3 if enabled else 1)

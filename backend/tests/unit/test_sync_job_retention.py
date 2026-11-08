@@ -135,3 +135,26 @@ def test_unknown_target_stays_unknown_at_admission(redis):
     job = sync_jobs.create_sync_job('owner', 3, 0, recording_ids=['session-only'])
     assert job['target_conversation_id'] is None
     assert job['recording_ids'] == ['session-only']
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_legacy_inflight_job_without_admission_keys_remains_visible(redis, monkeypatch, enabled):
+    from utils.episodes import home_processing
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(home_processing, 'live_owner', lambda uid: None)
+    job = sync_jobs.create_sync_job('owner', 3, 0)
+    key = 'sync_job:' + job['job_id']
+    legacy = json.loads(redis.get(key))
+    del legacy['recording_ids']
+    del legacy['target_conversation_id']
+    legacy['status'] = 'processing'
+    redis.set(key, json.dumps(legacy), keepttl=True)
+    before_ttl = redis.ttl(key)
+    assert 'recording_ids' not in sync_jobs.get_sync_job(job['job_id'])
+    assert 'target_conversation_id' not in sync_jobs.get_sync_job(job['job_id'])
+    items = sync_jobs.pending_sync_jobs('owner', listed_conversation_ids={'unrelated'})
+    assert len(items) == 1
+    assert items[0]['conversation_ids'] == []
+    assert items[0].get('recording_count', 1) == 1
+    assert before_ttl - 1 <= redis.ttl(key) <= before_ttl

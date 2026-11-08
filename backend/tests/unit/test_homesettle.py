@@ -564,15 +564,20 @@ def test_live_home_suppression_requires_this_clients_unfiltered_capability(monke
     from types import SimpleNamespace
 
     monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
     read = Mock(return_value={'id': 'e', 'conversation_ids': ['a']})
     monkeypatch.setattr(home_membership, 'live_owner', read)
-    headers = {'X-Omi-Home-Ownership': '1', **({'X-Omi-App-Channel': channel} if channel else {})}
+    headers = {
+        'X-Omi-Home-Ownership': '1',
+        home_membership.HELD_EPISODES_HEADER: 'e:a',
+        **({'X-Omi-App-Channel': channel} if channel else {}),
+    }
     request = SimpleNamespace(headers=headers, query_params={bound: NOW.isoformat()} if bound else {})
     response = SimpleNamespace(headers={})
     rows = [floor(id='a', episode_id='e')]
     assert home_membership.project_list('u', rows, request, response, filtered=False) == ([] if hidden else rows)
     assert read.call_count == int(hidden)
-    assert response.headers.get(home_membership.SUPPRESSED_HEADER, '') == ''  # Only acknowledged held omissions use it.
+    assert response.headers.get(home_membership.SUPPRESSED_HEADER, '') == ('a' if hidden else '')
     assert home_membership.live_suppression_for('u', request) == hidden  # Version cache must be bypassed when dynamic.
 
 
@@ -582,3 +587,60 @@ def test_old_beta_client_does_not_opt_into_live_home_suppression(monkeypatch):
     monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
     request = SimpleNamespace(headers={'X-Omi-App-Channel': 'beta'}, query_params={})
     assert not home_membership.live_suppression_for('u', request)
+
+
+@pytest.mark.parametrize('echo', ['', 'other:a', 'e:a', 'malformed'])
+@pytest.mark.parametrize('held_switch', ['on', 'off'])
+def test_live_snapshot_failure_or_disagreement_keeps_recordings_visible(monkeypatch, echo, held_switch):
+    from types import SimpleNamespace
+
+    configure_membership(monkeypatch)
+    monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', held_switch)
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    monkeypatch.setattr(home_membership, 'live_owner', lambda uid: episode(status='live'))
+    monkeypatch.setattr(home_membership.episodes, 'get_home_episode_snapshots', lambda *a: {})
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: echo,
+        },
+        query_params={},
+    )
+    rows = [floor(episode_id='e'), floor(id='outside', episode_id='closed')]
+    # Snapshot-fetch failure sends no echo; stale or missing echoes fail visible.
+    assert home_membership.project_list('u', rows, request, None, filtered=False) == (
+        rows[1:] if echo == 'e:a' else rows
+    )
+
+
+@pytest.mark.parametrize('linked', [False, True])
+def test_stale_live_snapshot_keeps_unacknowledged_new_member_visible(monkeypatch, linked):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    owner = episode(status='live', conversation_ids=['a', 'b'] if linked else ['a'])
+    monkeypatch.setattr(home_membership, 'live_owner', lambda uid: owner)
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: 'e:a',
+        },
+        query_params={},
+    )
+    # b is either newly attached or only overlaps the server's live window.
+    rows = [
+        floor(episode_id='e'),
+        floor(
+            id='b',
+            episode_id='e' if linked else None,
+            started_at=owner['started_at'] + timedelta(minutes=1),
+            finished_at=owner['started_at'] + timedelta(minutes=2),
+        ),
+    ]
+    response = SimpleNamespace(headers={})
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == rows[1:]
+    assert response.headers[home_membership.SUPPRESSED_HEADER] == 'a'
+    assert response.headers[home_membership.PAGE_SIZE_HEADER] == '2'

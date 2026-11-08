@@ -17,6 +17,8 @@ from utils.sync import processing_hold, stage
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+# Cover the full bounded hold, plus one quiet window for worker delivery.
+DETAIL_LEASE_SECONDS = processing_hold.MAX_HOLD_SECONDS + processing_hold.QUIET_SECONDS
 EXPLICIT = frozenset(
     {
         ProcessingTrigger.FIRST_OPEN,
@@ -62,7 +64,11 @@ def waits(uid: str, row: dict, trigger=ProcessingTrigger.SYNC_UPDATE) -> bool:
 
 
 def before_notes(uid, conversation, trigger, *, finalization_fence=None):
-    if live_member_notes_enabled(uid) and waits(uid, {'id': getattr(conversation, 'id', None)}, trigger):
+    if (
+        getattr(conversation, 'transcript_segments', None)
+        and live_member_notes_enabled(uid)
+        and waits(uid, {'id': getattr(conversation, 'id', None)}, trigger)
+    ):
         if PROCESS_CONTEXT.get() is None and finalization_fence is None:
             # Legacy direct sync has no durable notes owner yet. Enroll it before
             # yielding; the same key coalesces with any concurrent outbox writer.
@@ -87,6 +93,6 @@ def open_recording(uid: str, row: dict) -> None:
         )
         # Publish the lease only after durable custody exists. Failed enqueue
         # leaves the next detail read free to retry immediately.
-        demand_processing.client().set(_key(uid, row['id']), '1', ex=300)
+        demand_processing.client().set(_key(uid, row['id']), '1', ex=DETAIL_LEASE_SECONDS)
     except Exception as error:
         _unavailable('escalation_unavailable', error)

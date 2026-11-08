@@ -799,6 +799,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
         _cleanup_flattened_ancestors(uid, donor_id, donor, survivor_id)
         step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
+    except member_notes.LiveMemberNotesDeferred:
+        raise  # Scheduling waits retain donor custody without spending retry budget.
     except Exception as error:
         # Bounded: no ids, no message text (provider errors can quote transcript).
         logger.warning('event=smart_merge outcome=incomplete step=%s cause=%s', step, _incomplete_cause(error))

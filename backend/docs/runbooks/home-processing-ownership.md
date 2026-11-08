@@ -12,14 +12,16 @@ the app does not read these server environment switches.
 - `HOME_PROCESSING_OWNERSHIP_ENABLED=true`: read-only Home/pending-work suppression
   of live members and jobs whose full target set is already represented. Partially
   represented and unknown-target jobs remain visible. No job is retired by hiding it.
-  Live suppression requires an admitted request channel and `X-Omi-Home-Ownership: 1`;
+  Live conversation-list suppression requires an admitted request channel,
+  `X-Omi-Home-Ownership: 1`, and the current live episode ID echoed in a valid
+  `X-Omi-Home-Episode-Ids` pair. Missing or mismatched echoes keep recordings visible;
   older clients and date-filtered Home lists retain their recordings. Writer-lease
   probes remain unfiltered. Live-state-dependent lists bypass version caching.
 - `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED=true`: automatic notes for a linked
   live member wait for episode close. Durable finalization yields without spending
   a processing attempt; enrichment uses its existing deferred settlement.
-  An authenticated recording detail read with `X-Omi-Recording-Detail: 1` grants that recording a five-minute
-  escalation lease and wakes its existing durable enrichment obligation. Home lifecycle
+  An authenticated recording detail read with `X-Omi-Recording-Detail: 1` grants that recording a 70-minute
+  escalation lease (the one-hour maximum hold plus a quiet-window delivery margin) and wakes its existing durable enrichment obligation. Home lifecycle
   probes omit this explicit-open header and cannot escalate notes. Explicit
   reprocess and finalize retain their intent. Transcription and custody continue.
 - `HOME_PROCESSING_OWNERSHIP_UIDS` optionally restricts both switches to named
@@ -75,3 +77,9 @@ Rollback: set both backend switches false. Existing durable obligations resume
 ordinary processing on their next wake; all raw data remains unchanged. Revert the
 two Flutter projection changes to roll back the app fix if necessary. Additive job
 metadata expires with the existing TTL and requires no migration or backfill.
+
+Live list omissions require exact client-held episode/member pairs, including
+for current live membership and time-overlap ownership. Newly attached or
+unacknowledged members remain visible until fetched. All acknowledged omissions
+are named in `X-Omi-Home-Suppressed-Ids` for local source restoration. The early
+finalizer notes gate also bypasses empty transcripts, including photo-only rows.
