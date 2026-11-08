@@ -6,13 +6,15 @@ import os
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import date
+from io import StringIO
 from unittest import mock
 from pathlib import Path
 
 from git_test_env import clean_git_env
 
-from check_feature_flag_registry import check
+from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog
 from feature_flag_registry import load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 
@@ -129,6 +131,136 @@ class RegistryFixture(unittest.TestCase):
 
     def errors(self) -> list[str]:
         return check(self.root, check_render=False, as_of=date(2026, 10, 1))[0]
+
+    def write_flags(self, rows: list[dict[str, object]]) -> None:
+        self.write("config/feature-flags.yaml", self.yaml(rows))
+        self.write("backend/service.py", "import os\n" + "".join(f"os.getenv({row['key']!r})\n" for row in rows))
+
+    def commit_fixture(self) -> str:
+        identity = [
+            "-c",
+            "user.email=flags@example.test",
+            "-c",
+            "user.name=Flag Tests",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ]
+        for args in (["add", "-A"], ["commit", "-qm", "fixture"]):
+            subprocess.run(["git", *identity, *args], cwd=self.root, check=True, env=clean_git_env())
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip()
+
+    def backlog_base(self, count: int = MAX_UNRAMPED_PER_OWNER, **overrides: object) -> list[dict[str, object]]:
+        rows = [flag(f"EXAMPLE_{index}_ENABLED", **overrides) for index in range(count)]
+        self.write_flags(rows)
+        base = self.commit_fixture()
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", base], cwd=self.root, check=True)
+        return rows
+
+    def test_owner_at_cap_cannot_add_rollout_but_under_cap_can(self) -> None:
+        rows = self.backlog_base()
+        self.write_flags(rows + [flag("NEW_ENABLED", decision="ship")])
+        self.commit_fixture()
+        self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(self.errors()))
+        self.assertIn("ramp or retire before adding", "\n".join(self.errors()))
+        # The comparison uses the base count, not the current count (now 6).
+        rows[-1]["decision"] = "ship"
+        self.write_flags(rows)
+        base = self.commit_fixture()
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", base], cwd=self.root, check=True)
+        self.write_flags(rows + [flag("UNDER_CAP_ENABLED"), flag("ANOTHER_ENABLED")])
+        self.assertEqual([], self.errors())
+
+    def test_pre_existing_rows_count_without_blocking_retroactively(self) -> None:
+        rows = self.backlog_base(MAX_UNRAMPED_PER_OWNER + 1)
+        rows[0]["summary"] = "Edited pre-existing rollout"
+        self.write_flags(rows)
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual([], self.errors())
+        self.assertIn("FLAG_OWNER_BACKLOG owner=tester unramped=6", output.getvalue())
+
+    def test_only_new_rollouts_for_the_capped_owner_are_blocked(self) -> None:
+        rows = self.backlog_base()
+        ops = flag("OPS_ENABLED", lifecycle="ops_kill", decision="keep")
+        ops.pop("review_by")
+        self.write_flags(rows + [ops, flag("OTHER_ENABLED", owner="other")])
+        self.assertEqual([], self.errors())
+
+    def test_backlog_exception_warns_through_expiry_then_errors(self) -> None:
+        rows = self.backlog_base(review_by="2026-12-01")
+        self.write_flags(rows + [flag("NEW_ENABLED", review_by="2026-12-01")])
+        exceptions = {"tester": {"expires": "2026-11-20", "reason": "Approved migration overlap"}}
+        with mock.patch("check_feature_flag_registry.OWNER_BACKLOG_EXCEPTIONS", exceptions):
+            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 20))
+            self.assertEqual([], errors)
+            self.assertIn("owner backlog exception expires 2026-11-20", "\n".join(warnings))
+            self.assertIn("Approved migration overlap", "\n".join(warnings))
+            errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 21))
+            self.assertIn("owner backlog exception expired 2026-11-20", "\n".join(errors))
+            self.assertIn("ramp or retire before adding", "\n".join(errors))
+
+    def test_backlog_exception_requires_expiry_and_reason(self) -> None:
+        rows = self.backlog_base()
+        self.write_flags(rows + [flag("NEW_ENABLED")])
+        for exception in (
+            {"reason": "missing expiry"},
+            {"expires": "bad", "reason": "bad date"},
+            {"expires": "2026-11-20", "reason": " "},
+        ):
+            with self.subTest(exception=exception), mock.patch(
+                "check_feature_flag_registry.OWNER_BACKLOG_EXCEPTIONS", {"tester": exception}
+            ):
+                self.assertIn("requires an ISO expires date and nonempty reason", "\n".join(self.errors()))
+
+    def test_missing_merge_base_warns_and_skips_gate(self) -> None:
+        errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 1))
+        self.assertEqual([], errors)
+        self.assertIn("WARNING: owner backlog gate skipped", "\n".join(warnings))
+        self.assertIn("merge-base with origin/main", "\n".join(warnings))
+
+    def test_missing_registry_at_base_warns_and_skips_gate(self) -> None:
+        (self.root / "config/feature-flags.yaml").unlink()
+        base = self.commit_fixture()
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", base], cwd=self.root, check=True)
+        self.write_flags([flag()])
+        errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 1))
+        self.assertEqual([], errors)
+        self.assertIn("WARNING: owner backlog gate skipped", "\n".join(warnings))
+
+    def test_backlog_normalizes_owners_in_output_and_gate(self) -> None:
+        rows = self.backlog_base(owner="  Tester (omi-lifecycle)  ")
+        self.write_flags(rows + [flag("NEW_ENABLED", owner="TESTER")])
+        output = StringIO()
+        with redirect_stdout(output):
+            errors = self.errors()
+        self.assertEqual("FLAG_OWNER_BACKLOG owner=tester unramped=6\n", output.getvalue())
+        self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(errors))
+
+    def test_normalize_owner_collapses_whitespace_left_by_annotations(self) -> None:
+        self.assertEqual("alice bob", normalize_owner("Alice (team) Bob"))
+        self.assertEqual("alice bob", normalize_owner("  alice\tBOB "))
+
+    def test_backlog_counts_only_pending_or_undecided_rollouts(self) -> None:
+        # undecided is a legacy decision spelling, even if current schema rejects new uses.
+        rows = [
+            flag(),
+            flag("LEGACY_ENABLED", owner="TESTER (lead)", decision="undecided"),
+            flag("SHIPPED_ENABLED", decision="ship"),
+            flag("EXPERIMENT_ENABLED", lifecycle="experiment"),
+            flag("KILL_ENABLED", lifecycle="ops_kill", decision="keep"),
+        ]
+        self.assertEqual({"tester": 2}, owner_backlog({"flags": rows}))
+
+    def test_gate_uses_merge_base_not_origin_main_tip(self) -> None:
+        rows = self.backlog_base()
+        base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip()
+        self.write_flags([dict(row, decision="ship") for row in rows])
+        tip = self.commit_fixture()
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", tip], cwd=self.root, check=True)
+        subprocess.run(["git", "checkout", "-q", "--detach", base], cwd=self.root, check=True)
+        self.write_flags(rows + [flag("NEW_ENABLED")])
+        self.commit_fixture()
+        self.assertIn("ramp or retire before adding", "\n".join(self.errors()))
 
     def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
         self.write("backend/docs/experiment.md", "Pre-registered readout")
@@ -585,7 +717,10 @@ class RegistryFixture(unittest.TestCase):
         )
         env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
         commit_env_identity = [
-            "-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests",
+            "-c",
+            "user.email=flags@example.test",
+            "-c",
+            "user.name=Flag Tests",
         ]
         subprocess.run(["git", "-C", str(self.root), *commit_env_identity, "add", "-A"], check=True, env=env)
         subprocess.run(

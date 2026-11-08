@@ -30,6 +30,7 @@ from tests.support.firestore_query_drivers import (
     DriverEntry,
     SkipEntry,
     noop,
+    noop_true,
     ref_collection,
     ref_document,
     ref_transaction,
@@ -170,8 +171,10 @@ BODY_DIGEST = {
     'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
-    'database.batch_pipeline_projection_release.release_page': '342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
-    'database.batch_pipeline_projection_release.release_scan_pass': '6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
+    'database.batch_pipeline_projection_release.release_page': '15ce4bf78a33ea401c5eeb56e895c088a75ffc45471d268784f7f174e6474f30',
+    'database.batch_pipeline_projection_release.release_page_settled': 'd863e83874910f88595eb18925f58f8129e1665d7b14dbde81179c443a75c632',
+    'database.batch_pipeline_projection_release.release_scan_pass': '92308c42482933a9adde1ca3fc20dff803d3c7c3be88d134d608e532061a1d22',
+    'database.batch_pipeline_projection_release.release_scan_pass_settled': '0b064975a7115e66ee082bdf546b2b9bcfc75cbdf14bf08e67ccb595027c4de2',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
@@ -228,7 +231,8 @@ BODY_DIGEST = {
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
-    'database.smart_merge.absorb_conversation': 'b8cbd9130ee1570309163a3300fcd90ecd953f58c4fc6e8f15849854104d3d81',
+    # Re-reviewed 2026-11-06: C2 preload runner and deleted-blob refusals; serving query shapes unchanged.
+    'database.smart_merge.absorb_conversation': 'aa05dfd87a7da325ac985d4f3d00d3ff5117baac8dbf7858d1d961fb4653b93d',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -387,7 +391,28 @@ _add(
 
 # Authenticated pending-work projections use bounded, single-field owner queries.
 _add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
-_add(DriverEntry('database.processing_attention.pending_conversations', base={'uid': UID}))
+
+
+def _pending_owned_page(client, combo, trial):
+    client.queue_results(
+        [client.snapshot(f'users/{UID}/conversations/owned-{i}', {'status': 'processing'}) for i in range(100)]
+    )
+    client.queue_results([])
+
+
+_add(
+    DriverEntry(
+        'database.processing_attention.pending_conversations',
+        base={'uid': UID},
+        neutrals={
+            'exclude': (
+                noop_true,
+                'Caller predicate filters after the same status query; fixture exercises the continuation cursor',
+            ),
+        },
+        setup=_pending_owned_page,
+    )
+)
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 
@@ -2601,7 +2626,8 @@ _add(
         reason='the discarded-barrier scan runs inside absorb_attempt through '
         'has_intervening_discarded/find_preceding_conversations, so the terminal '
         'stream records under those callees, never under absorb_conversation. '
-        'The revision-debt hook is a pure payload update with no query or read',
+        'The revision-debt hook is a pure payload update with no query or read; '
+        'passing the stored privacy state to the transcript codec adds no query',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
     )

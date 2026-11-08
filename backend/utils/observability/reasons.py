@@ -74,6 +74,7 @@ class ReasonFamily(StrEnum):
     DELIVERY = 'delivery'
     BATCH_FINAL_PASS = 'batch_final_pass'
     RECURRING_VOICE = 'recurring_voice'
+    RECORD_GAP_FILL = 'record_gap_fill'
 
 
 class PusherPcmStage(StrEnum):
@@ -104,6 +105,23 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class RecordGapFillOutcome(StrEnum):
+    """One closed-record gap-fill attempt (``utils.batch_pipeline.record_gap_fill``)."""
+
+    UNKNOWN = 'unknown'
+    WRITTEN = 'written'
+    SKIPPED_GATE = 'skipped_gate'
+    SKIPPED_RECENT = 'skipped_recent'
+    SKIPPED_MARKER = 'skipped_marker'
+    SKIPPED_NO_PENDING = 'skipped_no_pending'
+    SKIPPED_RETAINED = 'skipped_retained'
+    SKIPPED_NO_GAP = 'skipped_no_gap'
+    SKIPPED_NO_AUDIO = 'skipped_no_audio'
+    SKIPPED_NOT_CONTIGUOUS = 'skipped_not_contiguous'
+    SKIPPED_COLLISION = 'skipped_collision'
+    FAILED = 'failed'
 
 
 class DeliveryOutcome(StrEnum):

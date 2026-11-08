@@ -501,7 +501,9 @@ def start_serving_from_env():
     async def drain_tick():
         service = await run_blocking(sync_executor, serving_for_stage, current_stage())
         return await drain_recordings(
-            service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+            service.store,
+            provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT),
+            metrics=getattr(service, 'metrics', None),
         )
 
     async def drain():
