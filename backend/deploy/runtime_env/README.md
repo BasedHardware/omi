@@ -3,6 +3,14 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+The composer rejects repeated YAML mapping keys, including identical values.
+GKE sections declare expected environment values: `_validate_gke` checks each
+section against its `values_file` chart, and lake admission reads those manifest
+entries. Keep both sides of this enforced contract. The feature flag registry
+checker counts base plus overlays as one source per workload/environment and
+links the chart named by the effective `values_file` to that same source.
+Unlinked declarations from other charts or deploy actions remain duplicates.
+
 Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
 deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
 Keep it out of deployment defaults and use the

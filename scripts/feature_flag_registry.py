@@ -10,6 +10,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".github/scripts"))
 from run_checks import _parse_yaml_subset, head_tree_paths
@@ -45,8 +47,6 @@ TS_POSTHOG_FLAG = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\
 # Restrict discovery to known names so this does not re-inventory every legacy
 # private Node setting while registering a new runtime switch.
 NODE_RUNTIME_ENV = re.compile(r"\bprocess\.env\.((?!NEXT_PUBLIC_)[A-Z][A-Z0-9_]*)")
-CHART_KEY = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Z][A-Z0-9_]+)")
-MANIFEST_KEY = re.compile(r"^\s*([A-Z][A-Z0-9_]+):(?:\s|$)")
 ACTION_ENV_ARG = re.compile(r"--(?:update|set)-env-vars(?:=|\s+)(?:\"([^\"]*)\"|'([^']*)'|([^\s\\]+))", re.S)
 ACTION_ASSIGNMENT = re.compile(r"^\s*([A-Z][A-Z0-9_]+)=([^,\s]+)")
 
@@ -56,6 +56,13 @@ class Read:
     key: str
     path: str
     line: int
+
+
+@dataclass(frozen=True)
+class Declaration(Read):
+    workload: str
+    environment: str
+    source: str
 
 
 def load_registry(path: Path) -> dict[str, list[dict[str, Any]]]:
@@ -451,12 +458,80 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
     return reads
 
 
-def extract_deploy_declarations(root: Path) -> list[Read]:
+def _manifest_workload(parents: tuple[str, ...]) -> str | None:
+    # Keep runtime identity: Cloud Run and a GKE pod are different workloads.
+    if parents[:1] == ("gke",) and len(parents) == 3 and parents[-1] == "env":
+        return parents[1]
+    if parents == ("desktop_backend", "env"):
+        return "desktop_backend"
+    if len(parents) == 4 and parents[0] == "cloud_run" and parents[1] in {"services", "jobs"} and parents[-1] == "env":
+        return "/".join(parents[:3])
+    return None
+
+
+def _yaml_mappings(node, parents=(), ancestors=()):
+    """Walk aliases at each use site, preserving the env path through mapping merges."""
+    if not isinstance(node, (yaml.MappingNode, yaml.SequenceNode)):
+        return
+    if id(node) in ancestors:
+        raise ValueError("recursive YAML declaration mapping")
+    ancestors = (*ancestors, id(node))
+    if isinstance(node, yaml.MappingNode):
+        yield node, parents
+        for key, value in node.value:
+            if key.value == "<<":
+                yield from _yaml_mappings(value, parents, ancestors)
+            else:
+                yield from _yaml_mappings(value, (*parents, key.value), ancestors)
+    else:
+        for value in node.value:
+            yield from _yaml_mappings(value, parents, ancestors)
+
+
+def _validated_chart_bindings(root: Path) -> dict[tuple[str, str], list[str]]:
+    """Chart path/environment -> GKE sections whose expected env is validated against it.
+
+    Mirror the composer's precedence for values_file: a per-env override wins
+    over the shared section. Equality remains enforced by _validate_gke; this
+    checker identifies sources and never substitutes for that admission check.
+    """
+    sections: dict[str, dict[str, Any]] = {}
+    for name, section in (
+        ("_base.yaml", "environment_shared"),
+        ("dev.overlay.yaml", "overlay"),
+        ("prod.overlay.yaml", "overlay"),
+    ):
+        path = f"backend/deploy/runtime_env/{name}"
+        text = source_text(root, path)
+        try:
+            document = yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader)) if text else {}
+        except yaml.YAMLError as error:
+            raise ValueError(f"{path}: invalid declaration YAML: {error}") from error
+        sections[name] = ((document or {}).get(section) or {}).get("gke") or {}
+    shared = sections["_base.yaml"]
+    bindings: dict[tuple[str, str], list[str]] = {}
+    for env in ("dev", "prod"):
+        overlay = sections[f"{env}.overlay.yaml"]
+        for workload in sorted(set(shared) | set(overlay)):
+            base_service = shared.get(workload) or {}
+            env_service = overlay.get(workload) or {}
+            values_file = env_service.get("values_file", base_service.get("values_file"))
+            if not isinstance(values_file, str) or not values_file:
+                continue
+            resolved = (root / values_file.replace("{env}", env)).resolve()
+            try:
+                path = resolved.relative_to(root.resolve()).as_posix()
+            except ValueError as error:
+                raise ValueError(f"gke/{workload}: values_file must be inside the repository") from error
+            bindings.setdefault((path, env), []).append(workload)
+    return bindings
+
+
+def extract_deploy_declarations(root: Path) -> list[Declaration]:
     files = [
         root / "backend/deploy/runtime_env" / name for name in ("_base.yaml", "dev.overlay.yaml", "prod.overlay.yaml")
     ]
-    # Track the index (not a directory walk) so cone-mode sparse checkouts
-    # still see chart manifests that are not materialised on disk.
+    # Track the index so sparse checkouts still see unmaterialised chart files.
     files += [
         root / path
         for path in tracked_code_paths(root)
@@ -464,27 +539,116 @@ def extract_deploy_declarations(root: Path) -> list[Read]:
         and path.endswith("values.yaml")
         and Path(path).name.startswith(("dev_", "prod_"))
     ]
-    reads: list[Read] = []
+    bindings = _validated_chart_bindings(root)
+    # A referenced chart need not use the conventional dev_/prod_ filename.
+    files += [root / path for path, _ in bindings]
+    files = list(dict.fromkeys(files))
+    reads: list[Declaration] = []
     for file in files:
-        text = source_text(root, file.relative_to(root).as_posix())
+        path = file.relative_to(root).as_posix()
+        text = source_text(root, path)
         if text is None:
             continue
-        for lineno, line in enumerate(text.splitlines(), 1):
-            pattern = CHART_KEY if "/charts/" in file.as_posix() else MANIFEST_KEY
-            match = pattern.match(line)
-            if match and (FLAG_SUFFIX.search(match[1]) or "ALLOWLIST" in match[1]):
-                reads.append(Read(match[1], file.relative_to(root).as_posix(), lineno))
+        chart = "/charts/" in path or any(bound_path == path for bound_path, _ in bindings)
+        if not chart:
+            environments = ("dev", "prod") if file.name == "_base.yaml" else (file.name.split(".")[0],)
+        elif file.name.startswith(("dev_", "prod_")):
+            environments = (file.name.split("_")[0],)
+        else:
+            environments = tuple(sorted(env for bound_path, env in bindings if bound_path == path))
+        try:
+            tree = yaml.compose(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+        except yaml.YAMLError as error:
+            raise ValueError(f"{path}: invalid declaration YAML: {error}") from error
+        fields = {key.value: value for key, value in tree.value} if isinstance(tree, yaml.MappingNode) else {}
+        # Independent releases may share a chart (e.g. CPU LID).
+        release = fields.get("fullnameOverride")
+        release_name = release.value if isinstance(release, yaml.ScalarNode) else ""
+        workload = re.sub(r"^(?:dev|prod)-omi-", "", release_name) or file.parent.name
+        for node, parents in _yaml_mappings(tree):
+            if chart:
+                fields = {key.value: value for key, value in node.value}
+                key_node = fields.get("name")
+                candidates = [key_node] if isinstance(key_node, yaml.ScalarNode) else []
+                source = path
+            else:
+                section = parents[1:] if parents[:1] in {("environment_shared",), ("overlay",)} else parents
+                workload = _manifest_workload(section) or "/".join(section) or "manifest"
+                source = f"backend/deploy/runtime_env#{workload}"
+                candidates = [key for key, _ in node.value if isinstance(key, yaml.ScalarNode)]
+            for key_node in candidates:
+                key = key_node.value
+                if re.fullmatch(r"[A-Z][A-Z0-9_]+", key) and (FLAG_SUFFIX.search(key) or "ALLOWLIST" in key):
+                    for env in environments:
+                        # The referenced chart and expected GKE env are one source.
+                        # Unreferenced charts retain their own source file identity.
+                        owners = bindings.get((path, env), []) if chart else []
+                        if owners:
+                            reads.extend(
+                                Declaration(
+                                    key,
+                                    path,
+                                    key_node.start_mark.line + 1,
+                                    owner,
+                                    env,
+                                    f"backend/deploy/runtime_env#{owner}",
+                                )
+                                for owner in owners
+                            )
+                        else:
+                            reads.append(Declaration(key, path, key_node.start_mark.line + 1, workload, env, source))
     return reads
 
 
-def extract_action_declarations(root: Path) -> list[Read]:
-    """Find ramp-percent/allowlist values emitted by deploy actions and prod workflows."""
+def _action_targets(path: str, text: str, start: int, gke_workloads: set[str]) -> tuple[str, tuple[str, ...]]:
+    # Follow shell continuations in both directions, including flags after the env payload.
+    begin = text.rfind("\n", 0, start) + 1
+    while begin > 0 and text[:begin].rstrip("\n").endswith("\\"):
+        begin = text.rfind("\n", 0, begin - 1) + 1
+    end = text.find("\n", start)
+    while end >= 0 and text[:end].endswith("\\"):
+        end = text.find("\n", end + 1)
+    command = text[begin : end if end >= 0 else len(text)].replace("\\\n", " ")
+    targets = list(
+        re.finditer(
+            r"gcloud\s+run\s+(?:services\s+(?:update|replace)|deploy|jobs\s+(?:update|deploy))\s+[\"']?([a-z][a-z0-9-]*)",
+            command[: start - begin],
+        )
+    )
+    target = targets[-1] if targets else None
+    if target is None:
+        raise ValueError(f"{path}: cannot resolve workload for flag declaration; use the runtime manifest or chart")
+    name = target[1]
+    kind = "jobs" if "jobs" in target[0].split() else "services"
+    workload = name if kind == "services" and name in gke_workloads else f"cloud_run/{kind}/{name}"
+    if re.search(r"--project(?:=|\s+)[\"']?based-hardware(?:[\"'\s]|$)", command):
+        environments = ("prod",)
+    elif re.search(r"--project(?:=|\s+)[\"']?based-hardware-dev(?:[\"'\s]|$)", command):
+        environments = ("dev",)
+    elif "prod" in Path(path).name:
+        environments = ("prod",)
+    else:
+        # Shared actions and dispatch-selected environments can deploy to either environment.
+        environments = ("dev", "prod")
+    return workload, environments
+
+
+def extract_action_declarations(root: Path) -> list[Declaration]:
+    """Find ramp/allowlist literals paired with their deployed workload and environment."""
     files = list((root / ".github/actions").rglob("action.yml"))
     files.extend((root / ".github/workflows").glob("*prod*.y*ml"))
-    reads: list[Read] = []
+    # Derive GKE identities from declarations, including values_file-linked
+    # releases, rather than a fixed list of service names.
+    gke_workloads = {
+        item.workload
+        for item in extract_deploy_declarations(root)
+        if not item.workload.startswith("cloud_run/") and item.workload != "desktop_backend"
+    }
+    reads: list[Declaration] = []
     for file in files:
         if not file.is_file():
             continue
+        path = file.relative_to(root).as_posix()
         text = file.read_text(encoding="utf-8")
         for match in ACTION_ENV_ARG.finditer(text):
             payload = next((value for value in match.groups() if value is not None), "")
@@ -493,8 +657,9 @@ def extract_action_declarations(root: Path) -> list[Read]:
                 key, separator, _ = item.partition("=")
                 key = key.strip()
                 if separator and ("PERCENT" in key or "ALLOWLIST" in key):
-                    reads.append(Read(key, file.relative_to(root).as_posix(), line))
-        if file.as_posix().endswith(".github/actions/sync-backfill-lifecycle/action.yml"):
+                    workload, environments = _action_targets(path, text, match.start(), gke_workloads)
+                    reads.extend(Declaration(key, path, line, workload, env, path) for env in environments)
+        if path == ".github/actions/sync-backfill-lifecycle/action.yml":
             in_output = False
             for lineno, raw in enumerate(text.splitlines(), 1):
                 if 'echo "sync_backfill_env_vars<<EOF"' in raw:
@@ -505,17 +670,23 @@ def extract_action_declarations(root: Path) -> list[Read]:
                 if in_output:
                     assignment = ACTION_ASSIGNMENT.match(raw.strip().removeprefix('echo "').removesuffix('"'))
                     if assignment and ("PERCENT" in assignment[1] or "ALLOWLIST" in assignment[1]):
-                        reads.append(Read(assignment[1], file.relative_to(root).as_posix(), lineno))
+                        reads.extend(
+                            Declaration(
+                                assignment[1], path, lineno, "cloud_run/services/backend-sync-backfill", env, path
+                            )
+                            for env in ("dev", "prod")
+                        )
     return reads
 
 
-def duplicate_declaration_sources(declarations: list[Read]) -> dict[str, list[str]]:
-    """Return ramp-percent/allowlist keys declared in multiple source files."""
-    sources: dict[str, set[str]] = {}
+def duplicate_declaration_sources(declarations: list[Declaration]) -> dict[tuple[str, str, str], list[str]]:
+    """Reject independent sources; overlays and values_file-validated pairs compose."""
+    sources: dict[tuple[str, str, str], set[str]] = {}
     for declaration in declarations:
         if "PERCENT" in declaration.key or "ALLOWLIST" in declaration.key:
-            sources.setdefault(declaration.key, set()).add(declaration.path)
-    return {key: sorted(paths) for key, paths in sorted(sources.items()) if len(paths) > 1}
+            identity = (declaration.key, declaration.workload, declaration.environment)
+            sources.setdefault(identity, set()).add(declaration.source)
+    return {identity: sorted(paths) for identity, paths in sorted(sources.items()) if len(paths) > 1}
 
 
 def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]:
