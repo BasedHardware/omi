@@ -1,10 +1,43 @@
 """Wire models for the dark spaces device-sync protocol."""
 
+import base64
+import binascii
 import json
 from datetime import datetime
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field, StrictInt, field_validator
+from pydantic import BaseModel, Field, StrictInt, field_serializer, field_validator
+
+
+def _encode_document_value(value: Any) -> Any:
+    """Use the cell codec's reserved singleton {$bytes: base64} for binary values.
+
+    Recurse before Pydantic's JSON conversion, which otherwise assumes UTF-8.
+    As in the cell codec, a one-key $bytes object is reserved, not a literal map.
+    """
+    if isinstance(value, (bytes, bytearray)):
+        return {'$bytes': base64.b64encode(value).decode('ascii')}
+    if isinstance(value, dict):
+        return {key: _encode_document_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_encode_document_value(item) for item in value]
+    return value
+
+
+def _decode_document_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        if set(value) == {'$bytes'}:
+            encoded = value['$bytes']
+            if not isinstance(encoded, str):
+                raise ValueError('$bytes must be a base64 string')
+            try:
+                return base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as error:
+                raise ValueError('$bytes must be a base64 string') from error
+        return {key: _decode_document_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_decode_document_value(item) for item in value]
+    return value
 
 
 class SpaceChangeEntry(BaseModel):
@@ -23,8 +56,14 @@ class SpaceRow(BaseModel):
     entity_id: str
     author_id: str
     rev: int
-    doc: dict[str, Any]
+    doc: dict[str, Any] = Field(
+        description='Cell document. Binary values at any depth use the reserved singleton {"$bytes": "<base64>"}.'
+    )
     updated_at: float
+
+    @field_serializer('doc', when_used='json')
+    def wire_document(self, value):
+        return _encode_document_value(value)
 
 
 class SpaceChangesResponse(BaseModel):
@@ -61,7 +100,19 @@ class PatchSpaceEntityOperation(BaseModel):
     model_config = {'extra': 'forbid'}
 
     type: Literal['patch']
-    fields: dict[str, Any]
+    fields: dict[str, Any] = Field(
+        description='Patch fields. Encode binary values at any depth as the reserved singleton {"$bytes": "<base64>"}.'
+    )
+
+    @field_validator('fields')
+    @classmethod
+    def decode_fields(cls, value):
+        # The outer map holds field names; only its values carry type tags.
+        return {key: _decode_document_value(item) for key, item in value.items()}
+
+    @field_serializer('fields', when_used='json')
+    def wire_fields(self, value):
+        return _encode_document_value(value)
 
 
 class DeleteSpaceEntityOperation(BaseModel):

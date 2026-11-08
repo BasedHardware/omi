@@ -238,7 +238,7 @@ def mutations(
                 entity_id=request.entity_id,
                 client_mutation_id=request.client_mutation_id,
                 base_revision=request.base_revision,
-                operation=request.operation.model_dump(mode='json'),
+                operation=request.operation.model_dump(mode='python'),
                 now=time.time(),
             )
         except SpaceMutationNotFoundError as error:

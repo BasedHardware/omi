@@ -1,6 +1,5 @@
 """Exactly-once application of optimistic space mutations through CellStore."""
 
-import json
 from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 from database.cells.errors import MutationIdReused
 from database.cells.feed import read_enrolled_head
 from database.cells.store import CellStore, CellTransaction
+from database.jobstore.codec import canonical
 
 
 class SpaceMutationNotFoundError(LookupError):
@@ -46,14 +46,7 @@ def apply_space_mutation(
     # but uses 'base' instead of 'base_revision'; fingerprints are not identical.
     # Importing that Firestore adapter violates the cell boundary. A6 unifies it.
     token = base_revision.astimezone(timezone.utc).isoformat() if isinstance(base_revision, datetime) else base_revision
-    fingerprint = sha256(
-        json.dumps(
-            {'base': token, 'operation': operation},
-            sort_keys=True,
-            separators=(',', ':'),
-            ensure_ascii=True,
-        ).encode()
-    ).hexdigest()
+    fingerprint = sha256(canonical({'base': token, 'operation': operation}).encode()).hexdigest()
     if operation.get('type') not in {'patch', 'delete'}:
         raise ValueError('unknown space mutation operation')
 
