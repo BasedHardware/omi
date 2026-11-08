@@ -20,6 +20,7 @@ on:
       - '.github/scripts/provision_grafana_dashboards.py'
       - '.github/scripts/grafana_business.py'
       - 'web/admin/grafana/dashboards/omi-tv-v2.json'
+      - 'web/admin/grafana/dashboards/omi-tv-funnel.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -117,7 +118,7 @@ jobs:
             --grafana-url "$GRAFANA_URL" \
             --token-env BUSINESS_GRAFANA_TOKEN \
             --source-sha "$GIT_SHORT_SHA" \
-            --allowlist omi-tv-v2.json \
+            --allowlist omi-tv-v2.json,omi-tv-funnel.json \
             --folder-uid business
       - name: Apply production alert definitions and check drift
         if: matrix.environment == 'prod'
