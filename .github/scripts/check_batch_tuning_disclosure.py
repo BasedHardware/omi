@@ -158,7 +158,7 @@ def prose(body: str) -> str:
             lines.append(line)
     text = re.sub(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)", " ", "".join(lines), flags=re.S)
     # Link titles only show on hover: keep [text](url), drop "title".
-    return re.sub(r"(\]\(\s*<?[^\s()<>]*>?)\s+(?:\"[^\"]*\"|'[^']*'|\([^()]*\))\s*\)", r"\1)", text)
+    return re.sub(r"(\]\(\s*(?:<[^<>]*>|[^\s()<>]*(?:\([^\s()]*\)[^\s()<>]*)*))\s+(?:\"[^\"]*\"|'[^']*'|\([^()]*\))\s*\)", r"\1)", text)
 
 
 def sections(body: str) -> list[str]:
