@@ -341,3 +341,35 @@ def test_legacy_folder_and_person_ids_come_from_document_keys(domain_backend):
     assert people.set_pinned('person-key', True, mutation_id='pin').id == 'person-key'
     assert people.set_pinned('person-key', True, mutation_id='pin').id == 'person-key'
     assert 'id' not in h.read(sid, 'people', 'person-key')
+
+
+@pytest.mark.parametrize('include_discarded', [False, True])
+def test_folder_listing_includes_missing_discarded_before_paging(domain_backend, include_discarded):
+    h = domain_backend
+    sid = h.space('missing-discarded')
+    repo = h.folders(sid)
+    folder = repo.create(FolderCreate(name='Legacy'))
+    for i, fields in enumerate([{'discarded': True}, {}, {'discarded': False}, {'discarded': None}]):
+        h.seed(
+            sid, 'conversations', str(i), {'folder_id': folder.id, 'created_at': NOW - timedelta(seconds=i), **fields}
+        )
+    expected = ['0', '1', '2', '3'] if include_discarded else ['1', '2']
+    assert [r['id'] for r in repo.conversations_in_folder(folder.id)] == ['1', '2']
+    assert [r['id'] for r in repo.conversations_in_folder(folder.id, include_discarded=include_discarded)] == expected
+    assert [
+        r['id'] for r in repo.conversations_in_folder(folder.id, limit=1, offset=1, include_discarded=include_discarded)
+    ] == expected[1:2]
+
+
+@pytest.mark.parametrize(
+    'legacy_name,draft_name', [(42, '42'), (True, 'true'), ({'x': 1}, '{"x": 1}'), (['x'], '["x"]')]
+)
+def test_people_name_match_requires_string(domain_backend, legacy_name, draft_name):
+    h = domain_backend
+    sid = h.space('typed-name')
+    h.seed(sid, 'people', 'legacy', {'name': legacy_name})
+    repo = h.people(sid)
+    draft = PersonDraft(id='fresh', name=draft_name)
+    assert repo.get_or_create_by_name(draft).id == 'fresh'
+    assert repo.get_or_create_by_name(PersonDraft(id='unused', name=draft_name)).id == 'fresh'
+    assert h.read(sid, 'people', 'legacy')['name'] == legacy_name

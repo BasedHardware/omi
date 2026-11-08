@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from database.ports.action_items import ActionItemDraft, ActionItemEntity, TaskRelationshipConflictError
+from database.read_boundary import MalformedDocError
 from database.ports.base import MutationConflict, RevisionConflict
 from database.ports.folders import FolderCreate
 from database.ports.goals import GoalCreate, GoalUpdate, GoalEntity, GoalConflictError
@@ -750,3 +751,83 @@ def test_retirement_ignores_redundant_payload_id(domain_backend):
     assert repo.retire_for_conversation('c', active_ids=['keep-key'], replacements={'retire-key': 'keep-key'}) == 1
     assert not repo.get('keep-key').deleted
     assert repo.get('retire-key').superseded_by == 'keep-key'
+
+
+@pytest.mark.parametrize('status', ['background', 'paused', 'achieved', 'abandoned'])
+def test_unfocus_only_changes_focused_goals(domain_backend, status):
+    h = domain_backend
+    sid = h.space('unfocus-' + status)
+    repo = h.goals(sid)
+    goal = repo.create(GoalCreate(data={'title': 'Goal', 'status': status}))
+    before = h.read(sid, 'goals', goal.id)
+    result = repo.unfocus(goal.id, idempotency_key='unfocus', account_generation=0)
+    assert result.status == status
+    assert h.read(sid, 'goals', goal.id) == before
+    assert repo.unfocus(goal.id, idempotency_key='unfocus', account_generation=0).status == status
+    if status in ('achieved', 'abandoned'):
+        with pytest.raises(GoalConflictError):
+            repo.focus(goal.id, idempotency_key='refocus', account_generation=0)
+
+
+@pytest.mark.parametrize('field,value', [('id', 'other'), ('workstream_id', 'other'), ('account_generation', 9)])
+def test_workstream_update_rejects_identity_patch(domain_backend, field, value):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'identity-' + field)
+    repo = h.workstreams(sid)
+    before = h.read(sid, 'workstreams', ws.workstream_id)
+    with pytest.raises(MalformedDocError):
+        repo.update(
+            ws.workstream_id,
+            WorkstreamUpdate(data={field: value, 'title': 'Rejected'}),
+            idempotency_key='update',
+            account_generation=0,
+        )
+    assert h.read(sid, 'workstreams', ws.workstream_id) == before
+    # Rejection must not consume the mutation key.
+    assert (
+        repo.update(
+            ws.workstream_id,
+            WorkstreamUpdate(data={'title': 'Accepted'}),
+            idempotency_key='update',
+            account_generation=0,
+        ).title
+        == 'Accepted'
+    )
+
+
+def test_invalid_goal_relationship_disposition_is_atomic(domain_backend):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'bad-disposition')
+    repo = h.goals(sid)
+    before = h.read(sid, 'goals', goal.id)
+    with pytest.raises(ValueError):
+        repo.transition_lifecycle(
+            goal.id, status='achieved', relationship_disposition='typo', idempotency_key='end', account_generation=0
+        )
+    assert h.read(sid, 'goals', goal.id) == before
+    assert h.workstreams(sid).get(ws.workstream_id).goal_id == goal.id
+    assert (
+        repo.transition_lifecycle(
+            goal.id, status='achieved', relationship_disposition='retain', idempotency_key='end', account_generation=0
+        ).status
+        == 'achieved'
+    )
+
+
+@pytest.mark.parametrize('malformed', ['not-a-sequence', None, {'legacy': 42}, '9' * 40])
+def test_event_lists_skip_malformed_legacy_sequences(domain_backend, malformed):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'malformed-events')
+    goals, streams = h.goals(sid), h.workstreams(sid)
+    good_goal = goals.append_progress_event(
+        goal.id, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    good_ws = streams.append_event(
+        ws.workstream_id, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    for entity, parent, good in [('goal_events', goal.id, good_goal), ('workstream_events', ws.workstream_id, good_ws)]:
+        bad = {**good.model_dump(), 'event_id': 'bad', 'sequence': malformed}
+        h.seed(sid, entity, parent + '/bad', bad)
+    assert [e.event_id for e in goals.list_progress_events(goal.id)] == [good_goal.event_id]
+    assert [e.event_id for e in streams.list_events(ws.workstream_id)] == [good_ws.event_id]
+    assert streams.list_events(ws.workstream_id, after_sequence=good_ws.sequence) == []
