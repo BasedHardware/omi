@@ -66,6 +66,14 @@ def _chat_encode(value):
     return value
 
 
+def _sim_generation_matches(row: dict, expected: int) -> bool:
+    """Twin of the cells generation filter: missing is 0, only JSON numbers match."""
+    if 'account_generation' not in row:
+        return expected == 0
+    stored = row['account_generation']
+    return isinstance(stored, (int, float)) and not isinstance(stored, bool) and stored == expected
+
+
 def _sim_jsonb_text(value) -> str:
     """Render like PostgreSQL jsonb::text: object keys by (length, bytes)."""
     if isinstance(value, dict):
@@ -543,7 +551,9 @@ class SimActionItems(_WorkflowRepo):
             goal = self.store.goals.get(rule.goal_id)
             if goal is None:
                 raise TaskRelationshipConflictError('goal does not exist')
-            if rule.account_generation is not None and goal.account_generation != rule.account_generation:
+            if rule.account_generation is not None and not _sim_generation_matches(
+                self.store.state['goals'].get(rule.goal_id) or {}, rule.account_generation
+            ):
                 raise TaskRelationshipConflictError('goal account generation mismatch')
             if not rule.allow_ended_goal and (
                 goal.status in ('achieved', 'abandoned')
@@ -554,7 +564,9 @@ class SimActionItems(_WorkflowRepo):
             workstream = self.store.workstreams.get(rule.workstream_id)
             if workstream is None:
                 raise TaskRelationshipConflictError('workstream does not exist')
-            if rule.account_generation is not None and workstream.account_generation != rule.account_generation:
+            if rule.account_generation is not None and not _sim_generation_matches(
+                self.store.state['workstreams'].get(rule.workstream_id) or {}, rule.account_generation
+            ):
                 raise TaskRelationshipConflictError('workstream account generation mismatch')
             if workstream.goal_id != rule.goal_id:
                 raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
@@ -580,14 +592,14 @@ class SimActionItems(_WorkflowRepo):
             for entity_id, row in sorted(self._rows().items(), key=lambda pair: pair[0].encode()):
                 if (
                     row.get('idempotency_key') == idempotency_key
-                    and row.get('account_generation', 0) == generation
+                    and _sim_generation_matches(row, generation)
                     and not row.get('deleted')
                 ):
                     if reuse_finished or (not row.get('completed') and row.get('status', 'active') == 'active'):
                         self.save(mutation_id, digest, entity_id)
                         return entity_id
         if document_id is not None and document_id in self._rows():
-            if self._rows()[document_id].get('account_generation', 0) != generation:
+            if not _sim_generation_matches(self._rows()[document_id], generation):
                 raise TaskRelationshipConflictError('document id belongs to another account generation')
             return document_id
         data = prepare_action_item_for_write(draft.data)
@@ -1179,7 +1191,7 @@ class SimWorkstreams(_WorkflowRepo):
         row = self._read(workstream_id)
         if row is None:
             raise WorkstreamNotFoundError(workstream_id)
-        if row.get('account_generation', 0) != generation:
+        if not _sim_generation_matches(row, generation):
             raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
         return row
 
@@ -1219,7 +1231,7 @@ class SimWorkstreams(_WorkflowRepo):
             {**r, 'id': eid}
             for eid, r in self._rows().items()
             if r.get('status') == 'open'
-            and (account_generation is None or r.get('account_generation', 0) == account_generation)
+            and (account_generation is None or _sim_generation_matches(r, account_generation))
         ]
         return [self._entity(r) for r in sorted(rows, key=lambda r: r['updated_at'], reverse=True)[:limit]]
 
@@ -1479,7 +1491,7 @@ class SimWorkstreams(_WorkflowRepo):
                 task = self.store.state['action_items'].get(request['task_id'])
                 if task is None:
                     raise WorkstreamNotFoundError(request['task_id'])
-                if task.get('account_generation', 0) not in (0, account_generation):
+                if not (_sim_generation_matches(task, 0) or _sim_generation_matches(task, account_generation)):
                     raise WorkstreamGenerationMismatchError('task account generation mismatch')
                 gid = task.get('goal_id')
                 tid = request['task_id']
@@ -1544,8 +1556,8 @@ class SimWorkstreams(_WorkflowRepo):
                 valid = (
                     task is not None
                     and goal is not None
-                    and task.get('account_generation', 0) in (0, account_generation)
-                    and goal.get('account_generation', 0) == account_generation
+                    and (_sim_generation_matches(task, 0) or _sim_generation_matches(task, account_generation))
+                    and _sim_generation_matches(goal, account_generation)
                     and task.get('goal_id') in (None, link['goal_id'])
                 )
                 if valid and task.get('workstream_id'):
@@ -1553,13 +1565,13 @@ class SimWorkstreams(_WorkflowRepo):
                     valid = (
                         ws is not None
                         and ws.get('goal_id') == link['goal_id']
-                        and ws.get('account_generation', 0) == account_generation
+                        and _sim_generation_matches(ws, account_generation)
                     )
                 if not valid:
                     failed.append(link['task_id'])
                 elif task.get('goal_id') == link['goal_id']:
                     unchanged += 1
-                    if task.get('account_generation', 0) == 0:
+                    if _sim_generation_matches(task, 0):
                         self._write_task()
                         task['account_generation'] = account_generation
                 else:

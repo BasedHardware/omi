@@ -554,3 +554,35 @@ def test_wrong_typed_workstream_generation_refuses_mutation(pg, case, generation
     repo = pg.workstreams(sid)
     with pytest.raises(WorkstreamGenerationMismatchError):
         repo.update('ws-bad', WorkstreamUpdate(data={'title': 'Changed'}), idempotency_key='g', account_generation=1)
+
+
+@pytest.mark.parametrize('case,generation', [(0, False), (1, 'legacy'), (2, 0.5)])
+def test_wrong_typed_generation_refuses_task_goal_links(pg, case, generation):
+    # Python treats False as 0, so equality alone would let a boolean
+    # generation pass the generation-0 link guards.
+    from database.ports.action_items import TaskRelationshipConflictError
+    from database.ports.workstreams import WorkstreamGenerationMismatchError
+
+    sid = pg.space(f'legacy-generation-links-{case}')
+    now = datetime.now(timezone.utc)
+    goal = {'title': 'Goal', 'desired_outcome': 'Done', 'created_at': now, 'updated_at': now}
+    task = {'description': 'Task', 'completed': False, 'created_at': now, 'updated_at': now}
+    pg.seed(sid, 'goals', 'g-bad', {**goal, 'account_generation': generation})
+    pg.seed(sid, 'goals', 'g-ok', goal)
+    pg.seed(sid, 'action_items', 't-bad', {**task, 'account_generation': generation})
+    pg.seed(sid, 'action_items', 't-ok', task)
+    repo = pg.workstreams(sid)
+    with pytest.raises(WorkstreamGenerationMismatchError):
+        repo.resolve_work_intent({'origin': 'task', 'task_id': 't-bad'}, idempotency_key='i1', account_generation=0)
+    with pytest.raises(TaskRelationshipConflictError):
+        repo.resolve_work_intent(
+            {'origin': 'goal', 'goal_id': 'g-bad', 'anchor_task_description': 'A'},
+            idempotency_key='i2',
+            account_generation=0,
+        )
+    result = repo.import_task_goal_links(
+        {'links': [{'task_id': 't-ok', 'goal_id': 'g-bad'}, {'task_id': 't-bad', 'goal_id': 'g-ok'}]},
+        idempotency_key='i3',
+        account_generation=0,
+    )
+    assert result['failed'] == 2 and sorted(result['failure_task_ids']) == ['t-bad', 't-ok']

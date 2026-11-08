@@ -340,7 +340,7 @@ class CellWorkstreams(WorkflowRepo):
                 task = self.store.state['action_items'].get(request['task_id'])
                 if task is None:
                     raise WorkstreamNotFoundError(request['task_id'])
-                if task.get('account_generation', 0) not in (0, account_generation):
+                if not (generation_matches(task, 0) or generation_matches(task, account_generation)):
                     raise WorkstreamGenerationMismatchError('task account generation mismatch')
                 gid = task.get('goal_id')
                 tid = request['task_id']
@@ -407,8 +407,8 @@ class CellWorkstreams(WorkflowRepo):
                 valid = (
                     task is not None
                     and goal is not None
-                    and task.get('account_generation', 0) in (0, account_generation)
-                    and goal.get('account_generation', 0) == account_generation
+                    and (generation_matches(task, 0) or generation_matches(task, account_generation))
+                    and generation_matches(goal, account_generation)
                     and task.get('goal_id') in (None, link['goal_id'])
                 )
                 if valid and task.get('workstream_id'):
@@ -416,13 +416,13 @@ class CellWorkstreams(WorkflowRepo):
                     valid = (
                         ws is not None
                         and ws.get('goal_id') == link['goal_id']
-                        and ws.get('account_generation', 0) == account_generation
+                        and generation_matches(ws, account_generation)
                     )
                 if not valid:
                     failed.append(link['task_id'])
                 elif task.get('goal_id') == link['goal_id']:
                     unchanged += 1
-                    if task.get('account_generation', 0) == 0:
+                    if generation_matches(task, 0):
                         self._write_task()
                         task.update(account_generation=account_generation, updated_at=datetime.now(timezone.utc))
                 else:

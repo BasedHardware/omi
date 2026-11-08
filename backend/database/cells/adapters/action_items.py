@@ -45,7 +45,9 @@ class CellActionItems(WorkflowRepo):
             goal = self.store.goals.get(rule.goal_id)
             if goal is None:
                 raise TaskRelationshipConflictError('goal does not exist')
-            if rule.account_generation is not None and goal.account_generation != rule.account_generation:
+            if rule.account_generation is not None and not generation_matches(
+                self.store.goals._read(rule.goal_id) or {}, rule.account_generation
+            ):
                 raise TaskRelationshipConflictError('goal account generation mismatch')
             if not rule.allow_ended_goal and (
                 goal.status in ('achieved', 'abandoned')
@@ -56,7 +58,9 @@ class CellActionItems(WorkflowRepo):
             workstream = self.store.workstreams.get(rule.workstream_id)
             if workstream is None:
                 raise TaskRelationshipConflictError('workstream does not exist')
-            if rule.account_generation is not None and workstream.account_generation != rule.account_generation:
+            if rule.account_generation is not None and not generation_matches(
+                self.store.workstreams._read(rule.workstream_id) or {}, rule.account_generation
+            ):
                 raise TaskRelationshipConflictError('workstream account generation mismatch')
             if workstream.goal_id != rule.goal_id:
                 raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
