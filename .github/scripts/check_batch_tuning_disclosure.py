@@ -32,15 +32,16 @@ GETENV = re.compile(
 )
 EXCLUDED = re.compile(r"_(?:ENABLED|PERCENT|UIDS|ALLOWLIST|URL)$", re.I)
 LITERAL = re.compile(r"['\"]([a-z][a-z0-9_]{3,40})['\"]")
-STATE_CONTEXT = re.compile(r"\b(?:\w+_)?(?:status|state|phase|disposition|outcome|reason)\b", re.I)
+STATE_NAME = r"(?:\w+_)?(?:status|state|phase|disposition|outcome|reason)"
+STATE_OPERATOR = r"(?:==|!=|<=|>=|<|>|(?<![=!<>])=(?!=))"
+STATE_VALUE = re.compile(
+    rf"(?:(?<!['\"])\b{STATE_NAME}\b\s*(?::|{STATE_OPERATOR})"
+    rf"|['\"]{STATE_NAME}['\"]\s*(?::|\]\s*{STATE_OPERATOR}))\s*\(*\s*$", re.I
+)
+STATE_COMPARE = re.compile(rf"^\s*\)*\s*(?:==|!=|<=|>=|<|>)\s*\b{STATE_NAME}\b", re.I)
 EXIT = re.compile(r"\b(?:exit\w*|terminal\w*|dead.letter\w*|re-?entr\w*|clear\w*|recover\w*)\b", re.I)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 NON_CODE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`[^`]*`|#.*")
-FIELD_VALUE = re.compile(r"(?P<field>[a-zA-Z_]\w*)['\"]?\]?\s*(?::|(?<![=!<>])=(?!=))\s*$")
-FIELD_LOOKUP = re.compile(
-    r"(?:\.(?:get|pop|setdefault)\(|[\w)\]]\[|\b(?:Counter|Gauge|Histogram|Summary|Info|Enum)\()\s*$"
-    r"|\b(?:getattr|hasattr|setattr)\([^,\n]+,\s*$"
-)
 
 
 def triggered(path: str) -> bool:
@@ -74,24 +75,25 @@ def code(line: str) -> bool:
 
 
 def state_literals(line: str, prefix: str = "") -> set[str]:
-    """Ignore field names/lookups and values explicitly assigned to other fields.
-
-    The historical sweep found registration_origin next to state updates: a
-    new metadata key is not a lifecycle value merely because it is nearby.
-    """
+    """Require a direct state assignment/comparison, never mere word proximity."""
     values: set[str] = set()
-    for match in LITERAL.finditer(line):
-        before, after = prefix + line[: match.start()], line[match.end() :]
-        field = FIELD_VALUE.search(before)
-        if after.lstrip().startswith(":") or FIELD_LOOKUP.search(before):
+    text = prefix + line
+    for match in NON_CODE.finditer(text):
+        literal = LITERAL.fullmatch(match.group())
+        if match.start() < len(prefix) or not literal:
             continue
-        if field and not STATE_CONTEXT.fullmatch(field["field"]):
-            continue
-        values.add(match.group(1))
+        # Mask strings/comments except quoted state keys in dicts/subscripts.
+        before = NON_CODE.sub(
+            lambda item: item.group() if re.fullmatch(rf"['\"]{STATE_NAME}['\"]", item.group(), re.I)
+            else re.sub(r"[^\n]", " ", item.group()), text[:match.start()]
+        )
+        if STATE_VALUE.search(before) or STATE_COMPARE.search(text[match.end():]):
+            values.add(literal.group(1))
     return values
 
 
-def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], set[str]]:
+def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], set[str], set[str]]:
+    """Return changed knobs, new states, and knobs without a removed numeric value."""
     numeric: dict[tuple[str, str, str], set[str]] = {}
     candidates: set[str] = set()
     for path, lines in diff_hunks(diff):
@@ -105,34 +107,71 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
                         ):
                             key = (path, match["knob"], match["value"].replace("_", ""))
                             numeric.setdefault(key, set()).add(sign)
-        # Count distance in the new file, excluding removed lines entirely.
+        # Carry only new-side syntax for direct assignments split across lines.
         added_side = [(sign, line) for sign, line in lines if sign != "-"]
         for i, (sign, line) in enumerate(added_side):
             if sign != "+" or not code(line):
                 continue
-            nearby = added_side[max(0, i - 3) : i + 4]
-            if any(code(text) and STATE_CONTEXT.search(text) for _, text in nearby):
-                prefix = "\n".join(text for _, text in added_side[max(0, i - 3) : i] if code(text)) + "\n"
-                candidates.update(state_literals(line, prefix))
+            prefix = "\n".join(text for _, text in added_side[max(0, i - 3) : i]) + "\n"
+            candidates.update(state_literals(line, prefix))
     # #24738 only added client/source-metadata arguments beside max_count=4096.
     # The same knob/value on both sides is not tuning (including moved lines).
     knobs = {key[1] for key, signs in numeric.items() if len(signs) == 1}
-    return knobs, {literal for literal in candidates if not exists_at_base(literal)}
+    prior_knobs = {key[1] for key, signs in numeric.items() if "-" in signs}
+    return knobs, {literal for literal in candidates if not exists_at_base(literal)}, knobs - prior_knobs
+
+
+def prose(body: str) -> str:
+    """Remove HTML comments, fenced blocks (including unclosed ones), and code spans."""
+    lines: list[str] = []
+    fence = ""
+    for line in HTML_COMMENT.sub("", body).splitlines(keepends=True):
+        if fence:
+            if re.fullmatch(rf" {{0,3}}{re.escape(fence[0])}{{{len(fence)},}}[ \t]*", line.rstrip("\r\n")):
+                fence = ""
+            lines.append("\n")
+        elif match := re.match(r"^ {0,3}(`{3,}|~{3,})", line):
+            fence = match.group(1)
+            lines.append("\n")
+        else:
+            lines.append(line)
+    return re.sub(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)", " ", "".join(lines), flags=re.S)
 
 
 def sections(body: str) -> list[str]:
     # Any Markdown heading starts a section; don't combine unrelated before and
     # after claims. HTML template examples cannot satisfy the contract.
-    return re.split(r"(?m)(?=^ {0,3}#{1,6}[ \t]+)", HTML_COMMENT.sub("", body))
+    return re.split(r"(?m)(?=^ {0,3}#{1,6}[ \t]+)", body)
 
 
 def token(name: str, text: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.I) is not None
 
 
-def validate(knobs: set[str], states: set[str], body: str) -> tuple[list[str], list[str]]:
-    parts = sections(body)
-    cleaned = HTML_COMMENT.sub("", body)
+def numbers_disclosed(part: str, knobs: set[str], new_knobs: set[str]) -> bool:
+    named = {knob for knob in knobs if token(knob, part)}
+    if not named:
+        return False
+    if (
+        re.search(r"\bbefore\b.{0,120}\d", part, re.I | re.S)
+        and re.search(r"\bafter\b.{0,120}\d", part, re.I | re.S)
+    ):
+        return True
+    for knob in named:
+        for match in re.finditer(rf"(?<!\w){re.escape(knob)}(?!\w)", part, re.I):
+            nearby = part[max(0, match.start() - 120):match.end() + 120]
+            if re.search(rf"\bfrom\b.{{0,120}}{NUMBER}.{{0,120}}\bto\b.{{0,120}}{NUMBER}", nearby, re.I | re.S):
+                return True
+            if re.search(rf"{NUMBER}\s*(?:->|→)\s*{NUMBER}", nearby):
+                return True
+            if knob in new_knobs and re.search(rf"\b(?:new\s*:\s*|initial\s+){NUMBER}", nearby, re.I):
+                return True
+    return False
+
+
+def validate(knobs: set[str], states: set[str], body: str, new_knobs: set[str] | None = None) -> tuple[list[str], list[str]]:
+    cleaned = prose(body)
+    parts = sections(cleaned)
     errors: list[str] = []
     notices: list[str] = []
     for field, needed in (("Numbers-waived", knobs), ("State-exit-waived", states)):
@@ -143,15 +182,11 @@ def validate(knobs: set[str], states: set[str], body: str) -> tuple[list[str], l
                 knobs = set()
             else:
                 states = set()
-    if knobs and not any(
-        re.search(r"\bbefore\b.{0,120}\d", part, re.I | re.S)
-        and re.search(r"\bafter\b.{0,120}\d", part, re.I | re.S)
-        and any(token(knob, part) for knob in knobs)
-        for part in parts
-    ):
+    if knobs and not any(numbers_disclosed(part, knobs, new_knobs or set()) for part in parts):
         errors.append(
             f"Tuning ({', '.join(sorted(knobs))}) requires before and after numbers in one section "
-            "naming at least one knob, or Numbers-waived: <reason>."
+            "naming at least one knob (before/after, from/to, or an arrow); a new knob may use new: or initial; "
+            "or Numbers-waived: <reason>."
         )
     for state in sorted(states):
         if not (token(state, cleaned) and EXIT.search(cleaned)):
@@ -201,10 +236,10 @@ def main() -> int:
                 return result.returncode
         base = git(args.root, "merge-base", args.base, args.head).strip()
         diff = git(args.root, "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, args.head, "--", *TRIGGERS)
-        knobs, candidates = detect(diff, lambda _: False)
+        knobs, candidates, new_knobs = detect(diff, lambda _: False)
         states = candidates - existing_literals(args.root, base, candidates)
         body = args.pr_body_file.read_text(encoding="utf-8") if args.pr_body_file else ""
-        errors, notices = validate(knobs, states, body)
+        errors, notices = validate(knobs, states, body, new_knobs)
     except (OSError, RuntimeError) as exc:
         print(f"FAIL: batch-pipeline-tuning-disclosure: {exc}", file=sys.stderr)
         return 2

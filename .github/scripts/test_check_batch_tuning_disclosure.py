@@ -28,7 +28,7 @@ def patch(*lines: str, path: str = CONFIG) -> str:
 
 class DisclosureTests(unittest.TestCase):
     def detect(self, *lines: str, path: str = CONFIG, existing: tuple[str, ...] = ()) -> tuple[set[str], set[str]]:
-        return check.detect(patch(*lines, path=path), lambda value: value in existing)
+        return check.detect(patch(*lines, path=path), lambda value: value in existing)[:2]
 
     def test_numeric_config_and_hpa_require_numbers(self) -> None:
         for path, line, knob in (
@@ -119,13 +119,79 @@ class DisclosureTests(unittest.TestCase):
             self.assertFalse(check.validate(knobs, states, f"awaiting_repair: {exit_word} via retry")[0])
         self.assertFalse(check.validate(knobs, states, "## State\nawaiting_repair\n## Recovery\nrecover via retry")[0])
 
+    def test_code_examples_cannot_disclose_or_waive(self) -> None:
+        for example in (
+            "Numbers-waived: example only\nState-exit-waived: example only",
+            "MAX_DRAINS before 4 after 8\nawaiting_repair exits on retry",
+            "MAX_DRAINS from 4 to 8\nawaiting_repair recovers",
+            "MAX_DRAINS new: 8\nawaiting_repair exits",
+        ):
+            for wrapped in (f"```text\n{example}\n```", f"~~~\n{example}\n~~~", f"`{example}`", f"``{example}``", f"```\n{example}"):
+                with self.subTest(wrapped=wrapped):
+                    errors, notices = check.validate({"MAX_DRAINS"}, {"awaiting_repair"}, wrapped, {"MAX_DRAINS"})
+                    self.assertEqual(len(errors), 2)
+                    self.assertEqual(notices, [])
+        self.assertTrue(check.validate({"MAX_DRAINS"}, set(), "MAX_DRAINS `before 4 after 8`")[0])
+        self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "```\nexample\n```\nMAX_DRAINS from 4 to 8")[0])
+
+    def test_from_to_and_arrow_disclosures(self) -> None:
+        for body in (
+            "MAX_DRAINS from 6 to 4", "MAX_DRAINS: 6 -> 4", "MAX_DRAINS: 6 → 4",
+            "MAX_DRAINS from min 6 / max 12 to min 4 / max 8",
+            "MAX_DRAINS: 1e3 → 1_500", "MAX_DRAINS: -.5 -> .6", "6 → 4 for MAX_DRAINS",
+        ):
+            with self.subTest(body=body):
+                self.assertFalse(check.validate({"MAX_DRAINS"}, set(), body)[0])
+        for body in ("OTHER_MAX_DRAINS 6 -> 4", "MAX_DRAINS from 6", "MAX_DRAINS -> 4", "MAX_DRAINS\n## Other\n6 -> 4"):
+            self.assertTrue(check.validate({"MAX_DRAINS"}, set(), body)[0])
+        for wording in ("from 6 to 4", "6 -> 4", "6 → 4", "new: 4", "initial 4"):
+            self.assertTrue(check.validate({"MAX_DRAINS"}, set(), "MAX_DRAINS " + "x" * 121 + wording, {"MAX_DRAINS"})[0])
+
+    def test_initial_disclosure_only_for_a_knob_without_removed_numeric_value(self) -> None:
+        for lines, new in (
+            (("+MAX_DRAINS = 8",), {"MAX_DRAINS"}),
+            (("-MAX_DRAINS = None", "+MAX_DRAINS = 8"), {"MAX_DRAINS"}),
+            (("-MAX_DRAINS = 4", "+MAX_DRAINS = 8"), set()),
+            (("-MAX_DRAINS = 4",), set()),
+            (("-os.getenv('IO_CONCURRENCY', '4')", "+os.getenv('IO_CONCURRENCY', '8')"), set()),
+            (("+os.getenv('IO_CONCURRENCY', '8')",), {"IO_CONCURRENCY"}),
+        ):
+            knobs, states, new_knobs = check.detect(patch(*lines), lambda _: False)
+            self.assertEqual(new_knobs, new)
+            for knob in knobs:
+                for wording in ("new: 8", "initial 8"):
+                    self.assertEqual(bool(check.validate(knobs, states, f"{knob}: {wording}", new_knobs)[0]), not bool(new))
+            self.assertFalse(check.validate(knobs, states, "Numbers-waived: no prior value", new_knobs)[0])
+        self.assertTrue(check.validate({"MAX_DRAINS", "MAX_OTHER"}, set(), "MAX_DRAINS new: 8", {"MAX_OTHER"})[0])
+
+    def test_state_literals_require_direct_assignment_or_comparison(self) -> None:
+        for line in (
+            "state = 'retry_pending'", "state == 'retry_pending'", "'retry_pending' == state",
+            "status='retry_pending'", "update(status='retry_pending')", "{'state': 'retry_pending'}",
+            "job['state'] = 'retry_pending'", "job.state != 'retry_pending'",
+            "job_state = 'retry_pending'", "phase='retry_pending'", "disposition='retry_pending'",
+            "outcome='retry_pending'", "reason='retry_pending'",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.detect('+' + line)[1], {"retry_pending"})
+        for line in (
+            "logger.info('request state=%s', 'retry_pending')",
+            "logger.info('state = ', 'retry_pending')",
+            "logger.info('state', 'retry_pending')", "description = 'retry_pending'",
+            "'retry_pending'", """log('state == "retry_pending"')""",
+            "'state' == 'retry_pending'",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.detect(' state = current', '+' + line)[1], set())
+
     def test_state_distance_hunk_and_file_boundaries(self) -> None:
         self.assertEqual(self.detect(' status = (', '+"awaiting_repair"')[1], {"awaiting_repair"})
-        self.assertEqual(self.detect(' status = (', ' x', ' x', '+"awaiting_repair"')[1], {"awaiting_repair"})
+        self.assertEqual(self.detect(' status = (', ' ', ' ', '+"awaiting_repair"')[1], {"awaiting_repair"})
+        self.assertEqual(self.detect(' status = (', ' x', ' x', '+"awaiting_repair"')[1], set())
         self.assertEqual(self.detect(' status = (', ' x', ' x', ' x', '+"awaiting_repair"')[1], set())
         self.assertEqual(self.detect('-status = "removed_state"', '+value = "unrelated_word"')[1], set())
         self.assertEqual(self.detect(' status = "old_state"', '+value = 2')[1], set())
-        self.assertEqual(check.detect(patch('+status = "known_state"') + patch('+name = "unrelated_word"'), lambda _: True), (set(), set()))
+        self.assertEqual(check.detect(patch('+status = "known_state"') + patch('+name = "unrelated_word"'), lambda _: True), (set(), set(), set()))
 
     def test_existing_states_never_trigger(self) -> None:
         self.assertEqual(self.detect('+status = "awaiting_repair"', existing=("awaiting_repair",)), (set(), set()))
@@ -149,7 +215,7 @@ class DisclosureTests(unittest.TestCase):
     def test_unrelated_state_context_does_not_cross_hunks_or_files(self) -> None:
         diff = patch(' status = "known_state"') + '@@ -90 +90 @@\n+label = "unrelated_word"\n'
         diff += patch('+name = "another_word"', path=PUSHER)
-        self.assertEqual(check.detect(diff, lambda _: False), (set(), set()))
+        self.assertEqual(check.detect(diff, lambda _: False), (set(), set(), set()))
 
     def test_manifest_selects_both_lanes_and_requires_body(self) -> None:
         from run_checks import load_manifest, resolve_checks
@@ -165,7 +231,7 @@ class DisclosureTests(unittest.TestCase):
 
     def test_deleted_file_keeps_removed_knob(self) -> None:
         diff = f"diff --git a/{CONFIG} b/{CONFIG}\n--- a/{CONFIG}\n+++ /dev/null\n@@ -1 +0,0 @@\n-MAX_DRAINS = 4\n"
-        self.assertEqual(check.detect(diff, lambda _: False), ({"MAX_DRAINS"}, set()))
+        self.assertEqual(check.detect(diff, lambda _: False), ({"MAX_DRAINS"}, set(), set()))
 
     def test_both_waivers_require_reasons_and_echo_them(self) -> None:
         for body in ("Numbers-waived:\nState-exit-waived:", "<!-- Numbers-waived: example\nState-exit-waived: example -->"):
@@ -239,6 +305,16 @@ class GitFixtureTests(unittest.TestCase):
         result = self.run_check("MAX_DRAINS before 4 after 0")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("0 new states", result.stdout)
+
+    def test_cli_initial_value_requires_no_removed_numeric_assignment(self) -> None:
+        self.write(CONFIG, 'MAX_DRAINS = 4\nMAX_NEW = 8\nstatus = "known_state"\n')
+        result = self.run_check("MAX_NEW initial 8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write(CONFIG, 'MAX_DRAINS = 8\nstatus = "known_state"\n')
+        result = self.run_check("MAX_DRAINS new: 8")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        result = self.run_check("MAX_DRAINS 4 → 8")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_batched_lookup_handles_overlap_absence_and_binary_content(self) -> None:
         self.write("fixture.bin", b"\x00unique_binary_state\x00".decode())
