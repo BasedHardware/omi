@@ -59,7 +59,7 @@ limits before materializing results and overlay pending UoW edits. Task writer
 tickets span flush and connection commit, with one post-commit list-version bump
 per changed UoW. Domain result receipts and native content-free replay receipts
 commit atomically. Typed query columns understand the shared codec's tagged
-datetimes (`0003_task_workflow_typed.sql`, after B2's `0002_write_fence.sql`).
+datetimes (`0004_task_workflow_typed.sql`, after B2's `0002_write_fence.sql`).
 Only the synthetic domain conformance harness selects these adapters. Serving
 routing and `CELL_STORE_MODE` are unchanged; B2 enrollment/write fences remain
 required before any serving use. Adding stored columns requires an exclusive

@@ -316,7 +316,7 @@ class ConversationProvider extends ChangeNotifier {
   Future<void> refreshTypedDetail(String id) async {
     final api = _conversationApi;
     if (api == null) return;
-    final result = await api.byId(id);
+    final result = await api.byId(id, userInitiated: true);
     _typedDetailStates[id] = presentApiResult(result, isEmpty: (_) => false);
     if (result
         case ApiFailure(
@@ -416,7 +416,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> updateSearchedConvoDetails(String id) async {
-    final convo = await (conversationDetailsFetcherOverride?.call(id) ?? getConversationById(id));
+    final convo = await (conversationDetailsFetcherOverride?.call(id) ?? getConversationById(id, userInitiated: true));
     if (convo != null) {
       updateConversationInSortedList(convo);
     } else {

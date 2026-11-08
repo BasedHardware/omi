@@ -74,9 +74,12 @@ the native `sync:` refusal; `SPEAKER_BATCH_STORE_ENABLED=false` independently re
 refusal for either stamped store. Both default on inside the per-window cohort. The store-neutral
 `conversation_speaker_store` log reports `batch_proven`, `sync_proven` and the total proof count.
 
-Rollback: set `BATCH_CONVERSATION_SPEAKERS_ENABLED=false` on processing hosts.
-That stops automatic batch linking/naming, including when speaker-evidence mode
-serves. It preserves existing transcript and manual labels; it does not rewrite
+Rollback: `BATCH_CONVERSATION_SPEAKERS_ENABLED=false` is the wider switch. It stops
+automatic batch linking/naming for all batch speaker resolution, including when
+speaker-evidence mode serves. It has no deploy binding in `deploy/runtime_env.yaml`,
+so applying it needs a deploy change. To roll back only the final pass, use
+`BATCH_FINAL_PASS_ENABLED=false` on every serving runtime (see "Rollback on every
+serving runtime" below). It preserves existing transcript and manual labels; it does not rewrite
 historical conversations or undo already published names. No historical repair
 or production flag mutation is part of this code change.
 

@@ -34,10 +34,11 @@ FRESH_CAPTURE_LAG_SECONDS = 600.0
 
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
+RECORD_DEAD_LETTER_SECONDS = 14 * 86400
 
 
 def batch_held_dead_letter_enabled() -> bool:
-    """Ship-on held deadlines/expiry; manual requeue remains available when off."""
+    """Ship-on record/held deadlines and expiry; manual requeue remains available when off."""
     from config.policy.kill_switches import kill_switch
 
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')

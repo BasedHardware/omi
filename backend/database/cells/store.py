@@ -88,6 +88,26 @@ class CellTransaction:
                 return deepcopy(mutation.doc) if mutation.doc is not None else {}
         return deepcopy(row[1]) if row is not None else {}
 
+    def get_with_rev(self, entity: str, entity_id: str) -> tuple[int, dict[str, Any]] | None:
+        validate_address(entity, entity_id)
+        return deepcopy(self._lock_read(entity, entity_id))
+
+    def receipt_seq(self, client_mutation_id: str) -> int | None:
+        if not client_mutation_id or '\x00' in client_mutation_id:
+            raise ValueError('client_mutation_id must be nonempty without NUL')
+        row = self.conn.execute(
+            'SELECT seq FROM mutation_receipts WHERE space_id=%s AND client_mutation_id=%s',
+            (self.space_id, client_mutation_id),
+        ).fetchone()
+        return row[0] if row else None
+
+    def seq_as_of(self, entity: str, entity_id: str, ts: float) -> int | None:
+        validate_address(entity, entity_id)
+        return self.conn.execute(
+            'SELECT max(seq) FROM change_log ' 'WHERE space_id=%s AND entity=%s AND entity_id=%s AND committed_at<=%s',
+            (self.space_id, entity, entity_id, ts),
+        ).fetchone()[0]
+
     def _buffer(
         self,
         entity: str,
@@ -215,11 +235,18 @@ class CellTransaction:
         if not pending:
             return replayed
         count = len(pending)
-        head, _epoch = self.conn.execute(
-            'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s '
-            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch',
+        # flush already owns the space-head lock. Sample the database clock here,
+        # after contention, and advance monotonically even if that clock recedes.
+        # Caller `now` remains event/retention time, never revision authority.
+        head, _epoch, revision_us = self.conn.execute(
+            'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s, '
+            'revision_us=greatest((extract(epoch FROM clock_timestamp())*1000000)::bigint, revision_us+1) '
+            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch, revision_us',
             (count, self.now, self.space_id),
         ).fetchone()
+        # Integer microseconds round-trip through datetime tokens without
+        # accumulating floating-point drift during logical clock advances.
+        committed_at = revision_us / 1_000_000
         for seq, address in enumerate(sorted(pending), head - count + 1):
             mutation = pending[address]
             if mutation.doc is None:
@@ -232,11 +259,12 @@ class CellTransaction:
                     'VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s) ON CONFLICT (space_id, entity, entity_id) DO UPDATE '
                     'SET author_id=EXCLUDED.author_id, rev=EXCLUDED.rev, doc=EXCLUDED.doc, '
                     'updated_at=EXCLUDED.updated_at',
-                    (self.space_id, *address, mutation.author_uid, seq, dumps(mutation.doc), self.now),
+                    (self.space_id, *address, mutation.author_uid, seq, dumps(mutation.doc), committed_at),
                 )
             self.conn.execute(
                 'INSERT INTO change_log (space_id, seq, entity, entity_id, op, rev, actor_uid, '
-                'client_mutation_id, fingerprint, feed, ts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                'client_mutation_id, fingerprint, feed, ts, committed_at) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                 (
                     self.space_id,
                     seq,
@@ -248,6 +276,7 @@ class CellTransaction:
                     mutation.fingerprint,
                     mutation.feed,
                     self.now,
+                    committed_at,
                 ),
             )
             if mutation.client_mutation_id is not None:

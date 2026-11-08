@@ -54,16 +54,17 @@ def pg(monkeypatch):
 
 def test_expand_only_numbering_and_b2_dependency():
     migrations = load(MIGRATIONS)
-    assert [m.version for m in migrations] == [1, 2, 3]
+    assert [m.version for m in migrations] == [1, 2, 3, 4]
     assert migrations[1].name == 'write_fence'
-    assert migrations[2].name == 'task_workflow_typed'
-    sql = migrations[2].sql
+    assert migrations[2].name == 'revision_timestamps'
+    assert migrations[3].name == 'task_workflow_typed'
+    sql = migrations[3].sql
     assert 'depends on B2 0002_write_fence.sql' in sql
     assert 'GENERATED ALWAYS AS' in sql
     assert len(re.findall(r'ALTER\s+TABLE\s+cell_docs', sql, re.IGNORECASE)) == 1
     assert len(re.findall(r'ADD\s+COLUMN', sql, re.IGNORECASE)) == 10
     assert 'ACCESS EXCLUSIVE' in sql
-    assert migrations[2].checksum == 'a4b59f64c52cb2d01626a4e083f4f52c9ba971d20617cab21b2d2e6a2caf42d2'
+    assert migrations[3].checksum == 'a4b59f64c52cb2d01626a4e083f4f52c9ba971d20617cab21b2d2e6a2caf42d2'
     for migration in migrations[1:]:
         # Inspect statements, not the descriptive comments or string literals.
         statements = re.sub(r"--[^\n]*|'(?:''|[^'])*'", '', migration.sql)
@@ -79,7 +80,7 @@ def test_fresh_apply_reapply_and_codec_query_columns(pg):
         conn.execute(f'CREATE SCHEMA {schema}')
         try:
             conn.execute(f'SET search_path TO {schema}, public')
-            assert migrate(conn, MIGRATIONS) == [1, 2, 3]
+            assert migrate(conn, MIGRATIONS) == [1, 2, 3, 4]
             assert migrate(conn, MIGRATIONS) == []
             timestamp = conn.execute(
                 "SELECT cell_query_timestamp(%s::jsonb)", ('{"$datetime":"2026-11-01T07:00:00+07:00"}',)

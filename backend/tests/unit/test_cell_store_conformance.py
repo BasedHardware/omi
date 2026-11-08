@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+import base64
+import json
 import subprocess
 import sys
 import threading
@@ -202,7 +204,7 @@ def test_coalescing_feed_and_page_dedup(harness, space):
     assert page.rows[('notes', 'b')]['author_id'] == 'other-author'
     assert store.read_doc(space, 'notes', 'a') == {'v': 2}
     write(store, space, 'hidden', feed=False)
-    assert store.pull(space, cursor=2, now=NOW).next_cursor == 2
+    assert store.pull(space, cursor=2, now=NOW).next_cursor == 3
     with store.pool.connection() as conn:
         assert conn.execute('SELECT feed, rev FROM change_log WHERE space_id=%s AND seq=3', (space,)).fetchone() == (
             False,
@@ -487,7 +489,7 @@ def test_head_epoch_and_migrations(harness, space):
         path = Path(store_module.__file__).parent / 'migrations'
         assert migrate(conn, directory=path) == []
         assert migrate(conn, directory=path) == []
-        assert current_version(conn) == 3  # B2 admission fence + A2b typed query promotion
+        assert current_version(conn) == 4  # B2 fence, B3 revision timestamps, A2b typed query promotion
 
 
 def test_validation_and_adapter_registration(harness, space, monkeypatch):
@@ -623,3 +625,156 @@ def test_iam_fixture_refuses_before_contacting_postgres(monkeypatch):
         cells_fixtures.cells_dsn()
     with pytest.raises(cells_fixtures.BackendUnavailable, match='do not support IAM'):
         cells_fixtures.directory_dsn()
+
+
+@pytest.mark.parametrize('tombstoned', [False, True])
+def test_feed_enrollment_fence(harness, tombstoned):
+    space = harness.uid('feed-fence-' + str(tombstoned))
+    if tombstoned:
+        harness.store.purge_space(space)
+    for read in [harness.store.pull, harness.store.snapshot]:
+        kwargs = {'cursor': 0} if read.__name__ == 'pull' else {}
+        with pytest.raises(CellSpaceUnavailable):
+            read(space, now=NOW, **kwargs)
+    assert harness.store.compact(space, now=NOW) == 0
+
+
+def test_feed_tail_and_truncation(harness, space):
+    store = harness.store
+    write(store, space, 'a')
+    write(store, space, 'b')
+    write(store, space, 'hidden', feed=False)
+    assert store.pull(space, cursor=0, limit=1, now=NOW).next_cursor == 1
+    assert store.pull(space, cursor=1, limit=2, now=NOW).next_cursor == 3
+    assert store.pull(space, cursor=2, now=NOW).next_cursor == 3
+
+
+def test_snapshot_keyset_since_and_page_one_head(harness, space):
+    store = harness.store
+    # Entity IDs need not be ASCII; PostgreSQL C ordering defines the keyset.
+    for key in ['a', 'z', 'é']:
+        write(store, space, key)
+    page = store.snapshot(space, limit=1, now=NOW)
+    first_head = page.head
+    assert page.rows[0]['entity_id'] == 'a'
+    write(store, space, 'a')
+    rows = list(page.rows)
+    while page.next_page_token:
+        after = tuple(json.loads(base64.b64decode(page.next_page_token)))
+        page = store.snapshot(space, after=after, limit=1, now=NOW)
+        rows.extend(page.rows)
+    assert [row['entity_id'] for row in rows] == ['a', 'z', 'é']
+    assert [row['entity_id'] for row in store.snapshot(space, since=first_head, now=NOW).rows] == ['a']
+    assert [e.entity_id for e in store.pull(space, cursor=first_head, now=NOW).entries] == ['a']
+    assert store.bump_epoch(space, now=NOW) != page.epoch
+
+
+def test_snapshot_since_pages_rows_and_latest_tombstones(harness, space):
+    store = harness.store
+    for key in ['a', 'b', 'é', 'old']:
+        write(store, space, key)
+    store.run(space, lambda tx: tx.delete('notes', 'old'), actor_uid=space, now=NOW)
+    since = store.head(space)[0]
+    for key in ['a', 'é', 'a']:
+        store.run(space, lambda tx: tx.delete('notes', key, feed=False), actor_uid=space, now=NOW)
+    write(store, space, 'b')
+    write(store, space, 'é')  # Recreated rows suppress older deletion records.
+    store.compact(space, now=NOW + FEED_RETENTION_S + 1)
+
+    after, addresses, rows, entries = None, [], [], []
+    while True:
+        page = store.snapshot(space, since=since, after=after, limit=1, now=NOW)
+        assert len(page.rows) + len(page.entries) <= 1
+        rows.extend(page.rows)
+        entries.extend(page.entries)
+        addresses.extend(r['entity_id'] for r in page.rows)
+        addresses.extend(e.entity_id for e in page.entries)
+        if page.next_page_token is None:
+            break
+        after = tuple(json.loads(base64.b64decode(page.next_page_token)))
+    assert addresses == ['a', 'b', 'é']
+    assert [r['entity_id'] for r in rows] == ['b', 'é']
+    assert [(e.entity_id, e.op, e.seq) for e in entries] == [('a', 'delete', 8)]
+    assert all(e.rev == e.seq for e in entries)
+    assert store.snapshot(space, since=store.head(space)[0], now=NOW).entries == []
+
+
+def test_protocol_transaction_reads(harness, space):
+    store = harness.store
+    write(store, space, 'a', now=NOW - 2, client_mutation_id='read-mid', fingerprint='fp')
+    write(store, space, 'a', now=NOW - 1)
+    write(store, space, 'a', now=NOW - 1, feed=False)
+    with store.pool.connection() as conn:
+        stamps = [
+            r[0]
+            for r in conn.execute(
+                'SELECT committed_at FROM change_log WHERE space_id=%s ORDER BY seq', (space,)
+            ).fetchall()
+        ]
+
+    def read(tx):
+        assert tx.get_with_rev('notes', 'absent') is None
+        row = tx.get_with_rev('notes', 'a')
+        assert row == (3, {'key': 'a'})
+        row[1]['key'] = 'must not mutate the cached row'
+        assert tx.get_with_rev('notes', 'a') == (3, {'key': 'a'})
+        assert tx.receipt_seq('missing') is None
+        assert tx.receipt_seq('read-mid') == 1
+        assert tx.seq_as_of('notes', 'a', stamps[0] - 1) is None
+        assert tx.seq_as_of('notes', 'a', stamps[0]) == 1
+        assert tx.seq_as_of('notes', 'a', stamps[1]) == 2
+        assert tx.seq_as_of('notes', 'a', stamps[2]) == 3  # includes feed=false
+        for invalid in ['', 'bad\x00']:
+            with pytest.raises(ValueError):
+                tx.receipt_seq(invalid)
+
+    store.run(space, read, actor_uid=space, now=NOW)
+    store.compact(space, now=NOW + FEED_RETENTION_S + 1)
+    assert store.run(space, lambda tx: tx.seq_as_of('notes', 'a', stamps[0]), actor_uid=space, now=NOW).value is None
+
+
+@pytest.mark.parametrize('read_kind', ['pull', 'snapshot'])
+def test_read_head_cannot_advance_past_its_data_snapshot(harness, space, monkeypatch, read_kind):
+    store = harness.store
+    write(store, space, 'a')
+    original = store.pool.connection
+    injected = False
+
+    class Result:
+        def __init__(self, cursor):
+            self.cursor = cursor
+
+        def fetchall(self):
+            nonlocal injected
+            rows = self.cursor.fetchall()
+            if not injected:
+                injected = True
+                write(store, space, 'late')
+            return rows
+
+    class Proxy:
+        def __init__(self, conn):
+            self.conn = conn
+
+        def transaction(self):
+            return self.conn.transaction()
+
+        def execute(self, sql, args=None):
+            result = self.conn.execute(sql, args)
+            trigger = 'SELECT seq, entity' if read_kind == 'pull' else 'SELECT entity, entity_id, author_id'
+            return Result(result) if sql.startswith(trigger) else result
+
+    @contextmanager
+    def connection():
+        with original() as conn:
+            yield Proxy(conn)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store.pool, 'connection', connection)
+        kwargs = {'cursor': 0} if read_kind == 'pull' else {}
+        page = getattr(store, read_kind)(space, now=NOW, **kwargs)
+    assert injected
+    assert page.head == 1
+    if read_kind == 'pull':
+        assert page.next_cursor == 1
+    assert [e.entity_id for e in store.pull(space, cursor=page.head, now=NOW).entries] == ['late']

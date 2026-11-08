@@ -1705,6 +1705,26 @@ class TestAsyncCoordinatorBehavioral:
         finally:
             self._cleanup(stubs['saved_modules'])
 
+    def test_direct_live_member_deferral_preserves_intake_and_siblings(self, fenced_worker_module):
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=[
+                pipeline.processing_hold.ProcessingDeferred('live_episode_notes', 1000),
+                None,
+            ]
+        )
+        pipeline.logger = MagicMock()
+        response = {
+            '_merged': {'live-member': 'en', 'outside': 'en'},
+            'updated_memories': {'live-member', 'outside'},
+            'new_memories': set(),
+        }
+        pipeline._reprocess_merged_conversations('uid', response)
+        assert response['updated_memories'] == {'live-member', 'outside'}
+        assert pipeline._reprocess_conversation_after_update.call_count == 2
+        pipeline.logger.error.assert_not_called()
+
     def test_merged_reprocess_fence_isolated_to_its_conversation(self, fenced_worker_module):
         """One replaced merge target must not supersede its sibling conversations."""
         _module, stubs = fenced_worker_module

@@ -33,6 +33,8 @@ from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline import record_gap_fill
+from config.record_gap_fill import gap_fill_enabled
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
 from utils.sync.stage import current_stage
 from utils.sync.legacy_dark import LegacySyncMode
@@ -355,6 +357,18 @@ async def registered_record_response(
     if prior:
         return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT, content)
     if not jobs:
+        if gap_fill_enabled(uid):
+            # A closed record whose retained tail never landed cannot admit;
+            # write this owner WAL's missing span so the drain's next normal
+            # pass can. The answer is the same 503 either way: the WAL is
+            # released only by a later upload's byte-exact coverage proof.
+            await record_gap_fill.run_gap_fill(
+                uid=uid,
+                conversation_id=conversation_id,
+                paths=paths,
+                wal_content_id=content_id,
+                store=store,
+            )
         return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
