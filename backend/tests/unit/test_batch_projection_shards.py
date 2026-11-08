@@ -98,14 +98,18 @@ class OwnerPageQuery:
             return entry[0] is not None, entry[0] or 0.0, entry[1]
 
         ordered = sorted(
-            ((row['committed_at'], key) for key, row in self.rows.items()
-             if row.get('projection_state') in self.states and 'committed_at' in row),
+            (
+                (row['committed_at'], key)
+                for key, row in self.rows.items()
+                if row.get('projection_state') in self.states and 'committed_at' in row
+            ),
             key=position,
         )
         if self.after is not None:
             ordered = [entry for entry in ordered if position(entry) > position(self.after)]
-        return [SimpleNamespace(id=key, to_dict=lambda key=key: dict(self.rows[key]))
-                for _, key in ordered[:self.size]]
+        return [
+            SimpleNamespace(id=key, to_dict=lambda key=key: dict(self.rows[key])) for _, key in ordered[: self.size]
+        ]
 
 
 @pytest.fixture(params=('firestore', 'postgres', 'sim', 'pgsim'))
@@ -137,8 +141,9 @@ def owner_page_store(request, monkeypatch):
                 else:
                     assert len(params) == 3
                 docs = query.limit(params[-1]).stream()
-                return SimpleNamespace(fetchall=lambda: [
-                    (doc.id, doc.to_dict()['committed_at'], doc.to_dict()) for doc in docs])
+                return SimpleNamespace(
+                    fetchall=lambda: [(doc.id, doc.to_dict()['committed_at'], doc.to_dict()) for doc in docs]
+                )
 
         class Pool:
             @contextmanager
@@ -153,13 +158,15 @@ def owner_page_store(request, monkeypatch):
 
 
 def test_owner_pages_keep_raw_page_cursor_when_unroutable_rows_are_skipped(owner_page_store):
-    store = owner_page_store({
-        'a': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': 'first'},
-        'b': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': ''},
-        'c': {'projection_state': 'ready', 'committed_at': 1, 'owner_id': 'last', 'capture_at': 0},
-        'missing': {'projection_state': 'pending', 'owner_id': 'excluded'},
-        'held': {'projection_state': 'quarantine_held', 'committed_at': 2, 'owner_id': 'held'},
-    })
+    store = owner_page_store(
+        {
+            'a': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': 'first'},
+            'b': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': ''},
+            'c': {'projection_state': 'ready', 'committed_at': 1, 'owner_id': 'last', 'capture_at': 0},
+            'missing': {'projection_state': 'pending', 'owner_id': 'excluded'},
+            'held': {'projection_state': 'quarantine_held', 'committed_at': 2, 'owner_id': 'held'},
+        }
+    )
     assert store.projection_page_owners(2) == ([('a', 'first', 1.0, None)], (1, 'b'))
     assert store.projection_page_owners(1, after=(1, 'a')) == ([], (1, 'b'))
     assert store.projection_page_owners(2, after=(1, 'b')) == ([('c', 'last', 1.0, 0)], None)
@@ -168,10 +175,9 @@ def test_owner_pages_keep_raw_page_cursor_when_unroutable_rows_are_skipped(owner
 
 
 def test_owner_page_limits_and_timestamp_seed_match_firestore(owner_page_store):
-    store = owner_page_store({
-        f'r{i:03}': {'projection_state': 'pending', 'committed_at': i // 2, 'owner_id': 'owner'}
-        for i in range(150)
-    })
+    store = owner_page_store(
+        {f'r{i:03}': {'projection_state': 'pending', 'committed_at': i // 2, 'owner_id': 'owner'} for i in range(150)}
+    )
     page, cursor = store.projection_page_owners(999)
     assert len(page) == 100 and cursor == (49, 'r099')
     assert store.projection_page_owners(0) == ([('r000', 'owner', 0.0, None)], (0, 'r000'))
@@ -179,20 +185,31 @@ def test_owner_page_limits_and_timestamp_seed_match_firestore(owner_page_store):
 
 
 def test_owner_pages_preserve_null_timestamp_cursor_and_wrap(owner_page_store):
-    store = owner_page_store({
-        'null': {'projection_state': 'pending', 'committed_at': None, 'owner_id': 'owner'},
-        'zero': {'projection_state': 'pending', 'committed_at': 0, 'owner_id': 'owner'},
-    })
+    store = owner_page_store(
+        {
+            'null': {'projection_state': 'pending', 'committed_at': None, 'owner_id': 'owner'},
+            'zero': {'projection_state': 'pending', 'committed_at': 0, 'owner_id': 'owner'},
+        }
+    )
     assert store.projection_page_owners(1) == ([('null', 'owner', 0.0, None)], (None, 'null'))
     assert store.projection_page_owners(1, after=(None, 'null')) == ([('zero', 'owner', 0.0, None)], (0, 'zero'))
     assert store.projection_page_owners(1, after=(0, 'zero')) == ([], None)
 
 
-@pytest.mark.parametrize('capture,expected', [(0, 0), (1.5, 1.5), (True, None), (False, None), (None, None), ('1', None)])
+@pytest.mark.parametrize(
+    'capture,expected', [(0, 0), (1.5, 1.5), (True, None), (False, None), (None, None), ('1', None)]
+)
 def test_owner_pages_only_return_numeric_capture_hints(owner_page_store, capture, expected):
-    store = owner_page_store({'a': {
-        'projection_state': 'pending', 'committed_at': 1, 'owner_id': 'owner', 'capture_at': capture,
-    }})
+    store = owner_page_store(
+        {
+            'a': {
+                'projection_state': 'pending',
+                'committed_at': 1,
+                'owner_id': 'owner',
+                'capture_at': capture,
+            }
+        }
+    )
     assert store.projection_page_owners() == ([('a', 'owner', 1.0, expected)], None)
 
 
