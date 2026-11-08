@@ -112,9 +112,11 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
-  # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
-  # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
-  workers: 16
+  # lead2 f1ffa1 (2026-11-08): 24 overlaps fixed startup/client overhead to improve the measured
+  # 319 seals/h at 16, without changing resources; 48 saturated these stages (2026-11-05 #24729).
+  # Gate each of the first 3 runs after roll: sealed-row p50 < 200 s, sealed/run >= 190,
+  # budget_exhausted <= 40/run, Firestore reads/attempted row 6-8. Any miss: revert workers to 16.
+  workers: 24
   serverFlags:
     K_SERVICE: backend
     BATCH_PIPELINE_ENABLED: 'true'
