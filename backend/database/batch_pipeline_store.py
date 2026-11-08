@@ -813,6 +813,8 @@ def timeliness_sample(
 
     ``all_time_counts`` adds three exact COUNT aggregations on the existing leg queries, with no
     epoch/SLA filter or document walk. It is opt-in at the metrics caller, never queried on scrape.
+    These diagnostic counts run after every legacy read succeeds; a failed count logs and omits only
+    its companion leg, without failing the epoch sample.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
     leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
@@ -929,7 +931,7 @@ def timeliness_sample(
         quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
-    return {
+    sample: dict[str, Any] = {
         # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
         # limit(1) reads stay exact even when the stock is larger than a scan page.
         'drain_oldest': first(projection, 'committed_at'),
@@ -950,15 +952,6 @@ def timeliness_sample(
             ),
         },
         'new_over_sla': over_sla,
-        **(
-            {
-                'all_time': {
-                    leg: count(legs[leg][0]) for leg in ('quarantine_held_rows', 'assignment_held', 'projection')
-                }
-            }
-            if all_time_counts
-            else {}
-        ),
         'backlog': {
             'uncommitted_incl_holds': backlog_count(
                 jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)
@@ -970,6 +963,19 @@ def timeliness_sample(
             'projection': projection_truncated,
         },
     }
+    if all_time_counts:
+        companion_counts: dict[str, int] = {}
+        for leg in ('quarantine_held_rows', 'assignment_held', 'projection'):
+            try:
+                companion_counts[leg] = count(legs[leg][0])
+            except Exception as error:
+                logger.warning(
+                    'event=batch_timeliness_all_time_sample outcome=unavailable leg=%s exception_type=%s',
+                    leg,
+                    type(error).__name__,
+                )
+        sample['all_time'] = companion_counts
+    return sample
 
 
 def reseed_hinted_activation(client: Any, namespace: str, key: str, priority: int) -> bool:

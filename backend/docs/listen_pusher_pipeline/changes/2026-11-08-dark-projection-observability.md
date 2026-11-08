@@ -7,7 +7,7 @@ No GCP identity tier was activated. `backend/.venv` already existed (Python 3.11
 
 Behavior and rollback: [projection contract](../../../utils/batch_pipeline/CONTRACT.md#dark-projection-hold-observability-2026-11-08).
 
-## Focused verification
+## Initial focused verification
 
 From the lane worktree, using the workspace's `bin/omi-heavy` (the public checkout
 has no `bin/omi-heavy`):
@@ -24,7 +24,7 @@ write equivalence, strict opt-in in all parser modes, and fake-store all-time
 counts without extra document walks. Disabled collection emits no companion
 series; enabling adds exactly three unbounded COUNT aggregations per refresh.
 
-## Regression verification
+## Initial regression verification
 
 The file-isolated `backend/test.sh` runner exercised these ten files:
 
@@ -60,3 +60,26 @@ This is hermetic source-level verification. Live Firestore index acceptance,
 aggregation cost/latency, log ingestion, production sample counts and deployed
 metric ingestion were not verified. No production access or deployment is
 included. Both switches remain default OFF.
+
+
+## Review round 1 — companion failure isolation
+
+The optional companion COUNTs now run after every legacy sample read succeeds.
+Each aggregation failure logs only its leg and exception type and omits that
+leg. Successful legs still publish. The exporter clears previous companion
+series before setting the successful observations, so a failed count neither
+exports zero nor leaves a previously exported value behind. Epoch gauges,
+freshness and sample-success accounting update normally after companion
+failures. A legacy query failure keeps the existing error path and runs no
+companion COUNTs. OFF runs no companion COUNTs or series updates.
+
+The focused command above was rerun: **53 passed**, slowest call **0.07 seconds**.
+New failure-isolation cases took at most **0.05 seconds**. The same ten-file
+file-isolated backend subset was rerun: **423 passed**. Added coverage includes
+individual and simultaneous companion failures after an earlier successful
+sample, exact equality of all legacy gauge/counter series with the disabled
+baseline, no companion operations when OFF, and unchanged legacy-failure
+behavior with the companion switch either ON or OFF.
+
+Both switches remain default OFF. No production access, deployment or PR
+creation is included. Additional review findings have not been supplied yet.

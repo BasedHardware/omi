@@ -511,15 +511,19 @@ class QueueMetrics:
             self.timeliness_backlog.labels(leg).set(units)
         for leg, truncated in sample['truncated'].items():
             self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
-        for leg, units in sample.get('all_time', {}).items():
-            self.timeliness_all_time.labels(leg).set(units)
-        self._timeliness_all_time_visible = all_time_counts
         self.timeliness_observed_at.set(now)
         # Only a successful sample extends visibility, including with election
         # disabled. A lease renewal/fail-open result alone cannot revive debt.
         self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
+        if all_time_counts:
+            # A failed diagnostic leg must disappear, including a value from
+            # the previous refresh; it cannot become a fake zero or stay stale.
+            self.timeliness_all_time.clear()
+            for leg, units in sample['all_time'].items():
+                self.timeliness_all_time.labels(leg).set(units)
+        self._timeliness_all_time_visible = all_time_counts and bool(sample.get('all_time'))
 
     def refresh_projection(self, store: FirestoreStore, now: float) -> None:
         # Reuses the indexed discovery shape, one row, including durable holds.

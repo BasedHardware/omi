@@ -576,6 +576,12 @@ aggregations per successful elected timeliness refresh, no document scan and
 no queries on scrape. The timeliness alarm, cadence, election, freshness and
 existing epoch-scoped gauge remain unchanged. This companion is diagnostic;
 there is no alert or production metric-inventory requirement for it.
+Companion counts run only after all legacy sample reads succeed. Each failed
+count logs its bounded leg and exception type, omits that series, and leaves
+other legs available. A refresh removes previously exported failed-leg values;
+it never substitutes zero. Companion failures do not prevent epoch gauges or
+their freshness from refreshing. A legacy sample failure keeps its existing
+error behavior and runs no companion counts.
 
 Both controls are registered in `config/policy/kill_switches.py`,
 `config/feature-flags.yaml`, and `config/flag_budget.json`. They require `true`
