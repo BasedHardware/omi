@@ -462,7 +462,7 @@ def create_action_item_tool(
             import database.conversations as conv_db
         conversation = conv_db.get_conversation(uid, conversation_id)
         if not conversation or conv_db.is_soft_deleted(conversation):
-            return f"Error: Conversation with ID '{conversation_id}' not found."
+            return 'Error: Task source conversation is unavailable.'
 
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
