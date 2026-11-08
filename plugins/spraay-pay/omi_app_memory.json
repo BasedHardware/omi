@@ -1,0 +1,12 @@
+{
+  "name": "Spraay Pay Audit",
+  "description": "Audit trail and recurring payment insights for Spraay Pay",
+  "author": "Plagtech",
+  "category": "productivity-and-organization",
+  "capabilities": ["external_integration"],
+  "external_integration": {
+    "triggers_on": "memory_creation",
+    "webhook_url": "https://YOUR_ENDPOINT/webhook/memory?token=YOUR_WEBHOOK_SECRET",
+    "app_home_url": "https://YOUR_ENDPOINT"
+  }
+}
