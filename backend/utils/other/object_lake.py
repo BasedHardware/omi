@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 import hashlib
 import os
 import re
@@ -233,11 +234,14 @@ def put_space_object(
         # result or worker loss before the pointer commits. Never self-delete:
         # another writer may already reference this content-addressed name.
         _record_upload_candidate(config.bucket(), key)
+        # The SDK accepts (connect, read) tuples and retry=None; its signatures
+        # type both from their defaults, so call it untyped.
+        gcs: Any = blob
         try:
             remaining = _remaining_put_seconds(deadline)
             # No SDK retries: their per-attempt timeouts can outlive the drain.
             # Split the remaining budget between connect and response waits.
-            blob.upload_from_string(
+            gcs.upload_from_string(
                 payload,
                 content_type=content_type,
                 if_generation_match=0,
@@ -246,7 +250,7 @@ def put_space_object(
             )
         except PreconditionFailed:
             remaining = _remaining_put_seconds(deadline)
-            blob.reload(timeout=(remaining / 2, remaining / 2), retry=None)
+            gcs.reload(timeout=(remaining / 2, remaining / 2), retry=None)
             existing = blob.metadata or {}
             if any(existing.get(k) != stamp[k] for k in ('plaintext_sha256', 'space_id', 'data_class')):
                 raise LakeObjectConflict('Existing lake object metadata conflicts')
