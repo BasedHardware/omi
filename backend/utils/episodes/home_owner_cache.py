@@ -71,8 +71,9 @@ def read(uid: str, fetch: Callable[[], dict | None], *, enabled: bool = True) ->
             metadata = {name: owner.get(name) for name in _FIELDS}
             metadata['conversation_ids'] = owner.get('conversation_ids') or []
             for name in ('started_at', 'last_activity_at'):
-                if isinstance(metadata[name], datetime):
-                    metadata[name] = metadata[name].isoformat()
+                value = metadata[name]
+                if isinstance(value, datetime):
+                    metadata[name] = value.isoformat()
         if time.time() < deadline:
             redis_db.r.set(key, json.dumps({'valid_until': deadline, 'owner': metadata}), ex=TTL_SECONDS, nx=True)
     except Exception as error:
