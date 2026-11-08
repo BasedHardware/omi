@@ -36,7 +36,8 @@ class FakeBlob:
     def __init__(self, bucket, name):
         self.bucket, self.name, self.metadata = bucket, name, None
 
-    def upload_from_string(self, payload, content_type=None, if_generation_match=None):
+    def upload_from_string(self, payload, content_type=None, if_generation_match=None, timeout=None, retry=None):
+        self.bucket.calls.append({'timeout': timeout, 'retry': retry})
         if if_generation_match == 0 and self.name in self.bucket.objects:
             raise PreconditionFailed('exists')
         self.bucket.generation += 1
@@ -52,6 +53,7 @@ class FakeBucket:
         self.name = PRIMARY
         self.objects = {}
         self.generation = 0
+        self.calls = []
 
     def blob(self, name, generation=None):
         return FakeBlob(self, name)
@@ -1082,3 +1084,24 @@ def test_objects_outside_the_archive_buckets_never_count(monkeypatch):
     monkeypatch.setattr(record_retained_ack, 'read_reference', lambda *a, **kw: pytest.fail('staging read'))
     wal = [audio_unit(100.0, ramp(5))]
     assert record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0) == 'skipped_uncovered'
+
+
+def test_slow_gates_shorten_the_write_window_never_the_lease(world, ack, monkeypatch):
+    # The write deadline is measured before the gates take the lease, so time
+    # spent there comes out of the write window; here none is left.
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    clock = iter([0.0, record_gap_fill.FILL_LEASE_SECONDS])
+    monkeypatch.setattr(record_gap_fill.time, 'monotonic', lambda: next(clock, record_gap_fill.FILL_LEASE_SECONDS))
+    before = acks('acked')
+    assert fill(world) == 'skipped_no_audio'
+    assert fills(world) == {} and acks('acked') == before
+
+
+def test_each_piece_upload_is_bounded_inside_the_lease_margin(world):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(105.0, ramp(5))]
+    assert fill(world) == 'written'
+    (call,) = world.bucket.calls
+    margin = record_gap_fill.LEASE_MARGIN_SECONDS
+    assert call['timeout'] + call['retry'].timeout < margin

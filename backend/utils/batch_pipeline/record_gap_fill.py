@@ -32,6 +32,7 @@ import wave
 from datetime import datetime
 
 from google.api_core.exceptions import PreconditionFailed
+from google.cloud.storage.retry import DEFAULT_RETRY
 from prometheus_client import Counter
 
 from config import audio_archive
@@ -141,7 +142,16 @@ def create_gap_fill_chunk(
             'record_sample_rate': str(RATE),
         }
         try:
-            blob.upload_from_string(payload, content_type='application/octet-stream', if_generation_match=0)
+            # Bounded so a piece started before the write deadline lands before
+            # the drain lease lapses: per request and across retries. Every
+            # write is create-only (generation 0), so a retry is always safe.
+            blob.upload_from_string(
+                payload,
+                content_type='application/octet-stream',
+                if_generation_match=0,
+                timeout=LEASE_MARGIN_SECONDS / 3,
+                retry=DEFAULT_RETRY.with_timeout(LEASE_MARGIN_SECONDS / 2),
+            )
         except PreconditionFailed:
             return None
     return path
@@ -470,6 +480,9 @@ async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) ->
     seconds, lease, row, units = 0.0, None, None, None
     ack = retained_ack_enabled(uid)
     outcome: str | None = 'failed'
+    # The lease is taken inside the gates; measure the write deadline from
+    # before them so slow Firestore calls only shorten the write window.
+    deadline = time.monotonic() + FILL_LEASE_SECONDS - LEASE_MARGIN_SECONDS
     try:
         row = await run_blocking(db_executor, _fresh_row, store, uid, conversation_id)
         outcome = 'skipped_gate' if not row else None
@@ -478,7 +491,6 @@ async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) ->
                 db_executor, _gates, uid, conversation_id, row, record, segment, wal, store, time.time()
             )
         if outcome is None:
-            deadline = time.monotonic() + FILL_LEASE_SECONDS - LEASE_MARGIN_SECONDS
             if ack:
                 # The proof needs every WAL sample, and decoding consumes the files.
                 units = await run_blocking(storage_executor, _decoded, paths)
@@ -541,12 +553,12 @@ def fill_closed_record_gap(
     seconds, lease, units = 0.0, None, None
     ack = retained_ack_enabled(uid)
     outcome: str | None = 'failed'
+    deadline = time.monotonic() + FILL_LEASE_SECONDS - LEASE_MARGIN_SECONDS
     try:
         outcome, lease = _gates(
             uid, conversation_id, row, record, segment, wal, store, time.time() if now is None else now
         )
         if outcome is None:
-            deadline = time.monotonic() + FILL_LEASE_SECONDS - LEASE_MARGIN_SECONDS
             units = _decoded(paths) if ack else None
             outcome, seconds = _write(
                 uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level, deadline, units
