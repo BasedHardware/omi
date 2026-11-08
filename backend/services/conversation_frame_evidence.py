@@ -44,7 +44,7 @@ def delete_conversation_and_frame_evidence(
     need a complete ``utils.memory.retraction_scope``.
     """
 
-    from utils.other import lake_wipe
+    from utils.other import lake_wipe, object_lake
 
     deleter = delete_conversation
     default_deleter = None
@@ -69,7 +69,10 @@ def delete_conversation_and_frame_evidence(
     if lake_wipe.config.bucket():
         # Deletion inventory must survive a previous attempt that removed the
         # pointer's blob but failed before metadata cleanup.
-        conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
+        try:
+            conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
+        except Exception:
+            raise object_lake.LakeFetchError('Lake conversation inventory unavailable') from None
         source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
         lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
     if default_deleter is not None and conversation is not None:

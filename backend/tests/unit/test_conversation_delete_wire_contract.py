@@ -147,7 +147,8 @@ def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypa
 
 
 @pytest.mark.parametrize('cascade', ['false', 'true'])
-def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(monkeypatch, cascade):
+@pytest.mark.parametrize('failure', ['purge', 'inventory'])
+def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(monkeypatch, cascade, failure):
     from services import conversation_frame_evidence
     from utils.other import object_lake, lake_wipe
 
@@ -177,6 +178,13 @@ def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(mon
         monkeypatch.setattr(
             object_lake, 'delete_space_entity', MagicMock(side_effect=object_lake.LakeFetchError('lake down'))
         )
+        if failure == 'inventory':
+            monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+            monkeypatch.setattr(
+                conversation_frame_evidence.conversations_db,
+                'get_conversation_raw_snapshot',
+                MagicMock(side_effect=RuntimeError('synthetic Firestore read failure')),
+            )
         response = client.delete(f'/v1/conversations/conversation-1?cascade={cascade}')
     assert response.status_code == 503
     assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
@@ -216,7 +224,7 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
 
 def _real_lake_delete(monkeypatch, tmp_path):
     from services import conversation_frame_evidence
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
     from utils.other import object_lake, space_keys
     from utils.other.local_storage import LocalStorageClient
 
