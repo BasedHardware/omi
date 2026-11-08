@@ -9,9 +9,12 @@ only. It does not enable transport, the admin reader, or PostHog retirement.
 
 | Env | Default | Effect of turning it on |
 |---|---|---|
-| `CLIENT_TELEMETRY_TRANSPORT` | `off` | Transport shadow gate. The collector accepts authenticated batches either way so a canary does not need a second backend deploy. |
 | `CLIENT_TELEMETRY_READER` | `off` | Admin consumer may switch to this API. Independent of transport. |
 | `CLIENT_TELEMETRY_RETIREMENT` | `off` | PostHog infrastructure events stay until a documented parity receipt. Independent of the reader. |
+
+The unused backend `CLIENT_TELEMETRY_TRANSPORT` declaration is retired: its
+helper had no serving callers, and authenticated collection remains unconditional.
+The separate macOS `client_telemetry_transport_shadow` rollout flag is unchanged.
 
 ## What is durable
 

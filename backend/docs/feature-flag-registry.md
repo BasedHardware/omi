@@ -720,6 +720,7 @@ and an explicit empty literal renders as `''`.
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `PROJECTION_DRAIN_CLAIM_AWARE` | Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` | Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
 | `PROJECTION_DRAIN_PRIVACY_BACKOFF` | Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PROJECTION_PRIVACY_REFUSAL_RESUME` | Default on; retry a projection after its hinted privacy refusal no longer applies, using fenced replay for stored refusals | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
@@ -1415,6 +1416,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
 - `PLAYBACK_MANIFEST_RECOVERY_ENABLED` — Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation (fail: closed)
 - `PROJECTION_DRAIN_CLAIM_AWARE` — Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests (fail: open)
+- `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` — Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds (fail: open)
 - `PROJECTION_DRAIN_PRIVACY_BACKOFF` — Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change (fail: open)
 - `PROJECTION_PRIVACY_REFUSAL_RESUME` — Default on; retry a projection after its hinted privacy refusal no longer applies, using fenced replay for stored refusals (fail: open)
 - `PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED` — Default on; refresh the live pusher audio_files projection from exact uploaded-object metadata between full prefix rebuilds; 0 restores per-flush listing (fail: open)
@@ -1580,6 +1582,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `CLIENT_TELEMETRY_TRANSPORT` | 2026-11-08 | Previously unregistered dead backend declaration: migration_flags() had no serving callers, only a unit test. Collector ingestion was unconditional. Retired for PROJECTION_DRAIN_LIVE_TARGET_BACKOFF under the net-zero flag rule; the separate macOS PostHog transport flag is unchanged. |
 | `SYNC_LINEAGE_S1_REQUIRED` | 2026-10-20 | David 2026-10-20, DEC-SYN-005 graduate |
 | `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-SYN-007 graduate |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | 2026-10-20 | David 2026-10-20, DEC-SYN-008 graduate |

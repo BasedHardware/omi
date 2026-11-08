@@ -37,6 +37,9 @@ PROJECTION_DRAIN_PRIVACY_STOPS = Counter(
 PROJECTION_DRAIN_PRIVACY_BACKOFFS = Counter(
     'omi_batch_projection_privacy_backoffs_total', 'Zero-progress privacy owner drain backoffs applied'
 )
+PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS = Counter(
+    'omi_batch_projection_live_target_backoffs_total', 'Zero-progress awaiting-live-target owner drain backoffs applied'
+)
 PROJECTION_DRAIN_PRIVACY_ROW_CHANGED = Counter(
     'omi_batch_projection_privacy_row_changed_total', 'Early owner re-requests after a blocked head row changes'
 )

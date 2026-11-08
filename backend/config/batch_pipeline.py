@@ -715,6 +715,11 @@ def projection_drain_privacy_backoff_enabled() -> bool:
     return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
 
 
+def projection_drain_live_target_backoff_enabled() -> bool:
+    """Default on; only off disables bounded awaiting-live-target owner backoff."""
+    return kill_switch('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF')
+
+
 def projection_privacy_refusal_resume_enabled() -> bool:
     """Default on; only off disables recovery from a stale privacy refusal."""
     return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')

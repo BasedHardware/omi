@@ -215,6 +215,11 @@ site names its reason (`failure_subtype`). Structural reasons
 Reasons that wait on another writer (`live_target_not_persisted`,
 `lineage_ownership_ambiguous`, `record_target_missing`,
 `record_finalize_pending`) strike only on backfill, whose capture is hours old.
+Projection owner drains making no progress on `live_target_not_persisted` retry
+after 30, 60, 120, 240, then at most 300 seconds; any progress or other stop resets
+the attempt count, without changing the existing hold deadline or dispositions.
+Set `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` to restore ordinary `head_error`
+retries; `omi_batch_projection_live_target_backoffs_total` counts applied delays.
 One classified segment failure is enough for the batch to
 earn the strike, even beside successful siblings; differing fingerprints in one
 batch share `persistence:mixed`. Unknown exceptions, provider invalid-input

@@ -111,6 +111,14 @@ or explicit user deletion; storage pressure cannot evict them.
 state and ledger shape and pins each answer in `tests/fixtures/custody_status_shapes.json`,
 which the phone replays through its terminal policy (`app/test/unit/custody_status_shapes_test.dart`).
 
+Owner drains with zero progress waiting on `live_target_not_persisted` retry
+after 30, 60, 120, 240, then at most 300 seconds per owner, counted by
+`omi_batch_projection_live_target_backoffs_total`; progress or any other stop
+resets the bounded process-local attempt state. Only
+`PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` disables this backoff (restoring
+`head_error`); privacy/deleted dispositions, other writer waits, productive FIFO
+continuations and the durable 24-hour hold bound remain unchanged.
+
 ## Trips: which invariant each enforces
 
 Registry: omi-workspace `infra/rollout/trips.toml` (rollback authority only with a

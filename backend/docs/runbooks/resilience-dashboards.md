@@ -196,4 +196,4 @@ restarts.
 | Stale ingest | aggregate `partial=true` with an unsealed day whose last accept is older than 15 minutes; `result="stale"` | Do not backfill zeros for the missing receipt |
 | Missing rollup receipt | `available=false` until `seal` is recorded for that UTC day | A recent event is not a health receipt |
 
-Detail: [client-telemetry-ingestion.md](./client-telemetry-ingestion.md). PostHog raw-schema shutdown is [posthog-raw-schema-disablement.md](./posthog-raw-schema-disablement.md). Neither flag (`CLIENT_TELEMETRY_TRANSPORT`, `CLIENT_TELEMETRY_READER`, `CLIENT_TELEMETRY_RETIREMENT`) is on by default, and none of them pages.
+Detail: [client-telemetry-ingestion.md](./client-telemetry-ingestion.md). PostHog raw-schema shutdown is [posthog-raw-schema-disablement.md](./posthog-raw-schema-disablement.md). The reader and retirement declarations (`CLIENT_TELEMETRY_READER`, `CLIENT_TELEMETRY_RETIREMENT`) default off and do not page; the unused backend transport declaration is retired.
