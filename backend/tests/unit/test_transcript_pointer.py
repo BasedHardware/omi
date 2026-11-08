@@ -161,9 +161,10 @@ def test_deployed_stage_without_kms_key_closes_write_admission(lake_world, monke
     assert isinstance(encode()['transcript_segments'], bytes)
     put.assert_not_called()
     monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
-    assert not pointer.config.write_admitted(UID)
-    assert isinstance(encode()['transcript_segments'], bytes)
-    put.assert_not_called()
+    # Per-object DEKs lift the cryptographic stage fence for dev. Production and
+    # unknown stages stay refused at runtime and in deployment validation until C4.
+    assert pointer.config.write_admitted(UID) == (stage == 'dev')
+    assert bool(pointer.config.validate_write_settings(stage, 'true', '100')) == (stage != 'dev')
 
 
 def test_cold_transaction_reloads_outside_body(lake_world):
@@ -244,6 +245,104 @@ def test_candidate_upload_churn_is_bounded_and_never_commits(lake_world):
     assert lake_world.calls['put'] == 4
     assert PATH not in lake_world.store.rows
     assert pointer._MEMO.get() is None
+    assert_all_uploads_recorded(lake_world, expected=4)
+
+
+def assert_all_uploads_recorded(world, *, expected):
+    blobs = list(world.bucket.list_blobs(prefix=f'v1/spaces/{UID}/transcript/'))
+    assert len(blobs) == expected
+    for blob in blobs:
+        candidate_id = hashlib.sha256(f'{world.bucket.name}/{blob.name}'.encode()).hexdigest()
+        candidate = world.store.rows[('lake_upload_candidates', candidate_id)]
+        assert candidate['bucket'] == world.bucket.name
+        assert candidate['key'] == blob.name
+
+
+@pytest.mark.parametrize(
+    'refusal', ['private', 'deleted', 'locked', 'kill_switch', 'protect_kill_switch', 'protect_empty', 'small', 'empty']
+)
+def test_replay_inline_refusal_retains_sweep_candidate(lake_world, monkeypatch, refusal):
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        replay = len(attempts) > 1
+        state = {
+            'visibility': 'private' if replay and refusal == 'private' else 'shared',
+            'deleted': replay and refusal == 'deleted',
+            'is_locked': replay and refusal == 'locked',
+        }
+        if replay and refusal == 'kill_switch':
+            monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'false')
+
+        def protect(segments):
+            if replay and refusal == 'protect_kill_switch':
+                monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'false')
+            if replay and refusal == 'protect_empty':
+                segments.clear()
+            return zlib.compress(json.dumps(segments).encode())
+
+        segments = [] if replay and refusal == 'empty' else speech(10 if replay and refusal == 'small' else 18000)
+        raw = pointer.offload_or_inline(UID, CID, segments, protect, conversation_state=state)
+        transaction.set(
+            lake_world.store.collection('users').document(UID).collection('conversations').document(CID),
+            {'transcript_segments': raw},
+        )
+        return raw
+
+    assert isinstance(pointer.run_preloaded_transactional(lake_world.store, body), bytes)
+    assert len(attempts) == 2 and lake_world.calls['put'] == 1
+    assert isinstance(lake_world.store.rows[PATH]['transcript_segments'], bytes)
+    assert_all_uploads_recorded(lake_world, expected=1)
+
+
+@pytest.mark.parametrize('refusal', ['return_false', 'exception', 'preload_limit', 'upload_limit'])
+def test_replay_boundary_refusal_retains_sweep_candidate(lake_world, monkeypatch, refusal):
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        if len(attempts) == 1:
+            return encode()
+        if refusal == 'return_false':
+            return False
+        if refusal == 'exception':
+            raise ValueError('domain replay refused')
+        if refusal == 'preload_limit':
+            # Changing an unresolved reference repeatedly exhausts the bounded
+            # preload retry budget after the first candidate was uploaded.
+            ref = lake.LakeObjectRef.from_pointer_dict(encode()['transcript_segments'])
+            raise pointer.TranscriptPointerUnloaded(UID, ref.to_pointer_dict())
+        raise pointer.TranscriptUploadRequired(UID, f'other-{len(attempts)}', b'[]', 'source')
+
+    if refusal == 'preload_limit':
+        # Force no resolution progress: all 68 attempts still leave the
+        # original upload covered when the final preload attempt refuses.
+        monkeypatch.setattr(pointer, 'preload_pointer', lambda *args: None)
+    if refusal == 'return_false':
+        assert pointer.run_preloaded_transactional(lake_world.store, body) is False
+    else:
+        expected = ValueError if refusal == 'exception' else pointer.TranscriptPointerFetchError
+        with pytest.raises(expected):
+            pointer.run_preloaded_transactional(lake_world.store, body)
+    assert PATH not in lake_world.store.rows
+    assert_all_uploads_recorded(lake_world, expected=32 if refusal == 'upload_limit' else 1)
+
+
+def test_refused_replay_never_deletes_an_already_referenced_digest(lake_world):
+    doc = pointer_doc(lake_world)
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        if len(attempts) == 1:
+            return encode()
+        return False
+
+    assert pointer.run_preloaded_transactional(lake_world.store, body) is False
+    assert lake_world.store.rows[PATH] == doc
+    assert lake.get_space_object(lake.LakeObjectRef.from_pointer_dict(doc['transcript_segments']))
+    assert_all_uploads_recorded(lake_world, expected=1)
 
 
 def test_candidate_upload_failure_aborts_without_inline_write(lake_world, monkeypatch):
@@ -364,6 +463,8 @@ def test_deferred_swap_cas_and_skip_policy(lake_world, monkeypatch, state):
         assert not pointer.offload_inline_transcript(UID, CID, firestore_client=lake_world.store)
     elif state != 'pointer':
         assert isinstance(lake_world.store.rows[PATH]['transcript_segments'], bytes)
+    if state == 'conflict':
+        assert_all_uploads_recorded(lake_world, expected=1)
 
 
 def test_memo_ttl_expires_plaintext(lake_world):
