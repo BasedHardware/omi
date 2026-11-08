@@ -2606,7 +2606,7 @@ FIELD_SITES = {
         ('apply_backfill.commit', 'record_audio_closed', 'True', ('record_audio_closed', 'record_upload_sessions')),
         ('apply_backfill.commit', 'record_upload_failed', 'False', ('record_upload_failed',)),
         ('apply_backfill.commit', 'record_upload_sessions', '{}', ('record_audio_closed', 'record_upload_sessions')),
-        ('refusal', 'state', "'record_pending'", ('record_content_id', 'state')),
+        ('refusal', 'state', "'record_pending'", ('owner_id', 'record_content_id', 'state')),
     ],
     'utils/batch_pipeline/record_seal_repair.py': [
         ('apply_seals.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
