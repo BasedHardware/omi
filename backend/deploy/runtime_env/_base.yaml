@@ -80,6 +80,7 @@ environment_shared:
         RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
         RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         RECORD_TOKEN_LEASE_SECONDS: {value: '3600', category: reliability}
+        RECORD_TOKEN_LEASE_DEPLOYED_AT: {value: '0', category: reliability}
         BATCH_PIPELINE_SERVING_ENABLED:
           value: 'false'
           category: rollout
@@ -548,6 +549,7 @@ environment_shared:
         RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
         RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         RECORD_TOKEN_LEASE_SECONDS: {value: '3600', category: reliability}
+        RECORD_TOKEN_LEASE_DEPLOYED_AT: {value: '0', category: reliability}
         LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -982,6 +984,7 @@ environment_shared:
           RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           RECORD_TOKEN_LEASE_SECONDS: {value: '3600', category: reliability}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: {value: '0', category: reliability}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1381,6 +1384,7 @@ environment_shared:
           RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           RECORD_TOKEN_LEASE_SECONDS: {value: '3600', category: reliability}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: {value: '0', category: reliability}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1753,6 +1757,7 @@ environment_shared:
           RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           RECORD_TOKEN_LEASE_SECONDS: {value: '3600', category: reliability}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: {value: '0', category: reliability}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -2100,6 +2105,7 @@ environment_shared:
           RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           RECORD_TOKEN_LEASE_SECONDS: {value: '3600', category: reliability}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: {value: '0', category: reliability}
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:

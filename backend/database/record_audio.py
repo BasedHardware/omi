@@ -207,7 +207,7 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, fire
             sessions[key].pop('abandoned_at', None)
             changed = True
         if changed or reactivated:
-            patch = {'record_upload_sessions': sessions}
+            patch: dict[str, object] = {'record_upload_sessions': sessions}
             if reactivated:
                 patch['record_upload_revision'] = int(row.get('record_upload_revision') or 0) + 1
             tx.update(ref, patch)

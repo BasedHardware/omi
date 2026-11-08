@@ -16,7 +16,10 @@ admission, including memoized retry waits. No users.py or client-state changes.
 A renewal outage returns retryable custody refusal; the phone retains WAL/audio.
 `RECORD_TOKEN_LEASE_DEPLOYED_AT` is a fixed release epoch (pinned by the release owner with the shadow flip and
 inherited by children), not process-start time. The Helm guard refuses an enabled
-mode without that epoch; off keeps the inert default zero. Identified legacy tokens use
+mode without that epoch; off keeps the inert default zero. Bind the same epoch
+on every pusher/custody writer through runtime_env and on repair through
+recordTokenLease.deployedAt, so late stock renewals compute the same lapse and
+revision bump as repair. Identified legacy tokens use
 max(finished_at, refusal, abandoned_at, job available_at, deployment epoch);
 bare True and malformed tokens remain fenced. Missing epoch fails closed.
 

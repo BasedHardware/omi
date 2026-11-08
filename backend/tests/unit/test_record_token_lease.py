@@ -226,3 +226,14 @@ def test_stock_seed_preserves_original_pod_and_abandon_authorities(enabled, monk
     proof = {'namespace': 'prod-omi-backend', 'captured_at': NOW, 'pods': {}}
     assert producer_tokens_dead({'s': POD}, proof, uid='synthetic', row=ROW)
     assert producer_tokens_dead({'s': {**POD, 'abandoned_at': NOW - 10}}, None, uid='synthetic', row=ROW)
+
+
+def test_legacy_custody_reactivation_shares_repair_deployment_epoch(enabled, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 7200))
+    enabled.rows[PATH]['record_upload_sessions'] = {'s': POD}
+    assert producer_tokens_dead({'s': POD}, None, uid='synthetic', row=enabled.rows[PATH])
+    record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
+    assert enabled.rows[PATH]['record_upload_revision'] == 8
+    assert not producer_tokens_dead(
+        enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic', row=enabled.rows[PATH]
+    )
