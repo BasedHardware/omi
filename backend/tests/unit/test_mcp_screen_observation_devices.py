@@ -141,3 +141,73 @@ def test_registered_tool_keeps_local_hour_metadata(screen_tool, monkeypatch):
     assert bucket['last_seen'] == '2026-11-01T04:01:00-05:00'
     assert bucket['estimated_observation_seconds'] == 60
     assert result['coverage']['devices'][0]['device_id'] == 'a'
+
+
+@pytest.mark.parametrize(
+    'rows, group_by, expected',
+    [
+        (
+            [
+                row(0),
+                row(60),
+                row(120, 'b', 'Editor', timestamp='2026-11-01T09:02:00+00:00'),
+                row(180, 'b', 'Editor', timestamp='2026-11-01T09:03:00+00:00'),
+            ],
+            'day',
+            120,
+        ),
+        (
+            [
+                row(0),
+                row(60),
+                row(0, 'b', 'Editor', timestamp='2026-11-01T11:00:00+02:00'),
+                row(60, 'b', 'Editor', timestamp='2026-11-01T11:01:00+02:00'),
+            ],
+            'day',
+            60,
+        ),
+        (
+            [
+                row(0),
+                row(30, 'b', 'Editor', timestamp='2026-11-01T09:00:30+00:00'),
+                row(60, timestamp='2026-11-01T09:01:00+00:00'),
+            ],
+            'day',
+            60,
+        ),
+        (
+            [
+                row(0),
+                row(30, 'b', 'Editor', timestamp='2026-11-01T09:00:30+00:00'),
+                row(60, timestamp='2026-11-01T09:01:00+00:00'),
+            ],
+            'app',
+            60,
+        ),
+        (
+            [
+                row(0),
+                row(0.6, timestamp='2026-11-01T09:00:00.600+00:00'),
+                row(1.2, timestamp='2026-11-01T09:00:01.200+00:00'),
+            ],
+            'day',
+            0,
+        ),
+    ],
+    ids=['disjoint', 'same-instant-offset', 'interleaved-day', 'interleaved-app', 'fractional-credit'],
+)
+def test_registered_tool_mixed_timestamp_awareness(screen_tool, monkeypatch, rows, group_by, expected):
+    registry, other = screen_tool
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity', lambda *args, **kwargs: rows)
+    result = registry.execute_tool('synthetic-owner', 'get_screen_activity', {'group_by': group_by})
+    assert sum(bucket['estimated_observation_seconds'] for bucket in result['buckets']) == expected
+    if group_by == 'day':
+        assert result['buckets'][0]['day'] == '2026-11-01'
+        assert result['buckets'][0]['first_seen'] == rows[0]['timestamp']
+        assert result['buckets'][0]['last_seen'] == rows[-1]['timestamp']
+
+
+def test_seed_mixed_timestamp_awareness(screen_tool):
+    _, other = screen_tool
+    buckets = other._screen_activity_buckets([row(60, timestamp='2026-11-01T09:01:00+00:00')], 'app', seed_row=row(0))
+    assert buckets[0]['estimated_observation_seconds'] == 60

@@ -1,7 +1,7 @@
 """Remaining read-side tool handlers: X posts, goals, chat, people, screen, daily summaries."""
 
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from google.api_core.exceptions import FailedPrecondition
@@ -283,6 +283,17 @@ def _screen_activity_buckets(
         if title:
             bucket["titles"][title] += 1
         if previous_ts is not None and previous_key == key and previous_app == app and parsed_ts is not None:
+            # Legacy timestamps without an offset represent UTC, including seed rows.
+            previous_ts = (
+                previous_ts.replace(tzinfo=timezone.utc)
+                if previous_ts.tzinfo is None
+                else previous_ts.astimezone(timezone.utc)
+            )
+            parsed_ts = (
+                parsed_ts.replace(tzinfo=timezone.utc)
+                if parsed_ts.tzinfo is None
+                else parsed_ts.astimezone(timezone.utc)
+            )
             gap = (parsed_ts - previous_ts).total_seconds()
             if 0 <= gap <= MCP_SCREEN_ACTIVITY_OBSERVATION_GAP_SECONDS:
                 bucket["estimated_observation_seconds"] += int(gap)
