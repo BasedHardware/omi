@@ -23,7 +23,6 @@ from typing import Any, Mapping, Optional
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
-from utils.batch_pipeline.live import register_recording
 from utils.sync.stage import current_stage
 from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
@@ -635,7 +634,22 @@ def discard_by_relevance(
 def restore_discarded(uid: str, conversation_id: str) -> bool:
     """Register recording debt before an explicit restore makes the row visible."""
 
+    # Raw document read: the pre-read needs only the row's own fields, and the
+    # photo-attaching getter would add a query this path does not need.
+    snapshot = (
+        conversations_db.db.collection('users')
+        .document(uid)
+        .collection(conversations_db.conversations_collection)
+        .document(conversation_id)
+        .get()
+    )
+    current = snapshot.to_dict() if snapshot.exists else None
+    if not current or conversations_db.is_soft_deleted(current):
+        return False
+
     def register(tx):
+        from utils.batch_pipeline.live import register_recording
+
         current = tx.get('conversations', f'{uid}/{conversation_id}')
         if not current or conversations_db.is_soft_deleted(current):
             return None
@@ -655,14 +669,15 @@ def restore_discarded(uid: str, conversation_id: str) -> bool:
         current['id'] = conversation_id
         return register_recording(uid, current, transaction=tx, restoring=True)
 
-    try:
-        registered = FirestoreStore(f'batch_pipeline_{current_stage()}').run(register)
-    except BatchPrivacyBlocked as error:
-        raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore') from error
-    if registered is None:
-        return False
-    if not registered:
-        raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore')
+    if current.get('record_lane_owner') == 'batch_live_v1':
+        try:
+            registered = FirestoreStore(f'batch_pipeline_{current_stage()}').run(register)
+        except BatchPrivacyBlocked as error:
+            raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore') from error
+        if registered is None:
+            return False
+        if not registered:
+            raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore')
     # A crash here leaves at most one idempotent obligation parked behind the
     # discarded row. Seal/partial workers refuse it until metadata commits.
     try:

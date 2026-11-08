@@ -353,7 +353,7 @@ async def test_restore_after_fanout_claim_before_close_completes_with_one_obliga
     monkeypatch.setattr(live, 'resolve_batch_policy', lambda *_: BatchUnitPolicy())
     monkeypatch.setattr(lifecycle, 'FirestoreStore', lambda namespace: store)
     original_run = finalizer.run_blocking
-    original_register = lifecycle.register_recording
+    original_register = live.register_recording
     original_restore = conversations_db.restore_conversation_from_discarded
     order = []
 
@@ -398,7 +398,7 @@ async def test_restore_after_fanout_claim_before_close_completes_with_one_obliga
     async def absorbed(*args, **kwargs):
         return True
 
-    monkeypatch.setattr(lifecycle, 'register_recording', register)
+    monkeypatch.setattr(live, 'register_recording', register)
     monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', restore)
     monkeypatch.setattr(finalizer, 'smart_merge_step', absorbed)
     monkeypatch.setattr(finalizer, 'run_blocking', run)

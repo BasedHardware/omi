@@ -1468,6 +1468,7 @@ def _mark_finalization_fanout_completed_txn(
         job_ref,
         {
             'fanout_status': 'completed',
+            'fanout_lease_epoch': lease_epoch,
             'fanout_completed_at': now,
             'updated_at': now,
         },

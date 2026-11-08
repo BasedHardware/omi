@@ -40,6 +40,7 @@ def restore_store(monkeypatch):
     client.rows[('users', UID)] = {'data_protection_level': 'enhanced'}
     client.rows[ROW_PATH] = {
         'id': CID,
+        'has_photos': False,
         'status': 'completed',
         'discarded': True,
         'record_lane_owner': 'batch_live_v1',
@@ -112,7 +113,7 @@ def test_metadata_failure_leaves_one_parked_obligation_and_retry_reuses_it(resto
 
 
 def test_registration_receives_current_discarded_row_with_explicit_restore(restore_store, monkeypatch):
-    original = lifecycle.register_recording
+    original = live.register_recording
     seen = []
 
     def register(uid, snapshot, **kwargs):
@@ -123,7 +124,7 @@ def test_registration_receives_current_discarded_row_with_explicit_restore(resto
         seen.append(snapshot)
         return original(uid, snapshot, **kwargs)
 
-    monkeypatch.setattr(lifecycle, 'register_recording', register)
+    monkeypatch.setattr(live, 'register_recording', register)
     assert lifecycle.restore_discarded(UID, CID) is True
     assert len(seen) == 1
     assert restore_store.rows[ROW_PATH]['discarded'] is False
@@ -236,7 +237,7 @@ def test_restore_then_discard_refuses_further_registration(restore_store):
 def test_registration_refusal_does_not_attempt_restore_metadata(restore_store, monkeypatch):
     metadata = Mock()
     monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', metadata)
-    monkeypatch.setattr(lifecycle, 'register_recording', lambda *args, **kwargs: False)
+    monkeypatch.setattr(live, 'register_recording', lambda *args, **kwargs: False)
     before = deepcopy(restore_store.rows[ROW_PATH])
     with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable):
         lifecycle.restore_discarded(UID, CID)
@@ -299,4 +300,21 @@ def test_reprocess_surfaces_registration_refusal_as_retryable_http(restore_store
     assert refused.value.headers == {'Retry-After': '1'}
     finish.assert_called_once_with(UID, 'operation', 'failed')
     assert restore_store.rows[ROW_PATH] == before
+    assert JOB_PATH not in restore_store.rows
+
+
+def test_local_non_batch_restore_never_constructs_batch_store(restore_store, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    restore_store.rows[ROW_PATH]['record_lane_owner'] = 'legacy'
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('non-batch restore must not resolve a batch stage or store')
+
+    monkeypatch.setattr(lifecycle, 'FirestoreStore', forbidden)
+    monkeypatch.setattr(lifecycle, 'current_stage', forbidden)
+    assert lifecycle.restore_discarded(UID, CID) is True
+    restored = restore_store.rows[ROW_PATH]
+    assert restored['discarded'] is False
+    assert restored['sync_relevance_user_kept'] is True
+    assert restored['relevance_decision']['reason'] == 'restored'
     assert JOB_PATH not in restore_store.rows
