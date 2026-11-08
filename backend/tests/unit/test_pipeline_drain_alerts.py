@@ -148,3 +148,22 @@ def test_log_metric_source_scopes_and_real_turn_extraction():
         assert int(re.search(pattern, line).group(1)) == rows
     assert 'outcome=turn ' in advanced['filter']
     assert 'stop=claim_busy([[:space:]]|$)' in metrics['omi_pipeline_owner_drain_claim_busy']['filter']
+
+
+def test_owner_drain_metrics_cover_serving_and_pump_with_identical_service_scope():
+    metrics = {m['name']: m for m in json.loads((MONITORING / 'batch-projection/log-metrics.json').read_text())}
+    expected_services = {'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'}
+    for name in ('omi_pipeline_owner_drain_advanced', 'omi_pipeline_owner_drain_claim_busy'):
+        metric_filter = metrics[name]['filter']
+        assert 'resource.type="cloud_run_revision"' in metric_filter
+        assert 'resource.labels.project_id="based-hardware"' in metric_filter
+        services = re.search(r'resource.labels.service_name=\(([^)]+)\)', metric_filter).group(1)
+        assert set(re.findall(r'"([^"]+)"', services)) == expected_services
+        assert 'textPayload:"event=batch_projection action=owner_drain outcome=turn "' in metric_filter
+
+
+def test_pump_gauges_are_declared_without_claiming_production_observation():
+    inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
+    for name in ('omi_batch_projection_pump_last_tick_seconds', 'omi_batch_projection_pump_last_success_seconds'):
+        assert name in inventory['declared_metrics']
+        assert name not in inventory['metrics']

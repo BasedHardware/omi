@@ -47,11 +47,11 @@ No live baseline or heartbeat-alert delivery was verified by this preparation.
 - **(iii) Pump enable — service-scoped Cloud Run revision via cl2-deploy's approved config path, in three gated steps.** Nothing here is run by this PR.
   - **(iii-a) Capture the prior revision.** Record the serving revision and its traffic before any change: `gcloud run services describe backend-projection-pump --project=based-hardware --region=us-central1 --format='yaml(status.traffic,status.latestReadyRevisionName)'`. Save the output with the approval record. The prior revision name is `PRIOR_REV`.
   - **(iii-b) Create the flag-on revision without routing traffic:** `gcloud run services update backend-projection-pump --project=based-hardware --region=us-central1 --no-traffic --update-env-vars=BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=true`, keeping (ii)'s bounds and serving flag. The new revision name is `NEW_REV`, read from `status.latestReadyRevisionName`.
-  - **(iii-c) Shift traffic and verify it is serving:** `gcloud run services update-traffic backend-projection-pump --project=based-hardware --region=us-central1 --to-revisions=NEW_REV=100`. Verify `status.traffic` shows `NEW_REV` at 100 percent, that `gcloud run revisions describe NEW_REV --format='value(spec.containers[0].env)'` contains `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=true`, and that `omi_batch_projection_pump_last_tick_seconds` reports fresh ticks from the `NEW_REV` instances. Only a verified `NEW_REV` at 100 percent counts as enabled.
+  - **(iii-c) Shift traffic and verify it is serving:** `gcloud run services update-traffic backend-projection-pump --project=based-hardware --region=us-central1 --to-revisions=NEW_REV=100`. Verify `status.traffic` shows `NEW_REV` at 100 percent, that `gcloud run revisions describe NEW_REV --format='value(spec.containers[0].env)'` contains `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=true`, and that `omi_batch_projection_pump_last_success_seconds` reports fresh successful ticks from all four `NEW_REV` instances. Keep `omi_batch_projection_pump_last_tick_seconds` as an attempt-liveness diagnostic; it also advances on failure. Only a verified `NEW_REV` at 100 percent counts as enabled.
   - **Rollback for (iii), kept next to the step:** `gcloud run services update-traffic backend-projection-pump --project=based-hardware --region=us-central1 --to-revisions=PRIOR_REV=100`, then verify `status.traffic` shows `PRIOR_REV` at 100 percent and that `NEW_REV` has no traffic. Then, if needed, flip the flag off on a new revision as described under the (iii) rollback below. If (v) already ran, restore serving sweeps first.
   - David's approval required for (iii), and serving sweeps stay on throughout this dual-running phase.
 - **(iv) Missing/stale alert — Grafana, via the existing reviewed alert pipeline (not an isolated file):** the rule is one new split source plus the regenerated combined export, applied only by CI, as follows.
-  1. **Author the split source.** Add `backend/charts/monitoring/alerts/batch-projection-pump.json`, a JSON array of rule objects in the format of `alerts/batch-timeliness.json`. Each rule needs `uid`, `title`, `folderUID`, `ruleGroup`, `condition`, `data`, `noDataState`, `execErrState`, `for`, `annotations`, `labels` with `alert_identity` equal to `uid`, `isPaused`, and `notification_settings.receiver` equal to `Omi - Services Alerting (Telegram)`. Use the PromQL above as the expression.
+  1. **Author the split source.** Add `backend/charts/monitoring/alerts/batch-projection-pump.json`, a JSON array of rule objects in the format of `alerts/batch-timeliness.json`. Each rule needs `uid`, `title`, `folderUID`, `ruleGroup`, `condition`, `data`, `noDataState`, `execErrState`, `for`, `annotations`, `labels` with `alert_identity` equal to `uid`, `isPaused`, and `notification_settings.receiver` equal to `Omi - Services Alerting (Telegram)`. Use the success-freshness PromQL under the (iv) condition below as the expression.
   2. **Regenerate the combined export.** `python3 backend/scripts/provision_monitoring_alerts.py --regenerate`. It is offline, reads every `alerts/*.json` in sorted order, keeps existing rule order, and appends new UIDs to `backend/charts/monitoring/alert-rules.json`. Commit both files.
   3. **Offline validation.** `python3 backend/scripts/provision_monitoring_alerts.py --lint`. It fails if the split sources do not concatenate to the combined export. CI's `validate` job runs this too.
   4. **Read-only production checks.** With `MONITOR_GRAFANA_TOKEN` loaded from the approved secret store, run `python3 backend/scripts/provision_monitoring_alerts.py --probe-datasources`, then `python3 backend/scripts/provision_monitoring_alerts.py` with no mode flag, which prints drift only. Review every `DRIFT` line. Drift on any rule other than the new pump rule is a separate blocker.
@@ -71,43 +71,57 @@ changed by this prep PR. IAM/secret grants, if needed, are separate explicit ask
 
 For (iv), use the actual GMP dedicated-service label (verify whether it is
 `service_name`; substitute the verified label consistently). Proposed condition
-(fires when fewer than four instances have a tick in the last 120 seconds; this
+(fires when fewer than four instances have a successful tick in the last 120 seconds; this
 covers a missing instance, a stale instance, and zero, and `or vector(0)` makes
 an empty result count as zero rather than NoData):
 
 ```promql
-(count((time() - omi_batch_projection_pump_last_tick_seconds{project_id="based-hardware",service_name="backend-projection-pump"}) <= 120) or vector(0)) < 4
+(count((time() - omi_batch_projection_pump_last_success_seconds{project_id="based-hardware",service_name="backend-projection-pump"}) <= 120) or vector(0)) < 4
 ```
 
 Proposed pending time: 2 minutes, with query errors/NoData alerting, routed to the
-existing pipeline receiver. This is a tick-liveness signal, not success: failed
-ticks also update the gauge (the write sits in a `finally` block in
-`backend/utils/batch_pipeline/serving.py`, so it runs after a retry too), so it
-must never gate step (v). Test
-missing, zero, stale, recovery and receiver delivery; verify four instances export
-fresh ticks. Do not assert four-instance coverage from a single fresh series.
+existing pipeline receiver. The success gauge starts at zero and advances only
+after all configured sweep pages and synchronous follow-up/index/drain handoffs
+complete without an exception. It preserves the prior timestamp on a failed
+tick. A successful handoff does not prove asynchronous drain completion; the
+separate advanced-row rate gate below measures progress. The existing
+`omi_batch_projection_pump_last_tick_seconds` remains unchanged in `finally`,
+including on failed ticks, for compatibility and diagnostics only.
+Test missing, zero, stale, failing-tick, recovery and receiver delivery; verify
+four distinct receiving instances export fresh successes. Scope to the receiving
+revision(s) using the verified GMP revision label so overlapping old/new revisions
+cannot satisfy four-instance coverage. One fresh series cannot prove coverage.
 
-The (v) gate is **blocked** and cannot be satisfied by this bundle as written,
-for two reasons:
+The two source gaps that blocked (v) are addressed by the companion observability
+change, but **(v) stays blocked until deployment and renewed observation**:
 
-1. **No success-only signal exists.** A sustained successful-pump signal must
-   hold for the agreed window before (v). The only pump gauge is the tick-liveness
-   heartbeat above, which failed ticks also update. A separately reviewed, dark
-   code change must add a gauge set only after a successful sweep, with its own
-   tests; until that lands and is deployed dark, (v) does not run.
-2. **The owner_drain metric excludes the dedicated service.** The candidate query
-   below covers only backend-sync, backend-sync-backfill and backend-integration. It
-   proves the serving owner-drain floor, not pump throughput, so it cannot be the
-   throughput gate for pump enablement. A pump-inclusive rate metric needs its own
-   reviewed filter change and renewed observation.
+1. **Success-only signal:** deploy the code declaring
+   `omi_batch_projection_pump_last_success_seconds` in
+   `utils/batch_pipeline/metrics.py` and writing it in the pump tick's success-only
+   `else` branch in `utils/batch_pipeline/serving.py`. Deploy dark first; after
+   approved enablement, verify fresh success from all four receiving instances
+   throughout the same 30-minute settled gate window. Inventory declaration is
+   not production scrape evidence.
+2. **Pump-inclusive owner_drain metric:** apply the reviewed
+   `batch-projection/log-metrics.json` definitions through (i) and read back
+   `MATCH`. Both `omi_pipeline_owner_drain_advanced` and
+   `omi_pipeline_owner_drain_claim_busy` include backend-sync,
+   backend-sync-backfill, backend-integration and backend-projection-pump. The
+   paired filter change preserves the claim_busy numerator/turn denominator
+   scope. Names, descriptors, extractors and existing dashboard queries stay
+   valid. Prove new pump-service ingestion with service-scoped sum/count queries
+   and a bounded aggregate census of the exact turn-log filter; do not accept
+   serving-only samples as proof that pump logs are included. No historical
+   pump logs are backfilled by a filter change.
 
-Candidate serving owner-drain query, for reference only (not the (v) gate):
+Pump-inclusive owner-drain query (only after (i)'s apply/readback and ingestion
+proof):
 
 ```promql
 sum(rate(logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum{monitored_resource="cloud_run_revision",project_id="based-hardware"}[5m] offset 10m))
 ```
 
-When both are satisfied, the (v) gate is **owner_drain >=20 advanced rows/s
+When both readbacks are satisfied, the (v) gate is **owner_drain >=20 advanced rows/s
 continuously for 30 minutes** on a pump-inclusive metric, evaluated every minute
 over a settled window that starts after enablement, plus the 10-minute ingestion
 offset and 5-minute rate lookback. All samples must be present and >=20; a short
