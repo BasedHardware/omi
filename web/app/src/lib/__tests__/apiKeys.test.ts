@@ -9,7 +9,10 @@ import {
   createDeveloperApiKey,
   createMcpApiKey,
 } from '@/lib/api';
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 describe('key API error handling', () => {
   it.each([getDeveloperApiKeys, getMcpApiKeys])(
     'preserves soft failures and allows strict lists',
@@ -115,5 +118,31 @@ describe('key API error handling', () => {
       name: 'explicit',
       scopes: ['goals.read'],
     });
+  });
+
+  it('aborts a stalled optional contract request and mints with fallback scopes', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
+      if (url.endsWith('/scopes')) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        });
+      }
+      return Promise.resolve(new Response('{"id":"k1"}'));
+    });
+    vi.stubGlobal('fetch', fetch);
+    const created = createMcpApiKey('bounded');
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(created).resolves.toEqual({ id: 'k1' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body)).scopes).toEqual([
+      'memories.read',
+      'conversations.read',
+      'action_items.read',
+      'goals.read',
+    ]);
   });
 });

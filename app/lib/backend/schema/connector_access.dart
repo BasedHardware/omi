@@ -1,25 +1,31 @@
-/// The backend-owned connector product contract. Missing/invalid contracts come
-/// from older backends; callers retain their offline literals in that case.
-class ConnectorAccess {
-  const ConnectorAccess({required this.clientIds, required this.requiredScopes, required this.defaultScopes});
+// Projects the generated connector contract into connection-state sets.
+// Missing or invalid rows retain the callers' compatibility literals.
+// Scope and client-ID decoding stays owned by the generated wire DTO.
+import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as wire;
 
-  final Set<String> clientIds;
-  final Set<String> requiredScopes;
-  final List<String> defaultScopes;
+/// Scope requirements used by connection checks and key minting.
+class ConnectorAccess {
+  const ConnectorAccess._(this._wire);
+
+  final wire.GeneratedConnectorAccess _wire;
+
+  Set<String> get clientIds => _wire.clientIds.toSet();
+  Set<String> get requiredScopes => _wire.requiredScopes.toSet();
+  List<String> get defaultScopes => _wire.defaultScopes;
 
   static ConnectorAccess? fromJson(dynamic json) {
     if (json is! Map) return null;
-    for (final field in ['client_ids', 'required_scopes', 'default_scopes']) {
-      if (json[field] is! List || (json[field] as List).any((value) => value is! String)) return null;
+    try {
+      return ConnectorAccess._(wire.GeneratedConnectorAccess.fromJson(Map<String, dynamic>.from(json)));
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
     }
-    return ConnectorAccess(
-      clientIds: Set<String>.from(json['client_ids'] as List),
-      requiredScopes: Set<String>.from(json['required_scopes'] as List),
-      defaultScopes: List<String>.from(json['default_scopes'] as List),
-    );
   }
 }
 
+/// Carries existing raw grant snapshots alongside validated connector metadata.
 class McpOauthGrants {
   const McpOauthGrants({required this.grants, this.chatGptAccess});
 

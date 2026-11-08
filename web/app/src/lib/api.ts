@@ -2299,8 +2299,12 @@ export const MCP_READ_ONLY_SCOPES = [
 ] as const;
 
 async function getMcpDefaultScopes(): Promise<readonly string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const contract = await fetchWithAuth<ConnectorAccess>('/v1/mcp/keys/scopes');
+    const contract = await fetchWithAuth<ConnectorAccess>('/v1/mcp/keys/scopes', {
+      signal: controller.signal,
+    });
     if (
       Array.isArray(contract.default_scopes) &&
       contract.default_scopes.length > 0 &&
@@ -2310,6 +2314,8 @@ async function getMcpDefaultScopes(): Promise<readonly string[]> {
     }
   } catch {
     // Older/offline backends keep the existing explicit read-only request.
+  } finally {
+    clearTimeout(timeout);
   }
   console.warn('MCP scope contract unavailable; using read-only fallback');
   return MCP_READ_ONLY_SCOPES;

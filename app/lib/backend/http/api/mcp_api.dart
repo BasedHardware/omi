@@ -48,7 +48,14 @@ class McpApi {
 
   static Future<List<String>> _defaultKeyScopes() async {
     try {
-      final response = await makeApiCall(url: '$_baseUrl/keys/scopes', headers: {}, body: '', method: 'GET');
+      final response = await makeApiCall(
+        url: '$_baseUrl/keys/scopes',
+        headers: {},
+        body: '',
+        method: 'GET',
+        timeout: const Duration(seconds: 5),
+        retries: 0,
+      );
       final contract = response?.statusCode == 200 ? ConnectorAccess.fromJson(jsonDecode(response!.body)) : null;
       if (contract != null && contract.defaultScopes.isNotEmpty) return contract.defaultScopes;
     } catch (_) {

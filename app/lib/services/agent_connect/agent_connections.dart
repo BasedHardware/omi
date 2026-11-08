@@ -20,10 +20,10 @@ final chatGptDirectoryUrl =
 Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': prompt});
 
 /// OAuth client ids that mean "ChatGPT holds a grant". The directory listing always grants under
-/// the prod id, even on a dev backend. Offline fallback for older backends.
+/// the prod id, even on a dev backend. Fallback when served metadata is absent.
 const chatGptClientIds = {'omi-chatgpt-prod', 'omi-chatgpt-dev'};
 
-/// Offline fallback for the served ChatGPT required scopes. The backend
+/// Fallback when the backend does not serve ChatGPT required scopes. The backend
 /// enforces each scope separately, so a grant missing one gets refused for that kind of question.
 const chatGptRequiredScopes = {'memories.read', 'conversations.read', 'action_items.read', 'goals.read'};
 

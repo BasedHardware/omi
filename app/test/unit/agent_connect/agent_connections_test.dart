@@ -39,6 +39,8 @@ Future<List<Map<String, dynamic>>> _captureCreateKeyRequests(
   Future<void> Function() action, {
   dynamic contract,
   int contractStatus = 200,
+  bool dropContractConnection = false,
+  void Function()? onContractRequest,
 }) async {
   final previousOverrides = HttpOverrides.current;
   HttpOverrides.global = null;
@@ -46,6 +48,12 @@ Future<List<Map<String, dynamic>>> _captureCreateKeyRequests(
   final bodies = <Map<String, dynamic>>[];
   server.listen((request) async {
     if (request.method == 'GET' && request.uri.path == '/v1/mcp/keys/scopes') {
+      onContractRequest?.call();
+      if (dropContractConnection) {
+        final socket = await request.response.detachSocket(writeHeaders: false);
+        socket.destroy();
+        return;
+      }
       request.response
         ..statusCode = contractStatus
         ..headers.contentType = ContentType.json
@@ -244,6 +252,17 @@ void main() {
       }
     });
 
+    test('an unavailable optional scope lookup is not retried before minting', () async {
+      var lookups = 0;
+      final bodies = await _captureCreateKeyRequests(
+        () => McpApi.createMcpApiKey('fallback'),
+        dropContractConnection: true,
+        onContractRequest: () => lookups++,
+      );
+      expect(lookups, 1);
+      expect(bodies.single['scopes'], McpApi.readOnlyScopes);
+    });
+
     test('Copy Prompt createMcpApiKey sends explicit read-only scopes without writes or screen/people scopes',
         () async {
       final service = AgentConnectService(
@@ -321,6 +340,22 @@ void _registerPromptAndGrantTests() {
   });
 
   group('ChatGPT scopes', () {
+    test('the generated contract adapter rejects malformed wire rows', () {
+      for (final row in [
+        null,
+        [],
+        {},
+        {
+          'client_ids': [],
+          'required_scopes': [1],
+          'default_scopes': []
+        },
+        {'client_ids': [], 'required_scopes': [], 'default_scopes': null},
+      ]) {
+        expect(ConnectorAccess.fromJson(row), isNull);
+      }
+    });
+
     test('a grant missing a scope the screens need asks for a reconnect', () {
       final partial = AgentConnections.from(grants: [
         {

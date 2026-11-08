@@ -12,7 +12,7 @@ routes:
     policy:
       review_status: reviewed
       auth: {mechanisms: [firebase_id_token], placement: dependency, scopes: []}
-      byok: validated_when_headers_present
+      byok: not_applicable
       rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}
       timeout_class: default_method
       surface: first_party_app
