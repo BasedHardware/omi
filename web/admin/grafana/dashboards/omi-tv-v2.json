@@ -3626,7 +3626,7 @@
         "legend": {
           "showLegend": true,
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "right"
         },
         "tooltip": {
           "mode": "multi",
@@ -5721,6 +5721,14 @@
                   "mode": "fixed",
                   "fixedColor": "#5c6b80"
                 }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },
@@ -5739,6 +5747,14 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#8494ab"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
                 }
               }
             ]
@@ -5759,6 +5775,14 @@
                   "mode": "fixed",
                   "fixedColor": "#aab6c6"
                 }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },
@@ -5777,6 +5801,14 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#cdd5df"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
                 }
               }
             ]
@@ -5797,6 +5829,14 @@
                   "mode": "fixed",
                   "fixedColor": "#aab6c6"
                 }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },
@@ -5816,6 +5856,14 @@
                   "mode": "fixed",
                   "fixedColor": "#bfc9d6"
                 }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },
@@ -5834,6 +5882,14 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#8494ab"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
                 }
               }
             ]
@@ -5862,6 +5918,14 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },
@@ -5889,6 +5953,14 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },
@@ -5916,6 +5988,14 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
               }
             ]
           },

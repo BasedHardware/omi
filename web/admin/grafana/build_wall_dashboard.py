@@ -110,6 +110,17 @@ def hidden(name):
     return prop(name, ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": True}))
 
 
+def legend_hidden(override):
+    """Add to a series' own override: drawn and in the tooltip, but not listed in the legend (the legend has no room for the cost stack)."""
+    override["properties"] += [{"id": "custom.hideFrom", "value": {"legend": True, "tooltip": False, "viz": False}}]
+    return override
+
+
+def legend_right(panel):
+    """The legend beside the plot, not a list under it: a short panel has no room for the list."""
+    panel["options"]["legend"]["placement"] = "right"
+
+
 def dashed(name, hex_):
     return {"matcher": {"id": "byName", "options": name}, "properties": [
         {"id": "displayName", "value": name},
@@ -352,7 +363,7 @@ def columns():
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
-                   overrides=[color(n, h) for n, h in PLANS.items()])),
+                   overrides=[color(n, h) for n, h in PLANS.items()], extra=legend_right)),
         (6, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
@@ -386,9 +397,9 @@ def columns():
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
                    unit="currencyUSD", draw="bars", stack=True, time_from="35d",
-                   overrides=[*[color(n, h) for n, h in COST.items()],
-                              *[color(n, h) for n, h in MEASURED.items()],
-                              *[estimate(n, h) for n, h in ESTIMATE.items()],
+                   overrides=[*[legend_hidden(color(n, h)) for n, h in COST.items()],
+                              *[legend_hidden(color(n, h)) for n, h in MEASURED.items()],
+                              *[legend_hidden(estimate(n, h)) for n, h in ESTIMATE.items()],
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
         (10, chart("Uptime by journey",
