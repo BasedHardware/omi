@@ -267,14 +267,44 @@ def test_running_owner_at_cap_with_terminal_job_is_not_stranded(db, monkeypatch)
     dispatch.assert_called_once()
 
 
-def test_running_cap_kill_switch_restores_unbounded_redrive(db, monkeypatch):
-    monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, 'false')
+def at_cap_running_owner(db, monkeypatch):
+    """Two crashes with the carry switch ON: running_expiries is 1 of a cap of 2."""
     account, epoch = running_owner(db, monkeypatch, attempts='2')
-    now = NOW
-    for _ in range(4):
-        replacement, now = crash_once(account, epoch, now)
-        assert replacement is not None
-        epoch = replacement['epoch']
+    replacement, now = crash_once(account, epoch, NOW)
+    owner = registry.get_owner(account)
+    assert owner['running_expiries'] == 1 and owner['dispatch_attempt'] == 1
+    epoch = replacement['epoch']
+    assert registry.begin_job(account, 'crashy', epoch, now=now)
+    return account, now + timedelta(seconds=registry.LEASE_SECONDS + 1)
+
+
+@pytest.mark.parametrize('switch', ['false', None])
+def test_running_cap_kill_switch_through_the_sweep(db, monkeypatch, switch):
+    """Review wave 2: drive reconcile_uid, not redrive_job.
+
+    The next crash puts a running owner at its cap. With the switch OFF the
+    sweep must redrive it (replacement dispatched, counters reset, nothing
+    finalized). The switch-ON control finalizes the same owner.
+    """
+    account, expired = at_cap_running_owner(db, monkeypatch)
+    failure = finalizer_mocks(monkeypatch)
+    dispatch = Mock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    if switch is not None:
+        monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, switch)
+    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
+    owner = registry.get_owner(account)
+    if switch == 'false':
+        assert outcome == 'lease_expired'
+        dispatch.assert_called_once()
+        assert owner['active_job_id'] == 'crashy'
+        assert owner['dispatch_attempt'] == 0 and owner['running_expiries'] == 0
+        failure.assert_not_called()
+    else:
+        assert outcome == 'dispatch_retry_cap_reached'
+        dispatch.assert_not_called()
+        assert not owner.get('active_job_id')
+        assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
 
 
 # 3 and 6. Held requeue resets the budget; automatic re-drive stops after N --------
@@ -434,6 +464,49 @@ def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
     store.rows['jobs', 'segment'].update(state='dead', token='', lease_until=0)
     durable_status(store, 'synthetic-owner', 'bp_first')
     assert store.rows['jobs', 'segment']['state'] == 'ready'
+
+
+def test_switch_off_nightly_pass_requeues_an_exhausted_unit(setup, monkeypatch):
+    """Review wave 2 (finding 1): on -> exhaust -> off -> nightly requeue.
+
+    The fake candidate query honors the real filter (state=dead and the
+    requested dead_letter_reason), so the pass must ask for held_exhausted.
+    """
+    from utils.batch_pipeline import held_dead_letter as sweep
+
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), expired_at=20)
+    bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
+    assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) == 'exhausted'
+    assert bad(client)['dead_letter_reason'] == sm.HELD_EXHAUSTED_REASON
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'false')
+
+    def candidates(_client, _namespace, limit=32, *, after_id=None, reason='held_expired'):
+        return [
+            (key[1], dict(row))
+            for key, row in sorted(client.rows.items())
+            if key[0] == 'batch_pipeline_prod_jobs'
+            and row.get('state') == 'dead'
+            and row.get('dead_letter_reason') == reason
+        ][:limit]
+
+    monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
+    monkeypatch.setattr(sweep, 'dead_held_candidates', candidates)
+    sweep.HeldDeadLetter(store).tick(2 * 86400)
+    job = bad(client)
+    assert job['state'] == 'ready' and job['merge_pending'] is True
+    assert job['audio_uri'] == 'gs://synthetic/audio'
+
+
+def test_switch_on_nightly_pass_never_requeues_an_exhausted_unit(setup, monkeypatch):
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), expired_at=20)
+    bad(client)['dead_letter_reason'] = sm.HELD_EXHAUSTED_REASON
+    bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
+    assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is False
+    assert bad(client)['state'] == 'dead'
 
 
 def test_nightly_tick_counts_exhausted_separately(monkeypatch):
@@ -771,9 +844,27 @@ def test_unrestorable_assignment_hold_escalates_after_its_deadline_and_keeps_its
     assert client.rows[result_key]['assignment_hold_escalated_at'] == later
     assert transitions('assignment_hold_escalated') == before + 1
     # A restored target still releases an escalated hold automatically.
-    client.rows[('users', 'synthetic-owner', 'conversations', 'rec-target')]['discarded'] = False
+    target = ('users', 'synthetic-owner', 'conversations', 'rec-target')
+    client.rows[target]['discarded'] = False
     counts, _ = release.release_scan_pass(store, limit=2, after_id=None, now=later + 20)
     assert counts['released'] == 1
+    # Review wave 2 (finding 3): release clears the active escalation, so a new
+    # hold on the same unit gets a fresh deadline instead of the old marker.
+    released = client.rows[result_key]
+    assert released.get('assignment_hold_escalated_at') is None
+    assert released.get('assignment_hold_deadline_at') is None
+    assert released['assignment_hold_escalation_history'][-1]['escalated_at'] == later
+    rehold = later + 100
+    released.update(
+        projection_state='persisted',
+        projection={'state': 'quarantined', 'disposition': 'ambiguous_generation', 'quarantine_version': 1},
+    )
+    client.rows[job_key]['recovery_state'] = 'held'
+    client.rows[target]['discarded'] = True
+    release.release_scan_pass(store, limit=2, after_id=None, now=rehold)
+    entry = client.rows[result_key]
+    assert entry['assignment_hold_deadline_at'] == rehold + sm.ASSIGNMENT_HOLD_DEADLINE_SECONDS
+    assert entry.get('assignment_hold_escalated_at') is None
 
 
 def test_assignment_hold_escalation_kill_switch_writes_nothing(projection, monkeypatch):

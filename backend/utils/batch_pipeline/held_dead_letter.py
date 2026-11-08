@@ -8,6 +8,7 @@ import logging
 import math
 import time
 
+from config.backlog_state_machine import HELD_EXHAUSTED_REASON, held_redrive_budget_enabled
 from config.batch_pipeline import batch_held_dead_letter_enabled
 from utils.backlog_metrics import record_transition
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -103,6 +104,31 @@ class HeldDeadLetter:
             updated.update(
                 redrive_day=day, redrive_done=len(dead) < PAGE_SIZE, dead_after=dead[-1][0] if dead else None
             )
+        if not held_redrive_budget_enabled():
+            # Rollback of the re-drive stop: page units parked as held_exhausted
+            # on their own durable cursor and requeue them through the same CAS.
+            exhausted = dead_held_candidates(
+                self.store.client,
+                self.store.namespace,
+                PAGE_SIZE,
+                after_id=state.get('exhausted_after'),
+                reason=HELD_EXHAUSTED_REASON,
+            )
+            for sid, _ in exhausted:
+                try:
+                    changed = self.recovery.requeue_quarantined(sid, now, dead_before=day * 86400)
+                except (BatchPrivacyBlocked, ProjectionBlocked):
+                    continue
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_held_dead_letter action=requeue_exhausted outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
+                    continue
+                if changed is True:
+                    counts['requeued'] += 1
+                    self._record('requeued')
+            updated['exhausted_after'] = exhausted[-1][0] if len(exhausted) == PAGE_SIZE else None
         updated['next_at'] = now + INTERVAL_SECONDS
 
         def checkpoint(tx):

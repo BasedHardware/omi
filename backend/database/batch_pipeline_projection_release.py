@@ -332,6 +332,20 @@ class ProjectionReleaseStore:
                 reset.update(held_expired_at=None, held_expired_reason=None)
             if 'held_rearm_exhausted_at' in entry:
                 reset['held_rearm_exhausted_at'] = None
+            if entry.get('assignment_hold_deadline_at') is not None or entry.get('assignment_hold_escalated_at'):
+                # The hold this release ends owned that deadline; a later hold on
+                # the same unit starts its own. Keep the escalation as history.
+                reset.update(assignment_hold_deadline_at=None, assignment_hold_escalated_at=None)
+                if entry.get('assignment_hold_escalated_at') is not None:
+                    reset['assignment_hold_escalation_reason'] = None
+                    reset['assignment_hold_escalation_history'] = [
+                        *(entry.get('assignment_hold_escalation_history') or []),
+                        {
+                            'escalated_at': entry['assignment_hold_escalated_at'],
+                            'reason': entry.get('assignment_hold_escalation_reason'),
+                            'released_at': now,
+                        },
+                    ]
             if entry.get('lineage_quarantine_version') == 1:
                 # Old-binaries fence for the held receipt; the receipt is gone.
                 reset['protocol_version'] = 1

@@ -20,7 +20,7 @@ tokens or privacy fences, and each has an operator exit.
 | batch `quarantined` (held) | held dead-letter sweep | `held_deadline_at` (7 d) | `dead/held_expired` | (next row) |
 | batch `dead/held_expired` | nightly re-drive (client status polls never redrive it) | `held_redrives` vs `MAX_HELD_REDRIVES` (3) | `ready` with `attempt=0` | `dead/held_exhausted` (retained, operator requeue) |
 | projection `quarantine_held` | release scan + nightly re-drive | `projection_release_attempts` (3); `held_expired_rearms` (3) | `pending` when target restorable | re-arm stops; receipt retained as `held_expired` |
-| projection assignment hold (`persisted`, job `recovery_state=held`) | release scan, assignment leg | `assignment_hold_deadline_at` (7 d) | `pending` when target restorable (also after escalation) | `assignment_hold_escalated_at` marker (retained; operator redrive) |
+| projection assignment hold (`persisted`, job `recovery_state=held`) | release scan, assignment leg | `assignment_hold_deadline_at` (7 d; cleared on release, so a later hold starts its own) | `pending` when target restorable (also after escalation) | `assignment_hold_escalated_at` marker (retained; operator redrive) |
 | sync owner `dispatching` | sequencer sweep | `dispatch_retry_at`; `dispatch_attempt` vs `SYNC_TASKS_MAX_ATTEMPTS` (cap enforced only in the `CAPTURE_COVERAGE_MODE` cohort: a passed retry deadline is queue delay, not failure) | redrive or finalize | job failed `sync_dispatch_exhausted` (cohort only) |
 | sync owner `running` | sequencer sweep | `lease_expires_at`; `running_expiries` (crashes only: an expiry while a budget deferral's `deferred_until` is live is not counted) vs `SYNC_TASKS_MAX_ATTEMPTS`; `dispatch_attempt` carried | redrive (`epoch+1`) or finalize | job failed `sync_dispatch_exhausted` |
 | `record_pending` (young) | record drain | barrier backoff ladder (#24863) | admission | (next rows) |
@@ -41,7 +41,7 @@ off.
 | --- | --- | --- |
 | `CAPTURE_RETRY_CAP_ENFORCED` | 1: the cap observed but never ended work | Batch lease-expiry and sync running caps return to the `CAPTURE_COVERAGE_MODE` cohort (shadow outside it) |
 | `SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED` | 2: running lease expiry reset `dispatch_attempt` to 0 | Running expiry resets to 0, `running_expiries` stays 0, and only dispatching owners are capped |
-| `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | 3 and 6: requeue kept `attempt` at the cap; no terminal stop | Requeue keeps `attempt`; nightly and poll re-drive and projection re-arm are unbounded again; a receipt marked `held_rearm_exhausted_at` regains the legacy re-arm |
+| `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | 3 and 6: requeue kept `attempt` at the cap; no terminal stop | Requeue keeps `attempt`; nightly and poll re-drive and projection re-arm are unbounded again; the nightly pass also pages and requeues units already parked as `held_exhausted`; a receipt marked `held_rearm_exhausted_at` regains the legacy re-arm |
 | `RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED` | 4: unfinished conversations retried forever | Aged rows stay on the hourly barrier ladder; parked rows return to it at their next daily recheck |
 | `BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED` | Unrestorable assignment holds had no deadline | No new deadline stamps or escalations; existing markers are inert |
 
