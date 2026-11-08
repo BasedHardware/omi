@@ -912,7 +912,7 @@ def test_controller_refuses_live_preflight_and_bypasses_it_on_rollback(monkeypat
     check.reset_mock(side_effect=True)
     check.side_effect = AssertionError('prod read during rollback')
     effects.accept_not_live = 'Approved deliberate exception'
-    effects.gate = lambda *a: rc.GateVerdict('FAIL', 'privacy', rig.now, 3600, 5, {})
+    effects.gate = lambda *a: rc.GateVerdict('FAIL', 'parity_row_7', rig.now, 3600, 5, {})
     result = rc.tick('prod', effects, require_parity=False)
     assert result.wrote
     check.assert_not_called()
