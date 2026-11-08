@@ -107,8 +107,9 @@ class LivePreflightTest(unittest.TestCase):
         return subprocess.CompletedProcess(argv, 0, json.dumps(value), '')
 
     def fetch(self, request, **kwargs):
-        if 'monitoring.googleapis.com/' in request.full_url:
-            query = parse_qs(urlparse(request.full_url).query)['query'][0]
+        url = urlparse(request.full_url)
+        if url.hostname == 'monitoring.googleapis.com':
+            query = parse_qs(url.query)['query'][0]
             self.queries.append(query)
             return self.up if query.startswith('min(up') else self.clean
         if '/manifests/' in request.full_url:
