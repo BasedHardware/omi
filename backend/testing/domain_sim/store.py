@@ -190,11 +190,15 @@ class _Repo:
     def __init__(self, store: SimSpaceStore):
         self.store = store
 
-    def receipt(self, mutation_id, operation, data):
+    def receipt_entry(self, mutation_id, operation, data):
         digest = hashlib.sha256(json.dumps([operation, data], sort_keys=True, default=str).encode()).hexdigest()
         prior = self.store.state['receipts'].get(mutation_id) if mutation_id is not None else None
         if prior is not None and prior[0] != digest:
             raise MutationConflict(mutation_id)
+        return digest, prior
+
+    def receipt(self, mutation_id, operation, data):
+        digest, prior = self.receipt_entry(mutation_id, operation, data)
         return digest, prior[1] if prior is not None else None
 
     def save(self, mutation_id, digest, result):
@@ -511,9 +515,9 @@ class _WorkflowRepo(_Repo):
         return generation
 
     def _idempotent(self, operation, key, request, body):
-        digest, prior = self.receipt(key, operation, request)
+        digest, prior = self.receipt_entry(key, operation, request)
         if prior is not None:
-            return deepcopy(prior)
+            return deepcopy(prior[1])
         result = body()
         self.save(key, digest, result)
         return result

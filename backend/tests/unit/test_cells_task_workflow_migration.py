@@ -26,7 +26,7 @@ from database.jobstore.connection import configure, dial
 from database.jobstore.migrate import load, migrate
 from database.ports.action_items import ActionItemDraft
 from database.ports.folders import FolderCreate
-from database.ports.goals import GoalCreate
+from database.ports.goals import GoalCreate, GoalUpdate
 from database.ports.workstreams import WorkstreamCreate, WorkstreamUpdate
 from testing.cells_fixtures import cells_dsn
 from testing.domain_fixtures import build_backend
@@ -649,3 +649,18 @@ def test_multi_row_bodies_lock_rows_in_flush_order(pg, monkeypatch):
     store.run(lambda tx: tx.action_items.get_by_ids(['b', 'a']))
     store.run(lambda tx: tx.action_items.delete_batch(['b', 'a']))
     assert seen[:2] == ['a', 'b'] and seen[2:4] == ['a', 'b']
+
+
+@pytest.mark.parametrize('backend', ['postgres', 'sim'])
+def test_goal_update_replays_saved_none_after_goal_appears(pg, backend):
+    # A missing-goal update saves a None result; retrying the same mutation id
+    # after the goal exists must replay None, not apply the old patch.
+    harness = pg if backend == 'postgres' else build_backend('sim')
+    store = harness.store(harness.space('none-receipt'))
+    patch = GoalUpdate(data={'title': 'Patched'})
+    assert store.run(lambda tx: tx.goals.update('goal_late', patch, mutation_id='late-update')) is None
+    store.run(lambda tx: tx.goals.create(GoalCreate(data={'goal_id': 'goal_late', 'title': 'Original'})))
+    assert store.run(lambda tx: tx.goals.update('goal_late', patch, mutation_id='late-update')) is None
+    assert store.run(lambda tx: tx.goals.get('goal_late')).title == 'Original'
+    if harness is not pg:
+        harness.close()
