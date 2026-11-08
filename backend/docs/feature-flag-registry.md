@@ -651,6 +651,7 @@ and an explicit empty literal renders as `''`.
 | `HOME_HIDE_BELOW_FLOOR_ROWS` | Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `HOME_HIDE_EPISODE_MEMBERS` | Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED` | Default on; defer automatic notes for still-live episode members; recording detail alone escalates one recording | backend | env | open | — | — | — | — | keep | keep | — | home-overlap |
+| `HOME_LIVE_OWNER_CACHE_ENABLED` | Default on; cache acknowledged Home-list live owner metadata in Redis for at most 30 seconds; false restores fresh Firestore reads | backend | env | open | — | — | — | — | keep | keep | — | home-overlap |
 | `HOME_NEUTRAL_MINIMUM_TITLES` | Default on; neutral Home titles for below-floor or short server minimums and loaded eight-word lazy placeholders | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `HOME_PROCESSING_OWNERSHIP_ENABLED` | Default on; suppress live-owned recordings and fully represented sync jobs in Home processing projections | backend | env | open | — | — | — | — | keep | keep | — | home-overlap |
 | `HOME_STEP_PROJECTION` | Default on; conversation list rows carry home_step (ready, transcribing, writing_notes, failed, noise) so Home hides noise and folds unfinished rows into one Processing row | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1322,6 +1323,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `HOME_HIDE_BELOW_FLOOR_ROWS` — Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours (fail: open)
 - `HOME_HIDE_EPISODE_MEMBERS` — Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement (fail: open)
 - `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED` — Default on; defer automatic notes for still-live episode members; recording detail alone escalates one recording (fail: open)
+- `HOME_LIVE_OWNER_CACHE_ENABLED` — Default on; cache acknowledged Home-list live owner metadata in Redis for at most 30 seconds; false restores fresh Firestore reads (fail: open)
 - `HOME_NEUTRAL_MINIMUM_TITLES` — Default on; neutral Home titles for below-floor or short server minimums and loaded eight-word lazy placeholders (fail: open)
 - `HOME_PROCESSING_OWNERSHIP_ENABLED` — Default on; suppress live-owned recordings and fully represented sync jobs in Home processing projections (fail: open)
 - `HOME_PROCESSING_OWNERSHIP_UIDS` — Optional comma-separated UID allowlist shared by Home ownership and member-notes flags; empty allows all by default unless the respective kill switch is false (fail: open)
