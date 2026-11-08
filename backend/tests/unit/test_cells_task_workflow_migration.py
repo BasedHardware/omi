@@ -1,6 +1,8 @@
 """A2b schema and typed-cell commit contracts, with disposable local Postgres."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from threading import Event
 from pathlib import Path
 import re
 import subprocess
@@ -9,10 +11,13 @@ from uuid import uuid4
 
 import pytest
 import fakeredis
+from pydantic import BaseModel
 
 from database import action_item_versions, action_items_cache
 
+from database.cells import store as cell_store_module
 from database.cells.adapters import space_store
+from database.cells.adapters._base import event_payloads
 from database.cells.adapters.space_store import CellSpaceTx
 from database.cells.store import CellTransaction
 from database.cells.errors import BaseRevisionMismatch
@@ -435,3 +440,88 @@ def test_legacy_workstream_cell_views_project_key_without_rewriting_payload(pg):
         == 'ws-key'
     )
     assert 'id' not in pg.read(sid, 'workstreams', 'ws-key')
+
+
+@pytest.mark.parametrize('buffered_only', [False, True])
+@pytest.mark.parametrize('existing', [False, True])
+def test_raw_and_typed_writers_lock_rows_before_head(pg, monkeypatch, buffered_only, existing):
+    sid = pg.space('shared-lock-order')
+    store = pg.store(sid)
+    if existing:
+        pg.seed(sid, 'folders', 'shared', {'name': 'Shared', 'counter': 0})
+    raw_locked, typed_reading = Event(), Event()
+    # Deliberately instrument the actual row-lock boundary, including flush.
+    original = CellTransaction._lock_read  # pyright: ignore[reportPrivateUsage]
+    pids = {}
+    # No retry may hide a deadlock or lock timeout. Both real connections have
+    # a bounded PostgreSQL wait, in addition to bounded Python coordination.
+    monkeypatch.setattr(cell_store_module, 'MAX_SERIALIZATION_RETRIES', 1)
+    monkeypatch.setattr(cell_store_module, 'LOCK_TIMEOUT', '1s')
+
+    def lock_read(tx, entity, entity_id):
+        address = (entity, entity_id)
+        first = address not in tx.cache
+        raw = tx.actor_uid == 'raw-writer'
+        if first and not raw:
+            pids['typed'] = tx.conn.info.backend_pid
+            typed_reading.set()
+        result = original(tx, entity, entity_id)
+        if first and raw:
+            pids['raw'] = tx.conn.info.backend_pid
+            raw_locked.set()
+            assert typed_reading.wait(timeout=5), 'typed writer could not reach its row read'
+        return result
+
+    monkeypatch.setattr(CellTransaction, '_lock_read', lock_read)
+
+    def raw_body(tx):
+        if not buffered_only:
+            tx.get('folders', 'shared')
+        tx.put('folders', 'shared', {'name': 'Shared', 'counter': 1})
+
+    def typed_body(tx):
+        row = tx.state['folders']['shared']
+        row['counter'] += 1
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        raw = executor.submit(store.cell.run, sid, raw_body, actor_uid='raw-writer', now=0)
+        try:
+            assert raw_locked.wait(timeout=5)
+            typed = executor.submit(store.run, typed_body)
+            raw.result(timeout=10)
+            typed.result(timeout=10)
+        finally:
+            # Also release the raw body if launching/asserting the peer failed.
+            typed_reading.set()
+    assert pids['raw'] != pids['typed']
+    assert store.cell.read_doc(sid, 'folders', 'shared')['counter'] == 2
+    assert store.cell.head(sid) == (3 if existing else 2, 1)
+
+
+@pytest.mark.parametrize(
+    'sequence, accepted',
+    [
+        (-9223372036854775809, False),
+        (-1e25, False),
+        (-9223372036854775808, True),
+        (9223372036854775807, True),
+        (9223372036854775808, False),
+        (1e25, False),
+        ('-9223372036854775809', True),
+        ('9223372036854775808', True),
+    ],
+)
+def test_event_decoder_signed_bigint_bounds_after_jsonb(pg, sequence, accepted):
+    class EventPayload(BaseModel):
+        sequence: int
+
+    # JSONB loses the float type of integral doubles on both sides of bigint.
+    # Use a model without ge=1 to isolate the decoder's numeric storage guard.
+    from database.jobstore.codec import dumps
+
+    with pg._pool.connection() as conn:
+        row = conn.execute('SELECT %s::jsonb', (dumps({'sequence': sequence}),)).fetchone()[0]
+    if isinstance(sequence, float):
+        assert type(row['sequence']) is int
+    expected = [{'sequence': int(sequence)}] if accepted else []
+    assert list(event_payloads(EventPayload, [('event', row)])) == expected

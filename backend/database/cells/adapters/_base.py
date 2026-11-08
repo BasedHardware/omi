@@ -34,11 +34,11 @@ EVENT_SEQUENCE_DESC_SQL = (
 def event_payloads(model: type[BaseModel], rows):
     """Match the Firestore presentation model's skip-malformed read boundary."""
     for _, row in rows:
-        # Firestore integer fields are signed 64-bit. Larger numeric values can
+        # Firestore integer fields are signed 64-bit. Out-of-range numerics can
         # only be doubles, rejected by Pydantic's float-to-int coercion. JSONB
         # may decode those integral doubles as Python ints, losing that type.
         sequence = row.get('sequence')
-        if isinstance(sequence, (int, float)) and sequence > 9223372036854775807:
+        if isinstance(sequence, (int, float)) and not -9223372036854775808 <= sequence <= 9223372036854775807:
             continue
         try:
             yield model.model_validate(row).model_dump()

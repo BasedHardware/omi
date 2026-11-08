@@ -243,9 +243,9 @@ class CellSpaceStore:
 
         def attempt(raw):
             # Serialize typed domain algorithms (including collection predicates)
-            # per space. B2's admission head is locked before reading any rows.
+            # per space. As in raw bodies, row locks precede the admission/seq
+            # head, acquired only by raw.flush after all row locks are held.
             raw.conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', ('typed-space:' + self.space_id,))
-            raw.conn.execute('SELECT space_id FROM space_heads WHERE space_id=%s FOR UPDATE', (self.space_id,))
             tx = CellSpaceTx(raw, self.adapters)
             attempts.append(tx)
             result = body(tx)

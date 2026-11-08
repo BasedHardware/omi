@@ -167,6 +167,11 @@ class CellTransaction:
 
     def flush(self) -> dict[str, int]:
         if self.mutations:
+            # Match body reads (including typed adapters): document/missing-key
+            # locks first, then the admission/sequence head through commit. Lock
+            # buffered-only writes too, before replay checks take the head.
+            for address in sorted({(m.entity, m.entity_id) for m in self.mutations}):
+                self._lock_read(*address)
             # Also guard replay-only writes; no implicit enrollment on this path.
             lock_writable_space(self.conn, self.space_id)
         ids = [m.client_mutation_id for m in self.mutations if m.client_mutation_id is not None]
