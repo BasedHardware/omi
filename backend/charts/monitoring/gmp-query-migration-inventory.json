@@ -159,7 +159,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
+      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
       "metrics": [
@@ -1365,6 +1365,23 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(count(omi_batch_projection_obligation_oldest_age_seconds > 0 and (max_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) - min_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_batch_projection_obligation_oldest_age_seconds)[1h:1m]) >= 3300)) or vector(0)) + (count(omi_batch_pipeline_vendor_held_oldest_age_seconds > 0 and (max_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) - min_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_batch_pipeline_vendor_held_oldest_age_seconds)[1h:1m]) >= 3300)) or vector(0)) + (count(omi_summary_debt_oldest_age_seconds > 0 and (max_over_time(omi_summary_debt_oldest_age_seconds[1h]) - min_over_time(omi_summary_debt_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_summary_debt_oldest_age_seconds)[1h:1m]) >= 3300) and (time() - omi_summary_debt_sample_timestamp_seconds < 300)) or vector(0)) + (count(omi_demand_processing_queue_age_seconds > 0 and (max_over_time(omi_demand_processing_queue_age_seconds[1h]) - min_over_time(omi_demand_processing_queue_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_demand_processing_queue_age_seconds)[1h:1m]) >= 3300)) or vector(0))",
+      "file": "alerts/pipeline-drain.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_vendor_held_oldest_age_seconds",
+        "omi_batch_projection_obligation_oldest_age_seconds",
+        "omi_demand_processing_queue_age_seconds",
+        "omi_summary_debt_oldest_age_seconds",
+        "omi_summary_debt_sample_timestamp_seconds"
+      ],
+      "owner_title": "Oldest-age sampler gauge frozen for one hour",
+      "owner_uid": "omi-oldest-age-gauge-flat-1h",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
       "file": "alerts/pusher.json",
       "issues": [],
@@ -1692,6 +1709,19 @@
       ],
       "owner_title": "Durable queue - oldest ready item stalled",
       "owner_uid": "omi-queue-oldest-ready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "time() - max(omi_held_content_fleet_snapshot_timestamp_seconds)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_held_content_fleet_snapshot_timestamp_seconds"
+      ],
+      "owner_title": "Held-content fleet snapshot stale",
+      "owner_uid": "omi-held-content-snapshot-stale",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3960,7 +3990,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 265
+    "query_consumers": 267
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
