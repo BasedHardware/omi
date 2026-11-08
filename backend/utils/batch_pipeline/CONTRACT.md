@@ -304,12 +304,15 @@ part owes ordinary discovery, not held expiry. In the existing
 fails, recheck the hint, ready receipt, all parts, absence of a privacy refusal,
 segment/binding/owner identity, committed job with recovery state other than
 `held`, and finite `committed_at` at least 24 hours old. With
-`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, write
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, recheck the normal release
+`_target_restorable` fence inside the transaction; an absent or unrestorable
+target yields `target_not_restorable` with no writes. Only then write
 `projection_state=ready` and `ghost_settled_cohort=<label>` in a **single
 transaction.update**. The hint matches `hold_for_quarantine`'s ready-sibling write.
 Receipts, parts, jobs, audio, attempt counters and watermarks stay intact. The
 existing discovery/completion/publication/acknowledgement path rechecks its own
 fences. This is never `held_expired`; nightly expiry does not settle ghosts.
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED` (default true) hands settled ids to the existing bounded follow-up tail; false restores discovery-only scheduling, with completion privacy fences unchanged.
 
 | Result field | Rule |
 | --- | --- |
@@ -349,7 +352,7 @@ real-hold writes and cursor progress remain unchanged. The release summary adds
 aggregate-only `ghost_settled`, `classified`, `skipped_by_class` and `age_buckets`.
 Classified counts held-gate failures (including stale hints); each gets exactly
 one skip class or a committed repair. Skip classes distinguish hint changes,
-non-ready receipts, quarantined parts, privacy, identity, held/non-committed jobs,
+non-ready receipts, quarantined parts, `target_not_restorable`, privacy, identity, held/non-committed jobs,
 invalid/young age, count-only, cap and nightly expiry. Age buckets for classified
 rows are disjoint: 1d to <7d, 7d to <30d, and 30d+. Younger/invalid ages have no
 bucket. Retry attempts never inflate counters. No row IDs or user data enter

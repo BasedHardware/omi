@@ -443,7 +443,7 @@ def entries():
             ),
             reason='bounded release scan delegates queries to both page builders; resets are document transactions',
             expect_observed=False,
-            body_digest='342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
+            body_digest='127aab03c6504e09efa8323e3e3d92e0aa5f19db0f79926e5ae2a3374cc0979c',
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_scan_pass',
@@ -453,6 +453,6 @@ def entries():
             ),
             reason='two durable cursors share release_page; cursor reads and writes are document operations',
             expect_observed=False,
-            body_digest='6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
+            body_digest='ac3609b6a36420b2fcfef038db3689af74aa7d77f66d5746b6121f87b84f787c',
         ),
     )

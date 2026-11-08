@@ -5,8 +5,11 @@ The former strict xfails are regressions for the flagged automatic exit.
 All storage here is synthetic and emulator-only.
 """
 
+import asyncio
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from datetime import datetime, timezone
+from unittest.mock import Mock
 
 import pytest
 
@@ -207,10 +210,34 @@ def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds):
     }
 
 
+def seed_targeted_batch(lane):
+    """Persist a completed target before projecting a bound batch's ready receipt."""
+    batch = lane.seed()
+    target = batch.items[0].conversation_id
+    batch.binding = replace(batch.binding, target_conversation_id=target)
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'projection_binding': asdict(batch.binding)})
+    lane.user.collection('conversations').document(target).set(
+        {
+            'id': target,
+            'source': 'omi',
+            'started_at': datetime.fromtimestamp(1000, timezone.utc),
+            'finished_at': datetime.fromtimestamp(1030, timezone.utc),
+            'created_at': datetime.fromtimestamp(1000, timezone.utc),
+            'transcript_segments': [],
+            'is_locked': False,
+            'status': 'completed',
+            'record_lane_owner': 'batch_sync_v1',
+            'structured': {},
+            'data_protection_level': 'standard',
+        }
+    )
+    return batch
+
+
 @pytest.mark.parametrize('recovery_state', [None, 'recovered'], ids=['recovery-none', 'recovery-recovered'])
 def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment(lane, monkeypatch, recovery_state):
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', raising=False)
-    batch = lane.seed()
+    batch = seed_targeted_batch(lane)
     lane.finish(batch)
     segment = batch.ids[0]
 
@@ -240,7 +267,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     # accounting and acknowledgement transactions. Only external publication
     # and enqueue are captured by the established emulator lane fixture.
     result = lane.projector.project(segment)
-    assert result is not None and result['new_memories'] == [ready['projection']['conversation_id']]
+    assert result is not None and result['updated_memories'] == [ready['projection']['conversation_id']]
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert lane.projector.status(lane.uid, batch.binding.content_id)['status'] == 'completed'
     assert lane.published == [result]
@@ -281,6 +308,10 @@ def test_flag_off_classifies_ghosts_without_mutating_them(holds, monkeypatch, ca
         ('results', {'projection_state': 'pending'}, 'hint_changed'),
         ('results', {'projection': {'state': 'persisted'}}, 'receipt_not_ready'),
         ('results', {'projection_parts': {'0': {'state': 'quarantined'}}}, 'part_quarantined'),
+        ('target', None, 'target_not_restorable'),
+        ('target', {'deleted': True}, 'target_not_restorable'),
+        ('target', {'discarded': True}, 'target_not_restorable'),
+        ('target', {'status': 'in_progress'}, 'target_not_restorable'),
         ('results', {'projection_privacy_refusal': {'version': 1}}, 'privacy'),
         ('results', {'owner_key': 'foreign'}, 'binding'),
         ('jobs', {'recovery_state': 'held'}, 'job_held'),
@@ -297,7 +328,11 @@ def test_page_selection_cannot_authorize_changed_ghost(holds, monkeypatch, kind,
     def selected_page(*args):
         # A writer changes authority after the page was selected. release()
         # must use its transaction-fresh documents, never page-time predicates.
-        projection.ref(kind, segment).update(changes)
+        if kind == 'target':
+            target = holds.user.collection('conversations').document(f'target-{segment}')
+            target.delete() if changes is None else target.update(changes)
+        else:
+            projection.ref(kind, segment).update(changes)
         before.update({name: projection.ref(name, segment).get().to_dict() for name in ('jobs', 'results')})
         return [segment]
 
@@ -377,3 +412,66 @@ def test_invalid_cohort_fallback_survives_real_transaction(holds, monkeypatch):
     release = ProjectionReleaseStore(holds.projector.store)
     assert not release.release(GHOSTS[0], NOW) and release.ghost_settled
     assert holds.projector.store.ref('results', GHOSTS[0]).get().to_dict()['ghost_settled_cohort'] == 'g1'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('refusal', [None, 'conversation_deleted', 'account_deleted'])
+async def test_settle_wake_tail_uses_real_completion_and_rechecks_privacy(lane, monkeypatch, refusal):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from utils.batch_pipeline.projection_followup import ProjectionFollowups
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED', raising=False)
+    batch = seed_targeted_batch(lane)
+    lane.finish(batch)
+    segment = batch.ids[0]
+    complete = lane.projector.complete_content
+    with monkeypatch.context() as patch:
+        patch.setattr(lane.projector, 'complete_content', Mock(side_effect=RuntimeError('stop before completion')))
+        with pytest.raises(RuntimeError, match='stop before completion'):
+            lane.projector.project(segment)
+    ref = lane.projector.store.ref('results', segment)
+    ready = ref.get().to_dict()
+    assert ready['projection']['state'] == 'ready'
+    ref.update({'projection_state': 'quarantine_held'})
+    monkeypatch.setattr(lane.projector, 'clock', lambda: ready['committed_at'] + 86400)
+    assert lane.projector.release_held_scan()['ghost_settled'] == 1
+    assert lane.projector.chain_followups == [segment]
+    assert ref.get().to_dict()['committed_at'] == ready['committed_at']
+    assert not lane.published
+    loads, tasks = list(lane.loads), list(lane.tasks)
+
+    if refusal == 'conversation_deleted':
+        lane.user.collection('deleted_conversations').document(batch.items[0].conversation_id).set({'deleted': True})
+        lane.user.collection('conversations').document(ready['projection']['conversation_id']).delete()
+    elif refusal == 'account_deleted':
+        lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
+    if refusal:
+        # Exercise the completion transaction itself as well as the follow-up's
+        # earlier check: neither entry point may publish a now-fenced source.
+        with pytest.raises(BatchPrivacyBlocked) as error:
+            complete(segment, batch.binding)
+        assert error.value.reason == refusal
+        assert not lane.published
+
+    completion = Mock(wraps=complete)
+    monkeypatch.setattr(lane.projector, 'complete_content', completion)
+    runner = ProjectionFollowups(lane.projector)
+    lane.projector.followups = runner
+    # Keep discovery beyond the row: only the new tail handoff can offer it.
+    monkeypatch.setattr(runner, 'candidates', lambda: [])
+    await lane.projector.start_followups()
+    while runner.tasks:
+        await asyncio.wait_for(asyncio.gather(*list(runner.tasks.values())), 30)
+    assert not lane.projector.chain_followups and not runner.owed
+    if refusal:
+        assert not lane.published
+        assert batch.ledger.get().to_dict()['status'] == 'processing'
+        assert ref.get().to_dict()['projection_state'] != 'completed'
+    else:
+        completion.assert_called_once_with(segment, batch.binding)
+        assert ref.get().to_dict()['projection_state'] == 'completed'
+        assert batch.ledger.get().to_dict()['status'] == 'completed'
+        assert len(lane.published) == 1
+    assert lane.loads == loads and lane.tasks == tasks
