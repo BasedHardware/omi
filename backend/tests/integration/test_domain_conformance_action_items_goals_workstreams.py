@@ -830,4 +830,6 @@ def test_event_lists_skip_malformed_legacy_sequences(domain_backend, malformed):
         h.seed(sid, entity, parent + '/bad', bad)
     assert [e.event_id for e in goals.list_progress_events(goal.id)] == [good_goal.event_id]
     assert [e.event_id for e in streams.list_events(ws.workstream_id)] == [good_ws.event_id]
+    assert [e.event_id for e in goals.list_progress_events(goal.id, limit=1)] == [good_goal.event_id]
+    assert [e.event_id for e in streams.list_events(ws.workstream_id, limit=1)] == [good_ws.event_id]
     assert streams.list_events(ws.workstream_id, after_sequence=good_ws.sequence) == []

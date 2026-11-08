@@ -644,9 +644,18 @@ def list_goal_progress_events(
         _goal_ref(uid, goal_id, firestore_client=firestore_client)
         .collection(goal_events_collection)
         .order_by('sequence', direction=firestore.Query.DESCENDING)
-        .limit(limit)
     )
-    return [row for row in parse_snapshots(GoalProgressEvent, query.stream()) if row.sequence <= 9223372036854775807]
+    if limit <= 0:
+        return []
+    rows = []
+    # Skip malformed legacy rows before filling the requested event window.
+    for snapshot in query.stream():
+        row = parse_snapshot_or_none(GoalProgressEvent, snapshot)
+        if row is not None and row.sequence <= 9223372036854775807:
+            rows.append(row)
+            if len(rows) >= limit:
+                break
+    return rows
 
 
 def update_goal_progress(
