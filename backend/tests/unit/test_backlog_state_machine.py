@@ -132,7 +132,7 @@ def test_retry_cap_serves_without_capture_coverage_cohort(monkeypatch, switch, s
     assert (decision is not None) is serving
 
 
-# 2. Sync lease expiry carries dispatch_attempt ------------------------------------
+# 2. Sync lease expiry carries dispatch_attempt (SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED, default ON)
 
 
 def running_owner(db, monkeypatch, attempts='5'):
@@ -152,7 +152,7 @@ def crash_once(account, epoch, now):
     return registry.redrive_job(account, 'crashy', epoch, now=expired), expired
 
 
-@pytest.mark.parametrize('switch,expected', [(None, [1, 2, 3]), ('false', [0, 0, 0])])
+@pytest.mark.parametrize('switch,expected', [('true', [1, 2, 3]), (None, [1, 2, 3]), ('false', [0, 0, 0])])
 def test_running_lease_expiry_keeps_the_attempt_budget(db, monkeypatch, switch, expected):
     if switch is not None:
         monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, switch)
@@ -299,7 +299,7 @@ def at_cap_running_owner(db, monkeypatch):
     return account, now + timedelta(seconds=registry.LEASE_SECONDS + 1)
 
 
-@pytest.mark.parametrize('switch', ['false', None])
+@pytest.mark.parametrize('switch', ['false', 'true', None])
 def test_running_cap_kill_switch_through_the_sweep(db, monkeypatch, switch):
     """Review wave 2: drive reconcile_uid, not redrive_job.
 
