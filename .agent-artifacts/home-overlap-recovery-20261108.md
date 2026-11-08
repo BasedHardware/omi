@@ -149,3 +149,12 @@ without changing smart-merge stage-order assertions. Production behavior and bot
 default-on switches are unchanged. The required pre-push selection includes this
 whole 28-case file; its terminal result is recorded in the PR's verification
 section after publication. Source job: https://github.com/BasedHardware/omi/actions/runs/42434242402/job/128589548246
+
+The remaining shard failures exposed the same omitted scheduling seam in
+`test_meeting_evidence_admission.py` (6 failures) and the photo-registration suite
+(6 failures, using the already-corrected shared smart-merge harness). The action
+item mirror's import-isolated router fixture also needed an explicit member-notes
+module stub (3 setup errors), because the real module's outbox dependency is
+intentionally absent in that unrelated endpoint fixture. The meeting fixture
+retains the unset enabled default and models no live owner. No flags were
+disabled and no production code changed for these fixture corrections.
