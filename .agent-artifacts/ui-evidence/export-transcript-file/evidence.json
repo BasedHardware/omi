@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-menu-with-export-transcript.png",
+      "platform": "mobile-ios",
+      "description": "Conversation with a transcript: Export Transcript sits after Copy Transcript in the overflow menu",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-menu-without-transcript.png",
+      "platform": "mobile-ios",
+      "description": "Conversation with no transcript: the menu is unchanged, Export Transcript is hidden",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
