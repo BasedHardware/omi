@@ -1306,6 +1306,44 @@ def test_stale_cleanup_gate_takeover_after_delete_propagates_without_success(mon
     assert events == ['claim', 'delete', 'exit']
 
 
+def test_stale_cleanup_retry_finish_takeover_propagates_without_success(monkeypatch):
+    events = []
+    takeover = vector_db.DestructiveGateTakeover('peer took the token during the retry')
+
+    class _Claim:
+        def __enter__(self):
+            events.append('claim')
+            return 'token'
+
+        def __exit__(self, exc_type, exc, tb):
+            assert exc_type is None
+            events.append('exit')
+            # The first exit fails with an ordinary error after the provider delete succeeded.
+            raise RuntimeError('exit failed')
+
+    class _Index:
+        def delete(self, *, filter, namespace):
+            events.append('delete')
+
+    def finish(uid, *, kind, token, outcome):
+        events.append('finish_retry')
+        # The retry finds that a same-kind peer displaced the token.
+        raise takeover
+
+    monkeypatch.setattr(vector_db, 'index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
+    monkeypatch.setattr(vector_db, 'destructive_operation_gate', lambda *args, **kwargs: _Claim())
+    monkeypatch.setattr(vector_db, 'finish_destructive_operation', finish)
+
+    try:
+        count = vector_db.delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
+    except vector_db.DestructiveGateTakeover as error:
+        assert error is takeover
+    else:
+        raise AssertionError(f'takeover on the retry must propagate, not return a success count {count}')
+    assert events == ['claim', 'delete', 'exit', 'finish_retry']
+
+
 def test_hydration_default_stale_cleanup_claims_exclusive_admission(monkeypatch):
     now = datetime.now(timezone.utc)
     missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)

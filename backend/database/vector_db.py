@@ -671,6 +671,8 @@ def _retry_stale_vector_gate_finish(uid: str, token: str, outcome: str) -> None:
 
     if finish_destructive_operation is None or not token:
         return
+    if DestructiveGateTakeover is None:
+        raise RuntimeError('destructive authority exceptions are unavailable')
     try:
         finish_destructive_operation(
             uid,
@@ -678,6 +680,9 @@ def _retry_stale_vector_gate_finish(uid: str, token: str, outcome: str) -> None:
             token=token,
             outcome=outcome,
         )
+    except DestructiveGateTakeover:
+        # A same-kind peer displaced the token; the caller must see that, not a success count.
+        raise
     except Exception:
         logger.warning('canonical memory vector delete gate finalization retry failed')
 
