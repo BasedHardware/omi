@@ -315,12 +315,26 @@ def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monke
         deleted.assert_called_once()
 
 
+def _repurge_app():
+    # Mount only the task route: the full router and its OpenAPI build cost
+    # more than the fast-unit CPU budget per case.
+    route = next(
+        r for r in conversations.router.routes if getattr(r, 'path', '') == '/internal/lake/conversation-repurge'
+    )
+    assert route.include_in_schema is False
+    app = FastAPI()
+    # Re-register on the app so its dependency overrides apply to the route.
+    app.add_api_route(
+        route.path, route.endpoint, methods=list(route.methods), status_code=route.status_code, include_in_schema=False
+    )
+    return app
+
+
 @pytest.mark.parametrize('outcome', ['success', 'failure', 'unauthorized'])
 def test_delayed_lake_repurge_route_is_oidc_protected_and_retryable(monkeypatch, outcome):
     from utils.other import lake_wipe, object_lake
 
-    app = FastAPI()
-    app.include_router(conversations.router)
+    app = _repurge_app()
     purge = MagicMock()
     monkeypatch.setattr(lake_wipe, 'repurge_conversation_lake_objects', purge)
     monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
@@ -336,14 +350,12 @@ def test_delayed_lake_repurge_route_is_oidc_protected_and_retryable(monkeypatch,
         purge.assert_not_called()
     else:
         purge.assert_called_once_with('s', 'c')
-    assert '/internal/lake/conversation-repurge' not in app.openapi()['paths']
 
 
 def test_delayed_lake_repurge_rejects_invalid_payload(monkeypatch):
     from utils.other import lake_wipe
 
-    app = FastAPI()
-    app.include_router(conversations.router)
+    app = _repurge_app()
     app.dependency_overrides[conversations.verify_cloud_tasks_oidc] = lambda: 0
     purge = MagicMock()
     monkeypatch.setattr(lake_wipe, 'repurge_conversation_lake_objects', purge)
