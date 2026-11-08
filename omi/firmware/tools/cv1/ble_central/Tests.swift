@@ -47,9 +47,9 @@ enum Tests {
 
         let baselineReads = try FirstConnectionReads(discovered: [UUIDs.firmware])
         check(baselineReads.ordered == [UUIDs.firmware], "Baseline missing serial still has a valid read plan")
-        check(baselineReads.absentOptional == [UUIDs.serial, UUIDs.features, UUIDs.diagnostics], "Serial absence recorded alongside other optionals")
-        let allReads = try FirstConnectionReads(discovered: [UUIDs.diagnostics, UUIDs.serial, UUIDs.features, UUIDs.firmware])
-        check(allReads.ordered == [UUIDs.firmware, UUIDs.serial, UUIDs.features, UUIDs.diagnostics], "DIS precedes optional reads regardless of discovery order")
+        check(baselineReads.absentOptional == [UUIDs.serial, UUIDs.features, UUIDs.diagnostics, UUIDs.recovery], "Serial absence recorded alongside other optionals")
+        let allReads = try FirstConnectionReads(discovered: [UUIDs.recovery, UUIDs.diagnostics, UUIDs.serial, UUIDs.features, UUIDs.firmware])
+        check(allReads.ordered == [UUIDs.firmware, UUIDs.serial, UUIDs.features, UUIDs.diagnostics, UUIDs.recovery], "DIS precedes optional reads regardless of discovery order")
         check(allReads.absentOptional.isEmpty, "Present serial not marked absent")
         do { _ = try FirstConnectionReads(discovered: [UUIDs.serial]); fatalError("Accepted absent firmware") }
         catch { checks += 1 }
