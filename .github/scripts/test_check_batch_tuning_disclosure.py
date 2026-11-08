@@ -126,13 +126,21 @@ class DisclosureTests(unittest.TestCase):
             "MAX_DRAINS from 4 to 8\nawaiting_repair recovers",
             "MAX_DRAINS new: 8\nawaiting_repair exits",
         ):
-            for wrapped in (f"```text\n{example}\n```", f"~~~\n{example}\n~~~", f"`{example}`", f"``{example}``", f"```\n{example}"):
+            indented = "\n".join("    " + line for line in example.splitlines())
+            tabbed = "\n".join("\t" + line for line in example.splitlines())
+            for wrapped in (
+                f"```text\n{example}\n```", f"~~~\n{example}\n~~~", f"`{example}`", f"``{example}``", f"```\n{example}",
+                indented, f"Example:\n\n{indented}", f"Example:\n\n{tabbed}", f"<!--\n{example}", f"<!-- note -->\n<!--\n{example}",
+            ):
                 with self.subTest(wrapped=wrapped):
                     errors, notices = check.validate({"MAX_DRAINS"}, {"awaiting_repair"}, wrapped, {"MAX_DRAINS"})
                     self.assertEqual(len(errors), 2)
                     self.assertEqual(notices, [])
         self.assertTrue(check.validate({"MAX_DRAINS"}, set(), "MAX_DRAINS `before 4 after 8`")[0])
         self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "```\nexample\n```\nMAX_DRAINS from 4 to 8")[0])
+        # Indentation only counts as code after a blank line; list continuations stay prose.
+        self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "- MAX_DRAINS\n    from 4 to 8")[0])
+        self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "    example\n\nMAX_DRAINS from 4 to 8")[0])
 
     def test_from_to_and_arrow_disclosures(self) -> None:
         for body in (

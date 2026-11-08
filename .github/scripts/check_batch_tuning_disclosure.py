@@ -40,7 +40,7 @@ STATE_VALUE = re.compile(
 )
 STATE_COMPARE = re.compile(rf"^\s*\)*\s*(?:==|!=|<=|>=|<|>)\s*\b{STATE_NAME}\b", re.I)
 EXIT = re.compile(r"\b(?:exit\w*|terminal\w*|dead.letter\w*|re-?entr\w*|clear\w*|recover\w*)\b", re.I)
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)  # unclosed runs to the end
 NON_CODE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`[^`]*`|#.*")
 
 
@@ -122,10 +122,22 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
 
 
 def prose(body: str) -> str:
-    """Remove HTML comments, fenced blocks (including unclosed ones), and code spans."""
+    """Remove HTML comments (including unclosed ones), fenced and indented code
+    blocks (including unclosed fences), and code spans."""
     lines: list[str] = []
     fence = ""
+    indented = False  # inside an indented code block
+    blank = True  # previous line was blank (or start of body)
     for line in HTML_COMMENT.sub("", body).splitlines(keepends=True):
+        text = line.rstrip("\r\n")
+        if not fence and text.strip() and re.match(r"^(?: {4}|\t)", text) and (blank or indented):
+            # An indented code block starts after a blank line; strip it whole.
+            indented, blank = True, False
+            lines.append("\n")
+            continue
+        if text.strip():
+            indented = False
+        blank = not text.strip()
         if fence:
             if re.fullmatch(rf" {{0,3}}{re.escape(fence[0])}{{{len(fence)},}}[ \t]*", line.rstrip("\r\n")):
                 fence = ""
