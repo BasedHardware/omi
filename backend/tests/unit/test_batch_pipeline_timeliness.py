@@ -42,17 +42,20 @@ class _Ref:
 class _Query:
     """The slice of the Firestore query API the sample uses: where, order_by, limit, stream, count, document."""
 
-    def __init__(self, rows, filters=(), order=None, limit=None):
-        self.rows, self.filters, self.order, self._limit = rows, filters, order, limit
+    def __init__(self, rows, filters=(), order=None, limit=None, after=None):
+        self.rows, self.filters, self.order, self._limit, self.after = rows, filters, order, limit, after
 
     def where(self, field, op, value):
-        return _Query(self.rows, self.filters + ((field, op, value),), self.order, self._limit)
+        return _Query(self.rows, self.filters + ((field, op, value),), self.order, self._limit, self.after)
 
     def order_by(self, field):
-        return _Query(self.rows, self.filters, field, self._limit)
+        return _Query(self.rows, self.filters, field, self._limit, self.after)
 
     def limit(self, n):
-        return _Query(self.rows, self.filters, self.order, n)
+        return _Query(self.rows, self.filters, self.order, n, self.after)
+
+    def start_after(self, doc):
+        return _Query(self.rows, self.filters, self.order, self._limit, doc.id)
 
     def document(self, doc_id):
         return _Ref(self.rows, doc_id)
@@ -77,6 +80,9 @@ class _Query:
         rows = [r for r in self.rows if self._match(r)]
         if self.order:
             rows.sort(key=lambda r: r[self.order])
+        if self.after is not None:
+            offset = next(i for i, row in enumerate(rows) if row['id'] == self.after) + 1
+            rows = rows[offset:]
         return rows[: self._limit] if self._limit is not None else rows
 
     def stream(self):

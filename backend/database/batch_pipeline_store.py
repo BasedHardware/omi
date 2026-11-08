@@ -832,8 +832,10 @@ def timeliness_sample(
 
     def first_valid_clock(query, field):
         # Metrics-only: a malformed clock must not mask a later dated held row.
-        # Stream oldest-first and stop at the first usable clock, without a cohort bound.
-        for doc in query.order_by(field).stream():
+        # Keep limit(1) on each RPC: valid stock still costs one document read.
+        query = query.order_by(field).limit(1)
+        while docs := list(query.stream()):
+            doc = docs[0]
             started = doc.to_dict().get(field)
             if (
                 isinstance(started, (int, float))
@@ -842,6 +844,7 @@ def timeliness_sample(
                 and started > 0
             ):
                 return started
+            query = query.start_after(doc)
         return None
 
     def count(query):

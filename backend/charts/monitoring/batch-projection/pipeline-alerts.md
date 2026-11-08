@@ -121,7 +121,8 @@ sample-stale/blind rules own that absence. Confirm
 series with their original labels rather than aggregating ages across replicas.
 
 The held-age sampler skips nonnumeric, nonfinite and nonpositive leg clocks,
-continuing oldest-first until a usable clock is found. Empty or entirely undated
+continuing oldest-first with a snapshot cursor until a usable clock is found.
+Each RPC retains `limit(1)`, so healthy stock still reads just its first row. Empty or entirely undated
 stock emits zero age; it is not evidence that no held rows exist. This only changes
 metric sampling, never stored rows or lifecycle decisions. Valid stock still stops
 at its first row; a corrupt prefix requires additional reads, with no cohort or
