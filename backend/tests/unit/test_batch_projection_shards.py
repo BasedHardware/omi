@@ -6,6 +6,8 @@ wiring use small fakes; chain walks use the owner-chain ``ResultLog`` model.
 
 import asyncio
 from collections import Counter
+from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import fakeredis
@@ -13,6 +15,10 @@ import pytest
 from google.api_core import exceptions as api_exceptions  # noqa: F401 (parity with chain tests)
 
 from database.batch_pipeline_projection import ProjectionBlocked
+from database.batch_pipeline_store import FirestoreStore
+from database.jobstore.postgres_store import PostgresStore
+from testing.pipeline_sim.postgres_store import PgSimStore
+from testing.pipeline_sim.store import CustomerData, SimStore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain
 from utils.batch_pipeline import projection, projection_shard_pump, projection_shards
 from utils.batch_pipeline.projection_shard_pump import ShardPump
@@ -51,6 +57,155 @@ def owner_in_shard(shard: int, count: int, prefix='owner') -> str:
         if shard_of(owner_key(owner), count) == shard:
             return owner
     raise AssertionError('no owner for shard')
+
+
+class OwnerPageQuery:
+    """Ordered result query: field existence, null-first timestamps and document-name ties."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def collection(self, name):
+        assert name.endswith('_results')
+        return self
+
+    def where(self, field, op, states):
+        assert (field, op) == ('projection_state', 'in')
+        self.states, self.after = states, None
+        return self
+
+    def order_by(self, field):
+        assert field in ('committed_at', '__name__')
+        return self
+
+    def document(self, key):
+        return key
+
+    def start_after(self, cursor):
+        self.after = (cursor['committed_at'], cursor['__name__'])
+        return self
+
+    def start_at(self, cursor):
+        self.after = (cursor['committed_at'], '')
+        return self
+
+    def limit(self, size):
+        self.size = size
+        return self
+
+    def stream(self):
+        def position(entry):
+            return entry[0] is not None, entry[0] or 0.0, entry[1]
+
+        ordered = sorted(
+            ((row['committed_at'], key) for key, row in self.rows.items()
+             if row.get('projection_state') in self.states and 'committed_at' in row),
+            key=position,
+        )
+        if self.after is not None:
+            ordered = [entry for entry in ordered if position(entry) > position(self.after)]
+        return [SimpleNamespace(id=key, to_dict=lambda key=key: dict(self.rows[key]))
+                for _, key in ordered[:self.size]]
+
+
+@pytest.fixture(params=('firestore', 'postgres', 'sim', 'pgsim'))
+def owner_page_store(request, monkeypatch):
+    def make_store(rows):
+        query = OwnerPageQuery(rows)
+        if request.param == 'firestore':
+            monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+            return FirestoreStore('batch_pipeline_dev', firestore_client=query)
+        if request.param == 'sim':
+            store = SimStore(CustomerData())
+            store.rows.update({('results', key): dict(row) for key, row in rows.items()})
+            return store
+
+        class Connection:
+            def execute(self, sql, params):
+                # A single bounded result query must carry its routing metadata.
+                assert sql.startswith('SELECT key, committed_at, doc FROM results WHERE namespace = %s ')
+                assert 'projection_state = ANY(%s)' in sql and "doc ? 'committed_at'" in sql
+                assert 'ORDER BY committed_at NULLS FIRST, key COLLATE "C" LIMIT %s' in sql
+                assert params[0] == 'batch_pipeline_test_owner_page'
+                query.where('projection_state', 'in', params[1])
+                if len(params) == 5:
+                    assert '(committed_at, key COLLATE "C") > (%s, %s)' in sql
+                    query.start_after({'committed_at': params[2], '__name__': params[3]})
+                elif len(params) == 4:
+                    assert 'committed_at IS NULL AND key COLLATE "C" > %s' in sql
+                    query.start_after({'committed_at': None, '__name__': params[2]})
+                else:
+                    assert len(params) == 3
+                docs = query.limit(params[-1]).stream()
+                return SimpleNamespace(fetchall=lambda: [
+                    (doc.id, doc.to_dict()['committed_at'], doc.to_dict()) for doc in docs])
+
+        class Pool:
+            @contextmanager
+            def connection(self):
+                yield Connection()
+
+        if request.param == 'pgsim':
+            return PgSimStore(CustomerData(), namespace='batch_pipeline_test_owner_page', pool=Pool())
+        return PostgresStore('batch_pipeline_test_owner_page', pool=Pool(), customer_client=None)
+
+    return make_store
+
+
+def test_owner_pages_keep_raw_page_cursor_when_unroutable_rows_are_skipped(owner_page_store):
+    store = owner_page_store({
+        'a': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': 'first'},
+        'b': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': ''},
+        'c': {'projection_state': 'ready', 'committed_at': 1, 'owner_id': 'last', 'capture_at': 0},
+        'missing': {'projection_state': 'pending', 'owner_id': 'excluded'},
+        'held': {'projection_state': 'quarantine_held', 'committed_at': 2, 'owner_id': 'held'},
+    })
+    assert store.projection_page_owners(2) == ([('a', 'first', 1.0, None)], (1, 'b'))
+    assert store.projection_page_owners(1, after=(1, 'a')) == ([], (1, 'b'))
+    assert store.projection_page_owners(2, after=(1, 'b')) == ([('c', 'last', 1.0, 0)], None)
+    assert store.projection_page_owners(2, after=(1, 'deleted-cursor')) == ([], None)
+    assert store.projection_page_owners(states=('quarantine_held',)) == ([('held', 'held', 2.0, None)], None)
+
+
+def test_owner_page_limits_and_timestamp_seed_match_firestore(owner_page_store):
+    store = owner_page_store({
+        f'r{i:03}': {'projection_state': 'pending', 'committed_at': i // 2, 'owner_id': 'owner'}
+        for i in range(150)
+    })
+    page, cursor = store.projection_page_owners(999)
+    assert len(page) == 100 and cursor == (49, 'r099')
+    assert store.projection_page_owners(0) == ([('r000', 'owner', 0.0, None)], (0, 'r000'))
+    assert store.projection_page_owners(1, after=(50, '')) == ([('r100', 'owner', 50.0, None)], (50, 'r100'))
+
+
+def test_owner_pages_preserve_null_timestamp_cursor_and_wrap(owner_page_store):
+    store = owner_page_store({
+        'null': {'projection_state': 'pending', 'committed_at': None, 'owner_id': 'owner'},
+        'zero': {'projection_state': 'pending', 'committed_at': 0, 'owner_id': 'owner'},
+    })
+    assert store.projection_page_owners(1) == ([('null', 'owner', 0.0, None)], (None, 'null'))
+    assert store.projection_page_owners(1, after=(None, 'null')) == ([('zero', 'owner', 0.0, None)], (0, 'zero'))
+    assert store.projection_page_owners(1, after=(0, 'zero')) == ([], None)
+
+
+@pytest.mark.parametrize('capture,expected', [(0, 0), (1.5, 1.5), (True, None), (False, None), (None, None), ('1', None)])
+def test_owner_pages_only_return_numeric_capture_hints(owner_page_store, capture, expected):
+    store = owner_page_store({'a': {
+        'projection_state': 'pending', 'committed_at': 1, 'owner_id': 'owner', 'capture_at': capture,
+    }})
+    assert store.projection_page_owners() == ([('a', 'owner', 1.0, expected)], None)
+
+
+@pytest.mark.parametrize('owner', [None, '', False, 3])
+def test_owner_pages_require_nonempty_string_owners(owner_page_store, owner):
+    store = owner_page_store({'a': {'projection_state': 'pending', 'committed_at': 1, 'owner_id': owner}})
+    assert store.projection_page_owners(1) == ([], (1, 'a'))
+
+
+@pytest.mark.parametrize('states', [(), ('invalid',), None])
+def test_owner_pages_reject_invalid_discovery_states(owner_page_store, states):
+    with pytest.raises(ValueError, match='projection discovery states must be drain states'):
+        owner_page_store({}).projection_page_owners(states=states)
 
 
 # --- leases -----------------------------------------------------------------

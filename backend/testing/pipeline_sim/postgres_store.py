@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
+from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES
 from database.jobstore.connection import Pool
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -162,6 +163,11 @@ class PgSimStore(SimStore):
         self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
     ) -> tuple[list[str], Any]:
         return self.pg.projection_page(limit, after=after, states=states)
+
+    def projection_page_owners(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+    ) -> tuple[list[tuple[str, str, float, float | None]], Any]:
+        return self.pg.projection_page_owners(limit, after=after, states=states)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)

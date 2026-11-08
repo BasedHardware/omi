@@ -40,6 +40,8 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_wr
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -476,6 +478,39 @@ class PostgresStore:
             ).fetchall()
         cursor = (rows[-1][1], rows[-1][0]) if len(rows) == size else None
         return [row[0] for row in rows], cursor
+
+    def projection_page_owners(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+    ) -> tuple[list[tuple[str, str, float, float | None]], Any]:
+        """Read routing metadata in the discovery page, without per-result document reads."""
+        if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
+            raise ValueError('projection discovery states must be drain states')
+        size = max(1, min(limit, 100))
+        clause, params = '', [self.namespace, list(states)]
+        if after is not None and after[0] is None:
+            clause = 'AND (committed_at IS NOT NULL OR (committed_at IS NULL AND key COLLATE "C" > %s))'
+            params += [after[1]]
+        elif after is not None:
+            clause = 'AND (committed_at, key COLLATE "C") > (%s, %s)'
+            params += [after[0], after[1]]
+        with self._read_conn() as conn:
+            page = conn.execute(
+                "SELECT key, committed_at, doc FROM results WHERE namespace = %s "
+                f"AND projection_state = ANY(%s) AND doc ? 'committed_at' {clause} "
+                'ORDER BY committed_at NULLS FIRST, key COLLATE "C" LIMIT %s',
+                (*params, size),
+            ).fetchall()
+        rows = []
+        for key, committed_at, data in page:
+            owner_id = data.get('owner_id')
+            if isinstance(owner_id, str) and owner_id:
+                capture_at = data.get('capture_at')
+                if not isinstance(capture_at, (int, float)) or isinstance(capture_at, bool):
+                    capture_at = None
+                rows.append((key, owner_id, float(committed_at or 0.0), capture_at))
+        # Page fullness and the cursor include rows without a routable owner.
+        cursor = (page[-1][1], page[-1][0]) if len(page) == size else None
+        return rows, cursor
 
     # -- internals ---------------------------------------------------------------------------
     @contextmanager

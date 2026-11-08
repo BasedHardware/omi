@@ -40,6 +40,8 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -396,6 +398,36 @@ class SimStore:
         page = ordered[:size]
         cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
         return [key for _, key in page], cursor
+
+    def projection_page_owners(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+    ) -> tuple[list[tuple[str, str, float, float | None]], Any]:
+        if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
+            raise ValueError('projection discovery states must be drain states')
+        ordered = sorted(
+            (
+                (row['committed_at'], key)
+                for (table, key), row in self.rows.items()
+                if table == 'results' and row.get('projection_state') in states and 'committed_at' in row
+            ),
+            key=lambda entry: (entry[0] is not None, entry[0] or 0.0, entry[1]),
+        )
+        if after is not None:
+            after_key = (after[0] is not None, after[0] or 0.0, after[1])
+            ordered = [entry for entry in ordered if (entry[0] is not None, entry[0] or 0.0, entry[1]) > after_key]
+        size = max(1, min(limit, 100))
+        page = ordered[:size]
+        cursor = page[-1] if len(page) == size else None
+        rows = []
+        for _, key in page:
+            data = self.rows[('results', key)]
+            owner_id = data.get('owner_id')
+            if isinstance(owner_id, str) and owner_id:
+                capture_at = data.get('capture_at')
+                if not isinstance(capture_at, (int, float)) or isinstance(capture_at, bool):
+                    capture_at = None
+                rows.append((key, owner_id, float(data.get('committed_at') or 0.0), capture_at))
+        return rows, cursor
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # Firestore excludes rows without the ordered field, and orders ties by document name.
