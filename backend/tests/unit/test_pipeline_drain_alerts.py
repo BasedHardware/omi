@@ -35,7 +35,13 @@ def test_sources_match_inventory_and_are_routed_resolving_warnings():
         assert uid not in gate
         assert (BACKEND.parent / rule['annotations']['runbook']).is_file()
         assert rule['annotations']['verification']
-        assert rule['annotations']['review_by'] == '2026-11-07'
+        if uid == 'omi-oldest-age-gauge-flat-1h':
+            # Sampler health is agent-tier; the original drain warnings keep their review deadline.
+            assert rule['labels']['tier'] == 'agent'
+            assert rule['labels']['audience'] == 'agent'
+            assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        else:
+            assert rule['annotations']['review_by'] == '2026-11-07'
         for q in rule['data']:
             if q['datasourceUid'] == 'gmp-cloud-run':
                 assert 'offset 10m' in q['model']['expr']
