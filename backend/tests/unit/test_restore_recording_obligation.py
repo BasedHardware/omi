@@ -111,14 +111,15 @@ def test_metadata_failure_leaves_one_parked_obligation_and_retry_reuses_it(resto
     assert restore_store.rows[ROW_PATH]['discarded'] is False
 
 
-def test_registration_receives_restored_shape_while_durable_row_is_discarded(restore_store, monkeypatch):
+def test_registration_receives_current_discarded_row_with_explicit_restore(restore_store, monkeypatch):
     original = lifecycle.register_recording
     seen = []
 
     def register(uid, snapshot, **kwargs):
         assert restore_store.rows[ROW_PATH]['discarded'] is True
-        assert snapshot['discarded'] is False
-        assert snapshot['sync_relevance_user_kept'] is True
+        assert snapshot == restore_store.rows[ROW_PATH]
+        assert snapshot['discarded'] is True
+        assert kwargs['restoring'] is True
         seen.append(snapshot)
         return original(uid, snapshot, **kwargs)
 
@@ -126,6 +127,45 @@ def test_registration_receives_restored_shape_while_durable_row_is_discarded(res
     assert lifecycle.restore_discarded(UID, CID) is True
     assert len(seen) == 1
     assert restore_store.rows[ROW_PATH]['discarded'] is False
+
+
+def test_explicit_restore_registration_creates_exactly_one_obligation(restore_store):
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=restore_store)
+    before = deepcopy(restore_store.rows[ROW_PATH])
+    assert live.register_recording(UID, before, store=store, restoring=True) is True
+    obligation = deepcopy(restore_store.rows[JOB_PATH])
+    assert live.register_recording(UID, before, store=store, restoring=True) is True
+    assert restore_store.rows[JOB_PATH] == obligation
+    assert obligation['state'] == 'record_pending'
+    assert obligation['conversation_id'] == CID
+    assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in restore_store.rows) == 1
+    assert restore_store.rows[ROW_PATH] == before
+
+
+@pytest.mark.parametrize(
+    'unrestorable',
+    [
+        pytest.param({'deleted': True}, id='deleted'),
+        pytest.param({'deleted': True, 'status': 'deleted'}, id='tombstoned'),
+        pytest.param({'deleted': True, 'sync_merged_into': 'survivor'}, id='redirect-tombstoned'),
+        pytest.param({'sync_merged_into': 'survivor'}, id='merged-away'),
+    ],
+)
+def test_explicit_restore_registration_refuses_unrestorable_rows(restore_store, unrestorable):
+    restore_store.rows[ROW_PATH].update(unrestorable)
+    before = deepcopy(restore_store.rows)
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=restore_store)
+    assert live.register_recording(UID, restore_store.rows[ROW_PATH], store=store, restoring=True) is False
+    assert restore_store.rows == before
+    assert JOB_PATH not in restore_store.rows
+
+
+def test_default_registration_still_refuses_discarded_row(restore_store):
+    before = deepcopy(restore_store.rows)
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=restore_store)
+    assert live.register_recording(UID, restore_store.rows[ROW_PATH], store=store) is False
+    assert restore_store.rows == before
+    assert JOB_PATH not in restore_store.rows
 
 
 def test_legacy_restore_has_no_recording_obligation(restore_store):

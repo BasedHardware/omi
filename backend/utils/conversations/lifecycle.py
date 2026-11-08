@@ -652,8 +652,8 @@ def restore_discarded(uid: str, conversation_id: str) -> bool:
             and not server_batch.has_audio(current)
         ):
             return True
-        restored = {**current, 'id': conversation_id, 'discarded': False, 'sync_relevance_user_kept': True}
-        return register_recording(uid, restored, transaction=tx)
+        current['id'] = conversation_id
+        return register_recording(uid, current, transaction=tx, restoring=True)
 
     try:
         registered = FirestoreStore(f'batch_pipeline_{current_stage()}').run(register)

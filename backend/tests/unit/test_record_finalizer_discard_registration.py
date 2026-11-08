@@ -6,11 +6,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from config.policy import BatchUnitPolicy
+from config.record_audio import record_identity
+from database import batch_pipeline_privacy, batch_pipeline_store
 from database import conversation_finalization_jobs as jobs_db
+from database import conversations as conversations_db
+from database.batch_pipeline_store import FirestoreStore
 from models.conversation_enums import ConversationStatus
 from routers import conversation_finalization as finalization_router
+from utils.batch_pipeline import live
 from utils.conversations import finalizer
 from utils.conversations import demand_processing
+from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
 from tests.unit.test_conversation_smart_merge_finalizer import harness, _Conversation, _JOB, _finalize
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -321,3 +328,87 @@ async def test_concurrent_restore_before_fanout_retries_and_retains_obligation(h
     assert await _finalize() is finalizer.ConversationFinalizationDisposition.completed
     assert finalizer.register_recording in calls
     assert finalizer.lifecycle_service.complete_finalization_fanout in calls
+
+
+@pytest.mark.asyncio
+async def test_restore_after_fanout_claim_before_close_completes_with_one_obligation(harness, monkeypatch):
+    calls, row = harness
+    row.update(record_lane_owner='batch_live_v1', private_cloud_sync_enabled=True)
+    client = StrictFirestore()
+    row_path = ('users', 'u', 'conversations', 'n')
+    job_path = (jobs_db.FINALIZATION_JOBS_COLLECTION, 'job')
+    _, segment = record_identity('u', 'n')
+    obligation_path = ('batch_pipeline_dev_jobs', segment)
+    client.rows[row_path] = dict(row)
+    client.rows[job_path] = {**_JOB, 'fanout_status': 'pending'}
+    client.rows[('users', 'u')] = {'private_cloud_sync_enabled': True}
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
+    monkeypatch.setattr(jobs_db, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(conversations_db, 'db', client)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_: None)
+    monkeypatch.setattr(batch_pipeline_privacy, 'lever_enabled', lambda *_: False)
+    monkeypatch.setattr(batch_pipeline_store, 'contention_retry_enabled', lambda: False)
+    monkeypatch.setattr(live, 'resolve_batch_policy', lambda *_: BatchUnitPolicy())
+    monkeypatch.setattr(lifecycle, 'FirestoreStore', lambda namespace: store)
+    original_run = finalizer.run_blocking
+    original_register = lifecycle.register_recording
+    original_restore = conversations_db.restore_conversation_from_discarded
+    order = []
+
+    def register(uid, current, **kwargs):
+        assert kwargs['restoring'] is True
+        assert current == client.rows[row_path]
+        assert current['discarded'] is True
+        assert original_register(uid, current, **kwargs) is True
+        assert obligation_path in client.rows
+        order.append('register')
+        return True
+
+    def restore(uid, conversation_id):
+        assert order == ['claim', 'register']
+        assert client.rows[row_path]['discarded'] is True
+        assert obligation_path in client.rows
+        result = original_restore(uid, conversation_id)
+        assert client.rows[row_path]['discarded'] is False
+        order.append('metadata')
+        return result
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            calls.append(function)
+            return function(*args, store=store, **kwargs)
+        if function is lifecycle.claim_finalization_fanout:
+            result = function(*args, **kwargs)
+            assert result['status'] == 'claimed'
+            order.append('claim')
+            # The claim read a kept row. A concurrent relevance discard and
+            # explicit restore now land while its fanout lease is still open.
+            client.rows[row_path]['discarded'] = True
+            assert lifecycle.restore_discarded('u', 'n') is True
+            return result
+        if function is lifecycle.complete_finalization_fanout:
+            assert order == ['claim', 'register', 'metadata']
+            assert function(*args, **kwargs) is True
+            order.append('close')
+            return True
+        return await original_run(executor, function, *args, **kwargs)
+
+    async def absorbed(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(lifecycle, 'register_recording', register)
+    monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', restore)
+    monkeypatch.setattr(finalizer, 'smart_merge_step', absorbed)
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    assert await _finalize() is finalizer.ConversationFinalizationDisposition.completed
+    # Exercise the handler's terminal-success write after the real fanout close.
+    assert jobs_db.mark_finalization_completed('job', 1, 1) is True
+    assert order == ['claim', 'register', 'metadata', 'close']
+    assert client.rows[job_path]['status'] == 'completed'
+    assert client.rows[job_path]['fanout_status'] == 'completed'
+    assert client.rows[job_path]['terminal_outcome'] == 'success'
+    assert client.rows[row_path]['discarded'] is False
+    assert client.rows[obligation_path]['state'] == 'record_pending'
+    assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in client.rows) == 1
