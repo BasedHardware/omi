@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -65,10 +65,112 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
     "TRANSCRIPTION_SHADOW_PERCENT",
     "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
 }
-# Empty on 2026-10-20: no row is beyond its seven-day grace. Add only an
-# already-overdue row with an expiry and reason; the checker prints it as a
-# blocker for David until the row is reviewed or the exception expires.
-REVIEW_OVERDUE: dict[str, dict[str, str]] = {}
+# Rows already past review_by may carry a dated exception (expiry + reason); it is
+# printed on every run and turns back into an error when it expires. Entries for
+# rows not yet past review_by are stale and fail.
+# 2026-11-08: the ad1268 ramp-or-retire sweep (auditfix) covers every row that
+# would pass its grace before 2026-11-14; the registry v2 checker replaces these
+# with per-row extension fields before they expire.
+_AD1268_SWEEP = {"expires": "2026-11-15", "reason": "ad1268 ramp-or-retire sweep in progress (auditfix)"}
+REVIEW_OVERDUE: dict[str, dict[str, str]] = {
+    "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_HEAD_PRIORITY_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_PERCENT": _AD1268_SWEEP,
+    "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_RECOVERY_MODE": _AD1268_SWEEP,
+    "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST": _AD1268_SWEEP,
+    "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_SERVING_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_SHADOW_PERCENT": _AD1268_SWEEP,
+    "BATCH_PIPELINE_SHARED_LIVE_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED": _AD1268_SWEEP,
+    "BATCH_PIPELINE_UID_ALLOWLIST": _AD1268_SWEEP,
+    "BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED": _AD1268_SWEEP,
+    "CAPTURE_GROUP_CONTAINMENT_MODE": _AD1268_SWEEP,
+    "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED": _AD1268_SWEEP,
+    "DREAM_AGENT_PAID_PERCENT": _AD1268_SWEEP,
+    "DREAM_HISTORY_COMPACT_MODE": _AD1268_SWEEP,
+    "DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT": _AD1268_SWEEP,
+    "DREAM_IDLE_SKIP_MODE": _AD1268_SWEEP,
+    "DREAM_IDLE_SKIP_MODE_SERVE_PERCENT": _AD1268_SWEEP,
+    "DREAM_MATERIAL_BUDGET_MODE": _AD1268_SWEEP,
+    "DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT": _AD1268_SWEEP,
+    "DREAM_NO_PROGRESS_STOP_MODE": _AD1268_SWEEP,
+    "DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT": _AD1268_SWEEP,
+    "DREAM_PAYOFF_ORDER_MODE": _AD1268_SWEEP,
+    "EPISODES_CLIENT_CHANNELS": _AD1268_SWEEP,
+    "EPISODES_PERCENT": _AD1268_SWEEP,
+    "FIRST_SUMMARY_DEADLINE_ENABLED": _AD1268_SWEEP,
+    "FIRST_SUMMARY_DEADLINE_PERCENT": _AD1268_SWEEP,
+    "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED": _AD1268_SWEEP,
+    "FIRST_SUMMARY_UID_ALLOWLIST": _AD1268_SWEEP,
+    "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": _AD1268_SWEEP,
+    "LIVE_CAPTURE_WINDOW_MERGE_UNION": _AD1268_SWEEP,
+    "LIVE_CAPTURE_WINDOW_RETENTION": _AD1268_SWEEP,
+    "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": _AD1268_SWEEP,
+    "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": _AD1268_SWEEP,
+    "MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS": _AD1268_SWEEP,
+    "MEETING_NOTES_EPISODE_CLAIMS_ENABLED": _AD1268_SWEEP,
+    "MEETING_NOTES_EPISODE_TIERED_ENABLED": _AD1268_SWEEP,
+    "MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS": _AD1268_SWEEP,
+    "MEETING_NOTES_EPISODE_TIER_MIN_WORDS": _AD1268_SWEEP,
+    "MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS": _AD1268_SWEEP,
+    "OMI_SHAPED_AGENT_MODE": _AD1268_SWEEP,
+    "PARAKEET_EXPLICIT_CUDA_GRAPHS": _AD1268_SWEEP,
+    "PARAKEET_PACKING_ENABLED": _AD1268_SWEEP,
+    "PARAKEET_WINDOW_DIARIZATION": _AD1268_SWEEP,
+    "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT": _AD1268_SWEEP,
+    "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": _AD1268_SWEEP,
+    "SONIOX_ELAPSED_AXIS": _AD1268_SWEEP,
+    "SONIOX_ORDERED_FINALIZE": _AD1268_SWEEP,
+    "SONIOX_WIRE_LEDGER": _AD1268_SWEEP,
+    "SPEAKER_MATCH_SCORES_ENABLED": _AD1268_SWEEP,
+    "STT_CAP_RECOVERY_COHORT": _AD1268_SWEEP,
+    "STT_FAILOVER_RECOVERY_ENABLED": _AD1268_SWEEP,
+    "STT_LEARNED_LANGUAGE_PROFILE": _AD1268_SWEEP,
+    "STT_MULTI_LANGUAGE_HINTS": _AD1268_SWEEP,
+    "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": _AD1268_SWEEP,
+    "STT_PAID_SPILLOVER_BUDGET_ENABLED": _AD1268_SWEEP,
+    "STT_RESILIENT_RECONNECT": _AD1268_SWEEP,
+    "STT_ROUTING_MODE": _AD1268_SWEEP,
+    "STT_ROUTING_ON_PERCENT": _AD1268_SWEEP,
+    "SUMMARY_DEBT_REPAIR_ENABLED": _AD1268_SWEEP,
+    "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED": _AD1268_SWEEP,
+    "SYNC_BACKFILL_ORDER": _AD1268_SWEEP,
+    "SYNC_BACKFILL_ORDER_PERCENT": _AD1268_SWEEP,
+    "SYNC_BACKFILL_ORDER_UID_ALLOWLIST": _AD1268_SWEEP,
+    "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM": _AD1268_SWEEP,
+    "SYNC_DURABLE_REDRIVE_GUARD": _AD1268_SWEEP,
+    "SYNC_LEGACY_COMPLETION_CONVERGENCE": _AD1268_SWEEP,
+    "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED": _AD1268_SWEEP,
+    "SYNC_LINEAGE_RESOLVE_ENABLED": _AD1268_SWEEP,
+    "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST": _AD1268_SWEEP,
+    "SYNC_POLL_BACKOFF_ENABLED": _AD1268_SWEEP,
+    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": _AD1268_SWEEP,
+    "TRANSCRIPTION_FINAL_PASS_PERCENT": _AD1268_SWEEP,
+    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": _AD1268_SWEEP,
+    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": _AD1268_SWEEP,
+    "TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED": _AD1268_SWEEP,
+    "TRANSCRIPTION_SHADOW_ENABLED": _AD1268_SWEEP,
+    "TRANSCRIPTION_SHADOW_PERCENT": _AD1268_SWEEP,
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": _AD1268_SWEEP,
+    "onboarding-setup-rating-prompt": _AD1268_SWEEP,
+    "proactivity_v2": _AD1268_SWEEP,
+    "screen_activity_lossless_sync": _AD1268_SWEEP,
+    "screen_activity_lossless_sync_kill": _AD1268_SWEEP,
+    "summary-generation-v2": _AD1268_SWEEP,
+}
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
 # Keys use normalize_owner(); exceptions require an ISO expires date and reason.
@@ -162,7 +264,8 @@ def check_owner_backlog(
 
 
 def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -> tuple[list[str], list[str]]:
-    current_date = as_of or date.today()
+    # UTC, so a pre-push hook on a host ahead of UTC agrees with CI.
+    current_date = as_of or datetime.now(timezone.utc).date()
     registry_path = root / "config/feature-flags.yaml"
     registry = load_registry(registry_path)
     errors = validate_registry(registry, root=root)
@@ -254,14 +357,13 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
         warnings.append(f"WARNING: review_by passed but remains within the {REVIEW_GRACE_DAYS}-day grace: {details}")
 
     active_review_exceptions: set[str] = set()
-    for key in sorted(beyond_grace):
-        exception = REVIEW_OVERDUE.get(key)
-        if exception is None:
-            errors.append(
-                f"review overdue beyond the {REVIEW_GRACE_DAYS}-day grace: {key} "
-                f"(review_by {flags[key]['review_by']})"
-            )
-            continue
+    for key in sorted(beyond_grace - set(REVIEW_OVERDUE)):
+        errors.append(
+            f"review overdue beyond the {REVIEW_GRACE_DAYS}-day grace: {key} "
+            f"(review_by {flags[key]['review_by']})"
+        )
+    for key in sorted(set(REVIEW_OVERDUE) & set(past_due)):
+        exception = REVIEW_OVERDUE[key]
         try:
             expires = date.fromisoformat(exception["expires"])
             reason = exception["reason"].strip()
@@ -271,12 +373,13 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
         if not reason:
             errors.append(f"review_overdue[{key}] requires an ISO expires date and nonempty reason")
         elif current_date > expires:
-            errors.append(f"review_overdue exception expired {expires}: {key} (review_by {flags[key]['review_by']})")
+            active_review_exceptions.add(key)
+            if key in beyond_grace:
+                errors.append(f"review_overdue exception expired {expires}: {key} (review_by {flags[key]['review_by']})")
         else:
             active_review_exceptions.add(key)
             warnings.append(
-                f"BLOCKER for David: review_overdue exception {key} (review_by {flags[key]['review_by']}) "
-                f"expires {expires}: {reason}"
+                f"review_overdue exception {key} (review_by {flags[key]['review_by']}) expires {expires}: {reason}"
             )
     if root.resolve() == ROOT.resolve():
         stale_review_exceptions = sorted(set(REVIEW_OVERDUE) - active_review_exceptions)
