@@ -11,7 +11,9 @@ Serve uses the fresh `record-token-lease` uid salt and explicit
 modes, shadow never serves, and serve still honors the percentage.
 
 `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (bounded 1800–7200). Frame batches
-renew at most once per lease/2 per conversation; custody appends renew before
+renew at most once per lease/2 per conversation on receive and projection,
+including queued drain batches after socket close. An async conversation lock
+coalesces concurrent receive/projection renewals; custody appends renew before
 admission, including memoized retry waits. No users.py or client-state changes.
 A renewal outage returns retryable custody refusal; the phone retains WAL/audio.
 `RECORD_TOKEN_LEASE_DEPLOYED_AT` is a fixed release epoch (pinned by the release owner with the shadow flip and

@@ -379,3 +379,65 @@ async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(r
     await barrier.renew_recording('record')
     assert len(records.transactions) == before
     await barrier.finish_recording('record')
+
+
+async def test_receive_and_projection_batches_share_one_committed_renewal(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 100})
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    barrier.lease_renewed_at['record'] -= 1801
+    entered, release = threading.Event(), threading.Event()
+    renew = record_audio.renew_record_token_lease
+    calls = []
+
+    def slow(*args, **kwargs):
+        calls.append(kwargs['source'])
+        entered.set()
+        assert release.wait(10)
+        return renew(*args, **kwargs)
+
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', slow)
+    first = asyncio.create_task(barrier.renew_recording('record'))
+    second = None
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        second = asyncio.create_task(barrier.renew_recording('record'))
+        await asyncio.sleep(0)
+        assert calls == ['frames']
+        assert not first.done() and not second.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(first, second), 5)
+        assert calls == ['frames']
+        await barrier.finish_recording('record')
+        assert not barrier.lease_locks
+    finally:
+        release.set()
+        await asyncio.gather(first, *(task for task in (second,) if task is not None), return_exceptions=True)
+
+
+async def test_delayed_begin_response_cannot_hide_a_lapsed_lease(records, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    epoch, monotonic = [10000.0], [10000.0]
+    monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
+    monkeypatch.setattr(barriers, 'time', SimpleNamespace(time=lambda: epoch[0], monotonic=lambda: monotonic[0]))
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 9000})
+    register = record_audio.set_record_upload_pending
+
+    def delayed_response(*args, **kwargs):
+        result = register(*args, **kwargs)
+        epoch[0] += 3601
+        monotonic[0] += 3601
+        return result
+
+    monkeypatch.setattr(record_audio, 'set_record_upload_pending', delayed_response)
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    assert producer_tokens_dead(records.rows[PATH]['record_upload_sessions'], None, uid='uid-at')
+    await barrier.renew_recording('record')
+    assert records.rows[PATH]['record_upload_revision'] == 2
+    assert not producer_tokens_dead(records.rows[PATH]['record_upload_sessions'], None, uid='uid-at')
+    await barrier.finish_recording('record')

@@ -222,6 +222,7 @@ class PusherRecordBarrier:
         self.close_retry_at: dict[str, float] = {}
         self.keep_close_pending = False
         self.lease_renewed_at: dict[str, float] = {}
+        self.lease_locks: dict[str, asyncio.Lock] = {}
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
@@ -309,6 +310,7 @@ class PusherRecordBarrier:
             # registration response. Abandon's transaction tolerates absent tokens.
             self.upload_sessions[conversation_id] = token
             registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
+            began_at = time.monotonic()
             if await run_blocking(
                 record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
@@ -319,7 +321,9 @@ class PusherRecordBarrier:
                 producer=producer_identity(),
             ):
                 if lease.token_lease_mode() != 'off':
-                    self.lease_renewed_at[conversation_id] = time.monotonic()
+                    # A delayed commit response must not make an old lease
+                    # look newly renewed to the receive/projection cache.
+                    self.lease_renewed_at[conversation_id] = began_at
                     lease_metrics.ACTIVE.inc()
                 return
             self.upload_sessions.pop(conversation_id, None)
@@ -333,27 +337,35 @@ class PusherRecordBarrier:
             await self.fail_recording(conversation_id)
 
     async def renew_recording(self, conversation_id: str) -> None:
-        """Only frame-bearing batches renew; no idle socket timer/client-state."""
+        """Frame-bearing receive/projection batches only; no idle socket timer."""
         if lease.token_lease_mode() == 'off' or conversation_id not in self.upload_sessions:
             return
         now = time.monotonic()
         if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
             return
-        # Persist before the next batch is buffered. Errors retain client/raw
-        # custody rather than admitting bytes under an unknown expiry fence.
-        await run_blocking(
-            record_barrier_executor,
-            record_audio_db.renew_record_token_lease,
-            self.uid,
-            conversation_id,
-            source='frames',
-            session=self.upload_sessions[conversation_id],
-        )
-        if conversation_id not in self.lease_renewed_at:
-            lease_metrics.ACTIVE.inc()
-        self.lease_renewed_at[conversation_id] = now
+        # Receive and projection are concurrent tasks on this socket. Both must
+        # await the same committed fence, rather than double-renew or let the
+        # second appender pass while the first metadata write is still pending.
+        async with self.lease_locks.setdefault(conversation_id, asyncio.Lock()):
+            if lease.token_lease_mode() == 'off' or conversation_id not in self.upload_sessions:
+                return
+            now = time.monotonic()
+            if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
+                return
+            await run_blocking(
+                record_barrier_executor,
+                record_audio_db.renew_record_token_lease,
+                self.uid,
+                conversation_id,
+                source='frames',
+                session=self.upload_sessions[conversation_id],
+            )
+            if conversation_id not in self.lease_renewed_at:
+                lease_metrics.ACTIVE.inc()
+            self.lease_renewed_at[conversation_id] = now
 
     def _forget_lease(self, conversation_id):
+        self.lease_locks.pop(conversation_id, None)
         if self.lease_renewed_at.pop(conversation_id, None) is not None:
             lease_metrics.ACTIVE.dec()
 
