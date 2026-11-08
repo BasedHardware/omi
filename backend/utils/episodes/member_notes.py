@@ -13,6 +13,7 @@ from utils.conversations import demand_processing
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.enrichment import outbox
+from utils.episodes.policy import owned_member_ids
 from utils.sync import processing_hold, stage
 from utils.observability.fallback import record_fallback
 
@@ -53,7 +54,7 @@ def waits(uid: str, row: dict, trigger=ProcessingTrigger.SYNC_UPDATE) -> bool:
     except Exception as error:
         _unavailable('owner_unavailable', error)
         return False
-    if not owner or owner.get('status') != 'live' or row['id'] not in (owner.get('conversation_ids') or []):
+    if not owner or owner.get('status') != 'live' or row['id'] not in owned_member_ids(owner):
         return False
     # Unlike owner-wide attention, this lease names just the detail being read.
     try:
