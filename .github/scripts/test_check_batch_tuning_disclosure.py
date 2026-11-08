@@ -125,10 +125,12 @@ class DisclosureTests(unittest.TestCase):
             "+job['new_metadata_key'] = value", "+job.get('new_metadata_key')",
             "+description = 'new_description'",
             "+getattr(error, 'store_tables', 'n/a')",
+            "+Counter('omi_new_metric_total', 'Description')",
             "+Counter('omi_new_metric_total', 'Description', ['outcome'])",
         ):
             with self.subTest(line=line):
-                self.assertEqual(self.detect(' status = current', line), (set(), set()))
+                # outcome is a pre-existing label name, not a new metric value.
+                self.assertEqual(self.detect(' status = current', line, existing=("outcome",)), (set(), set()))
         self.assertEqual(self.detect(' status = current', '+Counter(', "+    'omi_new_metric_total',", '+)')[1], set())
         self.assertEqual(self.detect("+job['state'] = 'awaiting_repair'")[1], {"awaiting_repair"})
         self.assertEqual(self.detect("+{'state': 'awaiting_repair'}")[1], {"awaiting_repair"})
