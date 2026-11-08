@@ -3,11 +3,11 @@
 import logging
 from typing import Mapping
 
-from config.home_processing import ownership_enabled
+from config.home_processing import ownership_enabled, owner_cache_enabled
 from config.episodes import episodes_enabled_for
 from database import episodes, conversations
 from utils.conversations.recorded_time import conversation_span
-from utils.episodes import client_gate, metrics
+from utils.episodes import client_gate, metrics, home_owner_cache
 from utils.episodes.policy import utc
 from utils.episodes.timeline import ownership_end
 from utils.observability.fallback import record_fallback
@@ -16,18 +16,27 @@ logger = logging.getLogger(__name__)
 OWNERSHIP_HEADER = 'X-Omi-Home-Ownership'
 
 
-def live_owner(uid: str, *, firestore_client=None) -> dict | None:
+def live_owner(uid: str, *, firestore_client=None, use_cache: bool = False) -> dict | None:
     if not ownership_enabled(uid) or not episodes_enabled_for(uid) or not client_gate.client_seen_cached(uid):
         return None
     try:
-        owner = episodes.get_current_episode(uid, firestore_client=firestore_client)
-        return owner if owner and owner.get('status') == 'live' else None
+
+        def fetch():
+            owner = episodes.get_current_episode(uid, firestore_client=firestore_client)
+            return owner if owner and owner.get('status') == 'live' else None
+
+        return home_owner_cache.read(uid, fetch, enabled=owner_cache_enabled()) if use_cache else fetch()
     except Exception as error:
         record_fallback(
             component='firestore_read', from_mode='none', to_mode='none', reason='other', outcome='degraded'
         )
         logger.warning('event=home_live_owner outcome=unavailable exception_type=%s', type(error).__name__)
         return None
+
+
+def live_owner_for_home(uid: str) -> dict | None:
+    """Only callers retaining the per-recording client acknowledgement may cache."""
+    return live_owner(uid, use_cache=True)
 
 
 def owns_recording(owner: Mapping | None, row: Mapping) -> bool:
