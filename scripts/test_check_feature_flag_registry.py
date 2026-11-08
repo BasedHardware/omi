@@ -757,9 +757,9 @@ class RegistryFixture(unittest.TestCase):
             validate_registry(registry, root=self.root),
         )
         with mock.patch("feature_flag_registry.OPS_KILL_DEFAULT_OFF_ALLOWLIST", {"EXAMPLE_ENABLED"}):
-            self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2026, 11, 22)))
-            errors = validate_registry(registry, root=self.root, as_of=date(2026, 11, 23))
-            self.assertIn("ops_kill default-off exception expired 2026-11-22: EXAMPLE_ENABLED", errors)
+            self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2026, 11, 29)))
+            errors = validate_registry(registry, root=self.root, as_of=date(2026, 11, 30))
+            self.assertIn("ops_kill default-off exception expired 2026-11-29: EXAMPLE_ENABLED", errors)
         for fail in ("open", "inverted"):
             registry["flags"][0]["fail"] = fail
             self.assertEqual([], validate_registry(registry, root=self.root))
