@@ -1537,10 +1537,6 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            provisional: true
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
             value: 'off'
@@ -1906,10 +1902,6 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
-            category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            provisional: true
-            value: 'false'
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true

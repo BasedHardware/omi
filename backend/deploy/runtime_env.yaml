@@ -383,7 +383,7 @@ environments:
             value: g1
             category: config
           PUSHER_STORAGE_PCM_BUDGET_MB:
-            value: '0'
+            value: '512'
             category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
@@ -1243,10 +1243,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
-              category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
               value: 'off'
@@ -1552,10 +1548,6 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
-              category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
@@ -3738,10 +3730,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
-              category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
               value: 'on'
@@ -4180,10 +4168,6 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
-              category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true

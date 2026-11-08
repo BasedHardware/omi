@@ -21,6 +21,9 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping, Optional
 
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_store import FirestoreStore
+from utils.sync.stage import current_stage
 from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
 from utils.conversations import merge_conversations_job
@@ -79,6 +82,10 @@ _STATUS_TRANSITIONS = {
 
 class LifecycleTransitionError(ValueError):
     """Raised when an intent would reopen or otherwise violate a terminal lifecycle."""
+
+
+class RestoredRecordingRegistrationUnavailable(RuntimeError):
+    """Restore could not safely complete its recording obligation and metadata."""
 
 
 class FinalizationDispatchUnavailable(RuntimeError):
@@ -625,8 +632,58 @@ def discard_by_relevance(
 
 
 def restore_discarded(uid: str, conversation_id: str) -> bool:
-    """An explicit user intent may restore visibility without changing status."""
-    return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    """Register recording debt before an explicit restore makes the row visible."""
+
+    # Raw document read: the pre-read needs only the row's own fields, and the
+    # photo-attaching getter would add a query this path does not need.
+    snapshot = (
+        conversations_db.db.collection('users')
+        .document(uid)
+        .collection(conversations_db.conversations_collection)
+        .document(conversation_id)
+        .get()
+    )
+    current = snapshot.to_dict() if snapshot.exists else None
+    if not current or conversations_db.is_soft_deleted(current):
+        return False
+
+    def register(tx):
+        from utils.batch_pipeline.live import register_recording
+
+        current = tx.get('conversations', f'{uid}/{conversation_id}')
+        if not current or conversations_db.is_soft_deleted(current):
+            return None
+        if current.get('record_lane_owner') != 'batch_live_v1':
+            return True
+        # The finalizer's proven-empty predicate, plus the capture's own audio-closed
+        # gate: an open archive still registers, because the batch drain owns its
+        # upload barrier.
+        if server_batch.proven_empty(current) and current.get('record_audio_closed') is True:
+            return True
+        # A projected row was already fulfilled. Its receipt expires after 45 days,
+        # and register_recording dedupes only against the job, so a new obligation
+        # here would transcribe the audio again. record_projection_revision is the
+        # projected marker (utils/conversations/phase.py).
+        if current.get('record_projection_revision'):
+            return True
+        current['id'] = conversation_id
+        return register_recording(uid, current, transaction=tx, restoring=True)
+
+    if current.get('record_lane_owner') == 'batch_live_v1':
+        try:
+            registered = FirestoreStore(f'batch_pipeline_{current_stage()}').run(register)
+        except BatchPrivacyBlocked as error:
+            raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore') from error
+        if registered is None:
+            return False
+        if not registered:
+            raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore')
+    # A crash here leaves at most one idempotent obligation parked behind the
+    # discarded row. Seal/partial workers refuse it until metadata commits.
+    try:
+        return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    except Exception as error:
+        raise RestoredRecordingRegistrationUnavailable('restore metadata unavailable; retry restore') from error
 
 
 def open_recording_session(
@@ -1005,10 +1062,21 @@ def _finalization_admission(
 
 
 def claim_finalization_fanout(
-    job_id: str, dispatch_generation: int, lease_epoch: int
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    expected_discarded: bool = False,
+    firestore_client: Any = None,
 ) -> jobs_db.FinalizationFanoutClaim:
     """Claim the durable external-integration fanout through the lifecycle owner."""
-    return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
+    return jobs_db.claim_finalization_fanout(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        expected_discarded=expected_discarded,
+        firestore_client=firestore_client,
+    )
 
 
 def complete_finalization_fanout(
@@ -1018,6 +1086,23 @@ def complete_finalization_fanout(
 ) -> bool:
     """Persist completion only after the idempotency-keyed fanout succeeds."""
     return jobs_db.mark_finalization_fanout_completed(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+    )
+
+
+def complete_discarded_server_batch_fanout(
+    uid: str,
+    conversation_id: str,
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+) -> bool:
+    """Close a discarded zero-preview fanout; the still-bound parent leaves processing."""
+    return jobs_db.mark_discarded_server_batch_fanout_completed(
+        uid,
+        conversation_id,
         job_id,
         dispatch_generation,
         lease_epoch,

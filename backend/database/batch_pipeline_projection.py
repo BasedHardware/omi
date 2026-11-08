@@ -31,6 +31,7 @@ from database.sync_ledger import (
 )
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked as ProjectionBlocked,
@@ -141,10 +142,12 @@ class ProjectionStore:
             if not receipt:
                 raise ProjectionBlocked('projection must persist before enrichment acknowledgment')
             receipt['state'] = 'ready'
-            session.write_receipt(transaction, receipt)
-            return receipt
+            sibling_held = session.write_receipt(transaction, receipt)
+            return receipt, sibling_held
 
-        receipt = self.run(commit, policy=policy)
+        receipt, sibling_held = self.run(commit, policy=policy)
+        if sibling_held:
+            log_projection_hold('sibling')
         self._mirror(binding)
         return receipt
 
@@ -183,7 +186,7 @@ class ProjectionStore:
             session.prepare(transaction, replay=False)
             current = session.receipt()
             if current.get('conversation_id') != output:
-                return current
+                return current, False
             try:
                 session.guard(transaction, [output])
             except BatchPrivacyBlocked as error:
@@ -197,7 +200,7 @@ class ProjectionStore:
                 ):
                     raise
             else:
-                return current
+                return current, False
             settled = {
                 **current,
                 'state': 'ready',
@@ -206,10 +209,12 @@ class ProjectionStore:
                 'enrichment_required': False,
                 'disposition': 'output_deleted',
             }
-            session.write_receipt(transaction, settled)
-            return settled
+            sibling_held = session.write_receipt(transaction, settled)
+            return settled, sibling_held
 
-        settled = self.run(commit, policy=policy)
+        settled, sibling_held = self.run(commit, policy=policy)
+        if sibling_held:
+            log_projection_hold('sibling')
         receipt.update(settled)
         self._mirror(binding)
 
@@ -293,14 +298,16 @@ class ProjectionStore:
             if len(output_ids) > 1:
                 receipt['size_rollover_enriched'] = completed
             receipt.update(state='ready' if finished else 'persisted', conversation_id=canonical)
-            session.write_receipt(transaction, receipt)
-            return result, finished
+            sibling_held = session.write_receipt(transaction, receipt)
+            return result, finished, sibling_held
 
         while True:
             committed = self.run(firestore.transactional(commit), policy=policy)
             if committed is None:
                 break
-            result, finished = committed
+            result, finished, sibling_held = committed
+            if sibling_held:
+                log_projection_hold('sibling')
             if result.wake_token:
                 outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
             if finished:

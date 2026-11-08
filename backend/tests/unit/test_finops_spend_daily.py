@@ -117,7 +117,10 @@ def test_bucket_mapping_and_modelled_cash_preference_and_tooling_cap(modules, tm
         DAY,
     )
     price = {'price_usd_per_hour': '0.06'}
-    write(raw / 'stt_modulate_modelled_daily.json', dict(status='ready', rows=modulate.modelled_rows(seconds, price)))
+    write(
+        raw / 'stt_modulate_modelled_daily.json',
+        dict(status='ready', rows=modulate.modelled_rows(seconds, price, {}, modulate.rest_prices())),
+    )
     cash = json.loads((raw / 'mercury_vendor_spend_daily.json').read_text())
     cash['rows'].append(dict(date=DAY, vendor='anthropic', category='saas', amount_usd='7000', transaction_count=1))
     write(raw / 'mercury_vendor_spend_daily.json', cash)
@@ -483,3 +486,50 @@ def test_billing_and_sku_detail_commit_in_the_same_transaction(modules, monkeypa
     assert sql.count('BEGIN TRANSACTION') == sql.count('COMMIT TRANSACTION') == 1
     assert 'INSERT INTO `based-hardware.omi_finops.spend_daily`' in sql
     assert 'INSERT INTO `based-hardware.omi_finops.spend_daily_gcp_sku`' in sql
+
+
+@pytest.mark.parametrize('unknown', [None, 'artifact', 'row'])
+def test_modulate_loader_accepts_breakdown_and_rejects_unknown_keys(modules, tmp_path, unknown):
+    modulate = load('pull_modulate_modelled')
+    prices = modulate.rest_prices()
+    live_price = modulate.price_from_card(json.loads(modulate.RATE_CARD.read_text()))
+    from decimal import Decimal
+
+    artifact = dict(
+        status='ready',
+        method='modelled',
+        **live_price,
+        **prices,
+        rows=modulate.modelled_rows({}, live_price, {DAY: {'stt': Decimal(7200), 'lid': Decimal(3600)}}, prices),
+    )
+    if unknown == 'artifact':
+        artifact['unexpected'] = 1
+    elif unknown == 'row':
+        artifact['rows'][0]['unexpected'] = 1
+    write(tmp_path / modulate.ARTIFACT, artifact)
+    ensured, writes = [], []
+
+    def replace(name, rows, dates):
+        writes.append((name, rows, dates))
+        return len(rows)
+
+    if unknown:
+        with pytest.raises(SystemExit, match='invalid Modulate modelled'):
+            modules.loader.load_modulate_modelled(tmp_path, 'run', 't', ensured.append, replace)
+        assert not ensured and not writes
+        return
+    assert modules.loader.load_modulate_modelled(tmp_path, 'run', 't', ensured.append, replace) == {
+        'stt_modulate_modelled_daily': 1,
+    }
+    assert ensured == ['stt_modulate_modelled_daily']
+    name, rows, dates = writes[0]
+    assert dates == [DAY]
+    assert rows[0]['live_seconds'] == '0.000000000'
+    assert rows[0]['rest_stt_seconds'] == '7200.000000000'
+    assert rows[0]['lid_seconds'] == '3600.000000000'
+    assert rows[0]['rest_price_usd_per_hour'] == '0.030000000'
+    assert rows[0]['lid_price_usd_per_hour'] == '0.010000000'
+    assert rows[0]['usd'] == '0.070000000'
+    schema = dict(modules.loader.SCHEMAS[name])
+    assert all(schema[key] == 'FLOAT64' for key in ('live_seconds', 'rest_stt_seconds', 'lid_seconds'))
+    assert all(schema[key] == 'NUMERIC' for key in ('rest_price_usd_per_hour', 'lid_price_usd_per_hour'))

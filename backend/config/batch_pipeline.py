@@ -57,6 +57,11 @@ def projection_ghost_settle_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
 
 
+def projection_restorable_cap_expiry_enabled() -> bool:
+    """Default OFF: allow the existing one-time expiry CAS for restorable capped holds."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED')
+
+
 def projection_ghost_settle_cohort() -> tuple[str, bool]:
     """Inert measurement label; return whether invalid config used the fallback."""
     label = os.getenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'g1')
@@ -713,6 +718,11 @@ def projection_drain_privacy_backoff_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_drain_live_target_backoff_enabled() -> bool:
+    """Default on; only off disables bounded awaiting-live-target owner backoff."""
+    return kill_switch('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF')
 
 
 def projection_privacy_refusal_resume_enabled() -> bool:

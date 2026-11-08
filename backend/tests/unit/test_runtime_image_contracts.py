@@ -69,6 +69,31 @@ def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):
     assert not (dest / '.openapi-venv').exists()
 
 
+@pytest.mark.parametrize('scratch', ['_temp', '_samples', '_speech_profiles', '_segments'])
+def test_source_copy_skips_untracked_scratch_directories(contracts_module, tmp_path, scratch):
+    source = tmp_path / 'backend'
+    source.mkdir()
+    (source / 'main.py').write_text('ok\n', encoding='utf-8')
+    (source / scratch).mkdir()
+    (source / scratch / 'written-by-a-test.bin').write_text('transient\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'main.py').is_file()
+    assert not (dest / scratch).exists()
+
+
+def test_scratch_directory_names_do_not_hide_nested_source(contracts_module, tmp_path):
+    source = tmp_path / 'backend'
+    (source / 'utils' / '_segments').mkdir(parents=True)
+    (source / 'utils' / '_segments' / 'merge.py').write_text('ok\n', encoding='utf-8')
+    (source / 'utils' / '_temp').mkdir()
+    (source / 'utils' / '_temp' / 'helper.py').write_text('ok\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'utils' / '_segments' / 'merge.py').is_file()
+    assert (dest / 'utils' / '_temp' / 'helper.py').is_file()
+
+
 def _contract_with_dockerfile(contracts_module, tmp_path, dockerfile_text):
     dockerfile = tmp_path / 'Dockerfile'
     dockerfile.write_text(dockerfile_text, encoding='utf-8')

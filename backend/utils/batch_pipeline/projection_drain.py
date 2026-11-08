@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from config.batch_pipeline import (
     max_owner_drains,
     projection_drain_claim_aware_enabled,
+    projection_drain_live_target_backoff_enabled,
     projection_drain_privacy_backoff_enabled,
     projection_drain_privacy_backoff_seconds,
 )
@@ -28,6 +29,7 @@ from utils.batch_pipeline.metrics import (
     PROJECTION_DRAIN_CLAIM_HELD,
     PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS,
     PROJECTION_DRAIN_PRIVACY_BACKOFFS,
+    PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS,
     PROJECTION_DRAIN_PRIVACY_ROW_CHANGED,
     record_privacy_stop,
 )
@@ -62,6 +64,8 @@ class OwnerDrains:
         # Owners requested again while draining: one more turn after this one.
         self.again: set[str] = set()
         self.delayed: dict[str, asyncio.TimerHandle] = {}
+        # Retained across timer expiry; capped independently of active timers.
+        self.live_target_attempts: dict[str, int] = {}
         self.continuations: set[str] = set()
         # Only active admissions/turns write this bounded stop state.
         self.stops: dict[str, str] = {}
@@ -171,6 +175,7 @@ class OwnerDrains:
         self.stops.clear()
         self.stopped_heads.clear()
         self.privacy_heads.clear()
+        self.live_target_attempts.clear()
         self.continuations.clear()
         for handle in self.delayed.values():
             handle.cancel()
@@ -189,6 +194,8 @@ class OwnerDrains:
         head = self.stopped_heads.pop(owner, None)
         if self.closed:
             return
+        if stop != 'head_awaiting_live_target':
+            self.live_target_attempts.pop(owner, None)
         more = task.exception() is None and task.result() is True
         if more:
             self.continuations.add(owner)
@@ -204,6 +211,12 @@ class OwnerDrains:
                 PROJECTION_DRAIN_PRIVACY_BACKOFFS.inc()
         elif projection_drain_claim_aware_enabled() and stop == 'claim_held':
             self.defer(owner)
+        elif (
+            stop == 'head_awaiting_live_target'
+            and projection_drain_live_target_backoff_enabled()
+            and self.defer_live_target(owner)
+        ):
+            pass
         elif owner in self.again and owner not in self.queue:
             if projection_drain_claim_aware_enabled() and stop == 'claim_busy':
                 PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS.inc()
@@ -212,6 +225,17 @@ class OwnerDrains:
                 self.queue.append(owner)
         self.again.discard(owner)
         self.launch()
+
+    def defer_live_target(self, owner: str) -> bool:
+        attempt = min(self.live_target_attempts.get(owner, 0) + 1, 5)
+        if not self.defer(owner, delay=min(30 * 2 ** (attempt - 1), 300)):
+            return False
+        self.live_target_attempts.pop(owner, None)
+        if len(self.live_target_attempts) >= MAX_DELAYED_OWNERS:
+            self.live_target_attempts.pop(next(iter(self.live_target_attempts)))
+        self.live_target_attempts[owner] = attempt
+        PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS.inc()
+        return True
 
     async def run(self, owner: str) -> bool:
         """One turn; True when the chain had more rows when the turn ended."""
@@ -258,6 +282,10 @@ class OwnerDrains:
             if advanced == 0:
                 self.stops[owner] = stop
                 self.stopped_heads[owner] = walk.blocked_head if walk is not None else None
+        if advanced == 0 and stop == 'head_awaiting_live_target':
+            self.stops[owner] = stop
+        else:
+            self.live_target_attempts.pop(owner, None)
         logger.info(
             'event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s stop=%s elapsed_ms=%d',
             steps,
