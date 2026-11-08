@@ -346,25 +346,15 @@ class FirestoreFolders:
         self, folder_id: str, *, limit: int = 100, offset: int = 0, include_discarded: bool = False
     ) -> list[dict]:
         query = self.owner.collection('conversations').where(filter=FieldFilter('folder_id', '==', folder_id))
-        query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-        # Firestore == False excludes missing fields. Legacy missing means false
-        # at this port, so filter before the historical offset/limit window.
-        if limit <= 0:
-            return []
-        if include_discarded:
-            query = query.offset(offset).limit(limit)
+        if not include_discarded:
+            query = query.where(filter=FieldFilter('discarded', '==', False))
+        query = query.order_by('created_at', direction=firestore.Query.DESCENDING).offset(offset).limit(limit)
         rows = []
-        eligible = 0
         for doc in self._stream(query):
             data = _typed_doc(doc)
-            if not include_discarded and data.get('discarded', False) is not False:
-                continue
-            eligible += 1
-            if include_discarded or eligible > offset:
+            if not data.get('deleted'):
                 rows.append({**data, 'id': doc.id})
-            if len(rows) >= limit:
-                break
-        return [row for row in rows if not row.get('deleted')]
+        return rows
 
     def _count(self, folder_id: str) -> int:
         query = (

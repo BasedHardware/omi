@@ -447,18 +447,9 @@ def list_workstream_events(
         .collection(EVENTS_COLLECTION)
         .where(filter=FieldFilter('sequence', '>', after_sequence))
         .order_by('sequence', direction=firestore.Query.ASCENDING)
+        .limit(limit)
     )
-    if limit <= 0:
-        return []
-    rows = []
-    # Skip malformed legacy rows before filling the requested event window.
-    for snapshot in query.stream():
-        row = parse_snapshot_or_none(WorkstreamEvent, snapshot)
-        if row is not None and row.sequence <= 9223372036854775807:
-            rows.append(row)
-            if len(rows) >= limit:
-                break
-    return rows
+    return parse_snapshots(WorkstreamEvent, query.stream())
 
 
 def create_artifact_descriptor(

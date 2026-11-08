@@ -735,25 +735,21 @@ def test_conversations_count_filtered_date_ranges_have_declared_descending_compo
     assert signature in _declared_index_signatures()
 
 
-@pytest.mark.parametrize('include_discarded', [False, True])
-def test_conversations_in_folder_has_the_missing_field_compatible_composite(monkeypatch, include_discarded):
-    """Keep the folder-list index guard from the 2026-09-23 incident.
-
-    Missing discarded is eligible, so both modes query folder/date and filter
-    eligibility before pagination rather than using discarded == False.
-    """
+def test_conversations_in_folder_has_the_prod_observed_composite(monkeypatch):
+    """Prod FailedPrecondition on 2026-09-23 came from this folder list query."""
     recorder = []
     monkeypatch.setattr(
         folders_db, 'get_firestore_client', lambda: _StreamRecordingFirestore(recorder, collection_name='conversations')
     )
 
-    folders_db.get_conversations_in_folder('index-contract-user', 'folder-123', include_discarded=include_discarded)
+    folders_db.get_conversations_in_folder('index-contract-user', 'folder-123')
 
-    assert recorder == [((('folder_id', '=='),), (('created_at', 'DESCENDING'),))]
+    assert recorder == [((('folder_id', '=='), ('discarded', '==')), (('created_at', 'DESCENDING'),))]
     signature = (
         'conversations',
         'COLLECTION',
         (
+            ('discarded', 'ASCENDING'),
             ('folder_id', 'ASCENDING'),
             ('created_at', 'DESCENDING'),
             ('__name__', 'DESCENDING'),
