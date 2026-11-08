@@ -100,6 +100,23 @@ class DisclosureTests(unittest.TestCase):
     def test_existing_states_never_trigger(self) -> None:
         self.assertEqual(self.detect('+status = "awaiting_repair"', existing=("awaiting_repair",)), (set(), set()))
 
+    def test_unrelated_state_context_does_not_cross_hunks_or_files(self) -> None:
+        diff = patch(' status = "known_state"') + '@@ -90 +90 @@\n+label = "unrelated_word"\n'
+        diff += patch('+name = "another_word"', path=PUSHER)
+        self.assertEqual(check.detect(diff, lambda _: False), (set(), set()))
+
+    def test_manifest_selects_both_lanes_and_requires_body(self) -> None:
+        from run_checks import load_manifest, resolve_checks
+
+        manifest = load_manifest(ROOT / ".github/checks-manifest.yaml")
+        for lane in ("local", "ci"):
+            for path in (CONFIG, CHART, PUSHER, ".github/scripts/test_check_batch_tuning_disclosure.py"):
+                with self.subTest(lane=lane, path=path):
+                    selected = resolve_checks(manifest, [path], lane, platform="linux")
+                    matches = [item for item in selected if item.id == "batch-pipeline-tuning-disclosure"]
+                    self.assertEqual(len(matches), 1)
+                    self.assertTrue(matches[0].requires_pr_body)
+
     def test_deleted_file_keeps_removed_knob(self) -> None:
         diff = f"diff --git a/{CONFIG} b/{CONFIG}\n--- a/{CONFIG}\n+++ /dev/null\n@@ -1 +0,0 @@\n-MAX_DRAINS = 4\n"
         self.assertEqual(check.detect(diff, lambda _: False), ({"MAX_DRAINS"}, set()))
