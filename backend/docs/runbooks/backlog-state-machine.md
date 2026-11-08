@@ -42,6 +42,7 @@ off.
 | `CAPTURE_RETRY_CAP_ENFORCED` (default **OFF**: enforcing quarantines rows, a custody change) | 1: the cap observed but never ended work | Batch lease-expiry and sync running caps return to the `CAPTURE_COVERAGE_MODE` cohort (shadow outside it) |
 | `SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED` (default **ON**: only stops the attempt-budget reset; finalizing at the cap also needs class 1 on) | 2: running lease expiry reset `dispatch_attempt` to 0 | Running expiry resets to 0, `running_expiries` stays 0, and only dispatching owners are capped |
 | `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | 3 and 6: requeue kept `attempt` at the cap; no terminal stop | Requeue keeps `attempt`; nightly and poll re-drive and projection re-arm are unbounded again; the nightly pass also pages and requeues units already parked as `held_exhausted`; a receipt marked `held_rearm_exhausted_at` regains the legacy re-arm |
+| `BATCH_HELD_REDRIVE_COUNTER_ENABLED` (default **ON**: counting and an alert only) | 6 (counter): re-drives were not counted | No `held_redrives` / `held_expired_rearms` increments and no spent-budget observation; existing counters are inert |
 | `RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED` | 4: unfinished conversations retried forever | Aged rows stay on the hourly barrier ladder; parked rows return to it at their next daily recheck |
 | `BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED` | Unrestorable assignment holds had no deadline | No new deadline stamps or escalations; existing markers are inert |
 

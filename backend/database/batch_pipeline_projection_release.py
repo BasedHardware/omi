@@ -39,6 +39,7 @@ from config.backlog_state_machine import (
     MAX_PROJECTION_REARMS,
     assignment_hold_escalation_enabled,
     held_redrive_budget_enabled,
+    held_redrive_counter_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -311,7 +312,7 @@ class ProjectionReleaseStore:
                                     held_expired_release_attempts=attempts,
                                     projection_release_attempts=0,
                                 )
-                                if held_redrive_budget_enabled():
+                                if held_redrive_counter_enabled():
                                     expiry['held_expired_rearms'] = rearms + 1
                         transaction.update(self.store.ref('results', segment_id), expiry)
                         return 'expired_rearm_exhausted' if rearm_exhausted else 'expired'

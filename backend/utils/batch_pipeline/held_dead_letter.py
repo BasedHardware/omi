@@ -8,7 +8,13 @@ import logging
 import math
 import time
 
-from config.backlog_state_machine import HELD_EXHAUSTED_REASON, held_redrive_budget_enabled
+from config.backlog_state_machine import (
+    HELD_EXHAUSTED_REASON,
+    MAX_HELD_REDRIVES,
+    held_redrive_budget_enabled,
+    held_redrive_counter_enabled,
+)
+from utils.batch_pipeline.scheduler import held_redrives
 from config.batch_pipeline import batch_held_dead_letter_enabled
 from utils.backlog_metrics import record_transition
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -75,6 +81,10 @@ class HeldDeadLetter:
             after = state.get('dead_after') if state.get('redrive_day') == day else None
             dead = dead_held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=after)
             for sid, job in dead:
+                if held_redrive_counter_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES:
+                    # Class 6 counter: observe a spent re-drive budget (alerted),
+                    # whether or not the terminal stop is enabled.
+                    record_transition('held_redrive_budget_spent')
                 # A row expired today gets until the next night; stale snapshots
                 # are rechecked by the sanctioned content/privacy/lease CAS.
                 expired_at = job.get('held_expired_at')

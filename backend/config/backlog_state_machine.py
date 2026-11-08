@@ -17,6 +17,10 @@ semantics. Turning a switch off restores the exact pre-change transition.
 - ``BATCH_HELD_REDRIVE_BUDGET_ENABLED`` (classes 3 and 6): a held/dead-letter
   requeue grants a fresh attempt budget, counts the re-drive, and automatic
   re-drive stops after ``MAX_HELD_REDRIVES``.
+- ``BATCH_HELD_REDRIVE_COUNTER_ENABLED`` (class 6 counter, default ON): count
+  held re-drives (``held_redrives``) and projection re-arms
+  (``held_expired_rearms``) and report units whose budget is spent. Counting
+  and the alert only; no state change.
 - ``RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED`` (class 4): an aged
   record_pending row whose conversation exists but never completed is
   re-driven weekly with a counter, then parked as a retained dead letter.
@@ -32,6 +36,7 @@ from config.policy.kill_switches import kill_switch
 RETRY_CAP_SWITCH = 'CAPTURE_RETRY_CAP_ENFORCED'
 SYNC_ATTEMPT_CARRY_SWITCH = 'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED'
 HELD_REDRIVE_BUDGET_SWITCH = 'BATCH_HELD_REDRIVE_BUDGET_ENABLED'
+HELD_REDRIVE_COUNTER_SWITCH = 'BATCH_HELD_REDRIVE_COUNTER_ENABLED'
 RECORD_BARRIER_DEAD_LETTER_SWITCH = 'RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED'
 ASSIGNMENT_HOLD_ESCALATION_SWITCH = 'BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED'
 
@@ -85,3 +90,7 @@ def record_barrier_dead_letter_enabled() -> bool:
 
 def assignment_hold_escalation_enabled() -> bool:
     return kill_switch(ASSIGNMENT_HOLD_ESCALATION_SWITCH)
+
+
+def held_redrive_counter_enabled() -> bool:
+    return kill_switch(HELD_REDRIVE_COUNTER_SWITCH)

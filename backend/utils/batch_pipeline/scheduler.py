@@ -36,6 +36,7 @@ from config.backlog_state_machine import (
     MAX_HELD_REDRIVES,
     RETAINED_DEAD_REASONS,
     held_redrive_budget_enabled,
+    held_redrive_counter_enabled,
 )
 
 QUANTUM_SECONDS = 30.0
@@ -992,11 +993,13 @@ class Scheduler:
         owner = tx.get('owners', job['owner_key'])
         owner['revision'] = owner.get('revision', 0) + 1
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        if held_redrive_counter_enabled():
+            # Class 6 counter: every requeue (nightly or operator) is counted.
+            job['held_redrives'] = held_redrives(job) + 1
         if held_redrive_budget_enabled():
             # A re-drive is a new attempt budget. Keeping attempt at the cap made
             # the first failure re-quarantine; history moves to explicit fields.
             job['held_redrive_last_attempt'] = job.get('attempt', 0)
-            job['held_redrives'] = held_redrives(job) + 1
             job['attempt'] = 0
         _append(tx, control, job)
         tx.put('owners', job['owner_key'], owner)

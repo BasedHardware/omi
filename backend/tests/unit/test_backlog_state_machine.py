@@ -36,9 +36,12 @@ SWITCHES = (
     sm.RETRY_CAP_SWITCH,
     sm.SYNC_ATTEMPT_CARRY_SWITCH,
     sm.HELD_REDRIVE_BUDGET_SWITCH,
+    sm.HELD_REDRIVE_COUNTER_SWITCH,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH,
 )
+# The class 6 terminal stop's switch (shared with class 3 until they split).
+STOP_SWITCH = sm.HELD_REDRIVE_BUDGET_SWITCH
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +66,7 @@ EXPECTED_DEFAULTS = {
     sm.RETRY_CAP_SWITCH: False,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
     sm.HELD_REDRIVE_BUDGET_SWITCH: True,
+    sm.HELD_REDRIVE_COUNTER_SWITCH: True,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: True,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: True,
 }
@@ -70,6 +74,7 @@ READERS = {
     sm.RETRY_CAP_SWITCH: sm.retry_cap_enforced,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: sm.sync_attempt_carry_enabled,
     sm.HELD_REDRIVE_BUDGET_SWITCH: sm.held_redrive_budget_enabled,
+    sm.HELD_REDRIVE_COUNTER_SWITCH: sm.held_redrive_counter_enabled,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: sm.record_barrier_dead_letter_enabled,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: sm.assignment_hold_escalation_enabled,
 }
@@ -382,7 +387,9 @@ def test_requeue_grants_a_fresh_attempt_budget(setup, monkeypatch, switch):
         assert job['attempt'] == 0
         assert job['held_redrives'] == 1 and job['held_redrive_last_attempt'] == 5
     else:
-        assert job['attempt'] == 5 and 'held_redrives' not in job
+        # The budget reset is off; the class 6 counter (default on) still counts.
+        assert job['attempt'] == 5 and job['held_redrives'] == 1
+        assert 'held_redrive_last_attempt' not in job
 
 
 def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch):
@@ -545,6 +552,39 @@ def test_switch_on_nightly_pass_never_requeues_an_exhausted_unit(setup, monkeypa
     assert bad(client)['state'] == 'dead'
 
 
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
+def test_redrive_counter_counts_requeues_only_with_its_switch(setup, monkeypatch, switch):
+    """Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON)."""
+    if switch is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, switch)
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), attempt=5)
+    assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
+    if switch == 'false':
+        assert 'held_redrives' not in bad(client)
+    else:
+        assert bad(client)['held_redrives'] == 1
+
+
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
+def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(monkeypatch, switch):
+    from utils.batch_pipeline import held_dead_letter as sweep
+
+    if switch is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, switch)
+    store = Mock()
+    store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
+    runner = sweep.HeldDeadLetter(store)
+    spent = {'held_expired_at': 1, 'held_redrives': sm.MAX_HELD_REDRIVES}
+    monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('a', spent)])
+    monkeypatch.setattr(runner.recovery, 'requeue_quarantined', lambda *a, **k: False)
+    before = transitions('held_redrive_budget_spent')
+    runner.tick(86400)
+    assert transitions('held_redrive_budget_spent') == before + (0 if switch == 'false' else 1)
+
+
 def test_nightly_tick_counts_exhausted_separately(monkeypatch):
     from utils.batch_pipeline import held_dead_letter as sweep
 
@@ -572,17 +612,20 @@ def projection(monkeypatch):
     return rows, store_for
 
 
-@pytest.mark.parametrize('switch', [None, 'false'])
-def test_projection_rearm_counts_and_stops_after_max(projection, monkeypatch, switch):
+@pytest.mark.parametrize('stop', ['true', 'false'])
+@pytest.mark.parametrize('counter', ['true', 'false'])
+def test_projection_rearm_counts_and_stops_after_max(projection, monkeypatch, stop, counter):
+    """Class 6: the counter counts re-arms; only the terminal stop keeps the budget spent."""
     from database.batch_pipeline_projection_release import MAX_RELEASE_ATTEMPTS, ProjectionReleaseStore
 
-    if switch is not None:
-        monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, switch)
+    monkeypatch.setenv(STOP_SWITCH, stop)
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
     rows, store_for = projection
     result = ('batch_pipeline_prod_results', 'held')
     client, store = store_for(
         rows(discarded=True, held_deadline_at=1, projection_release_attempts=MAX_RELEASE_ATTEMPTS)
     )
+    counted = counter == 'true'
     for rearm in range(1, sm.MAX_PROJECTION_REARMS + 2):
         entry = client.rows[result]
         # A released-then-re-held unit: a fresh, passed deadline and a spent release budget.
@@ -593,14 +636,15 @@ def test_projection_rearm_counts_and_stops_after_max(projection, monkeypatch, sw
         assert release.release('held', 2.0 + rearm) is False
         assert release.expired
         entry = client.rows[result]
-        if switch is None and rearm > sm.MAX_PROJECTION_REARMS:
+        if stop == 'true' and counted and rearm > sm.MAX_PROJECTION_REARMS:
             assert release.rearm_exhausted
             assert entry['projection_release_attempts'] == MAX_RELEASE_ATTEMPTS
             assert entry['held_rearm_exhausted_at'] == 2.0 + rearm
             assert entry['held_expired_rearms'] == sm.MAX_PROJECTION_REARMS
         else:
+            assert not release.rearm_exhausted
             assert entry['projection_release_attempts'] == 0
-            if switch is None:
+            if counted:
                 assert entry['held_expired_rearms'] == rearm
             else:
                 assert 'held_expired_rearms' not in entry

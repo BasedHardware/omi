@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 TRANSITIONS = (
     # A held unit whose automatic re-drive budget is spent (dead/held_exhausted).
     'held_exhausted',
+    # Nightly pass saw a held unit whose re-drive counter reached the max
+    # (counter only; recorded whether or not the terminal stop is on).
+    'held_redrive_budget_spent',
     # A projection receipt whose expiry may no longer re-arm its release budget.
     'projection_rearm_exhausted',
     # An aged record_pending row with an unfinished conversation re-driven weekly.
