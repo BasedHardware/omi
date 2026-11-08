@@ -208,6 +208,9 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_held_expired_total/',
     'prometheus.googleapis.com/omi_batch_held_expired_units/',
     'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
     'prometheus.googleapis.com/omi_finalization_byok_',
@@ -269,6 +272,9 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_held_expired_total/',
     'prometheus.googleapis.com/omi_batch_held_expired_units/',
     'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
     'prometheus.googleapis.com/omi_finalization_byok_',
@@ -693,3 +699,44 @@ def test_held_dead_letter_producer_families_reach_the_volume_alert_through_each_
     rule = next(r for r in json.loads(ALERT_RULES.read_text()) if r['uid'] == 'omi-batch-held-expired-volume')
     queries = ' '.join(node['model'].get('expr', '') for node in rule['data'])
     assert all(name in queries for name in families)
+
+
+@pytest.mark.parametrize(
+    'path', [CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV]
+)
+@pytest.mark.parametrize('profile', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_record_dead_letter_alert_metrics_survive_each_ingestion_allowlist(path, profile):
+    from prometheus_client import CollectorRegistry
+    from scripts.alert_backtest import metric_names, prometheus
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    rule = next(r for r in json.loads(ALERT_RULES.read_text()) if r['uid'] == 'omi-batch-record-dead-letter-volume')
+    queried = set().union(*(metric_names(node['model']['expr']) for node in rule['data'] if prometheus(node)))
+    assert queried == {
+        'omi_batch_record_dead_letter_total',
+        'omi_batch_record_dead_letter_units',
+        'omi_batch_record_dead_letter_observed_at_seconds',
+    }
+    registry = CollectorRegistry()
+    producer = QueueMetrics(registry)
+    producer.record_dead_letter.inc()
+    producer.record_dead_letter_stock.set(101)
+    producer.record_dead_letter_observed_at.set(1000)
+    emitted = {sample.name for metric in registry.collect() for sample in metric.samples}
+    assert queried <= emitted
+    inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
+    assert queried <= set(inventory['declared_metrics'])
+    imported = set(yaml.safe_load(path.read_text())['stackdriver']['metrics']['prefixes'])
+    assert {f'prometheus.googleapis.com/{name}/' for name in queried} <= imported
+    relabels = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())['spec']['endpoints'][0][
+        'metricRelabeling'
+    ]
+    for name in queried:
+        labels = {'__name__': name}
+        for relabel in relabels:
+            value = ';'.join(labels.get(key, '') for key in relabel['sourceLabels'])
+            matched = re.fullmatch(relabel['regex'], value)
+            if relabel['action'] == 'keep':
+                assert matched, (profile, name)
+            elif relabel['action'] == 'drop':
+                assert not matched, (profile, name)

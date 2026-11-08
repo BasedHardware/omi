@@ -14,6 +14,7 @@ from starlette.responses import Response, JSONResponse
 from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
@@ -236,6 +237,18 @@ async def requeue_quarantined(body: RedriveRequest):
             db_executor, RecoveryStore(body.service().store).requeue_quarantined, body.segment_id, time.time()
         )
     except (BatchPrivacyBlocked, ProjectionBlocked):
+        accepted = False
+    return {'accepted': accepted}
+
+
+@router.post('/requeue-record', include_in_schema=False)
+async def requeue_record(body: RedriveRequest):
+    """Private worker OIDC; rechecks the record reason and commit privacy fence."""
+    try:
+        accepted = await run_blocking(
+            db_executor, requeue_record_job, body.service().store, body.segment_id, time.time()
+        )
+    except BatchPrivacyBlocked:
         accepted = False
     return {'accepted': accepted}
 

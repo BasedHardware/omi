@@ -177,6 +177,29 @@ def test_aged_ghost_exits_via_ready_without_expiry(holds, segment, caplog, monke
     assert 'held_deadline_at' not in entry
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('recovery_state', [None, 'held'])
+@pytest.mark.parametrize('deadline', [None, NOW - 1])
+def test_completed_assignment_receipt_cannot_expire(holds, monkeypatch, enabled, recovery_state, deadline):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', str(enabled).lower())
+    projection = holds.projector.store
+    segment = GHOSTS[0]
+    projection.ref('jobs', segment).update({'recovery_state': recovery_state})
+    if deadline is not None:
+        projection.ref('results', segment).update({'held_deadline_at': deadline})
+    before = {kind: projection.ref(kind, segment).get().to_dict() for kind in ('jobs', 'results')}
+    release = ProjectionReleaseStore(projection)
+    assert not release.release(segment, NOW)
+    assert not release.expired
+    settled = enabled and recovery_state != 'held'
+    assert release.ghost_settled is settled
+    assert projection.ref('jobs', segment).get().to_dict() == before['jobs']
+    assert projection.ref('results', segment).get().to_dict() == {
+        **before['results'],
+        **({'projection_state': 'ready', 'ghost_settled_cohort': 'g1'} if settled else {}),
+    }
+
+
 @pytest.mark.parametrize('failure', ['fetch', 'transaction'])
 def test_expected_gap_cannot_hide_scan_failures(holds, monkeypatch, caplog, failure):
     def fail(*args, **kwargs):
