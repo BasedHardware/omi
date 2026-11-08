@@ -738,7 +738,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                     if record_drain_barrier_backoff_enabled():
                         # The capture is not finalized yet: back off by how long it has waited.
                         delay = barrier_retry_delay(age)
-                    if record_park_owns(barrier_error):
+                    # Same fence as main's expiry: only the worker that still holds
+                    # the drain lease may spend class 4 re-drive budget. A slow
+                    # admission whose lease another replica re-claimed spends nothing.
+                    if record_park_owns(barrier_error) and latest.get('available_at') == lease:
                         step = barrier_dead_letter_step(latest, age=age, error=barrier_error, now=now)
                         if step == 'redrive':
                             delay = RECORD_BARRIER_REDRIVE_SECONDS

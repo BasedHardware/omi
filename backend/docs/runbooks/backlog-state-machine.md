@@ -99,7 +99,7 @@ else changes, and a later restored target still releases it.
 ## Metrics
 
 `omi_backlog_state_transitions_total{transition}`: `held_exhausted`,
-`projection_rearm_exhausted`, `record_barrier_redrive`,
+`projection_rearm_exhausted`, `projection_rearm_budget_spent`, `record_barrier_redrive`,
 `record_barrier_dead_letter`, `sync_running_cap_reached`, `assignment_hold_escalated`. Counted once per
 committed transaction, never inside a retryable callback.
 

@@ -135,6 +135,7 @@ class ProjectionReleaseStore:
         self.store = store
         self.expired = False
         self.rearm_exhausted = False
+        self.rearm_spent = False
         self.escalated = False
         self.ghost_budget = max(0, min(ghost_budget, GHOST_SETTLE_MAX_PER_PASS))
         self.ghost_settled = False
@@ -195,6 +196,9 @@ class ProjectionReleaseStore:
         rearm_exhausted = False
         if attempts >= MAX_RELEASE_ATTEMPTS:
             rearms = projection_rearms(entry)
+            # Class 6 counter: a spent re-arm budget is observed (and alerted)
+            # whether or not the terminal stop is on; recorded after commit.
+            self.rearm_spent = held_redrive_counter_enabled() and rearms >= MAX_PROJECTION_REARMS
             if held_redrive_stop_enabled() and rearms >= MAX_PROJECTION_REARMS:
                 # Class 6 terminal stop: the receipt stays retained as
                 # held_expired but its release budget stays spent.
@@ -214,6 +218,7 @@ class ProjectionReleaseStore:
 
         @firestore.transactional
         def commit(transaction):
+            self.rearm_spent = False  # reset on every transaction retry
             job = self.store.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
@@ -419,6 +424,8 @@ class ProjectionReleaseStore:
         self.expired = outcome == 'expired' or self.rearm_exhausted
         if self.rearm_exhausted:
             record_transition('projection_rearm_exhausted')
+        if self.expired and self.rearm_spent:
+            record_transition('projection_rearm_budget_spent')
         released = outcome is True
         if released or self.expired or self.ghost_settled or self.escalated:
             try:

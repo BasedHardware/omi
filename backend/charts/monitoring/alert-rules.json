@@ -32972,7 +32972,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Backlog state machine",
-    "title": "Held units with a spent re-drive budget",
+    "title": "Held units or projection receipts with a spent re-drive budget",
     "condition": "C",
     "data": [
       {
@@ -32988,7 +32988,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=~\"held_redrive_budget_spent|projection_rearm_budget_spent\"}[1h])) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -33065,10 +33065,10 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "The nightly held pass saw more than 64 units whose re-drive counter reached the max in an hour.",
+      "summary": "The held pass or projection expiry saw more than 64 units or receipts whose re-drive or re-arm count reached the max in an hour.",
       "user_impact": "These recordings keep their audio but have been re-driven 3 times without a transcript; with the terminal stop off they keep looping nightly.",
-      "scope": "Counter only (BATCH_HELD_REDRIVE_COUNTER_ENABLED): observed whether or not the terminal stop is on. Agent tier only.",
-      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} and sample worker failure reasons with an authorized operator read.",
+      "scope": "Counter only (BATCH_HELD_REDRIVE_COUNTER_ENABLED): held_redrive_budget_spent counts nightly held jobs at MAX_HELD_REDRIVES; projection_rearm_budget_spent counts committed projection expiries at or over MAX_PROJECTION_REARMS. Both are observed whether or not the terminal stop is on. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=~\"held_redrive_budget_spent|projection_rearm_budget_spent\"} and sample units with an authorized operator read.",
       "safe_next_action": "Fix the failure cause, then decide whether to enable BATCH_HELD_REDRIVE_TERMINAL_STOP_ENABLED. Never delete audio. Rollback: BATCH_HELD_REDRIVE_COUNTER_ENABLED=false.",
       "runbook": "backend/docs/runbooks/backlog-state-machine.md",
       "threshold": ">64 in 1h for 5m (two nightly 32-row pages); initial agent threshold, not calibrated from production.",

@@ -994,14 +994,7 @@ class Scheduler:
         owner = tx.get('owners', job['owner_key'])
         owner['revision'] = owner.get('revision', 0) + 1
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
-        if held_redrive_counter_enabled():
-            # Class 6 counter: every requeue (nightly or operator) is counted.
-            job['held_redrives'] = held_redrives(job) + 1
-        if held_redrive_budget_enabled():
-            # A re-drive is a new attempt budget. Keeping attempt at the cap made
-            # the first failure re-quarantine; history moves to explicit fields.
-            job['held_redrive_last_attempt'] = job.get('attempt', 0)
-            job['attempt'] = 0
+        account_held_redrive(job)
         _append(tx, control, job)
         tx.put('owners', job['owner_key'], owner)
         tx.put('jobs', job['segment_id'], job)
@@ -1036,6 +1029,10 @@ class Scheduler:
             # bypass held_redrives and the attempt reset.
             return False
         control = read_control(tx, scheduler_control_key(job['owner_key']))
+        if automatic and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
+            # With the terminal stop off a status poll may still reopen a retained
+            # held dead letter; it gets the nightly path's switched accounting.
+            account_held_redrive(job)
         job.update(
             state='ready',
             available_at=now,
@@ -1084,3 +1081,18 @@ def held_redrives(job: dict) -> int:
         return 0
     count = job['held_redrives']
     return count if type(count) is int and count >= 0 else MAX_HELD_REDRIVES
+
+
+def account_held_redrive(job: dict) -> None:
+    """Switched accounting shared by every re-drive of a held unit (nightly, operator, poll).
+
+    Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED): count the re-drive.
+    Class 3 (BATCH_HELD_REDRIVE_BUDGET_ENABLED): grant a fresh attempt budget;
+    keeping attempt at the cap made the first failure re-quarantine. History
+    moves to held_redrive_last_attempt.
+    """
+    if held_redrive_counter_enabled():
+        job['held_redrives'] = held_redrives(job) + 1
+    if held_redrive_budget_enabled():
+        job['held_redrive_last_attempt'] = job.get('attempt', 0)
+        job['attempt'] = 0

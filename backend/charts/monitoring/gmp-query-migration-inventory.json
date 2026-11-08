@@ -184,13 +184,13 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=~\"held_redrive_budget_spent|projection_rearm_budget_spent\"}[1h])) or vector(0)",
       "file": "alerts/backlog-state-machine.json",
       "issues": [],
       "metrics": [
         "omi_backlog_state_transitions_total"
       ],
-      "owner_title": "Held units with a spent re-drive budget",
+      "owner_title": "Held units or projection receipts with a spent re-drive budget",
       "owner_uid": "omi-backlog-held-redrive-budget-spent",
       "panel": null,
       "pointer": "/data/0/model/expr",

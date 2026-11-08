@@ -512,6 +512,38 @@ def test_client_poll_never_redrives_a_retained_held_dead_letter(monkeypatch, rea
     assert store.rows['jobs', 'segment']['state'] == 'ready'
 
 
+@pytest.mark.parametrize('counter', ['true', 'false'])
+@pytest.mark.parametrize('budget', ['true', 'false'])
+def test_client_poll_redrive_with_stop_off_keeps_the_nightly_accounting(monkeypatch, counter, budget):
+    """Review wave 3 (finding 2): a poll re-drive is counted and reset like the nightly one."""
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv(STOP_SWITCH, 'false')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    store.rows['jobs', 'segment'].update(
+        state='dead',
+        token='',
+        lease_until=0,
+        merge_pending=True,
+        dead_letter_reason='held_expired',
+        held_redrives=1,
+        attempt=5,
+    )
+    durable_status(store, 'synthetic-owner', 'bp_first')
+    job = store.rows['jobs', 'segment']
+    assert job['state'] == 'ready'
+    assert job['held_redrives'] == (2 if counter == 'true' else 1)
+    assert job['attempt'] == (0 if budget == 'true' else 5)
+
+
 def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
     from tests.unit.test_batch_pipeline_intake import proposal, submit
     from utils.batch_pipeline.intake import durable_status
@@ -670,6 +702,34 @@ def test_projection_rearm_counts_and_stops_after_max(projection, monkeypatch, st
                 assert 'held_expired_rearms' not in entry
         # The receipt and its payload are retained in every case.
         assert entry['projection_state'] == 'quarantine_held'
+
+
+@pytest.mark.parametrize('rearms,emitted', [(sm.MAX_PROJECTION_REARMS - 1, 0), (sm.MAX_PROJECTION_REARMS, 1)])
+def test_projection_spent_rearm_budget_is_observed_with_the_stop_off(projection, monkeypatch, rearms, emitted):
+    """Review wave 3 (finding 3): ruled defaults (counter on, stop off) still report a spent budget."""
+    import json
+    from pathlib import Path
+
+    from database.batch_pipeline_projection_release import MAX_RELEASE_ATTEMPTS, ProjectionReleaseStore
+
+    monkeypatch.setenv(STOP_SWITCH, 'false')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    rows, store_for = projection
+    client, store = store_for(
+        rows(
+            discarded=True,
+            held_deadline_at=1,
+            projection_release_attempts=MAX_RELEASE_ATTEMPTS,
+            held_expired_rearms=rearms,
+        )
+    )
+    before = transitions('projection_rearm_budget_spent')
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 2.0) is False and release.expired and not release.rearm_exhausted
+    assert transitions('projection_rearm_budget_spent') == before + emitted
+    rules = json.loads((Path(__file__).resolve().parents[2] / 'charts/monitoring/alert-rules.json').read_text())
+    exprs = [d['model'].get('expr', '') for r in rules for d in r['data']]
+    assert any('projection_rearm_budget_spent' in e for e in exprs)
 
 
 def test_rearm_exhausted_receipt_releases_after_stop_switch_off_and_target_restored(projection, monkeypatch):
@@ -832,19 +892,56 @@ def test_parked_row_is_rechecked_without_admission_while_the_switch_is_on(drain,
 @pytest.mark.parametrize(
     'age,status,present,delay',
     [
-        # Young rows keep the #24863 ladder.
-        (13 * DAY, 'in_progress', True, 3600),
         # A missing conversation belongs to the seven-day record_pending_repair cancel.
         (30 * DAY, None, False, 3600),
         # A completed conversation with open upload tokens belongs to seal repair.
         (30 * DAY, 'completed', True, 3600),
     ],
 )
-def test_other_barrier_cohorts_keep_their_existing_owner(drain, age, status, present, delay):
+def test_other_barrier_cohorts_keep_their_existing_owner(drain, monkeypatch, age, status, present, delay):
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')  # class 4 on: still not its cohort
     live, _, seed, run, _ = drain
     seed(age)
     job, got = run(barrier(live, status, present))
     assert got == delay and 'barrier_redrives' not in job and 'barrier_dead_letter' not in job
+
+
+@pytest.mark.parametrize(
+    'age,redrive',
+    [(sm.RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS - 1, False), (sm.RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS, True)],
+)
+def test_class_4_spends_no_redrive_before_the_14_day_boundary(drain, monkeypatch, age, redrive):
+    """Review wave 3 (finding 4): class 4 on, a present unfinished row, either side of 14 days."""
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')
+    live, _, seed, run, _ = drain
+    seed(age)
+    job, delay = run(barrier(live, 'in_progress'))
+    if redrive:
+        assert job['barrier_redrives'] == 1 and delay == sm.RECORD_BARRIER_REDRIVE_SECONDS
+    else:
+        assert 'barrier_redrives' not in job and delay == 3600
+    assert 'barrier_dead_letter' not in job
+
+
+def test_class_4_refuses_to_spend_budget_after_losing_the_drain_lease(drain, monkeypatch):
+    """Review wave 3 (finding 1): a slow admission outlives its lease; another replica claims the row."""
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')
+    live, store, seed, _, clock = drain
+    seed(30 * DAY)
+    store.rows['jobs', 's']['barrier_redrives'] = 2
+    competing_lease = clock[0] + 5000
+
+    async def slow_admission(store_, pending):
+        # While this worker was admitting, its lease ended and another replica claimed the row.
+        store.rows['jobs', 's']['available_at'] = competing_lease
+        raise barrier(live, 'in_progress')
+
+    monkeypatch.setattr(live, 'admit_recording', slow_admission)
+    asyncio.run(live.drain_recordings(store))
+    job = store.rows['jobs', 's']
+    assert job['barrier_redrives'] == 2  # the stale worker spent nothing
+    assert 'barrier_redrive_at' not in job and 'barrier_dead_letter' not in job
+    assert job['available_at'] >= competing_lease  # the competing lease is kept
 
 
 def test_plain_barrier_error_from_the_transactional_recheck_is_not_parked(drain):

@@ -19,6 +19,9 @@ TRANSITIONS = (
     'held_redrive_budget_spent',
     # A projection receipt whose expiry may no longer re-arm its release budget.
     'projection_rearm_exhausted',
+    # A projection expiry at or over the re-arm budget (counter only; recorded
+    # whether or not the terminal stop is on).
+    'projection_rearm_budget_spent',
     # An aged record_pending row with an unfinished conversation re-driven weekly.
     'record_barrier_redrive',
     # The same row parked as a retained dead letter after its last re-drive.
