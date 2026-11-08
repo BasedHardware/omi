@@ -280,8 +280,8 @@ class CellGoals(WorkflowRepo):
     def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
         rows = self.store.query(
             'goal_events',
-            "doc->>'goal_id'=%s AND doc ? 'sequence'",
-            [goal_id],
+            "starts_with(entity_id,%s) AND doc ? 'sequence'",
+            [goal_id + '/'],
             order=EVENT_SEQUENCE_DESC_SQL,
             limit=limit,
         )

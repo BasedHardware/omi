@@ -163,8 +163,8 @@ class CellWorkstreams(WorkflowRepo):
     ) -> list[WorkstreamEventEntity]:
         rows = self.store.query(
             'workstream_events',
-            f"doc->>'workstream_id'=%s AND ({EVENT_SEQUENCE_SQL}) > %s",
-            [workstream_id, after_sequence],
+            f"starts_with(entity_id,%s) AND ({EVENT_SEQUENCE_SQL}) > %s",
+            [workstream_id + '/', after_sequence],
             order=f'({EVENT_SEQUENCE_SQL}), entity_id COLLATE "C"',
             limit=limit,
         )
