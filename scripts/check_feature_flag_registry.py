@@ -72,7 +72,11 @@ REVIEW_OVERDUE: dict[str, dict[str, str]] = {}
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
 # Keys use normalize_owner(); exceptions require an ISO expires date and reason.
-OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {}
+OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {
+    # 167 legacy rows name the account, not a lane; the retro N3 batch ruling ramps or retires them.
+    # New rows should name the owning lane. Expiry turns this back into an error.
+    "dazheng": {"expires": "2026-11-15", "reason": "retro N3 ramp-or-retire batch pending"},
+}
 
 
 def normalize_owner(owner: str) -> str:
