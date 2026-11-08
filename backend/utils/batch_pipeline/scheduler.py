@@ -1,6 +1,7 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
 import hashlib
+from typing import Literal
 import math
 import logging
 import random
@@ -1020,7 +1021,10 @@ class Scheduler:
         return True
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float, *, automatic: bool = False) -> bool:
+    def redrive_in_transaction(
+        tx: Transaction, job: dict, now: float, *, automatic: bool = False
+    ) -> bool | Literal['spent']:
+        """True on redrive; 'spent' when a poll re-drive starts at or over the held budget."""
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
         if automatic and held_redrive_stop_enabled() and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
@@ -1050,7 +1054,7 @@ class Scheduler:
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        return bool(self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now)))
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
