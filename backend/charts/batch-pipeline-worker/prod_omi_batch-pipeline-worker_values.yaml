@@ -127,3 +127,6 @@ recordSealRepair:
 # recordSealWorker.serverFlags stays at the chart default {} (worker IO refused, as in live release r71). Running the
 # worker AND repair with IO would let both pick the same pending row: the transactional seal prevents a double seal,
 # but both would do the proof and audio reads (Luna r1 P2 on #24643). Enable one IO path at a time after measuring.
+recordSealWorker:
+  # Serve /metrics idle; an enabled runtime with the refused policy exits before readiness.
+  runtimeEnabled: false
