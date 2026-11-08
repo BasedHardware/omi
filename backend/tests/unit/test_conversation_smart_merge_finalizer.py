@@ -59,6 +59,9 @@ def harness(monkeypatch):
     # The live-episode hook runs after fanout completion; its own tests cover it.
     monkeypatch.setenv('EPISODES_ENABLED', 'off')
     monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    # This row has no live episode; retain the enabled notes-scheduling prelude.
+    monkeypatch.delenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', raising=False)
+    monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *args: False)
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
@@ -68,6 +71,8 @@ def harness(monkeypatch):
             # Exercise the real default-off gate; it must not claim a route or touch Firestore.
             return function(*args, **kwargs)
         if function is finalizer.apply_call_metadata:
+            return function(*args, **kwargs)
+        if function is finalizer.member_notes.waits:
             return function(*args, **kwargs)
         calls.append(function)
         if function is finalizer.finalization_jobs_db.get_finalization_job:

@@ -137,3 +137,15 @@ No PR merge or deployment is authorized. Merge-desk owns merge; the Infra Rollou
 Coordinator owns production rollout. No runtime env changes were made. GCP tier:
 none; no production access. Final GitHub head/CI state must be checked after push.
 ANX ruling and progress are recorded on `card:episode-home-live-rows`.
+
+## CI follow-up: smart-merge finalizer fixture
+
+On 2026-11-08 at 01:33Z, the first published head's backend shard 7 failed
+`test_conversation_smart_merge_finalizer.py`: 24 failures, 4 passes. Every
+failure rejected the newly enabled `member_notes.waits` blocking call in the
+strict fake executor. The fixture now explicitly exercises the unset (enabled)
+default and models its recording as having no live owner, allowing that prelude
+without changing smart-merge stage-order assertions. Production behavior and both
+default-on switches are unchanged. The required pre-push selection includes this
+whole 28-case file; its terminal result is recorded in the PR's verification
+section after publication. Source job: https://github.com/BasedHardware/omi/actions/runs/42434242402/job/128589548246
