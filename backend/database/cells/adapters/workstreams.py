@@ -257,7 +257,11 @@ class CellWorkstreams(WorkflowRepo):
     @atomic
     def list_artifact_descriptors(self, workstream_id: str, *, limit: int = 100) -> list[ArtifactDescriptorEntity]:
         rows = self.store.query(
-            'workstream_artifacts', "doc->>'workstream_id'=%s", [workstream_id], order="q_created_at DESC", limit=limit
+            'workstream_artifacts',
+            "jsonb_typeof(doc->'workstream_id')='string' AND doc->>'workstream_id'=%s",
+            [workstream_id],
+            order="q_created_at DESC",
+            limit=limit,
         )
         return [ArtifactDescriptorEntity.model_construct(**deepcopy(row)) for _, row in rows]
 

@@ -175,7 +175,7 @@ class CellFolders(Repo):
     def conversations_in_folder(
         self, folder_id: str, *, limit: int = 100, offset: int = 0, include_discarded: bool = False
     ) -> list[dict]:
-        where = "doc->>'folder_id'=%s"
+        where = "jsonb_typeof(doc->'folder_id')='string' AND doc->>'folder_id'=%s"
         if not include_discarded:
             where += " AND doc->'discarded'='false'::jsonb"
         rows = self.store.query(

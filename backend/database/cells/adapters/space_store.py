@@ -185,8 +185,13 @@ class CellSpaceTx:
             }
             for field in ('due_at', 'created_at', 'updated_at'):
                 projections['q_' + field] = "cell_query_timestamp(doc->'" + field + "')"
-            for field in ('conversation_id', 'idempotency_key', 'goal_id', 'status'):
-                projections['q_' + field] = "doc->>'" + field + "'"
+            # Mirror migration 0004 exactly: key projections keep only JSON
+            # strings; status keeps its text cast.
+            for field in ('conversation_id', 'idempotency_key', 'goal_id'):
+                projections['q_' + field] = (
+                    "CASE WHEN jsonb_typeof(doc->'" + field + "')='string' THEN doc->>'" + field + "' END"
+                )
+            projections['q_status'] = "doc->>'status'"
             overlay_columns = 'entity_id, doc, ' + ', '.join(projections)
             expressions = 'entity_id, doc, ' + ', '.join(projections.values())
             values = [{'entity_id': key, 'doc': row} for key, row in edits.items() if row is not _MISSING]

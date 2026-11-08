@@ -600,3 +600,22 @@ def test_numeric_legacy_idempotency_key_does_not_match_string_request(pg):
     created = pg.action_items(sid).create(ActionItemDraft(data={'description': 'New'}), idempotency_key='123')
     assert created != 't-legacy'
     assert pg.action_items(sid).create(ActionItemDraft(data={'description': 'Again'}), idempotency_key='123') == created
+
+
+def test_pending_overlay_keeps_numeric_idempotency_key_typed(pg):
+    # A same-UoW edit routes the legacy row through the overlay, which must
+    # project keys exactly as migration 0004's generated columns do.
+    sid = pg.space('legacy-numeric-idempotency-overlay')
+    now = datetime.now(timezone.utc)
+    pg.seed(
+        sid,
+        'action_items',
+        't-legacy',
+        {'description': 'Legacy', 'completed': False, 'idempotency_key': 123, 'created_at': now, 'updated_at': now},
+    )
+
+    def body(tx):
+        tx.action_items.update('t-legacy', {'description': 'Edited'})
+        return tx.action_items.create(ActionItemDraft(data={'description': 'New'}), idempotency_key='123')
+
+    assert pg.store(sid).run(body) != 't-legacy'
