@@ -17,7 +17,13 @@ from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.live import record_identity, register_recording
-from utils.batch_pipeline.record_seal_repair import plan_digest, seal_refusal, seal_row_state, retained_tail_proof
+from utils.batch_pipeline.record_seal_repair import (
+    plan_digest,
+    seal_refusal,
+    seal_row_state,
+    retained_tail_proof,
+    observe_orphan_parked,
+)
 
 OPERATION = 'record-seal-nojob-v1'
 REGISTRATION_FIELDS = ('source', 'language', 'client_device_id', 'client_platform', 'uses_custom_stt', 'external_data')
@@ -105,6 +111,22 @@ def refusal(row, producer_proof, *, repair_upload_failed=False):
     )
 
 
+def observe_existing_orphan(observation, producer_proof, *, repair_upload_failed=False):
+    """Inspect only the existing snapshot, after the transaction has finished."""
+    if not observation:
+        return
+    try:
+        # The conversation row may be missing (deleted). Guard inside the try so the
+        # telemetry-only check can neither raise nor change the already_registered result.
+        job, row = observation['job'], observation['row']
+        if row is None or job.get('registration_origin') != 'restore' or not row.get('discarded'):
+            return
+        reason = seal_refusal(job, row, producer_proof=producer_proof, repair_upload_failed=repair_upload_failed)
+        observe_orphan_parked(job, row, reason, seal_path='nojob')
+    except Exception:
+        return
+
+
 def registration(tx, uid, cid, row, server_flags):
     capture = RegistrationPlan(tx)
     if (
@@ -136,9 +158,14 @@ def plan_backfill(
             _, job_id = record_identity(uid, cid)
             job_ref = store.client.collection(f'{store.namespace}_jobs').document(job_id)
 
+            observation = {}
+
             def read(tx):
+                observation.clear()
                 row = tx.get('conversations', f'{uid}/{cid}')
-                if job_ref.get(transaction=tx.transaction).exists:
+                snapshot = job_ref.get(transaction=tx.transaction)
+                if snapshot.exists:
+                    observation.update(job=snapshot.to_dict() or {}, row=row)
                     return row, None, 'already_registered'
                 reason = refusal(row, producer_proof, repair_upload_failed=repair_upload_failed)
                 if reason:
@@ -146,6 +173,7 @@ def plan_backfill(
                 return row, registration(tx, uid, cid, row, server_flags), None
 
             row, job, reason = store.run(read)
+            observe_existing_orphan(observation, producer_proof, repair_upload_failed=repair_upload_failed)
             if reason:
                 entry['disposition'] = reason
             else:
@@ -198,16 +226,22 @@ def apply_backfill(store, plan, approved_digest):
         row_ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
         now = time.time()
 
+        observation = {}
+
         @firestore.transactional
         def commit(raw):
+            observation.clear()
             tx = FirestoreTransaction(store.client, store.namespace, raw)
             row = tx.get('conversations', f'{uid}/{cid}')
-            if job_ref.get(transaction=raw).exists:
+            snapshot = job_ref.get(transaction=raw)
+            if snapshot.exists:
+                observation.update(job=snapshot.to_dict() or {}, row=row)
                 return 'already_registered'
             if row_state(row) != entry['row']:
                 return 'state_changed'
             reason = refusal(row, plan['producer_proof'], repair_upload_failed=plan.get('repair_upload_failed', False))
             if reason:
+                observation.update(job=entry['job'], row=row)
                 return reason
             tx.check_privacy(uid, (cid,), expected_generation=entry['job']['privacy_generation'])
             job = registration(tx, uid, cid, row, plan['server_flags'])
@@ -227,6 +261,9 @@ def apply_backfill(store, plan, approved_digest):
 
         try:
             outcomes[run_transactional(store.client, commit, transient=True)] += 1
+            observe_existing_orphan(
+                observation, plan['producer_proof'], repair_upload_failed=plan.get('repair_upload_failed', False)
+            )
         except BatchPrivacyBlocked:
             outcomes['privacy_refused'] += 1
         except Exception:

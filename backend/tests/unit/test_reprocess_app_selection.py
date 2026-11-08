@@ -306,7 +306,8 @@ def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classifica
         result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
     assert result is model
     assert process.call_args.kwargs['user_kept'] is expected
-    assert restore.call_count == int(discarded)
+    # A user_kept row re-runs restore registration on reprocess (register-first retry).
+    assert restore.call_count == int(discarded or stored_keep)
 
 
 @pytest.mark.parametrize(
