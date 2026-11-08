@@ -498,6 +498,7 @@ def claim_next(
             'active_epoch': epoch,
             'dispatch_attempt': 0,
             'running_expiries': 0,
+            'dispatch_attempt_base': 0,
             'active_state': 'dispatching',
             'worker_available': job['payload'].get('worker_eligible') is True,
             'worker_fallback_at': (
@@ -961,6 +962,10 @@ def redrive_job(
         # A running expiry is a crash unless a budget deferral's delayed
         # replacement is still pending (crashed=False from the sweeper).
         expiries = running_expiries(owner) + (0 if dispatching or not crashed else 1) if carry else 0
+        # dispatch_attempt stays a unique task identity, but the legacy
+        # dispatching-deadline budget restarts at every new epoch, as on main
+        # (which reset dispatch_attempt here): count from this base.
+        base = int(owner.get('dispatch_attempt_base') or 0) if dispatching else dispatch_attempt
         # Restore the persisted budget chain count across lease expiry.
         payload = dict(owner['active_payload'])
         deferrals = owner.get('active_budget_deferrals')
@@ -973,6 +978,7 @@ def redrive_job(
                 'active_epoch': next_epoch,
                 'dispatch_attempt': dispatch_attempt,
                 'running_expiries': expiries,
+                'dispatch_attempt_base': base,
                 'active_state': 'dispatching',
                 'worker_token': firestore.DELETE_FIELD,
                 'worker_available': False,

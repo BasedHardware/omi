@@ -33,7 +33,17 @@ def dispatch_cap(uid: str, owner: dict) -> RetryCap | None:
     from utils.cloud_tasks import get_sync_tasks_max_attempts
 
     # dispatch_attempt is a zero-based task identity: initial dispatch is 0.
-    return retry_cap(uid, int(owner.get('dispatch_attempt') or 0) + 1, get_sync_tasks_max_attempts(), enforce=False)
+    # The legacy budget counts only deliveries since this epoch began
+    # (dispatch_attempt_base), so a carried running-crash count never spends it.
+    return retry_cap(uid, legacy_dispatch_attempts(owner) + 1, get_sync_tasks_max_attempts(), enforce=False)
+
+
+def legacy_dispatch_attempts(owner: dict[str, Any]) -> int:
+    """Dispatch attempts since the current epoch began; main's dispatching budget."""
+    attempt = int(owner.get('dispatch_attempt') or 0)
+    base = owner.get('dispatch_attempt_base')
+    base = base if type(base) is int and 0 <= base <= attempt else 0
+    return attempt - base
 
 
 def running_expiries(owner: dict[str, Any]) -> int:

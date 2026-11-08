@@ -240,6 +240,33 @@ def finalizer_mocks(monkeypatch):
     return failure
 
 
+@pytest.mark.parametrize('class1', ['false', None])
+def test_crash_carry_does_not_spend_the_legacy_dispatch_budget_while_class_1_is_off(db, monkeypatch, class1):
+    """Review wave 5 (finding 1): crash -> redrive -> dispatch timeout in a serve cohort, max 2.
+
+    Main reset dispatch_attempt on a running expiry, so the next dispatch
+    deadline started a fresh legacy budget. The carried task identity must not
+    spend that budget: the delayed replacement is redriven, not failed.
+    """
+    if class1 is not None:
+        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    account, epoch = running_owner(db, monkeypatch, attempts='2')
+    replacement, expired = crash_once(account, epoch, NOW)
+    owner = registry.get_owner(account)
+    assert owner['active_state'] == 'dispatching' and owner['dispatch_attempt'] == 1  # carried identity
+    failure = finalizer_mocks(monkeypatch)
+    dispatch = Mock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    deadline = expired + timedelta(seconds=registry.DISPATCH_RETRY_SECONDS + 1)
+    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=deadline)
+    assert outcome != 'dispatch_retry_cap_reached'
+    failure.assert_not_called()
+    dispatch.assert_called_once()
+    owner = registry.get_owner(account)
+    assert owner['active_job_id'] == 'crashy' and owner['dispatch_attempt'] == 2
+
+
 def test_budget_deferred_owner_that_keeps_crashing_reaches_a_terminal_outcome(db, monkeypatch):
     """Review wave 1 (finding 2): one budget deferral must not disable crash accounting.
 
@@ -964,6 +991,30 @@ def test_class_4_spends_no_redrive_before_the_14_day_boundary(drain, monkeypatch
     else:
         assert 'barrier_redrives' not in job and delay == 3600
     assert 'barrier_dead_letter' not in job
+
+
+@pytest.mark.parametrize('anchor', ['missing', None, True, float('nan')])
+def test_class_4_keeps_mains_deadline_for_rows_without_a_valid_anchor(drain, monkeypatch, anchor):
+    """Review wave 5 (finding 2): an unreadable enqueued_at must not mean age zero forever."""
+    from config.batch_pipeline import RECORD_DEAD_LETTER_SECONDS
+
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    live, store, seed, run, clock = drain
+    seed(0)
+    if anchor == 'missing':
+        store.rows['jobs', 's'].pop('enqueued_at')
+    else:
+        store.rows['jobs', 's']['enqueued_at'] = anchor
+    job, _ = run(barrier(live, 'in_progress'))
+    deadline = job.get('record_dead_letter_deadline_at')
+    assert deadline == clock[0] + RECORD_DEAD_LETTER_SECONDS  # main's deadline is kept
+    clock[0] = deadline + 1
+    job['available_at'] = 0
+    job, _ = run(barrier(live, 'in_progress'))
+    # Past the deadline the row settles (retained), instead of retrying forever.
+    assert job['state'] == 'dead' and job['dead_letter_reason'] == 'record_barrier_aged'
+    assert 'barrier_redrives' not in job
 
 
 def test_class_4_refuses_to_spend_budget_after_losing_the_drain_lease(drain, monkeypatch):

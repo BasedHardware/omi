@@ -112,6 +112,11 @@ def record_park_owns(error: BaseException | None) -> bool:
     )
 
 
+def record_anchor_valid(enqueued_at: Any) -> bool:
+    """A real, finite enqueued_at that class 4 can age a row from."""
+    return not isinstance(enqueued_at, bool) and isinstance(enqueued_at, (int, float)) and math.isfinite(enqueued_at)
+
+
 def barrier_dead_letter_step(job: dict, *, age: float, error: BaseException | None, now: float) -> str | None:
     """Owner/deadline for an aged record_pending row whose conversation never finished.
 
@@ -701,9 +706,12 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             if latest.get('state') == 'record_pending':
                 now = time.time()
                 expired = False
+                # Class 4 needs a valid enqueued_at to age the row; without one it
+                # never owns the row, so main's record dead-letter deadline applies.
+                class4_owns = record_park_owns(barrier_error) and record_anchor_valid(latest.get('enqueued_at'))
                 if (
                     barrier_open
-                    and not record_park_owns(barrier_error)
+                    and not class4_owns
                     and latest.get('available_at') == lease
                     and batch_held_dead_letter_enabled()
                 ):
@@ -741,7 +749,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                     # Same fence as main's expiry: only the worker that still holds
                     # the drain lease may spend class 4 re-drive budget. A slow
                     # admission whose lease another replica re-claimed spends nothing.
-                    if record_park_owns(barrier_error) and latest.get('available_at') == lease:
+                    if class4_owns and latest.get('available_at') == lease:
                         step = barrier_dead_letter_step(latest, age=age, error=barrier_error, now=now)
                         if step == 'redrive':
                             delay = RECORD_BARRIER_REDRIVE_SECONDS
