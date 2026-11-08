@@ -4,6 +4,7 @@ import ast
 from dataclasses import FrozenInstanceError, replace
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -122,28 +123,42 @@ def test_cohort_registry_and_live_switch_contract():
     'value,expected',
     [
         ('off', False),
-        ('false', False),
-        ('0', False),
-        ('no', False),
+        ('false', True),
+        ('0', True),
+        ('no', True),
         ('on', True),
         (None, True),
         (' OFF ', False),
-        (' FaLsE ', False),
-        (' 0 ', False),
-        (' No ', False),
+        (' FaLsE ', True),
+        (' 0 ', True),
+        (' No ', True),
     ],
 )
 @pytest.mark.parametrize('source', ['flags', 'environ'])
-def test_projection_kill_switch_explicit_off_values(monkeypatch, name, value, expected, source):
+def test_projection_kill_switch_off_only_contract_and_warning(monkeypatch, caplog, name, value, expected, source):
     flags = {} if value is None else {name: value}
-    if source == 'environ':
-        if value is None:
-            monkeypatch.delenv(name, raising=False)
+    with caplog.at_level(logging.WARNING, logger='config.policy.kill_switches'):
+        if source == 'environ':
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
+            assert kill_switch(name) is expected
         else:
-            monkeypatch.setenv(name, value)
-        assert kill_switch(name) is expected
-    else:
-        assert kill_switch(name, flags=flags) is expected
+            assert kill_switch(name, flags=flags) is expected
+    normalized = value.strip().lower() if value is not None else None
+    expected_warnings = (
+        [
+            (
+                'config.policy.kill_switches',
+                logging.WARNING,
+                f"only 'off' disables {name}; value '{normalized}' keeps it ON",
+            )
+        ]
+        if normalized in {'false', '0', 'no'}
+        else []
+    )
+    assert caplog.record_tuples == expected_warnings
 
 
 @pytest.fixture(scope='module')

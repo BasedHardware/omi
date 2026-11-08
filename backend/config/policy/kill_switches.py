@@ -50,7 +50,9 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         'PROJECTION_DRAIN_PRIVACY_BACKOFF',
         'PROJECTION_PRIVACY_REFUSAL_RESUME',
     }:
-        enabled = value not in {'false', '0', 'off', 'no'}
+        enabled = value != 'off'
+        if value in {'false', '0', 'no'}:
+            logger.warning("only 'off' disables %s; value '%s' keeps it ON", name, value)
     elif name == 'CONVERSATION_TERMINAL_FAMILY_MODE':
         enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
@@ -59,7 +61,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
     from config.refactor_switches import default_on
 
-    # Preserve the explicit disable controls and true-only pump selector
+    # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
     if name not in {
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
