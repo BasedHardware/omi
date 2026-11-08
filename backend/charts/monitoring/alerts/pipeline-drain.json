@@ -462,5 +462,139 @@
     },
     "record": null,
     "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-oldest-age-gauge-flat-1h",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Oldest-age sampler gauge frozen for one hour",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(count(omi_batch_projection_obligation_oldest_age_seconds > 0 and (max_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) - min_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) == 0)) or vector(0)) + (count(omi_batch_pipeline_vendor_held_oldest_age_seconds > 0 and (max_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) - min_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) == 0)) or vector(0)) + (count(omi_summary_debt_oldest_age_seconds > 0 and (max_over_time(omi_summary_debt_oldest_age_seconds[1h]) - min_over_time(omi_summary_debt_oldest_age_seconds[1h]) == 0)) or vector(0)) + (count(omi_demand_processing_queue_age_seconds > 0 and (max_over_time(omi_demand_processing_queue_age_seconds[1h]) - min_over_time(omi_demand_processing_queue_age_seconds[1h]) == 0)) or vector(0)) + ((time() - max(omi_summary_debt_sample_timestamp_seconds) > bool 3600) or vector(1))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A positive oldest-age gauge has stayed flat for one hour, or the summary-debt sample is stale or absent.",
+      "user_impact": "Frozen metrics can hide delayed batch publication or demand processing and mislead backlog triage.",
+      "scope": "Per-series projection obligation, vendor-held, summary-debt and demand-processing ages. Zero ages and absent individual age emitters contribute zero. Summary sample freshness is checked separately. Agent-tier telemetry warning; no lifecycle consumer.",
+      "verification": "Check the emitting pod and its supervised tick logs. Compare max_over_time minus min_over_time over 1h per series, not across replicas. Verify omi_batch_projection_obligation_observed_at_seconds and the existing omi-batch-queue-safety-blind rule on omi_batch_pipeline_metrics_refreshed_at_seconds; timeliness sample-stale owns fresh-gated ages. Check omi_summary_debt_sample_timestamp_seconds is present and younger than 3600s.",
+      "safe_next_action": "Check the emitting pod's supervised tick logs; restart the pod; confirm the gauge resumes changing. This alert authorizes no runtime changes beyond a pod restart.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A > 0 for 10m; positive per-series age constant over 1h, or summary sample older than 3600s / absent",
+      "evaluated_bad": "Positive age with max_over_time equal to min_over_time over 1h; stale or absent summary sample.",
+      "evaluated_good": "Zero age or changing age, with a fresh summary sample."
+    },
+    "labels": {
+      "alert_identity": "omi-oldest-age-gauge-flat-1h",
+      "component": "batch-pipeline",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
   }
 ]

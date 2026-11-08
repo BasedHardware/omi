@@ -4142,6 +4142,140 @@
     "record": null
   },
   {
+    "uid": "omi-held-content-snapshot-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Held-content fleet snapshot stale",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max(omi_held_content_fleet_snapshot_timestamp_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 3600",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The held-content fleet snapshot is older than one hour or has never been published.",
+      "user_impact": "Held-content ages and counts can appear healthy or frozen while cap-held recovery is delayed.",
+      "scope": "Fleet snapshot publication freshness, selecting the newest timestamp across replicas. Default cadence is 120s, so one hour is about 30 missed publishes. Agent-tier telemetry warning.",
+      "verification": "Compare time() - max(omi_held_content_fleet_snapshot_timestamp_seconds) with 3600s. Check cap-hold redrive completion and snapshot publication logs and supervised ticks. Select replicas by snapshot timestamp; never max the held-content age gauge.",
+      "safe_next_action": "Check the cap-hold redrive publisher and supervised tick logs using the runbook. Confirm snapshot publication resumes. This alert authorizes no runtime changes.",
+      "runbook": "backend/docs/runbooks/cap-hold-durability.md",
+      "threshold": "$A > 3600 for 10m; absent snapshot is Alerting",
+      "evaluated_bad": "Newest fleet snapshot older than 3600s, or no snapshot series.",
+      "evaluated_good": "Newest fleet snapshot at most 3600s old."
+    },
+    "labels": {
+      "alert_identity": "omi-held-content-snapshot-stale",
+      "component": "batch-pipeline",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
     "uid": "omi-stt-chain-exhausted-warn",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",

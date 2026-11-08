@@ -64,15 +64,16 @@ not logged elapsed_ms. A fresh positive all-epoch runnable projection age enable
 remain quiet. Existing timeliness sample stale alerts own unavailable debt measurements. A roll has the full
 15-minute pending period to recover; this adds no post-train gate.
 
-Held stock uses `omi_batch_held_oldest_age_seconds{leg}` from three indexed oldest-first `limit(1)` queries:
+Held stock uses `omi_batch_held_oldest_age_seconds{leg}` from three indexed oldest-first queries
+that skip invalid leg clocks:
 
 - quarantine_held: result projection_state, clocked from committed_at;
 - assignment_held: committed job with recovery_state held, clocked from enqueued_at;
 - record_pending: job state, clocked from enqueued_at.
 
 There is no epoch or rolling 24h predicate. Even a stock larger than a scan page yields its exact oldest row;
-empty stocks reset to zero. This adds at most four document reads per existing timeliness sample, using
-existing query/index shapes. Sample errors preserve the last values and freshness. Freshness is checked on the
+empty stocks reset to zero. Valid held stock stops at its first row; invalid clocks require
+additional reads, using existing query/index shapes. Sample errors preserve the last values and freshness. Freshness is checked on the
 same producer series before max-by-leg aggregation; missing/stale samples are owned by the existing
 `omi-batch-timeliness-sample-stale` warning. The 24h-capped `omi_batch_record_pending_new_oldest_age_seconds` is
 not a source. Existing new-cohort 2h delivery semantics remain unchanged. The fourth indexed oldest-row read exports
@@ -97,3 +98,42 @@ datasource, live filter counts and receiver delivery. These warnings are intenti
 `live-alert-gate.json` allowlist. No workflow change is needed for the existing standalone alert provisioner.
 Rollback: pause the four UIDs or revert their split definitions and regenerate the combined export; no drain,
 scheduler, capacity or custody state is changed. The read-only held gauge may remain deployed.
+
+## Oldest-age sampler flat for one hour
+
+`omi-oldest-age-gauge-flat-1h` is an agent-tier warning, muted by `omi-tier-silent`.
+It counts each positive series whose one-hour maximum equals its minimum for
+projection obligations, vendor-held work, summary debt and demand processing.
+Zero is a healthy empty queue. Missing individual age emitters contribute zero;
+summary-debt sample timestamps older than 3600 seconds or absent contribute a
+separate failure. The condition must persist for ten minutes (`noDataState: OK`).
+This detects frozen sampling: live ages increase while a head is stuck and fall
+when it drains. Drain-stall and age-threshold rules still own stalled processing.
+
+Check the emitting pod's supervised tick logs; restart the pod; confirm the gauge
+resumes changing. This alert authorizes no runtime changes beyond a pod restart.
+Check projection-obligation `omi_batch_projection_obligation_observed_at_seconds`
+and the existing `omi-batch-queue-safety-blind` companion on
+`omi_batch_pipeline_metrics_refreshed_at_seconds` for queue sampling blindness.
+Fresh-gated timeliness/queue ages vanish instead of going flat; their existing
+sample-stale/blind rules own that absence. Confirm
+`omi_summary_debt_sample_timestamp_seconds` is present and fresh, and compare
+series with their original labels rather than aggregating ages across replicas.
+
+The held-age sampler skips nonnumeric, nonfinite and nonpositive leg clocks,
+continuing oldest-first until a usable clock is found. Empty or entirely undated
+stock emits zero age; it is not evidence that no held rows exist. This only changes
+metric sampling, never stored rows or lifecycle decisions. Valid stock still stops
+at its first row; a corrupt prefix requires additional reads, with no cohort or
+scan-page cutoff. The projection-drain clock and new-cohort metrics are unchanged.
+
+Deploy the guard through the normal backend train. After merge, an authorized
+operator dispatches `grafana_dashboard_provisioning.yml` with `environment=prod`
+for alert definitions; a main push provisions dev only. Run the provisioner's
+read-only drift check against production, then verify both new UIDs, tier, mute,
+query and no-data state in Grafana. The flat rule is expected quiet given the N5
+2026-11-08T14:03–14:10Z baseline; recheck current signals at deployment.
+Rollback: pause the new UID or revert its split definition and regenerate/reapply.
+Revert the sampler commit through the backend train if needed; no data repair is
+required. The existing held-row-age rule's tier and 21600-second threshold are
+unchanged; the deployer owns its pending rollout ruling.
