@@ -100,7 +100,7 @@
       "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for fifteen minutes.",
       "user_impact": "Late batch transcripts may go unnoticed while a bounded scan is saturated or the worker sample is unavailable.",
       "scope": "Production queue freshness and oldest/retry NaN samples. A saturated exempt prefix is incomplete, never proven late work or a healthy empty queue.",
-      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05\u201314:59Z; the prior 120s arm falsely paged between healthy samples.",
+      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05–14:59Z; the prior 120s arm falsely paged between healthy samples.",
       "safe_next_action": "Classify the saturated prefix and real overdue work; retain all held audio and custody. Do not delete rows, reset paid intents, or waive allowance to silence the alarm.",
       "runbook": "backend/docs/runbooks/batch-queue-safety.md",
       "threshold": "$A > 0 for 5m; stale means at least 900s",
