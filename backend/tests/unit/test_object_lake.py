@@ -827,3 +827,19 @@ def test_single_request_limit_matches_installed_sdk_dispatch(monkeypatch):
         resumable.assert_not_called()
     finally:
         client.close()
+
+
+def test_deletion_after_post_put_check_fails_the_put(storage, monkeypatch):
+    # The tombstone lands after the post-upload authority check but before
+    # settlement; settlement purges the object, so the put must not return it.
+    bucket, store = storage
+    original = lake._settle_upload_candidate
+
+    def tombstone_then_settle(*args, **kwargs):
+        store.collection('users').document('s').collection('deleted_conversations').document('c').create({})
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(lake, '_settle_upload_candidate', tombstone_then_settle)
+    with pytest.raises(lake.LakeWriteFenced, match='fenced the upload'):
+        put()
+    assert not list(bucket.list_blobs())

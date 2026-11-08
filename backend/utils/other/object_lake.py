@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap, aes_key_wrap
 from google.api_core.exceptions import NotFound, PreconditionFailed
 from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter
 
 from config import object_lake as config
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -286,7 +286,10 @@ def put_space_object(
 def _upload_candidate(bucket: str, key: str):
     attempt = _record_upload_candidate(bucket, key)
     yield attempt
-    _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True)
+    if _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True):
+        # Deletion won the race after the post-put check: never return a
+        # reference to the object settlement just removed.
+        raise LakeWriteFenced('Conversation deletion fenced the upload')
     # Only a returned put settles. A raised storage error or process loss can
     # leave the remote outcome ambiguous, so the attempt stays in flight until
     # a re-purge after the 24-hour request assumption permits erasure.
@@ -340,8 +343,11 @@ def _record_upload_candidate(bucket: str, key: str) -> str:
     return attempt
 
 
-def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_fenced: bool = False) -> None:
-    """Settle only this request; a concurrent upload of the same key stays live."""
+def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_fenced: bool = False) -> bool:
+    """Settle only this request; a concurrent upload of the same key stays live.
+
+    Returns True when a deletion fence purged the object during settlement.
+    """
     client = space_keys.space_key_firestore_client()
     candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
     candidate = client.collection('lake_upload_candidates').document(candidate_id)
@@ -368,6 +374,7 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_f
             transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
 
     settle(client.transaction())
+    return purged
 
 
 def _space_candidate_key_range(space_id: str) -> tuple[str, str]:
