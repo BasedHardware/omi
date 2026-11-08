@@ -50,57 +50,56 @@ token alive, including a stale abandoned marker on an otherwise lapsed token.
 The exact two pending alert objects are in `.agent-brief/alert-rules-addition.json`
 for the aggregate owner; the aggregate mirror tests intentionally remain red.
 
+The late-append page uses `increase(counter[5m]) > 0`, equivalent to the design's
+positive rate trigger, with `for: 0s`. This expresses an invariant event without
+weakening the generic noisy-rate pending-duration lint. Its first-event test passes.
+The production metric inventory is also owned by #24893: exact source declarations
+are handed off in `.agent-brief/metric-inventory-addition.json`, separately from
+observed production series. Neither authoritative monitoring file changes in the final branch.
+
 ## Local validation receipt
 
-Recorded 2026-11-08T21:05:40+00:00.
+Recorded 2026-11-08T23:54:02+00:00.
 
-Branch `lane/tokenlease`, based on `2333dc70300dfd165ad8411cdfbd1d6bc2fb1cf7`.
+Branch `lane/tokenlease`, rebased cleanly onto freshly fetched `origin/main`
+`db09790d1d76cf7b9247cfbaa6f4645946962a0a` (includes #24950, `fadad03099acbf133fa6461f8f928d606cf6a236`).
+Runtime/custody suites ran at `25fd3ed07ca3`; alert tests and expanded checks at
+`b2102be20c72`; corrected registry/Firestore checks at `06f8abb76e92d45dcb71629db0f72453aa53291d`.
+The later receipt-only commit is reported separately in the final handoff.
 Local only: no push, PR, deployment, PR closure or production access. GCP tier: **none**.
-All test launchers remove `GOOGLE_APPLICATION_CREDENTIALS` and every `CLOUDSDK_*`.
-Focused units, integration and final contract checks use private HOME/config/temp
-directories; no backend stage env files exist. Custody requires all three store
-backends, with demo Firestore emulator and private local PostgreSQL. Each focused
-unit suite runs in its own Python process.
 
-Actual aggregate launch:
+Every test launcher removes `GOOGLE_APPLICATION_CREDENTIALS`, all `CLOUDSDK_*`,
+service-account/auth-file and external PostgreSQL test bindings. Private HOME,
+config and temporary directories prevent ADC fallback. No backend stage env files
+exist here. Units/custody use `OMI_ENV_STAGE=offline`; production route exports and
+hermetic deployment checks use the production source surface without service access.
+Custody requires all three store backends; Firestore uses `demo-omi-listen-stack`
+on loopback, with private local PostgreSQL. No store-backend skips were accepted.
+
+Actual heavy admissions:
 
 ```sh
-/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 7200 -- python3 /Volumes/Ephemeral/scratch/tokenlease-final-validation.py
+/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 7200 -- python3 /Volumes/Ephemeral/scratch/tokenlease-followup-validation.py
+/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 7200 -- python3 /Volumes/Ephemeral/scratch/tokenlease-review-runner.py
 ```
 
-The first admission attempt hit the default 900-second queue deadline without
-running tests; the longer waiter uses the same slot count. Full output:
-`/Volumes/Ephemeral/scratch/tokenlease-final-results.log`. Deployment fixture correction
-was rerun via `omi-heavy run --wait 7200 -- python3 /Volumes/Ephemeral/scratch/tokenlease-deploy-final.py`;
-output is `/Volumes/Ephemeral/scratch/tokenlease-deploy-final-results.log`.
-The durable commands/counts below preserve the receipt independently of scratch.
+The second runner executes the child commands below serially, then exits and
+releases its slot. Shared slots/priorities were not changed. Full logs:
+`/Volumes/Ephemeral/scratch/tokenlease-followup-results.log` and
+`/Volumes/Ephemeral/scratch/tokenlease-alert-review-results.log`.
+Commands/counts are preserved here independently of disposable launcher files.
 
-Focused unit and custody child command (cwd `backend`), once for each suite below:
+### Focused units: 2,527 passed across 18 suites
+
+Each command runs from `backend`, in its own interpreter:
 
 ```sh
 .venv/bin/python -m pytest -q --tb=short <suite>
 ```
 
-The integration launcher executes the two conformance suites under:
-
-```sh
-firebase emulators:exec --only firestore --project demo-omi-listen-stack --config /Volumes/Ephemeral/scratch/tokenlease-validation-n1c6yuzv/firebase.json '<worktree>/backend/.venv/bin/python /Volumes/Ephemeral/scratch/tokenlease-local-child.py /Volumes/Ephemeral/scratch/tokenlease-validation-n1c6yuzv'
-```
-
-The config binds a private loopback port. Environment:
-`OMI_REQUIRE_STORE_BACKENDS=all`, `OMI_ENV_STAGE=offline`, private HOME/config/temp,
-no external PostgreSQL binding; the child pins only the demo emulator project.
-Lifecycle child command (cwd `backend`):
-
-```sh
-.venv/bin/python -m testing.lifecycle_sim.run --keep --state-dir /Volumes/Ephemeral/scratch/tokenlease-validation-n1c6yuzv/lifecycle --extra-test-module testing/lifecycle_properties/test_properties.py
-```
-
-Final results (last completed result for each suite):
-
-| Suite / gate | Result |
+| Suite | Exact result |
 | --- | --- |
-| `tests/unit/test_record_token_lease.py` | 61 passed |
+| `tests/unit/test_record_token_lease.py` | 67 passed |
 | `tests/unit/test_record_producer_proof.py` | 27 passed |
 | `tests/unit/test_record_seal_repair.py` | 48 passed |
 | `tests/unit/test_record_partial.py` | 71 passed |
@@ -111,9 +110,6 @@ Final results (last completed result for each suite):
 | `tests/unit/test_record_seal_nojob.py` | 44 passed |
 | `tests/unit/test_refactor_modes.py` | 17 passed |
 | `tests/unit/test_lifecycle_state_table_writers.py` | 1722 passed |
-| `tests/integration/test_held_custody_conformance.py` | 75 passed |
-| `tests/integration/test_recovery_custody_conformance.py` | 39 passed |
-| `lifecycle_sim + lifecycle_properties` | 34 passed, 3 xfailed |
 | `tests/unit/test_record_token_lease_deploy.py` | 8 passed |
 | `tests/unit/test_monitoring_telemetry_contract.py` | 52 passed |
 | `tests/unit/test_sync_v2.py` | 180 passed |
@@ -121,96 +117,151 @@ Final results (last completed result for each suite):
 | `tests/unit/test_record_seal_worker_deploy.py` | 7 passed |
 | `tests/unit/test_record_seal_cluster_repair_deploy.py` | 10 passed |
 | `tests/unit/test_record_seal_worker_guards.py` | 13 passed |
-| `hermetic pre-deploy pytest suites` | 511 passed |
-| `monitoring notification / combined export contracts` | 2 failed, 1 passed |
 
-The first writer-inventory run had 1 failure / 1721 passes: no-job refusal now
-carries owner_id for cohort selection. The manually reviewed inventory entry was
-corrected in ec4c08669e90; the complete rerun passed 1722/1722. No production code
-changed in that correction. The initial hermetic deploy batch had 508 passes /
-3 failures because its synthetic Cloud Run snapshots lacked the four new lease
-settings; 67a1ca2b590e completes those fixtures without weakening any assertion.
-The complete hermetic batch was rerun afterward. All three new real-store named exits passed:
-`test_leased_lapsed_token_has_named_exit[seal|partial_finish|reactivated]`.
-The lifecycle run's three existing xfails remain explicit, rather than skipped or
-reclassified. The added backlog alert also requires nonzero age so a completely
-drained backlog does not warn solely because its age stays flat at zero.
+The new lease suite proves exact old mint/clear/seal write payloads, no renewal IO
+in off/unset modes, inert lease fields, and old terminal metric wire output after
+rollback. New lead regressions cover moving retry wakes, metadata newer than
+enable, strict newer-than-proof signals, and moving `available_at` between plan
+and apply. Both plan/apply cases seal with the original fixed expiry.
 
-The 18 focused unit suites total **2621 passed**. The newly touched runtime-env
-validator fixture suite accounts for **206 passed** of the hermetic batch's
-511; the per-file JUnit record is
-`/Volumes/Ephemeral/scratch/tokenlease-deploy-final.xml`.
+### Custody and lifecycle
 
-`git diff --check` passed. Forbidden-file diffs are empty; AST comparison confirms
-`discover_jobs` (Part B) and `seal_record_audio` are unchanged from the pinned base.
-Off-mode tests assert exact original mint/clear/seal write payloads, no renewal IO,
-inert lease-field decisions, and original CLI terminal metrics after rollback.
-
-Additional commands (all through the admitted heavy runner, cloud env stripped):
+Under `firebase emulators:exec --only firestore --project demo-omi-listen-stack`,
+with a private loopback config (`/Volumes/Ephemeral/scratch/tokenlease-validation-whznxqvi/firebase.json`):
 
 ```sh
+# cwd backend, OMI_REQUIRE_STORE_BACKENDS=all
+.venv/bin/python -m pytest -q --tb=short tests/integration/test_held_custody_conformance.py
+.venv/bin/python -m pytest -q --tb=short tests/integration/test_recovery_custody_conformance.py
+.venv/bin/python -m testing.lifecycle_sim.run --keep --state-dir /Volumes/Ephemeral/scratch/tokenlease-validation-whznxqvi/lifecycle --extra-test-module testing/lifecycle_properties/test_properties.py
+```
+
+| Suite | Exact result |
+| --- | --- |
+| Held custody | 75 passed |
+| Recovery custody | 39 passed |
+| Lifecycle scenarios/properties | 34 passed, 3 pre-existing xfailed |
+
+All three `test_leased_lapsed_token_has_named_exit` rows passed:
+`seal`, `partial_finish`, `reactivated`. Existing lifecycle xfails were not widened.
+
+### Deployment, alerts and preflight
+
+```sh
+# cwd backend; hermetic default, no --live:
+bash scripts/pre-deploy-check.sh
+.venv/bin/python -m pytest -q --tb=short tests/unit/test_monitoring_alert_backtest.py
+.venv/bin/python -m pytest -q --tb=short tests/unit/test_monitoring_notification_contract.py::test_severity_timing_and_actionable_annotations tests/unit/test_monitoring_notification_contract.py::test_split_and_combined_rule_objects_are_byte_identical tests/unit/test_monitoring_alert_rule_contract.py::test_combined_alert_export_matches_every_split_source_rule
+# cwd repository root; private body file supplied via OMI_PR_BODY_FILE:
+make preflight
 backend/.venv/bin/python .github/scripts/pr_preflight.py --metadata-only --pr-body-file .agent-brief/tokenlease-pr-body.md
 backend/.venv/bin/python backend/scripts/check_route_policy_baseline.py --base-ref origin/main
 backend/.venv/bin/python backend/scripts/generate_plan_catalog.py --check --base-ref origin/main
-# cwd backend; default is hermetic, no --live:
-bash scripts/pre-deploy-check.sh
-.venv/bin/python -m pytest -q --tb=short tests/unit/test_monitoring_notification_contract.py::test_severity_timing_and_actionable_annotations tests/unit/test_monitoring_notification_contract.py::test_split_and_combined_rule_objects_are_byte_identical tests/unit/test_monitoring_alert_rule_contract.py::test_combined_alert_export_matches_every_split_source_rule
 ```
 
-Metadata: 4 checks passed on frozen source. Route policy: passed, zero new missing
-routes (use production surface export, not the offline harness's extra routes).
-Plan catalog: passed. Hermetic deploy: dev/prod runtime env and source-only bucket,
-source-admission and OAuth contracts passed. Its source-admission unittest script
-also passed 36 tests. Earlier `.github/scripts/test_run_checks.py` passed 78 tests.
+| Command / gate | Exact result |
+| --- | --- |
+| Hermetic deployment pytest | 511 passed |
+| Deployment source-admission unittest | 36 passed |
+| PR metadata | 4 checks passed |
+| Route-policy / plan catalog | Passed; zero new missing routes |
+| Monitoring backtest suite | 28 passed, 1 failed (committed inventory admission) |
+| Notification timing/actionable + two mirror checks | 1 passed, 2 failed (both mirrors) |
+| `make preflight` | Exit 2 at `monitoring-alert-backtest-lint`; missing three owner-fenced declarations |
+| Expanded manifest run | 55 distinct checks: 52 passed, 3 failed |
+| Corrective named-check rerun | 2 checks passed: Firestore index guard and feature-flag registry |
+| Final last-completed status for each selected check | 54 passed, 1 failed (owner-fenced alert inventory) |
 
-Full `make preflight` was run through omi-heavy during implementation and is **not
-green**: the existing ACTION_ITEM_REFRESH_PRESERVE_ENABLED review_by=2026-11-01
-is past its seven-day grace. That same ruling exists on the pinned starting base;
-this lane neither extends its date nor suppresses the gate. Initial broad checks
-also overlapped formatting/commits and tripped the tracked-mutation sentinel;
-the final frozen metadata check passed, and the affected focused suites reran.
-The duplicate broad preflight was stopped after the known baseline failure;
-there is no claim of a terminal-green full preflight.
+The expanded command (changed-files list is `git diff --name-only BASE...HEAD`):
 
-The two combined-export mirror tests intentionally remain red because the new
-split rules are absent from #24893-owned `monitoring/alert-rules.json`:
+```sh
+backend/.venv/bin/python .github/scripts/run_checks.py --lane local --base db09790d1d76cf7b9247cfbaa6f4645946962a0a --head HEAD --changed-files /Volumes/Ephemeral/scratch/tokenlease-final-changed-files.txt --pr-body-file .agent-brief/tokenlease-pr-body.md --keep-going
+```
+
+Its other two failures were corrected and rerun, without weakening assertions:
+
+- The harness initially set `OMI_ENV_STAGE=prod` for every check. This made a
+  non-publisher queue-age driver correctly record no queries: query-shape suite
+  **558 passed, 1 failed**. The canonical guard was rerun under the documented
+  offline test stage, with unchanged source/drivers/indexes: **842 passed across
+  seven guard files**, including **559 query-shape tests**.
+- A manual generated-doc description differed from its registry source. The
+  source reason was corrected and the doc regenerated with
+  `python3 scripts/render_feature_flag_registry.py --as-of 2026-11-05`.
+  Only the source description changed; no review dates/exceptions were extended.
+  The registry check passed, including #24950's UTC review-date handling.
+
+Corrective command, still through the admitted heavy runner:
+
+```sh
+env OMI_ENV_STAGE=offline backend/.venv/bin/python .github/scripts/run_checks.py --lane local --base db09790d1d76cf7b9247cfbaa6f4645946962a0a --head HEAD --changed-files /Volumes/Ephemeral/scratch/tokenlease-final-changed-files.txt --pr-body-file .agent-brief/tokenlease-pr-body.md --check-id firestore-index-guard --check-id feature-flag-registry --keep-going
+```
+
+There is **no terminal-green full preflight claim**. The remaining inventory
+failure is the same boundary as `test_committed_offline_admission_gate`:
+`omi_record_seal_oldest_age_seconds`, `omi_record_token_late_append_total`, and
+`omi_record_token_lease_expired_sealed_total` need adding to `declared_metrics`.
+A temporary copy with exactly `.agent-brief/metric-inventory-addition.json`
+applied passed `alert_backtest.py --lint --inventory <copy>`; the authoritative
+inventory was asserted byte-identical to the rebase base and observed series
+were not changed. No production observations are claimed.
+
+Both mirror failures remain as requested:
 `test_split_and_combined_rule_objects_are_byte_identical` and
-`test_combined_alert_export_matches_every_split_source_rule`. The actionable
-notification/timing contract passes. The lead must integrate the split rules
-when that file is available; no assertion was weakened or skipped.
+`test_combined_alert_export_matches_every_split_source_rule`. The exact two alert
+objects are in `.agent-brief/alert-rules-addition.json`, byte-identical to the
+split file: `omi-record-token-lease-late-append`, `omi-record-token-lease-backlog`.
+No test was skipped or converted to xfail for these boundaries.
 
-Implementation clarifications / open risks:
+## Design clarifications, deviations and open risks
 
-- Fresh server-observed signals override stale pod/abandon proof in the serve
-  cohort, satisfying the hard live-uploader rule even if custody outlives pusher.
-- A fixed deployment epoch is required across every writer/repair runtime;
-  mode-on custody renewal failures return retryable 503 before accepting bytes,
-  preserving phone WAL rather than silently losing the liveness fence.
-- The specified mutable job available_at seed can keep old retrying stock fenced
-  indefinitely (live.py's defer updates it to now+delay). The formula is preserved
-  exactly; the lead must resolve it before promising backlog drainage.
-- #24866 adjacent record_audio integration and #24893 aggregate alert integration
-  remain lead dependencies. #24832 tests/wiring are salvaged, with closure left
-  to its owner/lead2. No Part B discovery/index work is included.
-- No live uploader / production acceptance or 48h shadow soak was performed.
-  Lead2/P4 owns the ramp; gap-fill >=10 before serve 100 and the shared epoch
-  remain explicit rollout prerequisites. All defaults remain off.
+- Latest lead rulings replace the body stock formula: retry/defer timestamps
+  cannot renew a lease. `record_seal_refused_at` is excluded because successful
+  seal clears it (`record_audio.py`), so it can be stamped again after reopen.
+  Historical finished/abandoned anchors are capped at fixed serve enable.
+- The stock deadline applies to identified legacy token dictionaries. Bare True
+  and malformed tokens retain the design's existing conservative fences.
+- `increase(counter[5m]) > 0` preserves the design's positive-rate trigger and
+  immediate event paging. No generic lint exception or legacy debt was added.
+- A preliminary metric-inventory edit was removed after checking #24893's full
+  file list; its additions are handed off instead. Final branch content leaves
+  the authoritative inventory and aggregate alert export unchanged. The routine
+  shared feature-flag registry files remain within the design's allowed scope.
+- The owner must integrate both monitoring handoffs before admission/mirror
+  gates can be green. #24866 adjacent integration and #24832 supersession/closure
+  remain lead responsibilities. No PR or closure was performed here.
+- No production acceptance, signal-gap measurement, 48h soak or ramp occurred.
+  Lead2/P4 owns 1/10/50/100 steps, stable serve-enable epoch, and gap-fill >=10
+  before lease serve 100. Defaults remain off.
+- No Part B work: `discover_jobs` and `seal_record_audio` AST bodies match the
+  rebase base; index declarations, users.py, live.py, ProjectionReleaseStore,
+  held_dead_letter files and aggregate alerts are unchanged. No raw audio is deleted.
 
-Implementation commits (the later receipt-only commit is not self-referenced):
+## Local commits
 
-- `c6f6d7f552a99b062988258432e3c606943ba063` feat: add server-renewed record custody token leases
-- `5987486bf95942d0130b8a9f66bed1b407d71792` harden: preserve stock producer proofs and align lease seed checks
-- `0b856a62ee57422cc770eb1fc1052c07caa050cf` chore: align token lease alert routing with fleet contract
-- `bf6e5577c3c61f4dbb21af4ae419c402fb04dad3` harden: bind stock lease epochs across producer runtimes
-- `d8fe1ef6c8fa338b1e9ad1368587a62035abc816` harden: renew leases while draining queued frame batches
-- `94efbe1742a04d5a1824d77e00635d3062bcf237` harden: restore pre-seal producer custody after partial finish
-- `d16393806a0a7f954b8104d993f4bba4a16d8e99` fix: preserve dark lease telemetry and bind runtime settings
-- `ec4c08669e900e066ef7f0a4d6889b36978c58c5` test: declare no-job lease cohort context in writer inventory
-- `7055900413180ecf8978f7b4f94f802db7313e97` fix: keep lease backlog alert quiet after drain completes
-- `67a1ca2b590e9f1d38230f61698ef55f45ec539c` test: include dark lease settings in synthetic Cloud Run revisions
+Rebased implementation and follow-up commits, before the final receipt-only
+commit (whose SHA is reported in the final handoff):
 
-Changed files relative to the pinned starting base (52):
+- `df76164b38bc03e4897b4b700d1102f8b16a8f24` feat: add server-renewed record custody token leases
+- `c374b1e67203da9d62d87607802ed20e4f5422c0` harden: preserve stock producer proofs and align lease seed checks
+- `0fdc4b0b11126e2221157454b98f25752d558ada` chore: align token lease alert routing with fleet contract
+- `2a20c158bd503e48d30bf442ac2c7e8dff50afe6` harden: bind stock lease epochs across producer runtimes
+- `2b7b66ddb41c70fd1a180154e8f742789cc0102e` harden: renew leases while draining queued frame batches
+- `9c76cbc9bbf7cc0cb092919a65f80b8feabb9456` harden: restore pre-seal producer custody after partial finish
+- `0af79875359bfb0caf1a7123c36fbb3591f9f855` fix: preserve dark lease telemetry and bind runtime settings
+- `38f0572b1ae7db1dd0ce0852a23e7916113536b3` test: declare no-job lease cohort context in writer inventory
+- `d06983dfc5952542428a7d51e31d8802f6585e8b` fix: keep lease backlog alert quiet after drain completes
+- `644e75bd5f96af8a8707e746572598affdd294b1` test: include dark lease settings in synthetic Cloud Run revisions
+- `454e114e730a00ef4e30ede530a3e69bf9f64556` docs: record token lease validation and lead handoff risks
+- `2300ad1892493944f7f8c7559e15f10883326f6b` fix: bound legacy leases at serve enable and honor newer custody proof
+- `25fd3ed07ca322b5d36a9ab428ddea9e078d3826` test: keep stock lease expiry stable across repair retry wakes
+- `b2102be20c72c9d537470a27e018b5f425d46b8b` fix: page on first lease event and hand off metric declarations
+- `06f8abb76e92d45dcb71629db0f72453aa53291d` fix: align lease epoch registry source with generated documentation
 
+## Files changed (55)
+
+- `.agent-brief/alert-rules-addition.json`
+- `.agent-brief/metric-inventory-addition.json`
 - `backend/charts/backend-listen/dev_omi_backend_listen_values.yaml`
 - `backend/charts/backend-listen/prod_omi_backend_listen_values.yaml`
 - `backend/charts/backend-listen/values.yaml`
@@ -245,6 +296,7 @@ Changed files relative to the pinned starting base (52):
 - `backend/tests/support/lifecycle_state_table.py`
 - `backend/tests/support/lifecycle_writer_inventory.py`
 - `backend/tests/unit/test_backend_runtime_env_validator.py`
+- `backend/tests/unit/test_monitoring_alert_backtest.py`
 - `backend/tests/unit/test_monitoring_telemetry_contract.py`
 - `backend/tests/unit/test_pusher_record_abandon.py`
 - `backend/tests/unit/test_record_partial.py`
