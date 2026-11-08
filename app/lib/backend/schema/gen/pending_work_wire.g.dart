@@ -7,6 +7,7 @@ class GeneratedPendingWorkItem {
   final double durationSeconds;
   final String id;
   final String kind;
+  final int recordingCount;
   final DateTime? startedAt;
   final String state;
   final DateTime? updatedAt;
@@ -16,6 +17,7 @@ class GeneratedPendingWorkItem {
     required this.durationSeconds,
     required this.id,
     required this.kind,
+    this.recordingCount = 1,
     required this.startedAt,
     required this.state,
     required this.updatedAt,
@@ -27,6 +29,7 @@ class GeneratedPendingWorkItem {
       durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      recordingCount: _required(_readFieldValue<int>(_readField(json, const ["recording_count"]), "recording_count", _readInt, requiredField: false, nullable: false, defaultValue: 1), "recording_count"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
       state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: true),
@@ -39,6 +42,7 @@ class GeneratedPendingWorkItem {
       'duration_seconds': durationSeconds,
       'id': id,
       'kind': kind,
+      'recording_count': recordingCount,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'state': state,
       'updated_at': updatedAt?.toUtc().toIso8601String(),

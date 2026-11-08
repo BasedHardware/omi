@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 
 from database.batch_pipeline_projection import ProjectionStore
-from database.batch_pipeline_projection_release import ProjectionReleaseStore, release_page
+from database.batch_pipeline_projection_release import ProjectionReleaseStore, release_page, release_page_settled
 from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding
@@ -459,7 +459,7 @@ def test_ghost_flag_is_strict_opt_in_in_every_parser_mode(monkeypatch, mode, raw
 
 @pytest.mark.parametrize('recovery', [None, 'recovered'])
 @pytest.mark.parametrize('enabled', [False, True])
-def test_ghost_repair_is_hint_only_with_identical_two_document_reads(monkeypatch, recovery, enabled):
+def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatch, recovery, enabled):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 
     monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
@@ -477,7 +477,7 @@ def test_ghost_repair_is_hint_only_with_identical_two_document_reads(monkeypatch
     assert release.release('held', GHOST_NOW) is False
     assert release.ghost_settled is enabled
     assert release.ghost_skip == (None if enabled else 'count_only')
-    assert read_paths == [JOB_KEY, RESULT_KEY]
+    assert read_paths == [JOB_KEY, RESULT_KEY] + ([('users', OWNER, 'conversations', TARGET)] if enabled else [])
     assert client.rows == {
         **seeded,
         RESULT_KEY: {
@@ -499,6 +499,14 @@ def test_ghost_repair_is_hint_only_with_identical_two_document_reads(monkeypatch
         ('result', {'projection_state': 'persisted'}, 'hint_changed'),
         ('result', {'projection': {'state': 'persisted'}}, 'receipt_not_ready'),
         ('result', {'projection_parts': {'0': {'state': 'quarantined'}}}, 'part_quarantined'),
+        ('target', None, 'target_not_restorable'),
+        ('target', {'deleted': True}, 'target_not_restorable'),
+        ('target', {'discarded': True}, 'target_not_restorable'),
+        ('target', {'status': 'in_progress'}, 'target_not_restorable'),
+        ('target', {'status': 'processing'}, 'target_not_restorable'),
+        ('target', {'uses_custom_stt': True}, 'target_not_restorable'),
+        ('target', {'data_protection_level': 'private'}, 'target_not_restorable'),
+        ('target', {'record_lane_owner': 'foreign'}, 'target_not_restorable'),
         ('result', {'projection_privacy_refusal': {'version': 1}}, 'privacy'),
         ('result', {'projection': {'state': 'ready', 'privacy_reason': 'conversation_deleted'}}, 'privacy'),
         (
@@ -523,11 +531,16 @@ def test_ghost_repair_is_hint_only_with_identical_two_document_reads(monkeypatch
 def test_ghost_safety_fences_are_rechecked_in_transaction(monkeypatch, kind, changes, expected):
     monkeypatch.setenv(GHOST_FLAG, 'true')
     seeded = ghost_rows()
-    seeded[JOB_KEY if kind == 'job' else RESULT_KEY].update(changes)
+    key = {'job': JOB_KEY, 'result': RESULT_KEY, 'target': ('users', OWNER, 'conversations', TARGET)}[kind]
+    if changes is None:
+        seeded.pop(key)
+    else:
+        seeded[key].update(changes)
     client, store = store_for(seeded)
     release = ProjectionReleaseStore(store)
     assert not release.release('held', GHOST_NOW)
     assert not release.ghost_settled and release.ghost_skip == expected
+    assert client.rows == seeded
     assert not client.transactions[-1].updates
 
 
@@ -562,7 +575,8 @@ def test_scan_caps_ghost_repairs_across_both_legs_and_counts_age_buckets(monkeyp
     # Even if a stale assignment page returns ghosts, it shares the pass cap.
     monkeypatch.setattr(release, 'held_page_ids', lambda *a: ids[:12])
     monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ids[12:])
-    counts, _ = release.release_scan_pass(store, limit=24, after_id=None, now=GHOST_NOW)
+    counts, _, settled = release.release_scan_pass_settled(store, limit=24, after_id=None, now=GHOST_NOW)
+    assert settled == (ids[:16] if enabled else [])
     assert counts['error'] == 0 and counts['examined'] == counts['ghost_classified'] == 24
     assert counts['ghost_settled'] == (16 if enabled else 0)
     assert counts['ghost_skipped_cap'] == (8 if enabled else 0)
@@ -636,6 +650,79 @@ def test_real_hold_never_gets_a_cohort_marker(monkeypatch):
     client, store = store_for(rows())
     assert ProjectionReleaseStore(store).release('held', GHOST_NOW)
     assert 'ghost_settled_cohort' not in client.rows[RESULT_KEY]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_release_page_returns_only_successfully_settled_ids(monkeypatch, enabled):
+    from database import batch_pipeline_projection_release as release
+
+    monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
+    _, store = store_for(ghost_rows())
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['missing', 'held'])
+    counts, after, settled = release_page_settled(store, limit=3, after_id=None, now=GHOST_NOW)
+    assert settled == (['held'] if enabled else [])
+    assert counts['ghost_settled'] == len(settled)
+    assert after is None
+    # A stale page on the next scan must not wake an already settled row.
+    assert release_page_settled(store, limit=3, after_id=None, now=GHOST_NOW)[2] == []
+
+
+def test_release_page_fetch_failure_returns_no_settled_ids(monkeypatch):
+    from database import batch_pipeline_projection_release as release
+
+    monkeypatch.setattr(release, 'held_page_ids', Mock(side_effect=RuntimeError('fetch failed')))
+    _, store = store_for(ghost_rows())
+    counts, after, settled = release_page_settled(store, limit=3, after_id='resume')
+    assert counts['examined'] == 0 and after == 'resume' and settled == []
+
+
+@pytest.mark.parametrize('wake', [None, 'true', 'false'])
+def test_release_scan_hands_settled_ids_to_followup_tail_only_when_enabled(monkeypatch, wake):
+    from database import batch_pipeline_projection_release as release
+    from utils.batch_pipeline.projection import Projector
+
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    flag = 'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED'
+    monkeypatch.delenv(flag, raising=False) if wake is None else monkeypatch.setenv(flag, wake)
+    _, store = store_for(ghost_rows())
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['held'])
+    projector = Projector(store.store, Mock(), projection_store=store, clock=lambda: GHOST_NOW)
+    handoff = Mock(wraps=projector.owe_followups)
+    monkeypatch.setattr(projector, 'owe_followups', handoff)
+    assert projector.release_held_scan()['ghost_settled'] == 1
+    if wake == 'false':
+        handoff.assert_not_called()
+        assert projector.chain_followups == []
+    else:
+        handoff.assert_called_once_with(['held'])
+        assert projector.chain_followups == ['held']
+        # A repeated scan/handoff coalesces without moving the existing tail.
+        projector.owe_followups(['held'])
+        assert projector.chain_followups == ['held']
+    assert projector.release_held_scan()['ghost_settled'] == 0
+
+
+def test_ghost_target_failure_is_counted_in_release_summary_without_wake(monkeypatch, caplog):
+    from database import batch_pipeline_projection_release as release
+    from utils.batch_pipeline.projection import Projector
+
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    seeded = ghost_rows()
+    seeded.pop(('users', OWNER, 'conversations', TARGET))
+    client, store = store_for(seeded)
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['held'])
+    projector = Projector(store.store, Mock(), projection_store=store, clock=lambda: GHOST_NOW)
+    handoff = Mock(side_effect=AssertionError('unrestorable target must not wake'))
+    monkeypatch.setattr(projector, 'owe_followups', handoff)
+    with caplog.at_level('INFO'):
+        counts = projector.release_held_scan()
+    assert counts['ghost_skipped_target_not_restorable'] == 1
+    assert counts['ghost_classified'] == 1 and counts['ghost_settled'] == 0
+    assert 'target_not_restorable:1' in caplog.text
+    handoff.assert_not_called()
+    assert client.rows[RESULT_KEY] == seeded[RESULT_KEY]
 
 
 @pytest.mark.parametrize('enabled', [False, True])
