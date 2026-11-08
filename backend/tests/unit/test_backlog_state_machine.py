@@ -26,6 +26,7 @@ from utils.sync import uid_sequencer
 SWITCHES = (
     sm.RETRY_CAP_SWITCH,
     sm.SYNC_ATTEMPT_CARRY_SWITCH,
+    sm.HELD_REDRIVE_COUNTER_SWITCH,
 )
 
 
@@ -52,10 +53,12 @@ def transitions(name):
 EXPECTED_DEFAULTS = {
     sm.RETRY_CAP_SWITCH: False,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
+    sm.HELD_REDRIVE_COUNTER_SWITCH: True,
 }
 READERS = {
     sm.RETRY_CAP_SWITCH: sm.retry_cap_enforced,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: sm.sync_attempt_carry_enabled,
+    sm.HELD_REDRIVE_COUNTER_SWITCH: sm.held_redrive_counter_enabled,
 }
 
 
@@ -366,3 +369,103 @@ def test_running_cap_only_observes_while_class_1_is_off(db, monkeypatch, class1,
     dispatch.assert_called_once()
     failure.assert_not_called()
     assert registry.get_owner(account)['running_expiries'] == 2
+
+
+# 6. Held re-drive counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON) ----------
+
+
+def held_dead(job, *, attempt=5, expired_at=20):
+    job.update(
+        state='dead',
+        dead_letter_reason='held_expired',
+        held_expired_at=expired_at,
+        merge_pending=True,
+        attempt=attempt,
+        token='',
+        lease_until=0,
+    )
+
+
+def bad(client):
+    return client.rows['batch_pipeline_prod_jobs', 'bad']
+
+
+def control_for(client):
+    from config.batch_pipeline import scheduler_control_key
+
+    client.rows['batch_pipeline_prod_control', scheduler_control_key(bad(client)['owner_key'])] = {'p0_active': True}
+
+
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
+def test_redrive_counter_counts_requeues_only_with_its_switch(setup, monkeypatch, switch):
+    """Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON)."""
+    if switch is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, switch)
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), attempt=5)
+    assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
+    if switch == 'false':
+        assert 'held_redrives' not in bad(client)
+    else:
+        assert bad(client)['held_redrives'] == 1
+
+
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
+def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(monkeypatch, switch):
+    from utils.batch_pipeline import held_dead_letter as sweep
+
+    if switch is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, switch)
+    store = Mock()
+    store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
+    runner = sweep.HeldDeadLetter(store)
+    spent = {'held_expired_at': 1, 'held_redrives': sm.MAX_HELD_REDRIVES}
+    monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('a', spent)])
+    monkeypatch.setattr(runner.recovery, 'requeue_quarantined', lambda *a, **k: False)
+    before = transitions('held_redrive_budget_spent')
+    runner.tick(86400)
+    assert transitions('held_redrive_budget_spent') == before + (0 if switch == 'false' else 1)
+
+
+def test_repeated_poll_redrives_report_a_spent_budget(monkeypatch):
+    """Review wave 4 (finding 2): poll re-drives emit the same spent-budget signal as the nightly scan."""
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    seen = []
+    for _ in range(sm.MAX_HELD_REDRIVES + 2):
+        # The unit failed again and its held window expired: a retained dead letter again.
+        store.rows['jobs', 'segment'].update(
+            state='dead', token='', lease_until=0, merge_pending=True, dead_letter_reason='held_expired'
+        )
+        before = transitions('held_redrive_budget_spent')
+        durable_status(store, 'synthetic-owner', 'bp_first')
+        assert store.rows['jobs', 'segment']['state'] == 'ready'
+        seen.append(transitions('held_redrive_budget_spent') - before)
+    # Below the budget (0..MAX-1 prior re-drives): no signal. At or over it: one per committed poll.
+    assert seen == [0] * sm.MAX_HELD_REDRIVES + [1, 1]
+    assert store.rows['jobs', 'segment']['held_redrives'] == sm.MAX_HELD_REDRIVES + 2
+
+
+def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    store.rows['jobs', 'segment'].update(state='dead', token='', lease_until=0)
+    durable_status(store, 'synthetic-owner', 'bp_first')
+    assert store.rows['jobs', 'segment']['state'] == 'ready'

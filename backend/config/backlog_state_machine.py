@@ -14,6 +14,9 @@ semantics. Turning a switch off restores the exact pre-change transition.
   crashes in ``running_expiries`` instead of resetting the attempt budget. The
   legacy dispatching-deadline budget restarts at each new epoch through
   ``dispatch_attempt_base``, as on main.
+- ``BATCH_HELD_REDRIVE_COUNTER_ENABLED`` (class 6 counter, default ON): count
+  held re-drives (``held_redrives``) and report units whose re-drive budget is
+  spent. Counting and an alert only; no state change.
 
 None of these transitions deletes audio, results, custody tokens or privacy
 fences. See backend/docs/runbooks/backlog-state-machine.md.
@@ -23,6 +26,10 @@ from config.policy.kill_switches import kill_switch
 
 RETRY_CAP_SWITCH = 'CAPTURE_RETRY_CAP_ENFORCED'
 SYNC_ATTEMPT_CARRY_SWITCH = 'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED'
+HELD_REDRIVE_COUNTER_SWITCH = 'BATCH_HELD_REDRIVE_COUNTER_ENABLED'
+
+# Automatic held re-drives per unit before the counter reports a spent budget.
+MAX_HELD_REDRIVES = 3
 
 
 def retry_cap_enforced() -> bool:
@@ -31,3 +38,7 @@ def retry_cap_enforced() -> bool:
 
 def sync_attempt_carry_enabled() -> bool:
     return kill_switch(SYNC_ATTEMPT_CARRY_SWITCH)
+
+
+def held_redrive_counter_enabled() -> bool:
+    return kill_switch(HELD_REDRIVE_COUNTER_SWITCH)

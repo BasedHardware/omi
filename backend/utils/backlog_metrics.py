@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 TRANSITIONS = (
     # A running sync job whose carried crash count reached the cap.
     'sync_running_cap_reached',
+    # A held unit re-driven at or over MAX_HELD_REDRIVES (counter only).
+    'held_redrive_budget_spent',
 )
 TERMINAL_TRANSITIONS = Counter(
     'omi_backlog_state_transitions_total',
