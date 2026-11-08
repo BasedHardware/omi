@@ -17,6 +17,10 @@ semantics. Turning a switch off restores the exact pre-change transition.
 - ``BATCH_HELD_REDRIVE_COUNTER_ENABLED`` (class 6 counter, default ON): count
   held re-drives (``held_redrives``) and report units whose re-drive budget is
   spent. Counting and an alert only; no state change.
+- ``BATCH_HELD_REDRIVE_BUDGET_ENABLED`` (class 3, default OFF): a
+  held/dead-letter requeue resets ``attempt`` to 0 (history in
+  ``held_redrive_last_attempt``), so one re-drive gets a real attempt. Moving
+  held rows back into processing with a fresh budget is a custody change.
 
 None of these transitions deletes audio, results, custody tokens or privacy
 fences. See backend/docs/runbooks/backlog-state-machine.md.
@@ -27,6 +31,7 @@ from config.policy.kill_switches import kill_switch
 RETRY_CAP_SWITCH = 'CAPTURE_RETRY_CAP_ENFORCED'
 SYNC_ATTEMPT_CARRY_SWITCH = 'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED'
 HELD_REDRIVE_COUNTER_SWITCH = 'BATCH_HELD_REDRIVE_COUNTER_ENABLED'
+HELD_REDRIVE_BUDGET_SWITCH = 'BATCH_HELD_REDRIVE_BUDGET_ENABLED'
 
 # Automatic held re-drives per unit before the counter reports a spent budget.
 MAX_HELD_REDRIVES = 3
@@ -42,3 +47,7 @@ def sync_attempt_carry_enabled() -> bool:
 
 def held_redrive_counter_enabled() -> bool:
     return kill_switch(HELD_REDRIVE_COUNTER_SWITCH)
+
+
+def held_redrive_budget_enabled() -> bool:
+    return kill_switch(HELD_REDRIVE_BUDGET_SWITCH)

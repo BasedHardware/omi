@@ -32,7 +32,7 @@ from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
-from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_counter_enabled
+from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -1061,9 +1061,15 @@ def account_held_redrive(job: dict) -> None:
     """Switched accounting shared by every re-drive of a held unit (nightly, operator, poll).
 
     Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED): count the re-drive.
+    Class 3 (BATCH_HELD_REDRIVE_BUDGET_ENABLED): grant a fresh attempt budget;
+    keeping attempt at the cap made the first failure re-quarantine. History
+    moves to held_redrive_last_attempt.
     """
     if held_redrive_counter_enabled():
         job['held_redrives'] = held_redrives(job) + 1
+    if held_redrive_budget_enabled():
+        job['held_redrive_last_attempt'] = job.get('attempt', 0)
+        job['attempt'] = 0
 
 
 def held_redrive_budget_spent(job: dict) -> bool:

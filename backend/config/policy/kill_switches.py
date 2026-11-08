@@ -40,6 +40,7 @@ KILL_SWITCHES = {
     'CAPTURE_RETRY_CAP_ENFORCED': False,
     'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED': True,
     'BATCH_HELD_REDRIVE_COUNTER_ENABLED': True,
+    'BATCH_HELD_REDRIVE_BUDGET_ENABLED': False,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 # Parsed literally (true means on); never re-read through the capture-coverage
@@ -49,6 +50,7 @@ BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
         'CAPTURE_RETRY_CAP_ENFORCED',
         'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED',
         'BATCH_HELD_REDRIVE_COUNTER_ENABLED',
+        'BATCH_HELD_REDRIVE_BUDGET_ENABLED',
     }
 )
 logger = logging.getLogger(__name__)

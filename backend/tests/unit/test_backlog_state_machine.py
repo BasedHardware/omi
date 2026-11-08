@@ -27,6 +27,7 @@ SWITCHES = (
     sm.RETRY_CAP_SWITCH,
     sm.SYNC_ATTEMPT_CARRY_SWITCH,
     sm.HELD_REDRIVE_COUNTER_SWITCH,
+    sm.HELD_REDRIVE_BUDGET_SWITCH,
 )
 
 
@@ -54,11 +55,13 @@ EXPECTED_DEFAULTS = {
     sm.RETRY_CAP_SWITCH: False,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
     sm.HELD_REDRIVE_COUNTER_SWITCH: True,
+    sm.HELD_REDRIVE_BUDGET_SWITCH: False,
 }
 READERS = {
     sm.RETRY_CAP_SWITCH: sm.retry_cap_enforced,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: sm.sync_attempt_carry_enabled,
     sm.HELD_REDRIVE_COUNTER_SWITCH: sm.held_redrive_counter_enabled,
+    sm.HELD_REDRIVE_BUDGET_SWITCH: sm.held_redrive_budget_enabled,
 }
 
 
@@ -469,3 +472,80 @@ def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
     store.rows['jobs', 'segment'].update(state='dead', token='', lease_until=0)
     durable_status(store, 'synthetic-owner', 'bp_first')
     assert store.rows['jobs', 'segment']['state'] == 'ready'
+
+
+# 3. Held requeue budget reset (BATCH_HELD_REDRIVE_BUDGET_ENABLED, default OFF) ------
+
+
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
+def test_requeue_grants_a_fresh_attempt_budget(setup, monkeypatch, switch):
+    if switch is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, switch)
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), attempt=5)
+    assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
+    job = bad(client)
+    assert job['state'] == 'ready' and job['audio_uri'] == 'gs://synthetic/audio'
+    if switch == 'true':
+        # A re-drive gets a real attempt: the first failure no longer re-quarantines.
+        assert job['attempt'] == 0
+        assert job['held_redrives'] == 1 and job['held_redrive_last_attempt'] == 5
+    else:
+        # Budget reset off (default): attempt stays; the class 6 counter still counts.
+        assert job['attempt'] == 5 and job['held_redrives'] == 1
+        assert 'held_redrive_last_attempt' not in job
+
+
+@pytest.mark.parametrize('budget,after', [('true', 'retry'), (None, 'quarantined'), ('false', 'quarantined')])
+def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch, budget, after):
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # reaching quarantine needs class 1 on
+    if budget is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('poison', owner=uuid4().hex), 0)
+    for attempt in (1, 2):
+        queue.recover(attempt * 1000)
+        queue.pull(attempt * 1000)
+        queue.recover(attempt * 1000 + 121)
+    job = store.rows['jobs', 'poison']
+    assert job['state'] == 'quarantined' and job['attempt'] == 2
+    assert store.run(lambda tx: Scheduler.requeue_quarantined_in_transaction(tx, tx.get('jobs', 'poison'), 5000))
+    lease = queue.pull(5000)[0]
+    assert lease.attempt == (1 if budget == 'true' else 3)
+    queue.recover(5121)
+    # Budget off: attempt stayed at the cap and this first expiry re-quarantines.
+    assert store.rows['jobs', 'poison']['state'] == after
+
+
+@pytest.mark.parametrize('counter', ['true', 'false'])
+@pytest.mark.parametrize('budget', ['true', 'false'])
+def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, budget):
+    """Review wave 3 (finding 2): a poll re-drive is counted and reset like the nightly one."""
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    store.rows['jobs', 'segment'].update(
+        state='dead',
+        token='',
+        lease_until=0,
+        merge_pending=True,
+        dead_letter_reason='held_expired',
+        held_redrives=1,
+        attempt=5,
+    )
+    durable_status(store, 'synthetic-owner', 'bp_first')
+    job = store.rows['jobs', 'segment']
+    assert job['state'] == 'ready'
+    assert job['held_redrives'] == (2 if counter == 'true' else 1)
+    assert job['attempt'] == (0 if budget == 'true' else 5)
