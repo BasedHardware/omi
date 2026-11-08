@@ -1,6 +1,7 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
 import hashlib
+from typing import Literal
 import math
 import logging
 import random
@@ -31,6 +32,14 @@ from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
+from config.backlog_state_machine import (
+    HELD_EXHAUSTED_REASON,
+    MAX_HELD_REDRIVES,
+    RETAINED_DEAD_REASONS,
+    held_redrive_budget_enabled,
+    held_redrive_counter_enabled,
+    held_redrive_stop_enabled,
+)
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -940,7 +949,9 @@ class Scheduler:
     @staticmethod
     def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
         """Dormant worker holds only; never reopen an active paid/operator intent."""
-        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        # held_exhausted rows (automatic re-drive budget spent) stay requeueable
+        # by an operator; the nightly pass selects held_expired only.
+        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS
         state_ok = job.get('state') == 'quarantined' or held_dead
         lease_until = job.get('lease_until', 0)
         if (
@@ -984,16 +995,51 @@ class Scheduler:
         owner = tx.get('owners', job['owner_key'])
         owner['revision'] = owner.get('revision', 0) + 1
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        account_held_redrive(job)
         _append(tx, control, job)
         tx.put('owners', job['owner_key'], owner)
         tx.put('jobs', job['segment_id'], job)
         return True
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def exhaust_held_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+        """Terminal stop for automatic re-drive: retained, operator-requeueable.
+
+        Only an eligible held_expired dead letter whose re-drive budget is spent
+        moves; audio, results, intents and attempt history are untouched.
+        """
+        if (
+            not held_redrive_stop_enabled()
+            or job.get('state') != 'dead'
+            or job.get('dead_letter_reason') != 'held_expired'
+            or held_redrives(job) < MAX_HELD_REDRIVES
+            or not Scheduler.held_requeue_eligible(tx, job, now)
+        ):
+            return False
+        job.update(dead_letter_reason=HELD_EXHAUSTED_REASON, held_exhausted_at=now)
+        tx.put('jobs', job['segment_id'], job)
+        return True
+
+    @staticmethod
+    def redrive_in_transaction(
+        tx: Transaction, job: dict, now: float, *, automatic: bool = False
+    ) -> bool | Literal['spent']:
+        """True on redrive; 'spent' when a poll re-drive starts at or over the held budget."""
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
+        if automatic and held_redrive_stop_enabled() and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
+            # A retained held dead letter moves only through the counted nightly
+            # re-drive or an explicit operator redrive; a status poll would
+            # bypass held_redrives and the attempt reset.
+            return False
         control = read_control(tx, scheduler_control_key(job['owner_key']))
+        spent = False
+        if automatic and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
+            # With the terminal stop off a status poll may still reopen a retained
+            # held dead letter; it gets the nightly path's switched accounting
+            # and the same spent-budget signal (reported by the caller after commit).
+            spent = held_redrive_budget_spent(job)
+            account_held_redrive(job)
         job.update(
             state='ready',
             available_at=now,
@@ -1004,11 +1050,11 @@ class Scheduler:
         )
         _append(tx, control, job)
         tx.put('jobs', job['segment_id'], job)
-        return True
+        return 'spent' if spent else True
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        return bool(self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now)))
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
@@ -1031,3 +1077,38 @@ class Scheduler:
             return True
 
         return self.store.run(commit)
+
+
+def held_redrives(job: dict) -> int:
+    """Automatic and operator re-drives already granted to this unit.
+
+    Malformed metadata counts as spent: it must never re-open an unbounded loop.
+    """
+    if 'held_redrives' not in job:
+        return 0
+    count = job['held_redrives']
+    return count if type(count) is int and count >= 0 else MAX_HELD_REDRIVES
+
+
+def account_held_redrive(job: dict) -> None:
+    """Switched accounting shared by every re-drive of a held unit (nightly, operator, poll).
+
+    Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED): count the re-drive.
+    Class 3 (BATCH_HELD_REDRIVE_BUDGET_ENABLED): grant a fresh attempt budget;
+    keeping attempt at the cap made the first failure re-quarantine. History
+    moves to held_redrive_last_attempt.
+    """
+    if held_redrive_counter_enabled():
+        job['held_redrives'] = held_redrives(job) + 1
+    if held_redrive_budget_enabled():
+        job['held_redrive_last_attempt'] = job.get('attempt', 0)
+        job['attempt'] = 0
+
+
+def held_redrive_budget_spent(job: dict) -> bool:
+    """Class 6 counter: this re-drive starts at or over MAX_HELD_REDRIVES.
+
+    Shared by the nightly scan and status-poll re-drives so both report the
+    same held_redrive_budget_spent signal, whether or not the stop is on.
+    """
+    return held_redrive_counter_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES

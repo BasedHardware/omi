@@ -882,7 +882,9 @@ def held_without_recovery(job: dict) -> bool:
     """
     from config.policy import RecoveryPolicy
 
-    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+    from config.backlog_state_machine import RETAINED_DEAD_REASONS
+
+    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS
     if (job.get('state') != 'quarantined' and not retained_dead) or job.get('result'):
         return False
     if any(

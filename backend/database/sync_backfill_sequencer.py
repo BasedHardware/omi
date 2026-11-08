@@ -26,7 +26,7 @@ from config import sync_backfill_worker as worker_policy
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
-from utils.sync.retry_hygiene import dispatch_cap
+from utils.sync.retry_hygiene import dispatch_cap, running_attempt_carry, running_expiries
 
 logger = logging.getLogger(__name__)
 OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
@@ -497,6 +497,8 @@ def claim_next(
             'active_payload': job['payload'],
             'active_epoch': epoch,
             'dispatch_attempt': 0,
+            'running_expiries': 0,
+            'dispatch_attempt_base': 0,
             'active_state': 'dispatching',
             'worker_available': job['payload'].get('worker_eligible') is True,
             'worker_fallback_at': (
@@ -920,7 +922,13 @@ def owner_release_due(
 
 
 def redrive_job(
-    uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
+    uid: str,
+    job_id: str,
+    epoch: int,
+    *,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+    crashed: bool = True,
 ) -> Optional[dict[str, Any]]:
     """Retry queued dispatch within its cap; fence expired running work."""
     _require_production()
@@ -944,7 +952,20 @@ def redrive_job(
         # refactor: superseded by retry_hygiene when CAPTURE_COVERAGE_MODE=serve
         # Preserve epochs across uncertain enqueues: queue latency is not lost ownership.
         next_epoch = epoch if dispatching else epoch + 1
-        dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if dispatching else 0
+        # A running lease expiry consumed a delivery just like a lost enqueue:
+        # carry the count so the reconciler's cap bounds lifetime deliveries
+        # (SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED=false restores the reset to 0).
+        # The cap itself stays with the reconciler, which runs first and owns
+        # the fenced terminal handoff; refusing here would strand the owner.
+        carry = dispatching or running_attempt_carry(owner)
+        dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if carry else 0
+        # A running expiry is a crash unless a budget deferral's delayed
+        # replacement is still pending (crashed=False from the sweeper).
+        expiries = running_expiries(owner) + (0 if dispatching or not crashed else 1) if carry else 0
+        # dispatch_attempt stays a unique task identity, but the legacy
+        # dispatching-deadline budget restarts at every new epoch, as on main
+        # (which reset dispatch_attempt here): count from this base.
+        base = int(owner.get('dispatch_attempt_base') or 0) if dispatching else dispatch_attempt
         # Restore the persisted budget chain count across lease expiry.
         payload = dict(owner['active_payload'])
         deferrals = owner.get('active_budget_deferrals')
@@ -956,6 +977,8 @@ def redrive_job(
                 'epoch': next_epoch,
                 'active_epoch': next_epoch,
                 'dispatch_attempt': dispatch_attempt,
+                'running_expiries': expiries,
+                'dispatch_attempt_base': base,
                 'active_state': 'dispatching',
                 'worker_token': firestore.DELETE_FIELD,
                 'worker_available': False,

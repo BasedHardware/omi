@@ -32,6 +32,15 @@ from config.batch_pipeline import (
     projection_ghost_settle_cohort,
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
+from utils.backlog_metrics import record_transition
+from config.backlog_state_machine import (
+    ASSIGNMENT_HOLD_DEADLINE_SECONDS,
+    ASSIGNMENT_HOLD_ESCALATION_REASON,
+    MAX_PROJECTION_REARMS,
+    assignment_hold_escalation_enabled,
+    held_redrive_counter_enabled,
+    held_redrive_stop_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +120,23 @@ def ghost_class(entry, job, binding, segment_id: str, now: float) -> str:
     return 'eligible'
 
 
+def projection_rearms(entry: dict) -> int:
+    """Expiry re-arms already granted; malformed metadata counts as spent."""
+    if 'held_expired_rearms' not in entry:
+        return 0
+    count = entry['held_expired_rearms']
+    return count if type(count) is int and count >= 0 else MAX_PROJECTION_REARMS
+
+
 class ProjectionReleaseStore:
     """Operator-free reset of one held unit; every assignment fence still applies."""
 
     def __init__(self, store, *, ghost_budget: int = GHOST_SETTLE_MAX_PER_PASS):
         self.store = store
         self.expired = False
+        self.rearm_exhausted = False
+        self.rearm_spent = False
+        self.escalated = False
         self.ghost_budget = max(0, min(ghost_budget, GHOST_SETTLE_MAX_PER_PASS))
         self.ghost_settled = False
         self.ghost_skip: str | None = None
@@ -173,10 +193,24 @@ class ProjectionReleaseStore:
         if not finite_timestamp(deadline) or deadline > now:
             return None
         expiry = {'held_expired_reason': 'held_expired', 'held_expired_at': now}
+        rearm_exhausted = False
         if attempts >= MAX_RELEASE_ATTEMPTS:
-            expiry.update(held_expired_release_attempts=attempts, projection_release_attempts=0)
+            rearms = projection_rearms(entry)
+            # Class 6 counter: a spent re-arm budget is observed (and alerted)
+            # whether or not the terminal stop is on; recorded after commit.
+            self.rearm_spent = held_redrive_counter_enabled() and rearms >= MAX_PROJECTION_REARMS
+            if held_redrive_stop_enabled() and rearms >= MAX_PROJECTION_REARMS:
+                # Class 6 terminal stop: the receipt stays retained as
+                # held_expired but its release budget stays spent.
+                expiry['held_rearm_exhausted_at'] = now
+                rearm_exhausted = True
+            else:
+                # Keep the old reader's state AND attempt eligibility.
+                expiry.update(held_expired_release_attempts=attempts, projection_release_attempts=0)
+                if held_redrive_counter_enabled():
+                    expiry['held_expired_rearms'] = rearms + 1
         transaction.update(self.store.ref('results', segment_id), expiry)
-        return 'expired'
+        return 'expired_rearm_exhausted' if rearm_exhausted else 'expired'
 
     def release(self, segment_id: str, now: float, *, dead_before: float | None = None) -> bool:
         """Reset one held unit to pending iff its record target was restored."""
@@ -184,6 +218,7 @@ class ProjectionReleaseStore:
 
         @firestore.transactional
         def commit(transaction):
+            self.rearm_spent = False  # reset on every transaction retry
             job = self.store.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
@@ -204,6 +239,17 @@ class ProjectionReleaseStore:
                 entry.get('held_expired_at')
             )
             attempts = entry.get('projection_release_attempts', int(entry.get('projection_redriven_at') is not None))
+            rearm_restored = (
+                # Rollback of the re-arm stop: only a receipt this feature marked
+                # exhausted regains the legacy one-time re-arm when budgeting is off.
+                expired
+                and entry.get('held_rearm_exhausted_at') is not None
+                and not held_redrive_stop_enabled()
+                and type(attempts) is int
+                and attempts >= MAX_RELEASE_ATTEMPTS
+            )
+            if rearm_restored:
+                attempts = 0
             if (
                 binding is None
                 or segment_id not in binding.segment_ids
@@ -273,7 +319,7 @@ class ProjectionReleaseStore:
                     and dead_before is None
                 ):
                     outcome = self._expire_assignment(transaction, segment_id, entry, now, expired, attempts)
-                    if outcome == 'expired':
+                    if outcome in ('expired', 'expired_rearm_exhausted'):
                         return outcome
                     if outcome == 'stamped':
                         return False
@@ -283,9 +329,34 @@ class ProjectionReleaseStore:
                 if not expired or not finite_timestamp(expired_at) or expired_at >= dead_before:
                     return False
             restorable = self._target_restorable(transaction, binding)
+            if not restorable and entry.get('projection_state') == 'persisted':
+                # An assignment hold still owes multipart follow-ups, so it never
+                # expires. It still gets an owner and a deadline: after it, a
+                # retained escalation marker (no state, receipt, payload, job or
+                # audio change). A later restored target still releases it.
+                if entry.get('assignment_hold_escalated_at') is not None or not assignment_hold_escalation_enabled():
+                    return False
+                deadline = entry.get('assignment_hold_deadline_at')
+                if deadline is None:
+                    transaction.update(
+                        self.store.ref('results', segment_id),
+                        {'assignment_hold_deadline_at': now + ASSIGNMENT_HOLD_DEADLINE_SECONDS},
+                    )
+                    return False
+                if not finite_timestamp(deadline) or deadline > now:
+                    return False
+                transaction.update(
+                    self.store.ref('results', segment_id),
+                    {
+                        'assignment_hold_escalated_at': now,
+                        'assignment_hold_escalation_reason': ASSIGNMENT_HOLD_ESCALATION_REASON,
+                    },
+                )
+                return 'assignment_hold_escalated'
             if not restorable:
-                if self._expire_assignment(transaction, segment_id, entry, now, expired, attempts) == 'expired':
-                    return 'expired'
+                outcome = self._expire_assignment(transaction, segment_id, entry, now, expired, attempts)
+                if outcome in ('expired', 'expired_rearm_exhausted'):
+                    return outcome
                 return False
             if attempts >= MAX_RELEASE_ATTEMPTS:
                 return False
@@ -301,6 +372,22 @@ class ProjectionReleaseStore:
                 reset['held_deadline_at'] = None
             if expired:
                 reset.update(held_expired_at=None, held_expired_reason=None)
+            if 'held_rearm_exhausted_at' in entry:
+                reset['held_rearm_exhausted_at'] = None
+            if entry.get('assignment_hold_deadline_at') is not None or entry.get('assignment_hold_escalated_at'):
+                # The hold this release ends owned that deadline; a later hold on
+                # the same unit starts its own. Keep the escalation as history.
+                reset.update(assignment_hold_deadline_at=None, assignment_hold_escalated_at=None)
+                if entry.get('assignment_hold_escalated_at') is not None:
+                    reset['assignment_hold_escalation_reason'] = None
+                    reset['assignment_hold_escalation_history'] = [
+                        *(entry.get('assignment_hold_escalation_history') or []),
+                        {
+                            'escalated_at': entry['assignment_hold_escalated_at'],
+                            'reason': entry.get('assignment_hold_escalation_reason'),
+                            'released_at': now,
+                        },
+                    ]
             if entry.get('lineage_quarantine_version') == 1:
                 # Old-binaries fence for the held receipt; the receipt is gone.
                 reset['protocol_version'] = 1
@@ -330,9 +417,17 @@ class ProjectionReleaseStore:
         self.ghost_age = outcome[1] if isinstance(outcome, tuple) else None
         if self.ghost_settled and outcome[2]:
             logger.warning('event=batch_projection_ghost_cohort outcome=invalid_fallback count=1')
-        self.expired = outcome == 'expired'
+        self.rearm_exhausted = outcome == 'expired_rearm_exhausted'
+        self.escalated = outcome == 'assignment_hold_escalated'
+        if self.escalated:
+            record_transition('assignment_hold_escalated')
+        self.expired = outcome == 'expired' or self.rearm_exhausted
+        if self.rearm_exhausted:
+            record_transition('projection_rearm_exhausted')
+        if self.expired and self.rearm_spent:
+            record_transition('projection_rearm_budget_spent')
         released = outcome is True
-        if released or self.expired or self.ghost_settled:
+        if released or self.expired or self.ghost_settled or self.escalated:
             try:
                 mirror_refresh(
                     self.store.store.namespace,

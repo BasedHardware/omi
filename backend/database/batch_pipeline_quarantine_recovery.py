@@ -17,7 +17,8 @@ from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
-from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.batch_pipeline.scheduler import Scheduler, held_redrives, owner_key
+from config.backlog_state_machine import HELD_EXHAUSTED_REASON, MAX_HELD_REDRIVES, held_redrive_stop_enabled
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -128,20 +129,35 @@ class RecoveryStore:
         return self.store.run(commit)
 
     def requeue_quarantined(self, segment_id, now, *, dead_before=None):
-        """Operator and nightly entry: retain the content/privacy ownership CAS."""
+        """Operator and nightly entry: retain the content/privacy ownership CAS.
+
+        Returns True on requeue, False on refusal, and 'exhausted' when the
+        nightly pass (dead_before set) parks a unit whose re-drive budget is spent.
+        """
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             if dead_before is not None:
                 expired_at = job.get('held_expired_at')
+                # Rollback: with the re-drive budget switch off, the nightly pass
+                # again accepts units this feature parked as held_exhausted.
+                nightly_reasons = (
+                    {'held_expired'} if held_redrive_stop_enabled() else {'held_expired', HELD_EXHAUSTED_REASON}
+                )
                 if (
                     job.get('state') != 'dead'
-                    or job.get('dead_letter_reason') != 'held_expired'
+                    or job.get('dead_letter_reason') not in nightly_reasons
                     or isinstance(expired_at, bool)
                     or not isinstance(expired_at, (int, float))
                     or not math.isfinite(expired_at)
                     or expired_at >= dead_before
                 ):
+                    return False
+                # Automatic re-drive has a terminal stop; the operator path
+                # (dead_before=None) may still requeue an exhausted unit.
+                if Scheduler.exhaust_held_in_transaction(tx, job, now):
+                    return 'exhausted'
+                if held_redrive_stop_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES:
                     return False
             return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
 
@@ -643,10 +659,16 @@ def expire_held_in_transaction(tx, job, now):
     return 'expired'
 
 
-def dead_held_candidates(client, namespace, limit=32, *, after_id=None):
-    """Only this reason is nightly redriven; historical dead stock is untouched."""
+def dead_held_candidates(client, namespace, limit=32, *, after_id=None, reason='held_expired'):
+    """Only retained held reasons are nightly redriven; historical dead stock is untouched.
+
+    ``reason='held_exhausted'`` is paged only while BATCH_HELD_REDRIVE_BUDGET_ENABLED
+    is off (rollback); same equality shape and index as the default.
+    """
+    if reason not in ('held_expired', HELD_EXHAUSTED_REASON):
+        raise ValueError('unsupported held dead-letter reason')
     collection = client.collection(f'{namespace}_jobs')
-    query = collection.where('state', '==', 'dead').where('dead_letter_reason', '==', 'held_expired')
+    query = collection.where('state', '==', 'dead').where('dead_letter_reason', '==', reason)
     query = query.order_by('__name__')
     if after_id is not None:
         query = query.start_after({'__name__': collection.document(after_id)})

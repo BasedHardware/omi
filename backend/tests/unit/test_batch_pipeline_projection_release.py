@@ -7,11 +7,13 @@ target, clear the held disposition without touching audio, and stamp
 watermark backward onto already-terminal rows.
 """
 
+from copy import deepcopy
 from dataclasses import asdict
 from unittest.mock import Mock
 
 import pytest
 
+from config.backlog_state_machine import ASSIGNMENT_HOLD_DEADLINE_SECONDS
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, release_page, release_page_settled
 from database.batch_pipeline_store import FirestoreStore
@@ -255,10 +257,13 @@ def test_release_scan_cursor_failures_never_stop_the_scan(monkeypatch):
     assert _scanner(broken)(1)['examined'] == 1
 
 
+@pytest.mark.parametrize('escalation', ['true', None])
 @pytest.mark.parametrize('summary', ['quarantined', 'persisted'])
 @pytest.mark.parametrize('blocked', [None, 'target', 'attempts', 'privacy', 'operator'])
-def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summary, blocked):
+def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summary, blocked, escalation):
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    if escalation is not None:
+        monkeypatch.setenv('BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED', escalation)
     held_part = {'state': 'quarantined', 'disposition': 'ambiguous_generation'}
     suffix = {'state': 'persisted', 'conversation_id': 'proven-suffix', 'audio_required': True}
     seeded = rows(
@@ -279,7 +284,14 @@ def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summar
     client, store = store_for(seeded)
     assert ProjectionReleaseStore(store).release('held', 500.0) is (blocked is None)
     if blocked:
-        assert client.rows == seeded
+        expected = deepcopy(seeded)
+        if blocked == 'target' and escalation == 'true':
+            # An unrestorable assignment hold only gains its deadline stamp
+            # (backlog state machine); its parts and proven suffix are untouched.
+            expected[('batch_pipeline_prod_results', 'held')]['assignment_hold_deadline_at'] = (
+                500.0 + ASSIGNMENT_HOLD_DEADLINE_SECONDS
+            )
+        assert client.rows == expected
     else:
         result = client.rows[('batch_pipeline_prod_results', 'held')]
         assert result['projection_state'] == 'pending'

@@ -37,7 +37,7 @@ def test_worker_fail_expire_and_nightly_redrive_keep_audio_and_cold_queue_integr
     assert dead_held_candidates(lane.client, lane.store.namespace) == [(sid, expired)]
     assert held_expired_stock(lane.client, lane.store.namespace) == 1
     metrics = QueueMetrics(CollectorRegistry())
-    assert HeldDeadLetter(lane.store, metrics=metrics).tick(172800) == {'expired': 0, 'requeued': 1}
+    assert HeldDeadLetter(lane.store, metrics=metrics).tick(172800) == {'expired': 0, 'requeued': 1, 'exhausted': 0}
     before = deepcopy(ref.get().to_dict())
     assert not recovery.requeue_quarantined(sid, 172800)
     assert ref.get().to_dict() == before

@@ -212,7 +212,11 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_quarantine_recovery.dead_held_candidates',
-            domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
+            domains={
+                'namespace': namespaces,
+                'after_id': [None, 'held-09'],
+                'reason': ['held_expired', 'held_exhausted'],
+            },
             neutrals={'limit': (32, 'bounded page size')},
         ),
         DriverEntry(

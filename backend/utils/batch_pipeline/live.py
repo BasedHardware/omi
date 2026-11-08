@@ -31,6 +31,15 @@ from config.record_drain import (
     barrier_retry_delay,
     record_drain_barrier_backoff_enabled,
 )
+from config.backlog_state_machine import (
+    MAX_RECORD_BARRIER_REDRIVES,
+    RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS,
+    RECORD_BARRIER_DEAD_LETTER_REASON,
+    RECORD_BARRIER_PARK_RECHECK_SECONDS,
+    RECORD_BARRIER_REDRIVE_SECONDS,
+    record_barrier_dead_letter_enabled,
+)
+from utils.backlog_metrics import record_transition
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import (
@@ -63,6 +72,103 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
+
+
+class RecordBarrierOpen(ValueError):
+    """The admission pre-check's barrier refusal, with the conversation it read.
+
+    Same message as the config.record_audio refusal, so every existing
+    ``str(error) == BARRIER_NOT_CLOSED`` match is unchanged.
+    """
+
+    def __init__(self, message: str, *, conversation_present: bool, conversation_status: Any):
+        super().__init__(message)
+        self.conversation_present = conversation_present
+        self.conversation_status = conversation_status if isinstance(conversation_status, str) else None
+
+
+def record_barrier_redrives(job: dict) -> int:
+    """Weekly barrier re-drives already spent; malformed metadata counts as spent."""
+    if 'barrier_redrives' not in job:
+        return 0
+    count = job['barrier_redrives']
+    return count if type(count) is int and count >= 0 else MAX_RECORD_BARRIER_REDRIVES
+
+
+def record_park_owns(error: BaseException | None) -> bool:
+    """Class 4 owns this barrier failure: the conversation exists and is not completed.
+
+    While RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED is on, such a row follows
+    the class 4 ladder (weekly re-drive, then a retained park) for its whole
+    life, and main's record_barrier_aged dead letter is skipped for it. Every
+    other barrier failure, and every row while the switch is off, keeps main's
+    record dead letter unchanged.
+    """
+    return (
+        isinstance(error, RecordBarrierOpen)
+        and error.conversation_present
+        and error.conversation_status != 'completed'
+        and record_barrier_dead_letter_enabled()
+    )
+
+
+def record_anchor_valid(enqueued_at: Any) -> bool:
+    """A real, finite enqueued_at that class 4 can age a row from."""
+    return not isinstance(enqueued_at, bool) and isinstance(enqueued_at, (int, float)) and math.isfinite(enqueued_at)
+
+
+def barrier_dead_letter_step(job: dict, *, age: float, error: BaseException | None, now: float) -> str | None:
+    """Owner/deadline for an aged record_pending row whose conversation never finished.
+
+    Mutates ``job`` and returns 'redrive' (weekly retry, counted) or
+    'dead_letter' (retained park, operator requeue only), or None to keep the
+    ordinary barrier ladder. Only a conversation that exists and is not
+    completed qualifies: a missing one belongs to the seven-day
+    record_pending_repair cancel, and a completed one with open upload
+    tokens belongs to seal repair. Never touches custody, tokens or audio.
+    """
+    if (
+        not isinstance(error, RecordBarrierOpen)
+        or not error.conversation_present
+        or error.conversation_status == 'completed'
+        or age < RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS
+        or job.get('barrier_dead_letter')
+        or not record_barrier_dead_letter_enabled()
+    ):
+        return None
+    spent = record_barrier_redrives(job)
+    if spent >= MAX_RECORD_BARRIER_REDRIVES:
+        job['barrier_dead_letter'] = {
+            'reason': RECORD_BARRIER_DEAD_LETTER_REASON,
+            'at': now,
+            'redrives': spent,
+            'conversation_status': error.conversation_status,
+        }
+        return 'dead_letter'
+    job['barrier_redrives'] = spent + 1
+    job['barrier_redrive_at'] = now
+    return 'redrive'
+
+
+def requeue_barrier_dead_letter(store, segment: str, now: float) -> bool:
+    """Operator exit for a parked record_pending row: one fresh re-drive budget."""
+
+    def commit(tx):
+        job = tx.get('jobs', segment)
+        if job.get('state') != 'record_pending' or not job.get('barrier_dead_letter'):
+            return False
+        job['barrier_dead_letter_history'] = [
+            *(job.get('barrier_dead_letter_history') or []),
+            job['barrier_dead_letter'],
+        ]
+        job.pop('barrier_dead_letter')
+        job.update(barrier_redrives=0, barrier_requeued_at=now, available_at=now)
+        tx.put('jobs', segment, job)
+        return True
+
+    return store.run(commit)
+
+
 # Literal admission refusals worth counting; any other text could carry a value
 # and is reported only as `other`.
 _RETRY_REASONS = frozenset(
@@ -320,8 +426,12 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     current = await run_blocking(db_executor, read_current)
     try:
         record_barrier = require_record_audio_barrier(current)
-    except ValueError:
+    except ValueError as error:
         phase_shadow.observe('batch_admission', current, False, now=now)
+        if str(error) == BARRIER_NOT_CLOSED:
+            raise RecordBarrierOpen(
+                BARRIER_NOT_CLOSED, conversation_present=bool(current), conversation_status=current.get('status')
+            ) from error
         raise
     phase_shadow.observe('batch_admission', current, True, now=now)
     client = await run_blocking(storage_executor, create_storage_client)
@@ -534,6 +644,21 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         now = time.time()
         if latest.get('state') != 'record_pending' or latest.get('available_at', 0) > now:
             return None
+        if latest.get('barrier_dead_letter'):
+            # A parked dead letter is rechecked daily without admission. With the
+            # switch off (rollback) it returns to the ordinary barrier ladder, so
+            # parked rows are never stranded behind a far-future available_at.
+            if record_barrier_dead_letter_enabled():
+                latest['available_at'] = now + RECORD_BARRIER_PARK_RECHECK_SECONDS
+            else:
+                history = [*(latest.get('barrier_dead_letter_history') or []), latest.pop('barrier_dead_letter')]
+                latest['barrier_dead_letter_history'] = history
+                enqueued = latest.get('enqueued_at')
+                age = now - enqueued if isinstance(enqueued, (int, float)) else 0.0
+                delay = barrier_retry_delay(age) if record_drain_barrier_backoff_enabled() else 60
+                latest.update(barrier_redrives=0, barrier_unparked_at=now, available_at=now + delay)
+            tx.put('jobs', segment, latest)
+            return None
         lease = now + lease_seconds
         latest['available_at'] = lease
         tx.put('jobs', segment, latest)
@@ -543,6 +668,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
+        barrier_error = None
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -558,6 +684,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         except Exception as error:
             failed = True
             barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
+            barrier_error = error if barrier_open else None
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
@@ -575,10 +702,19 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             # so a no-op cannot monopolize every immediately repeated pass,
             # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
+            step = None
             if latest.get('state') == 'record_pending':
                 now = time.time()
                 expired = False
-                if barrier_open and latest.get('available_at') == lease and batch_held_dead_letter_enabled():
+                # Class 4 needs a valid enqueued_at to age the row; without one it
+                # never owns the row, so main's record dead-letter deadline applies.
+                class4_owns = record_park_owns(barrier_error) and record_anchor_valid(latest.get('enqueued_at'))
+                if (
+                    barrier_open
+                    and not class4_owns
+                    and latest.get('available_at') == lease
+                    and batch_held_dead_letter_enabled()
+                ):
                     deadline = latest.get('record_dead_letter_deadline_at')
                     if deadline is None:
                         latest['record_dead_letter_deadline_at'] = now + RECORD_DEAD_LETTER_SECONDS
@@ -598,8 +734,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                 delay = 60
                 if not failed and (latest.get('partial_run') or {}).get('complete'):
                     delay = INVENTORY_POLL_SECONDS
-                elif barrier_open and record_drain_barrier_backoff_enabled():
-                    # The capture is not finalized yet: back off by how long it has waited.
+                elif barrier_open:
                     enqueued = latest.get('enqueued_at')
                     age = (
                         max(0.0, now - enqueued)
@@ -608,18 +743,37 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                         and math.isfinite(enqueued)
                         else 0.0
                     )
-                    delay = barrier_retry_delay(age)
+                    if record_drain_barrier_backoff_enabled():
+                        # The capture is not finalized yet: back off by how long it has waited.
+                        delay = barrier_retry_delay(age)
+                    # Same fence as main's expiry: only the worker that still holds
+                    # the drain lease may spend class 4 re-drive budget. A slow
+                    # admission whose lease another replica re-claimed spends nothing.
+                    if class4_owns and latest.get('available_at') == lease:
+                        step = barrier_dead_letter_step(latest, age=age, error=barrier_error, now=now)
+                        if step == 'redrive':
+                            delay = RECORD_BARRIER_REDRIVE_SECONDS
+                        elif step == 'dead_letter':
+                            delay = RECORD_BARRIER_PARK_RECHECK_SECONDS
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)
                 latest['available_at'] = max(0 if current == lease else current, now + delay)
                 tx.put('jobs', segment, latest)
-                return expired
-            return False
+                return expired, step
+            return False, None
 
-        expired = await run_blocking(db_executor, store.run, defer)
+        expired, step = await run_blocking(db_executor, store.run, defer)
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
+        # Count only the committed attempt, never inside the retryable callback.
+        if step == 'redrive':
+            record_transition('record_barrier_redrive')
+        elif step == 'dead_letter':
+            record_transition('record_barrier_dead_letter')
+            logger.warning(
+                'event=batch_live_admission outcome=barrier_dead_letter reason=%s', RECORD_BARRIER_DEAD_LETTER_REASON
+            )
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

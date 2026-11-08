@@ -8,7 +8,10 @@ import logging
 import math
 import time
 
+from config.backlog_state_machine import HELD_EXHAUSTED_REASON, held_redrive_stop_enabled
+from utils.batch_pipeline.scheduler import held_redrive_budget_spent
 from config.batch_pipeline import batch_held_dead_letter_enabled
+from utils.backlog_metrics import record_transition
 from database.batch_pipeline_record_dead_letter import record_dead_letter_stock
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -34,6 +37,9 @@ class HeldDeadLetter:
         self.metrics = metrics
 
     def _record(self, event):
+        if event == 'exhausted':
+            record_transition('held_exhausted')
+            return
         if self.metrics is not None:
             if event == 'expired':
                 self.metrics.held_expired.inc()
@@ -44,11 +50,11 @@ class HeldDeadLetter:
         # Off has no queries, cursor writes, deadline stamps or expirations.
         # The separate RecoveryStore.requeue_quarantined tool remains usable.
         if not batch_held_dead_letter_enabled():
-            return {'expired': 0, 'requeued': 0}
+            return {'expired': 0, 'requeued': 0, 'exhausted': 0}
         state = self.store.run(lambda tx: tx.get('leases', CURSOR_KEY))
         if state.get('next_at', 0) > now:
-            return {'expired': 0, 'requeued': 0}
-        counts = {'expired': 0, 'requeued': 0}
+            return {'expired': 0, 'requeued': 0, 'exhausted': 0}
+        counts = {'expired': 0, 'requeued': 0, 'exhausted': 0}
         page = held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=state.get('held_after'))
         for sid, _ in page:
             try:
@@ -71,6 +77,10 @@ class HeldDeadLetter:
             after = state.get('dead_after') if state.get('redrive_day') == day else None
             dead = dead_held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=after)
             for sid, job in dead:
+                if held_redrive_budget_spent(job):
+                    # Class 6 counter: observe a spent re-drive budget (alerted),
+                    # whether or not the terminal stop is enabled.
+                    record_transition('held_redrive_budget_spent')
                 # A row expired today gets until the next night; stale snapshots
                 # are rechecked by the sanctioned content/privacy/lease CAS.
                 expired_at = job.get('held_expired_at')
@@ -91,12 +101,40 @@ class HeldDeadLetter:
                         type(error).__name__,
                     )
                     continue
-                if changed:
+                if changed == 'exhausted':
+                    counts['exhausted'] += 1
+                    self._record('exhausted')
+                elif changed:
                     counts['requeued'] += 1
                     self._record('requeued')
             updated.update(
                 redrive_day=day, redrive_done=len(dead) < PAGE_SIZE, dead_after=dead[-1][0] if dead else None
             )
+        if not held_redrive_stop_enabled():
+            # Rollback of the re-drive stop: page units parked as held_exhausted
+            # on their own durable cursor and requeue them through the same CAS.
+            exhausted = dead_held_candidates(
+                self.store.client,
+                self.store.namespace,
+                PAGE_SIZE,
+                after_id=state.get('exhausted_after'),
+                reason=HELD_EXHAUSTED_REASON,
+            )
+            for sid, _ in exhausted:
+                try:
+                    changed = self.recovery.requeue_quarantined(sid, now, dead_before=day * 86400)
+                except (BatchPrivacyBlocked, ProjectionBlocked):
+                    continue
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_held_dead_letter action=requeue_exhausted outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
+                    continue
+                if changed is True:
+                    counts['requeued'] += 1
+                    self._record('requeued')
+            updated['exhausted_after'] = exhausted[-1][0] if len(exhausted) == PAGE_SIZE else None
         updated['next_at'] = now + INTERVAL_SECONDS
 
         def checkpoint(tx):
@@ -110,7 +148,12 @@ class HeldDeadLetter:
             stock = held_expired_stock(self.store.client, self.store.namespace)
             self.metrics.held_expired_stock.set(stock)
             self.metrics.held_expired_observed_at.set(now)
-        logger.info('event=batch_held_dead_letter expired=%d requeued=%d', counts['expired'], counts['requeued'])
+        logger.info(
+            'event=batch_held_dead_letter expired=%d requeued=%d exhausted=%d',
+            counts['expired'],
+            counts['requeued'],
+            counts['exhausted'],
+        )
         return counts
 
 
