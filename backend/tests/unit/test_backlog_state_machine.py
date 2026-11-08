@@ -57,25 +57,44 @@ def transitions(name):
     return backlog_metrics.TERMINAL_TRANSITIONS.labels(name)._value.get()
 
 
-def test_switches_are_registered_safety_kill_switches_default_on(monkeypatch):
+# Defaults by the lead2 rule (64b2fa): ON only where a class just cuts wasted
+# work or retries; OFF where it changes custody, settle or expiry semantics.
+EXPECTED_DEFAULTS = {
+    sm.RETRY_CAP_SWITCH: False,
+    sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
+    sm.HELD_REDRIVE_BUDGET_SWITCH: True,
+    sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: True,
+    sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: True,
+}
+READERS = {
+    sm.RETRY_CAP_SWITCH: sm.retry_cap_enforced,
+    sm.SYNC_ATTEMPT_CARRY_SWITCH: sm.sync_attempt_carry_enabled,
+    sm.HELD_REDRIVE_BUDGET_SWITCH: sm.held_redrive_budget_enabled,
+    sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: sm.record_barrier_dead_letter_enabled,
+    sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: sm.assignment_hold_escalation_enabled,
+}
+
+
+@pytest.mark.parametrize('name', sorted(EXPECTED_DEFAULTS))
+def test_switch_default_and_both_explicit_states(monkeypatch, name):
     from config.policy.kill_switches import KILL_SWITCHES
 
-    for name in SWITCHES:
-        assert KILL_SWITCHES[name] is True
-    assert sm.retry_cap_enforced() and sm.sync_attempt_carry_enabled()
-    assert sm.held_redrive_budget_enabled() and sm.record_barrier_dead_letter_enabled()
-    assert sm.assignment_hold_escalation_enabled()
-    for name in SWITCHES:
-        monkeypatch.setenv(name, 'false')
-    assert not sm.retry_cap_enforced() and not sm.sync_attempt_carry_enabled()
-    assert not sm.held_redrive_budget_enabled() and not sm.record_barrier_dead_letter_enabled()
-    assert not sm.assignment_hold_escalation_enabled()
+    assert set(SWITCHES) == set(EXPECTED_DEFAULTS) == set(READERS)
+    assert KILL_SWITCHES[name] is EXPECTED_DEFAULTS[name]
+    assert READERS[name]() is EXPECTED_DEFAULTS[name]
+    # The capture-coverage serve mode never changes a backlog switch default.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    assert READERS[name]() is EXPECTED_DEFAULTS[name]
+    monkeypatch.setenv(name, 'true')
+    assert READERS[name]() is True
+    monkeypatch.setenv(name, 'false')
+    assert READERS[name]() is False
 
 
-# 1. Retry cap enforced by default ------------------------------------------------
+# 1. Retry cap enforcement (CAPTURE_RETRY_CAP_ENFORCED, default OFF) ---------------
 
 
-@pytest.mark.parametrize('switch,expected', [(None, 'quarantined'), ('false', 'retry')])
+@pytest.mark.parametrize('switch,expected', [('true', 'quarantined'), (None, 'retry'), ('false', 'retry')])
 def test_retry_cap_enforced_by_default_on_lease_expiry(monkeypatch, switch, expected):
     if switch is not None:
         monkeypatch.setenv(sm.RETRY_CAP_SWITCH, switch)
@@ -99,7 +118,7 @@ def test_retry_cap_enforced_by_default_on_lease_expiry(monkeypatch, switch, expe
         assert job['merge_pending']
 
 
-@pytest.mark.parametrize('switch,serving', [(None, True), ('false', False)])
+@pytest.mark.parametrize('switch,serving', [('true', True), (None, False), ('false', False)])
 def test_retry_cap_serves_without_capture_coverage_cohort(monkeypatch, switch, serving):
     from utils.capture.retry_cap import retry_cap
 
@@ -149,6 +168,7 @@ def test_running_lease_expiry_keeps_the_attempt_budget(db, monkeypatch, switch, 
 
 
 def test_running_lease_expiry_at_the_cap_terminalizes_instead_of_redriving(db, monkeypatch):
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # finalization needs class 1 on
     account, epoch = running_owner(db, monkeypatch, attempts='2')
     replacement, now = crash_once(account, epoch, NOW)
     assert replacement['dispatch_attempt'] == 1
@@ -218,6 +238,7 @@ def test_budget_deferred_owner_that_keeps_crashing_reaches_a_terminal_outcome(db
     The chain deferred once, then every replacement crashed (lease expired, no
     run lock, no live deferred_until marker). The UID lane must terminate.
     """
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # finalization needs class 1 on
     account, epoch = running_owner(db, monkeypatch, attempts='5')
     failure = finalizer_mocks(monkeypatch)
     now, outcomes = NOW, []
@@ -286,6 +307,7 @@ def test_running_cap_kill_switch_through_the_sweep(db, monkeypatch, switch):
     sweep must redrive it (replacement dispatched, counters reset, nothing
     finalized). The switch-ON control finalizes the same owner.
     """
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # finalization needs class 1 on
     account, expired = at_cap_running_owner(db, monkeypatch)
     failure = finalizer_mocks(monkeypatch)
     dispatch = Mock()
@@ -305,6 +327,19 @@ def test_running_cap_kill_switch_through_the_sweep(db, monkeypatch, switch):
         dispatch.assert_not_called()
         assert not owner.get('active_job_id')
         assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
+
+
+def test_running_cap_only_observes_while_class_1_is_off(db, monkeypatch):
+    """CAPTURE_RETRY_CAP_ENFORCED off (default): the carried count never finalizes."""
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'false')
+    account, expired = at_cap_running_owner(db, monkeypatch)
+    failure = finalizer_mocks(monkeypatch)
+    dispatch = Mock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'lease_expired'
+    dispatch.assert_called_once()
+    failure.assert_not_called()
+    assert registry.get_owner(account)['running_expiries'] == 2
 
 
 # 3 and 6. Held requeue resets the budget; automatic re-drive stops after N --------
@@ -351,6 +386,7 @@ def test_requeue_grants_a_fresh_attempt_budget(setup, monkeypatch, switch):
 
 
 def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch):
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # reaching quarantine needs class 1 on
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
     store = MemoryStore()
     queue = Scheduler(store)

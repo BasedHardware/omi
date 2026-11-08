@@ -1,20 +1,27 @@
 """Owners, deadlines and attempt budgets for the batch and sync backlog paths.
 
 Every non-terminal backlog state names one owner, one deadline and one counter.
-The table lives in ``backend/docs/runbooks/backlog-state-machine.md``; the four
-switches below are safety kill switches (on unless set to anything but
-``true``). Turning one off restores the exact pre-change transition.
+The table lives in ``backend/docs/runbooks/backlog-state-machine.md``.
 
-- ``CAPTURE_RETRY_CAP_ENFORCED``: retry caps end work for every uid, not only
-  the CAPTURE_COVERAGE_MODE serve cohort.
-- ``SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED``: a running sync lease expiry keeps
-  counting ``dispatch_attempt`` instead of resetting it to zero.
-- ``BATCH_HELD_REDRIVE_BUDGET_ENABLED``: a held/dead-letter requeue grants a
-  fresh attempt budget, counts the re-drive, and automatic re-drive stops after
-  ``MAX_HELD_REDRIVES``.
-- ``RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED``: an aged record_pending row
-  whose conversation exists but never completed is re-driven weekly with a
-  counter, then parked as a retained dead letter.
+Each class has its own switch in config/policy/kill_switches.py, parsed
+literally (``true`` is on, anything else is off, unset is the registered
+default). Defaults follow the lead2 rule (64b2fa): ON only where a class just
+cuts wasted work or retries, OFF where it changes custody, settle or expiry
+semantics. Turning a switch off restores the exact pre-change transition.
+
+- ``CAPTURE_RETRY_CAP_ENFORCED`` (class 1, default OFF): retry caps end work
+  (retained quarantine or fenced failure) for every uid, not only the
+  CAPTURE_COVERAGE_MODE serve cohort.
+- ``SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED`` (class 2): a running sync lease
+  expiry keeps counting ``dispatch_attempt`` instead of resetting it to zero.
+- ``BATCH_HELD_REDRIVE_BUDGET_ENABLED`` (classes 3 and 6): a held/dead-letter
+  requeue grants a fresh attempt budget, counts the re-drive, and automatic
+  re-drive stops after ``MAX_HELD_REDRIVES``.
+- ``RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED`` (class 4): an aged
+  record_pending row whose conversation exists but never completed is
+  re-driven weekly with a counter, then parked as a retained dead letter.
+- ``BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED`` (class 5): an unrestorable
+  assignment hold gets a deadline and then a retained escalation marker.
 
 None of these transitions deletes audio, results, custody tokens or privacy
 fences.

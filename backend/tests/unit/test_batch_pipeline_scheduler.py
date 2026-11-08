@@ -382,8 +382,9 @@ def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
 def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
-    # Default CAPTURE_RETRY_CAP_ENFORCED: the at-cap expiry is a retained hold.
-    monkeypatch.delenv('CAPTURE_RETRY_CAP_ENFORCED', raising=False)
+    # CAPTURE_RETRY_CAP_ENFORCED=true (default off): the at-cap expiry is a
+    # retained hold. The unset default keeps retrying, as the test above shows.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'true')
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
     store = MemoryStore()
     queue = Scheduler(store)

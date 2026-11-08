@@ -28,7 +28,7 @@ tokens or privacy fences, and each has an operator exit.
 | `record_pending`, conversation completed, barrier open | seal repair | seal repair proofs | admission after seal | seal repair refusal (unchanged) |
 | `record_pending`, conversation present and not completed | record drain | 14 d, then weekly; `barrier_redrives` vs 4 | admission if it completes | `barrier_dead_letter` park, rechecked daily without admission (retained, operator requeue; switch off returns it to the ladder) |
 
-## Switches (safety kill switches, on unless set to anything but `true`)
+## Switches (parsed literally: `true` is on, anything else is off, unset is the default below)
 
 All four are in `config/policy/kill_switches.py` and `config/feature-flags.yaml`.
 Set one to `false` to restore the exact previous transition. They are read per
@@ -39,17 +39,18 @@ off.
 
 | Switch | Bug class | Turning it off |
 | --- | --- | --- |
-| `CAPTURE_RETRY_CAP_ENFORCED` | 1: the cap observed but never ended work | Batch lease-expiry and sync running caps return to the `CAPTURE_COVERAGE_MODE` cohort (shadow outside it) |
+| `CAPTURE_RETRY_CAP_ENFORCED` (default **OFF**: enforcing quarantines rows, a custody change) | 1: the cap observed but never ended work | Batch lease-expiry and sync running caps return to the `CAPTURE_COVERAGE_MODE` cohort (shadow outside it) |
 | `SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED` | 2: running lease expiry reset `dispatch_attempt` to 0 | Running expiry resets to 0, `running_expiries` stays 0, and only dispatching owners are capped |
 | `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | 3 and 6: requeue kept `attempt` at the cap; no terminal stop | Requeue keeps `attempt`; nightly and poll re-drive and projection re-arm are unbounded again; the nightly pass also pages and requeues units already parked as `held_exhausted`; a receipt marked `held_rearm_exhausted_at` regains the legacy re-arm |
 | `RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED` | 4: unfinished conversations retried forever | Aged rows stay on the hourly barrier ladder; parked rows return to it at their next daily recheck |
 | `BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED` | Unrestorable assignment holds had no deadline | No new deadline stamps or escalations; existing markers are inert |
 
-### The flip of the retry cap (class 1)
+### Retry cap enforcement (class 1, default OFF)
 
 Before this change the cap's enforcement rode on `CAPTURE_COVERAGE_MODE`, whose
 serve ramp is gated on unrelated dedupe evidence. With the default `shadow` mode
-the cap only logged `would_quarantine`. Now:
+the cap only logged `would_quarantine`. With `CAPTURE_RETRY_CAP_ENFORCED=true`
+(default off; it is a custody change):
 
 - Batch: a unit whose lease expires at `BATCH_PIPELINE_MAX_ATTEMPTS` is quarantined
   (`quarantine_reason=worker_failed`, `recovery_state=held`), the same transition an
@@ -67,8 +68,8 @@ the cap only logged `would_quarantine`. Now:
   `test_delayed_queue_dispatch_retries_are_not_terminalized_by_default`).
 
 Watch `omi_capture_retry_cap_total{outcome="quarantine"}` (alert
-`omi-backlog-retry-cap-quarantine-rate`). A spike after deploy means units that
-used to loop are now being held. That is the intended effect, but check
+`omi-backlog-retry-cap-quarantine-rate`). A spike after the switch is turned on
+means units that used to loop are now being held. That is the intended effect, but check
 `check=scheduler_lease_expiry` worker failure reasons before deciding it is not a
 regression. Rollback: `CAPTURE_RETRY_CAP_ENFORCED=false`.
 
