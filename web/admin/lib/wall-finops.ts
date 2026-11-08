@@ -17,6 +17,8 @@ export const ADMIN_FINOPS_TABLES = [
   "omi_finops.stt_modulate_modelled_daily",
   "omi_finops.vendor_balance_snapshot",
   "omi_finops.vendor_balance_spend_daily",
+  "omi_finops.spend_daily",
+  "omi_finops.spend_daily_gcp_sku",
 ] as const;
 
 /** Aggregate FinOps tables only; no user-level table is read.
