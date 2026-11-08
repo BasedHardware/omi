@@ -3067,6 +3067,19 @@ when no transcript segments were supplied.
 
 ### Home processing ownership (default on)
 
+`HOME_LIVE_OWNER_CACHE_ENABLED` defaults true (the same per-call true/false
+pattern as the ownership flags). The acknowledged, unfiltered conversation-list
+path memoizes live owner metadata by UID in Redis for at most 30 seconds from
+before its Firestore read. Positive and negative hits never refresh the expiry;
+a payload deadline also bounds delayed writes. Only IDs, live status and ownership
+timestamps enter this cache. Exact episode/member client acknowledgements still
+gate every omitted recording: stale live metadata can retain an acknowledged
+omission for at most 30 seconds, and cannot hide an unacknowledged recording.
+Redis errors or invalid entries fall back to Firestore; Firestore errors keep rows
+visible. Set `HOME_LIVE_OWNER_CACHE_ENABLED=false` to bypass all cache reads and
+writes and restore the original owner read on each eligible poll. Pending-work,
+detail escalation and writer leases do not consume this cache.
+
 `HOME_PROCESSING_OWNERSHIP_ENABLED` and `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED`
 both default true, including notes for closed members of a still-live episode.
 Set either to false as an independent kill switch. `HOME_PROCESSING_OWNERSHIP_UIDS`
