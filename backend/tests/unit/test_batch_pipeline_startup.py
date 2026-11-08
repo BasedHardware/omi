@@ -93,7 +93,7 @@ def test_load_pyannote_pair(mock_vad, mock_pipeline, mock_torch):
 
 def test_load_pyannote_pair_missing_deps(monkeypatch):
     monkeypatch.setattr(batch_pipeline_startup, "torch", None)
-    with pytest.raises(RuntimeError, match="pyannote pair requires the GPU image"):
+    with pytest.raises(RuntimeError, match="pyannote pair requires the model runtime"):
         batch_pipeline_startup.load_pyannote_pair(model_batch_size=16)
 
 
