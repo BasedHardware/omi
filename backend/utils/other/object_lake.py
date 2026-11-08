@@ -13,6 +13,7 @@ import os
 import re
 import struct
 import threading
+import time
 import zlib
 
 from cryptography.exceptions import InvalidTag
@@ -60,6 +61,10 @@ class LakeFetchError(ObjectLakeError):
 
 class LakePurgeIncomplete(LakeFetchError):
     """Verified absence failed; retain documents and retry deletion."""
+
+
+class LakeWriteDeadlineExceeded(LakeFetchError):
+    """An expired put cannot publish a pointer; its intent remains discoverable."""
 
 
 class LakeObjectCorrupt(ObjectLakeError):
@@ -184,6 +189,7 @@ def put_space_object(
 ) -> LakeObjectRef:
     if not config.bucket() or not config.write_admitted(space_id):
         raise ObjectLakeNotConfigured('Lake writes are not configured or admitted')
+    deadline = time.monotonic() + config.put_deadline_seconds()
     if len(plaintext) > MAX_PLAINTEXT_BYTES[_class(data_class)]:
         raise LakeObjectCorrupt('Lake plaintext exceeds data-class limit')
     digest = hashlib.sha256(plaintext).hexdigest()
@@ -228,9 +234,19 @@ def put_space_object(
         # another writer may already reference this content-addressed name.
         _record_upload_candidate(config.bucket(), key)
         try:
-            blob.upload_from_string(payload, content_type=content_type, if_generation_match=0)
+            remaining = _remaining_put_seconds(deadline)
+            # No SDK retries: their per-attempt timeouts can outlive the drain.
+            # Split the remaining budget between connect and response waits.
+            blob.upload_from_string(
+                payload,
+                content_type=content_type,
+                if_generation_match=0,
+                timeout=(remaining / 2, remaining / 2),
+                retry=None,
+            )
         except PreconditionFailed:
-            blob.reload()
+            remaining = _remaining_put_seconds(deadline)
+            blob.reload(timeout=(remaining / 2, remaining / 2), retry=None)
             existing = blob.metadata or {}
             if any(existing.get(k) != stamp[k] for k in ('plaintext_sha256', 'space_id', 'data_class')):
                 raise LakeObjectConflict('Existing lake object metadata conflicts')
@@ -242,9 +258,9 @@ def put_space_object(
                 _parse_ref(ref)
             except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
                 raise LakeObjectConflict('Existing lake object metadata is invalid') from None
-            _check_put_authority(space_id, entity_id, blob, created=False)
+            _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline)
             return ref
-        _check_put_authority(space_id, entity_id, blob, created=True)
+        _check_put_authority(space_id, entity_id, blob, created=True, deadline=deadline)
     except (space_keys.SpaceKeyDestroyed, space_keys.SpaceKeyUnavailable):
         raise
     except ObjectLakeError:
@@ -305,12 +321,20 @@ def _assert_owner_write_allowed(space_id, entity_id, *, firestore_client=None, t
         raise LakeFetchError('Lake owner write authority unavailable') from None
 
 
-def _check_put_authority(space_id, entity_id, blob, *, created):
+def _remaining_put_seconds(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise LakeWriteDeadlineExceeded('Lake put deadline exceeded')
+    return remaining
+
+
+def _check_put_authority(space_id, entity_id, blob, *, created, deadline):
     try:
         _assert_owner_write_allowed(space_id, entity_id)
         if space_keys.get_space_keys(space_id) is None:
             raise space_keys.SpaceKeyDestroyed('Space key disappeared during upload')
-    except (space_keys.SpaceKeyDestroyed, LakeWriteFenced):
+        _remaining_put_seconds(deadline)
+    except (space_keys.SpaceKeyDestroyed, LakeWriteFenced, LakeWriteDeadlineExceeded):
         # Only this newly created candidate is ours to remove. A create-only
         # retry may have reused a referenced object; the purge owns that object.
         # The candidate cannot acquire a live reference after the durable

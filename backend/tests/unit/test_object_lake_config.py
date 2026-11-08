@@ -15,6 +15,7 @@ def clean_env(monkeypatch):
         'OBJECT_LAKE_INLINE_MAX_BYTES',
         'OBJECT_LAKE_RELEASE',
         'OBJECT_LAKE_KEY_CACHE_TTL_SECONDS',
+        'OBJECT_LAKE_WIPE_DRAIN_SECONDS',
         'OMI_ENV_STAGE',
     ):
         monkeypatch.delenv(name, raising=False)
@@ -29,6 +30,21 @@ def test_defaults():
     assert object_lake.key_cache_ttl_seconds() == 86400
     assert object_lake.release() == 'v1'
     assert not object_lake.write_admitted('s')
+    assert object_lake.put_deadline_seconds() == 2.5 < object_lake.wipe_drain_seconds() == 5
+
+
+@pytest.mark.parametrize('raw', ['0.01', '1.25', '5', '60'])
+def test_put_deadline_is_derived_strictly_below_drain(monkeypatch, raw):
+    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', raw)
+    assert 0 < object_lake.put_deadline_seconds() == object_lake.wipe_drain_seconds() / 2 < float(raw)
+
+
+@pytest.mark.parametrize('raw', ['bad', '-1', '0', '61', 'nan', 'inf', '-inf', '5e-324'])
+@pytest.mark.parametrize('load', [object_lake.wipe_drain_seconds, object_lake.put_deadline_seconds])
+def test_invalid_wipe_and_put_timing_fails_closed(monkeypatch, raw, load):
+    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', raw)
+    with pytest.raises(ValueError):
+        load()
 
 
 @pytest.mark.parametrize('raw', ['bad', '-1', '101', 'nan', 'inf', ''])

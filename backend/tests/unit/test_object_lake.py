@@ -22,6 +22,7 @@ def storage(tmp_path, monkeypatch):
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '100')
     monkeypatch.setenv('OBJECT_LAKE_RELEASE', 'v1')
+    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '5')
     monkeypatch.delenv('OBJECT_LAKE_KMS_KEY', raising=False)
     monkeypatch.delenv('OBJECT_LAKE_KMS_FAKE_SECRET', raising=False)
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')  # FakeKMS is admitted only offline
@@ -68,6 +69,9 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
     upload = LocalBlob.upload_from_string
 
     def checked_upload(blob, *args, **kwargs):
+        assert kwargs['retry'] is None
+        assert all(0 < value < lake.config.put_deadline_seconds() for value in kwargs['timeout'])
+        assert sum(kwargs['timeout']) <= lake.config.put_deadline_seconds()
         candidate_id = hashlib.sha256(f'{bucket.name}/{blob.name}'.encode()).hexdigest()
         row = store.rows[('lake_upload_candidates', candidate_id)]
         assert set(row) == {'bucket', 'key', 'created_at'}
@@ -80,6 +84,71 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
     candidates = {path: row.copy() for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'}
     assert put() == first
     assert {path: row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'} == candidates
+
+
+@pytest.mark.parametrize('replay', [False, True])
+def test_put_exceeding_deadline_cannot_return_pointer(storage, monkeypatch, replay):
+    bucket, store = storage
+    ref = put() if replay else None
+    clock = Mock(monotonic=Mock(return_value=10.0))
+    monkeypatch.setattr(lake, 'time', clock)
+    original = LocalBlob.reload if replay else LocalBlob.upload_from_string
+
+    def slow_operation(blob, *args, **kwargs):
+        assert kwargs['retry'] is None
+        original(blob, *args, **kwargs)
+        clock.monotonic.return_value += lake.config.put_deadline_seconds()
+
+    monkeypatch.setattr(LocalBlob, 'reload' if replay else 'upload_from_string', slow_operation)
+    with pytest.raises(lake.LakeWriteDeadlineExceeded, match='deadline exceeded'):
+        put()
+    monkeypatch.setattr(LocalBlob, 'reload' if replay else 'upload_from_string', original)
+    assert bool(list(bucket.list_blobs())) is replay
+    if replay:
+        assert bucket.blob(ref.key).exists()  # A reused referenced generation is never self-deleted.
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_expired_candidate_admission_never_starts_put(storage, monkeypatch):
+    bucket, store = storage
+    clock = Mock(monotonic=Mock(return_value=10.0))
+    monkeypatch.setattr(lake, 'time', clock)
+    record = lake._record_upload_candidate
+
+    def delayed_record(*args):
+        record(*args)
+        clock.monotonic.return_value += lake.config.put_deadline_seconds()
+
+    monkeypatch.setattr(lake, '_record_upload_candidate', delayed_record)
+    forbidden = Mock(side_effect=AssertionError('expired put started upload'))
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', forbidden)
+    with pytest.raises(lake.LakeWriteDeadlineExceeded):
+        put()
+    forbidden.assert_not_called()
+    assert not list(bucket.list_blobs())
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_deadline_checked_after_post_put_authority(storage, monkeypatch):
+    bucket, _ = storage
+    clock = Mock(monotonic=Mock(return_value=10.0))
+    monkeypatch.setattr(lake, 'time', clock)
+    authority = space_keys.get_space_keys
+    upload = LocalBlob.upload_from_string
+
+    def slow_authority(*args, **kwargs):
+        keys = authority(*args, **kwargs)
+        clock.monotonic.return_value += lake.config.put_deadline_seconds()
+        return keys
+
+    def uploaded(blob, *args, **kwargs):
+        upload(blob, *args, **kwargs)
+        monkeypatch.setattr(space_keys, 'get_space_keys', slow_authority)
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', uploaded)
+    with pytest.raises(lake.LakeWriteDeadlineExceeded):
+        put()
+    assert not list(bucket.list_blobs())
 
 
 @pytest.mark.parametrize('operation', ['get', 'create'])
@@ -440,13 +509,15 @@ def test_strict_dict_bucket_retry_uses_existing_metadata(storage):
             self.metadata = None
             self.size = None
 
-        def upload_from_string(self, data, *, content_type, if_generation_match):
+        def upload_from_string(self, data, *, content_type, if_generation_match, timeout, retry):
             assert if_generation_match == 0
+            assert retry is None and all(value > 0 for value in timeout)
             if self.name in rows:
                 raise PreconditionFailed('exists')
             rows[self.name] = (data, dict(self.metadata))
 
-        def reload(self):
+        def reload(self, *, timeout, retry):
+            assert retry is None and all(value > 0 for value in timeout)
             data, self.metadata = rows[self.name]
             self.size = len(data)
 
@@ -618,7 +689,7 @@ def test_delayed_candidate_creation_refused_after_owner_purge(storage, monkeypat
     def record_after_purge(bucket_name, key):
         store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
         monkeypatch.setattr(lake_wipe.users_db, 'get_user_deletion_wipe_status', lambda uid: 'running')
-        monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '0')
+        monkeypatch.setattr(lake_wipe, 'time', Mock(sleep=Mock()))
         assert lake_wipe.purge_owner_lake_content('s')['status'] == 'purged'
         record(bucket_name, key)
 
