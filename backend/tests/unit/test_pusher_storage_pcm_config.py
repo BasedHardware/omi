@@ -28,14 +28,20 @@ def test_pusher_byte_limit_manifest_requires_progress_capable_integer(environmen
     assert bool(relevant) is (value not in ('0', '27', '512'))
 
 
+# Prod stays off; dev carries the 512 MiB canary (lead2 2afa3e, 2026-11-08). Any other
+# value, or any prod change, is a deliberate policy change that must update this contract.
+EXPECTED_DECLARED_VALUES = {'dev': '512', 'prod': '0'}
+
+
 def test_all_deployment_declarations_remain_off_and_classified():
     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     for environment in ('dev', 'prod'):
-        assert manifest['environments'][environment]['gke']['pusher']['env'][KEY]['value'] == '0'
+        expected = EXPECTED_DECLARED_VALUES[environment]
+        assert manifest['environments'][environment]['gke']['pusher']['env'][KEY]['value'] == expected
         chart = yaml.load(
             (ROOT / f'backend/charts/pusher/{environment}_omi_pusher_values.yaml').read_text(), Loader=yaml.CSafeLoader
         )
-        assert next(entry for entry in chart['env'] if entry['name'] == KEY)['value'] == '0'
+        assert next(entry for entry in chart['env'] if entry['name'] == KEY)['value'] == expected
     policy = json.loads((ROOT / 'config/deployment-setting-classification.json').read_text())
     assert KEY in policy['kinds']['config']
     flags = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=yaml.CSafeLoader)
