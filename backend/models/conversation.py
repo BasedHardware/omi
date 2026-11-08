@@ -654,7 +654,7 @@ class Conversation(BaseModel):
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 
-    # TODO: plugins_results for backward compatibility with the old memories routes and app
+    # plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
     user_corrections: List[Dict] = Field(default_factory=list)
@@ -676,7 +676,7 @@ class Conversation(BaseModel):
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
-    # TODO: processing_memory_id for backward compatibility with the old memories routes and app
+    # processing_memory_id for backward compatibility with the old memories routes and app
     processing_memory_id: Optional[str] = None
 
     processing_conversation_id: Optional[str] = None

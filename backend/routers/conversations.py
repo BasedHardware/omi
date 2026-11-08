@@ -106,6 +106,7 @@ from utils.conversations.process_conversation import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.episodes import finalize as episode_finalize
+from utils.episodes.member_notes import open_recording
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -1001,7 +1002,9 @@ def get_conversations(
 
     held_request = home_membership.held_for(request)
     # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = home_transcription_presentation_gate_enabled()
+    time_dependent = home_transcription_presentation_gate_enabled() or home_membership.live_suppression_for(
+        uid, request
+    )
     version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified
@@ -1135,6 +1138,7 @@ def get_conversation_by_id(
     include_translations: bool = Query(False),
     translation_cursor: Optional[str] = Query(None),
     response: Response = None,
+    request: Request = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
@@ -1153,6 +1157,9 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Home lifecycle probes also read details; only a detail-page open escalates notes.
+    if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
+        open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred') and not conversation.get('processing_deferred'):

@@ -30,6 +30,7 @@ from tests.support.firestore_query_drivers import (
     DriverEntry,
     SkipEntry,
     noop,
+    noop_true,
     ref_collection,
     ref_document,
     ref_transaction,
@@ -386,7 +387,28 @@ _add(
 
 # Authenticated pending-work projections use bounded, single-field owner queries.
 _add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
-_add(DriverEntry('database.processing_attention.pending_conversations', base={'uid': UID}))
+
+
+def _pending_owned_page(client, combo, trial):
+    client.queue_results(
+        [client.snapshot(f'users/{UID}/conversations/owned-{i}', {'status': 'processing'}) for i in range(100)]
+    )
+    client.queue_results([])
+
+
+_add(
+    DriverEntry(
+        'database.processing_attention.pending_conversations',
+        base={'uid': UID},
+        neutrals={
+            'exclude': (
+                noop_true,
+                'Caller predicate filters after the same status query; fixture exercises the continuation cursor',
+            ),
+        },
+        setup=_pending_owned_page,
+    )
+)
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 

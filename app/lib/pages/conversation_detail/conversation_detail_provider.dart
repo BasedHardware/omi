@@ -81,7 +81,7 @@ class ConversationDetailProvider extends ChangeNotifier
                 : (_) async => null),
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? getConversationById,
+        _fetchConversation = fetchConversation ?? ((id) => getConversationById(id, userInitiated: true)),
         enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
         suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
         preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp;

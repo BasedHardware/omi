@@ -58,11 +58,56 @@ BATCH_FINAL_PASS_HOSTS = (
 )
 
 
+HOSTED_DIARIZATION_URL_ENV = 'HOSTED_DIARIZATION_API_URL'
+
+
+def _host_env(platform: str, name: str, config: ConfigDict) -> ConfigDict:
+    services = config.get('gke', {}) if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+    return (services.get(name, {}) or {}).get('env', {}) or {}
+
+
+def _host_has_diarizer_url(platform: str, name: str, config: ConfigDict) -> bool:
+    """True when the host can call the batch diarizer.
+
+    A literal value decides. An unknown source (environment, secret, or any
+    other non-literal binding) counts as present, so the check errs toward
+    keeping the pass on.
+    """
+    env = _host_env(platform, name, config)
+    if HOSTED_DIARIZATION_URL_ENV in env:
+        return _binding_has_url(env[HOSTED_DIARIZATION_URL_ENV])
+    if platform == 'cloud_run':
+        services = config.get('cloud_run', {}).get('services', {})
+        secrets = (services.get(name, {}) or {}).get('secrets', {}) or {}
+        if HOSTED_DIARIZATION_URL_ENV in secrets:
+            return True
+    if platform == 'gke':
+        shared = (config.get('gke', {}).get('config_map', {}) or {}).get('entries', {}) or {}
+        if HOSTED_DIARIZATION_URL_ENV in shared:
+            return _binding_has_url(shared[HOSTED_DIARIZATION_URL_ENV])
+    return False
+
+
+def _binding_has_url(binding: object) -> bool:
+    if not isinstance(binding, dict):
+        return True
+    if 'value' not in binding:
+        return True  # Not a literal: unknown source, keep the pass on.
+    value = binding.get('value')
+    return value is not None and bool(str(value).strip())
+
+
 def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
-    """Independent serving roster: deleting a binding cannot hide a runtime."""
+    """Independent serving roster: deleting a binding cannot hide a runtime.
+
+    Every production host needs an explicit true or false. A host without a
+    diarizer URL may be switched off on its own, since its pass can only fall
+    back. A host with the URL stays on unless every production host is off, which
+    keeps the full rollback valid.
+    """
     if env != 'prod':
         return []
-    errors, values = [], set()
+    errors, values = [], {}
     gke = config.get('gke', {})
     config_map = gke.get('config_map', {})
     flag = BATCH_FINAL_PASS_FLAG
@@ -79,9 +124,31 @@ def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[Valida
         if value not in {'true', 'false'}:
             errors.append(ValidationError(f'{platform}/{name}', f'{flag} needs an explicit true/false binding'))
         else:
-            values.add(value)
-    if len(values) > 1:
-        errors.append(ValidationError('batch_final_pass', f'{flag} must agree across all production hosts'))
+            values[(platform, name)] = value
+    if len(values) == len(BATCH_FINAL_PASS_HOSTS) and all(v == 'false' for v in values.values()):
+        return errors  # Full rollback: every production host is off.
+    for (platform, name), value in values.items():
+        # GKE hosts share one ConfigMap entry, and their Helm values can carry the
+        # URL outside the manifest, so a GKE host is never exempt from the rule.
+        has_url = platform == 'gke' or _host_has_diarizer_url(platform, name, config)
+        if value == 'false' and has_url:
+            errors.append(
+                ValidationError(
+                    f'{platform}/{name}',
+                    f'{flag} must stay true on a host with {HOSTED_DIARIZATION_URL_ENV} unless every production host is off',
+                )
+            )
+        # An exempt Cloud Run host must also list the URL in forbidden_env, so the
+        # live service state is checked for it and an undeclared binding cannot hide.
+        if value == 'false' and platform == 'cloud_run' and not has_url:
+            forbidden = config.get('cloud_run', {}).get('services', {}).get(name, {}).get('forbidden_env') or []
+            if HOSTED_DIARIZATION_URL_ENV not in forbidden:
+                errors.append(
+                    ValidationError(
+                        f'{platform}/{name}',
+                        f'{flag}=false needs {HOSTED_DIARIZATION_URL_ENV} in forbidden_env so the live service is checked for it',
+                    )
+                )
     return errors
 
 

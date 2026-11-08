@@ -21,7 +21,7 @@ from typing import Any, TypeGuard
 from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding
-from database.batch_pipeline_projection import assignment_held_without_recovery
+from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
 from config.batch_pipeline import (
@@ -150,6 +150,33 @@ class ProjectionReleaseStore:
             and conversation.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
         )
 
+    def _expire_assignment(self, transaction, segment_id, entry, now, expired, attempts):
+        # Persisted multipart suffixes and privacy holds never expire. Missing
+        # anchors get a full window; malformed anchors never authorize expiry.
+        if (
+            expired
+            or entry.get('projection_state') != 'quarantine_held'
+            or not batch_held_dead_letter_enabled()
+            or not finite_timestamp(now)
+        ):
+            return None
+        deadline = entry.get('held_deadline_at')
+        if deadline is None:
+            transaction.update(
+                self.store.ref('results', segment_id),
+                {
+                    'held_deadline_at': now + HELD_DEAD_LETTER_SECONDS,
+                },
+            )
+            return 'stamped'
+        if not finite_timestamp(deadline) or deadline > now:
+            return None
+        expiry = {'held_expired_reason': 'held_expired', 'held_expired_at': now}
+        if attempts >= MAX_RELEASE_ATTEMPTS:
+            expiry.update(held_expired_release_attempts=attempts, projection_release_attempts=0)
+        transaction.update(self.store.ref('results', segment_id), expiry)
+        return 'expired'
+
     def release(self, segment_id: str, now: float, *, dead_before: float | None = None) -> bool:
         """Reset one held unit to pending iff its record target was restored."""
         released_owner: list[str] = []
@@ -218,6 +245,35 @@ class ProjectionReleaseStore:
                             {'projection_state': 'ready', 'ghost_settled_cohort': cohort},
                         )
                         return ('ghost_settled', bucket, invalid_cohort)
+                    return (classification, bucket)
+                # Ready receipts blocked only by recovery/age fences still owe
+                # discovery; never stamp or expire them while repair waits.
+                # A committed assignment hold can lack the original receipt
+                # shape. Retain it with the SAME expiry markers, never release
+                # through a failed identity/privacy/operator fence.
+                if (
+                    classification not in {'privacy', 'job_held', 'young', 'invalid_age'}
+                    and binding is not None
+                    and segment_id in binding.segment_ids
+                    and job.get('owner_id') == binding.owner_id
+                    and entry.get('owner_key') == owner_key(binding.owner_id)
+                    and entry.get('segment_id') == segment_id
+                    and job.get('state') == 'committed'
+                    and job.get('recovery_state') == 'held'
+                    and not entry.get('projection_privacy_refusal')
+                    and not any(
+                        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
+                        for key in OPERATOR_INTENTS
+                    )
+                    and type(attempts) is int
+                    and attempts >= 0
+                    and dead_before is None
+                ):
+                    outcome = self._expire_assignment(transaction, segment_id, entry, now, expired, attempts)
+                    if outcome == 'expired':
+                        return outcome
+                    if outcome == 'stamped':
+                        return False
                 return (classification, bucket)
             if dead_before is not None:
                 expired_at = entry.get('held_expired_at')
@@ -225,33 +281,8 @@ class ProjectionReleaseStore:
                     return False
             restorable = self._target_restorable(transaction, binding)
             if not restorable:
-                # Only settled assignment holds expire. Persisted multipart
-                # suffixes still owe follow-ups; privacy holds never qualify.
-                if (
-                    not expired
-                    and entry.get('projection_state') == 'quarantine_held'
-                    and batch_held_dead_letter_enabled()
-                ):
-                    deadline = entry.get('held_deadline_at')
-                    if deadline is None:
-                        transaction.update(
-                            self.store.ref('results', segment_id),
-                            {
-                                'held_deadline_at': now + HELD_DEAD_LETTER_SECONDS,
-                            },
-                        )
-                    elif finite_timestamp(deadline) and deadline <= now:
-                        expiry = {'held_expired_reason': 'held_expired', 'held_expired_at': now}
-                        if attempts >= MAX_RELEASE_ATTEMPTS:
-                            # Keep the old reader's state AND attempt eligibility.
-                            # This bounded, one-time CAS re-arms only an aged hold;
-                            # retain the previous counter for custody/audit.
-                            expiry.update(
-                                held_expired_release_attempts=attempts,
-                                projection_release_attempts=0,
-                            )
-                        transaction.update(self.store.ref('results', segment_id), expiry)
-                        return 'expired'
+                if self._expire_assignment(transaction, segment_id, entry, now, expired, attempts) == 'expired':
+                    return 'expired'
                 return False
             if attempts >= MAX_RELEASE_ATTEMPTS:
                 return False

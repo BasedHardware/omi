@@ -1,0 +1,56 @@
+{
+  "status": "ready",
+  "start": "2026-10-29",
+  "end": "2026-11-04",
+  "rows": [
+    {
+      "date": "2026-10-29",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    },
+    {
+      "date": "2026-10-30",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    },
+    {
+      "date": "2026-10-31",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    },
+    {
+      "date": "2026-11-01",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    },
+    {
+      "date": "2026-11-02",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    },
+    {
+      "date": "2026-11-03",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    },
+    {
+      "date": "2026-11-04",
+      "fee_usd": 281.84,
+      "volume_usd": 6794.82,
+      "transaction_count": 1,
+      "foreign_transaction_count": 0
+    }
+  ]
+}
