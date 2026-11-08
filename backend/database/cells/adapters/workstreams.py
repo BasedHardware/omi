@@ -405,6 +405,16 @@ class CellWorkstreams(WorkflowRepo):
         def build():
             imported = unchanged = 0
             failed = []
+            # Lock in flush order: entities alphabetically, ids sorted within.
+            self._lock_in_order('action_items', [link['task_id'] for link in request['links']])
+            self._lock_in_order('goals', [link['goal_id'] for link in request['links']])
+            self._lock_in_order(
+                'workstreams',
+                [
+                    (self.store.state['action_items'].get(link['task_id']) or {}).get('workstream_id')
+                    for link in request['links']
+                ],
+            )
             for link in request['links']:
                 task = self.store.state['action_items'].get(link['task_id'])
                 goal = self.store.state['goals'].get(link['goal_id'])

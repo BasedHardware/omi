@@ -217,6 +217,7 @@ class CellActionItems(WorkflowRepo):
 
     @atomic
     def delete_batch(self, ids: list[str]) -> list[str]:
+        self._lock_in_order('action_items', ids)
         for entity_id in ids:
             self.delete(entity_id)
         return list(ids)
@@ -254,6 +255,7 @@ class CellActionItems(WorkflowRepo):
 
     @atomic
     def get_by_ids(self, ids: list[str]) -> list[ActionItemEntity]:
+        self._lock_in_order('action_items', ids)
         return [row for row in (self.get(i) for i in ids) if row is not None]
 
     @atomic

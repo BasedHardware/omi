@@ -627,3 +627,25 @@ def test_folder_order_index_rebuilds_under_restricted_search_path(pg):
     with dial(cells_dsn()) as conn:
         conn.execute('SET search_path = pg_catalog, pg_temp')
         conn.execute('REINDEX INDEX public.cell_docs_folder_order')
+
+
+def test_multi_row_bodies_lock_rows_in_flush_order(pg, monkeypatch):
+    # Caller order b, a must still lock a before b, matching flush's sorted
+    # raw-write locks, so the two paths cannot deadlock each other.
+    sid = pg.space('lock-order')
+    now = datetime.now(timezone.utc)
+    for entity_id in ('a', 'b'):
+        pg.seed(sid, 'action_items', entity_id, {'description': entity_id, 'created_at': now, 'updated_at': now})
+    seen = []
+    original = CellTransaction.get
+
+    def record(self, entity, entity_id, *args, **kwargs):
+        if entity == 'action_items':
+            seen.append(entity_id)
+        return original(self, entity, entity_id, *args, **kwargs)
+
+    monkeypatch.setattr(CellTransaction, 'get', record)
+    store = pg.store(sid)
+    store.run(lambda tx: tx.action_items.get_by_ids(['b', 'a']))
+    store.run(lambda tx: tx.action_items.delete_batch(['b', 'a']))
+    assert seen[:2] == ['a', 'b'] and seen[2:4] == ['a', 'b']
