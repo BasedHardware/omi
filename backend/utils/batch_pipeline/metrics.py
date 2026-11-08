@@ -59,6 +59,13 @@ PROJECTION_PRIVACY_STILL_REFUSED = Counter(
 )
 
 
+RECORD_SEAL_ORPHAN_PARKED = Counter(
+    'omi_record_seal_orphan_parked_total',
+    'Seal passes observing a parked restore obligation on a discarded row',
+    ['seal_path'],
+)
+
+
 def record_privacy_stop(stop: str) -> None:
     PROJECTION_DRAIN_PRIVACY_STOPS.labels(
         reason=(

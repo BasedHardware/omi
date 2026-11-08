@@ -40,7 +40,7 @@ from config.batch_pipeline import (
     batch_held_dead_letter_enabled,
     RECORD_DEAD_LETTER_SECONDS,
 )
-from database.conversations import claim_record_lane_owner
+from database.conversations import claim_record_lane_owner, is_soft_deleted
 from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
@@ -127,13 +127,20 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
 
 
 def register_recording(
-    uid: str, conversation: dict, *, store=None, now=None, transaction=None, server_flags=None
+    uid: str, conversation: dict, *, store=None, now=None, transaction=None, server_flags=None, restoring: bool = False
 ) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
     if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
         return False
-    if conversation.get('deleted') or conversation.get('discarded') or conversation.get('uses_custom_stt'):
+    if conversation.get('deleted') or conversation.get('uses_custom_stt'):
+        return False
+    # Only explicit register-first restore may cross the discard fence. Use
+    # restore's tombstone predicate and also refuse a merged-away donor.
+    if restoring:
+        if is_soft_deleted(conversation) or conversation.get('sync_merged_into'):
+            return False
+    elif conversation.get('discarded'):
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
@@ -188,6 +195,7 @@ def register_recording(
                 'policy': policy.to_dict(),
                 'policy_source': 'admission',
                 'merge_pending': False,
+                **({'registration_origin': 'restore'} if restoring else {}),
             },
         )
         return True
