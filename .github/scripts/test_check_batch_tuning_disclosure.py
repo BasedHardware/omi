@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import check_batch_tuning_disclosure as check
@@ -224,6 +226,15 @@ class GitFixtureTests(unittest.TestCase):
         self.assertIn("merge-base", result.stderr)
         with self.assertRaisesRegex(RuntimeError, "git grep"):
             check.existing_literal(self.root, "missing-ref", "missing_state")
+
+    def test_fixture_init_scrubs_inherited_git_environment(self) -> None:
+        config = self.root / ".git/config"
+        before = config.read_bytes()
+        inherited = {"GIT_DIR": str(self.root / ".git"), "GIT_WORK_TREE": str(self.root), "GIT_NAMESPACE": "caller"}
+        with tempfile.TemporaryDirectory(prefix="p6-isolation-") as other, mock.patch.dict(os.environ, inherited):
+            subprocess.run(["git", "init", "-q", other], env=clean_git_env(), check=True, capture_output=True)
+            self.assertTrue((Path(other) / ".git/config").is_file())
+        self.assertEqual(config.read_bytes(), before)
 
 
 if __name__ == "__main__":
