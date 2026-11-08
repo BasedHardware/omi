@@ -500,15 +500,26 @@ def test_restorable_at_cap_stamps_then_expires_once_without_same_pass_release(mo
         },
     }
     assert len(client.transactions[-1].updates) == 1
-    # A later ordinary pass may release, incrementing from zero rather than
-    # expiring/resetting again. The saved attempt history survives that release.
-    assert release.release('held', deadline + 1) is True
+    expired_rows = deepcopy(client.rows)
+    # Both the jobs leg of this scan and later ordinary scans must wait for
+    # nightly redrive, even when each call constructs a new release store.
+    for now in (deadline, deadline + 1):
+        release = ProjectionReleaseStore(store)
+        assert release.release('held', now) is False
+        assert not release.expired
+        assert not client.transactions[-1].updates
+        assert client.rows == expired_rows
+    assert release.release('held', deadline + 2, dead_before=deadline) is False
+    assert not client.transactions[-1].updates
+    assert client.rows == expired_rows
+    assert release.release('held', deadline + 2, dead_before=deadline + 1) is True
     assert not release.expired
     assert client.rows[RESULT_KEY]['projection_release_attempts'] == 1
     assert client.rows[RESULT_KEY]['held_expired_release_attempts'] == attempts
 
 
-def test_restorable_at_cap_already_expired_is_not_reset_again(monkeypatch):
+@pytest.mark.parametrize('dead_before', [None, 200.0, 500.0])
+def test_restorable_at_cap_already_expired_is_not_reset_again(monkeypatch, dead_before):
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
     monkeypatch.setenv(CAP_EXPIRY_FLAG, 'true')
     seeded = rows(
@@ -522,10 +533,134 @@ def test_restorable_at_cap_already_expired_is_not_reset_again(monkeypatch):
     client, store = store_for(seeded)
     release = ProjectionReleaseStore(store)
     for now in (500.0, 501.0):
-        assert release.release('held', now) is False
+        assert release.release('held', now, dead_before=dead_before) is False
         assert not release.expired
         assert not client.transactions[-1].updates
         assert client.rows == before
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_restorable_at_cap_two_leg_scan_never_expires_and_releases(monkeypatch, enabled):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, str(enabled).lower())
+    seeded = rows(projection_release_attempts=MAX_RELEASE_ATTEMPTS, held_deadline_at=100.0)
+    seeded[JOB_KEY]['state'] = 'committed'
+    client, store = store_for(seeded)
+    monkeypatch.setattr(release, 'held_page_ids', lambda *args: ['held'])
+    monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *args: ['held'])
+    for now in (500.0, 501.0):
+        counts, _ = release.release_scan_pass(store, limit=2, after_id=None, now=now)
+        assert counts['examined'] == 2
+        assert counts['released'] == counts['error'] == 0
+        assert counts['expired'] == int(enabled and now == 500.0)
+        assert counts['waiting'] == 2 - counts['expired']
+        expected = {
+            **seeded[RESULT_KEY],
+            **(
+                {
+                    'held_expired_reason': 'held_expired',
+                    'held_expired_at': 500.0,
+                    'held_expired_release_attempts': MAX_RELEASE_ATTEMPTS,
+                    'projection_release_attempts': 0,
+                }
+                if enabled
+                else {}
+            ),
+        }
+        assert client.rows[RESULT_KEY] == expected
+        assert client.rows[JOB_KEY] == seeded[JOB_KEY]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('dead_before', [None, 199.0, 200.0, 201.0])
+def test_marked_restorable_row_requires_nightly_cutoff_only_when_enabled(monkeypatch, enabled, dead_before):
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, str(enabled).lower())
+    seeded = rows(
+        held_deadline_at=100.0,
+        held_expired_at=200.0,
+        held_expired_reason='held_expired',
+        held_expired_release_attempts=MAX_RELEASE_ATTEMPTS,
+        projection_release_attempts=0,
+    )
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    expected = (not enabled) if dead_before is None else dead_before > 200.0
+    assert release.release('held', 500.0, dead_before=dead_before) is expected
+    assert not release.expired
+    if not expected:
+        assert client.rows == before
+        assert not client.transactions[-1].updates
+    else:
+        assert client.rows[RESULT_KEY]['projection_state'] == 'pending'
+        assert client.rows[RESULT_KEY]['projection_release_attempts'] == 1
+        assert client.rows[RESULT_KEY]['held_expired_release_attempts'] == MAX_RELEASE_ATTEMPTS
+        assert client.rows[RESULT_KEY]['held_expired_at'] is None
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_noncompleted_target_expiry_then_restoration_preserves_off_behavior(monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, str(enabled).lower())
+    seeded = rows(projection_release_attempts=MAX_RELEASE_ATTEMPTS, held_deadline_at=100.0)
+    target = ('users', OWNER, 'conversations', TARGET)
+    seeded[target]['status'] = 'processing'
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 500.0) is False
+    assert release.expired
+    assert client.rows == {
+        **before,
+        RESULT_KEY: {
+            **before[RESULT_KEY],
+            'held_expired_reason': 'held_expired',
+            'held_expired_at': 500.0,
+            'held_expired_release_attempts': MAX_RELEASE_ATTEMPTS,
+            'projection_release_attempts': 0,
+        },
+    }
+    client.rows[target]['status'] = 'completed'
+    marked = deepcopy(client.rows)
+    assert ProjectionReleaseStore(store).release('held', 500.0) is (not enabled)
+    if enabled:
+        assert client.rows == marked
+        assert not client.transactions[-1].updates
+    else:
+        assert client.rows[RESULT_KEY]['projection_state'] == 'pending'
+        assert client.rows[RESULT_KEY]['held_expired_at'] is None
+        assert client.rows[RESULT_KEY]['projection_release_attempts'] == 1
+
+
+def test_null_expiry_stamp_does_not_fence_fresh_hold_when_enabled(monkeypatch):
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, 'true')
+    client, store = store_for(rows(held_expired_at=None, projection_release_attempts=0))
+    assert ProjectionReleaseStore(store).release('held', 500.0) is True
+    assert client.rows[RESULT_KEY]['projection_state'] == 'pending'
+
+
+@pytest.mark.parametrize('marker', [0.0, 200.0])
+@pytest.mark.parametrize('legacy_receipt', [False, True])
+def test_expiry_stamp_alone_fences_ordinary_writes_when_enabled(monkeypatch, marker, legacy_receipt):
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, 'true')
+    seeded = rows(
+        projection_release_attempts=MAX_RELEASE_ATTEMPTS,
+        held_deadline_at=100.0,
+        held_expired_at=marker,
+        held_expired_release_attempts=MAX_RELEASE_ATTEMPTS + 2,
+    )
+    seeded[JOB_KEY]['state'] = 'committed'
+    if legacy_receipt:
+        seeded[RESULT_KEY]['projection'] = {}
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    assert ProjectionReleaseStore(store).release('held', 500.0) is False
+    assert client.rows == before
+    assert not client.transactions[-1].updates
 
 
 @pytest.mark.parametrize('deadline', [None, 100.0])

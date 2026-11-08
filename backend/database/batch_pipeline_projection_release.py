@@ -186,6 +186,14 @@ class ProjectionReleaseStore:
         def commit(transaction):
             job = self.store.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
+            # Re-read the stamp inside each transaction: the other scan leg
+            # may already have expired this row and reset its attempt count.
+            if (
+                dead_before is None
+                and entry.get('held_expired_at') is not None
+                and projection_restorable_cap_expiry_enabled()
+            ):
+                return False
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
             held_receipt = next(
