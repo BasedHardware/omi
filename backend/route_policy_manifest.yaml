@@ -4762,7 +4762,7 @@ routes:
         mechanisms: [firebase_id_token, admin_key_uid_prefix]
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: spaces:changes
         key_subject: uid
@@ -4784,8 +4784,9 @@ routes:
         mechanisms: [firebase_id_token, admin_key_uid_prefix]
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
+        # Starts and invalid tokens use the hourly bucket; valid continuations use spaces:snapshot_page.
         policy_name: spaces:snapshot
         key_subject: uid
         enforcement: fail_open
@@ -4806,7 +4807,7 @@ routes:
         mechanisms: [firebase_id_token, admin_key_uid_prefix]
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: spaces:mutations
         key_subject: uid
@@ -4828,7 +4829,7 @@ routes:
         mechanisms: [firebase_id_token, admin_key_uid_prefix]
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: spaces:cursors
         key_subject: uid
