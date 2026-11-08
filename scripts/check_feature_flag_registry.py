@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import subprocess
 import sys
+import tempfile
+from collections import Counter
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from feature_flag_parser_defaults import parser_defaults
 from feature_flag_registry import (
@@ -64,6 +69,96 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
 # already-overdue row with an expiry and reason; the checker prints it as a
 # blocker for David until the row is reviewed or the exception expires.
 REVIEW_OVERDUE: dict[str, dict[str, str]] = {}
+# Only new rollout rows are gated; existing rows still contribute to the count.
+MAX_UNRAMPED_PER_OWNER = 5
+# Keys use normalize_owner(); exceptions require an ISO expires date and reason.
+OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {
+    # 167 legacy rows name the account, not a lane; the retro N3 batch ruling ramps or retires them.
+    # New rows should name the owning lane. Expiry turns this back into an error.
+    "dazheng": {"expires": "2026-11-15", "reason": "retro N3 ramp-or-retire batch pending"},
+}
+
+
+def normalize_owner(owner: str) -> str:
+    """Ignore parenthetical annotations, case and whitespace runs."""
+    while re.search(r"\([^()]*\)", owner):
+        owner = re.sub(r"\([^()]*\)", " ", owner)
+    return " ".join(owner.lower().split())
+
+
+def owner_backlog(registry: dict[str, Any]) -> Counter[str]:
+    return Counter(
+        normalize_owner(entry["owner"])
+        for entry in registry.get("flags", [])
+        if entry.get("lifecycle") == "rollout"
+        and entry.get("decision") in {"pending", "undecided"}
+        and isinstance(entry.get("owner"), str)
+    )
+
+
+def load_base_registry(root: Path) -> dict[str, Any]:
+    # Hooks can export a different repository selection to child Git commands.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    base = subprocess.run(
+        ["git", "merge-base", "HEAD", "origin/main"],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    ).stdout.strip()
+    content = subprocess.run(
+        ["git", "show", f"{base}:config/feature-flags.yaml"],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    ).stdout
+    with tempfile.TemporaryDirectory(prefix="omi-flag-base-") as directory:
+        path = Path(directory) / "feature-flags.yaml"
+        path.write_text(content, encoding="utf-8")
+        return load_registry(path)
+
+
+def check_owner_backlog(
+    root: Path, registry: dict[str, Any], current_date: date, errors: list[str], warnings: list[str]
+) -> None:
+    try:
+        base = load_base_registry(root)
+        base_keys = {entry["key"] for entry in base["flags"]}
+        counts = owner_backlog(base)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
+        warnings.append(
+            f"WARNING: owner backlog gate skipped: cannot load registry at merge-base with origin/main: {error}"
+        )
+        return
+    for entry in registry["flags"]:
+        owner = normalize_owner(entry["owner"])
+        if entry["key"] in base_keys or entry["lifecycle"] != "rollout" or counts[owner] < MAX_UNRAMPED_PER_OWNER:
+            continue
+        message = (
+            f"{entry['key']}: owner={owner} had {counts[owner]} unramped flags at merge-base "
+            f"(cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
+        )
+        exception = OWNER_BACKLOG_EXCEPTIONS.get(owner)
+        if exception is None:
+            errors.append(message)
+            continue
+        try:
+            expires = date.fromisoformat(exception["expires"])
+            reason = exception["reason"].strip()
+            if not reason:
+                raise ValueError("empty reason")
+        except (KeyError, TypeError, ValueError, AttributeError):
+            errors.append(f"owner_backlog_exceptions[{owner}] requires an ISO expires date and nonempty reason")
+            continue
+        if current_date > expires:
+            errors.append(f"owner backlog exception expired {expires}: {message}")
+        else:
+            warnings.append(f"WARNING: owner backlog exception expires {expires}: {message} ({reason})")
 
 
 def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -> tuple[list[str], list[str]]:
@@ -71,9 +166,12 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
     registry_path = root / "config/feature-flags.yaml"
     registry = load_registry(registry_path)
     errors = validate_registry(registry, root=root)
+    for owner, count in sorted(owner_backlog(registry).items()):
+        print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
     if errors:
         return errors, []
     warnings: list[str] = []
+    check_owner_backlog(root, registry, current_date, errors, warnings)
     flags = {entry["key"]: entry for entry in registry["flags"]}
     for key, expected in parser_defaults(root).items():
         if key in flags and flags[key]["fail"] != expected:
