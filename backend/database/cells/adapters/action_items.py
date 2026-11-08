@@ -20,7 +20,7 @@ from database.ports.action_items import (
 
 from database.ports.base import Page
 
-from ._base import WorkflowRepo, atomic
+from ._base import ACCOUNT_GENERATION_SQL, WorkflowRepo, atomic
 
 # Normalize DESC created time to a negative epoch for a uniform keyset. The UTC
 # conversion makes EXTRACT immutable, so migration 0003 can index the same key.
@@ -79,7 +79,7 @@ class CellActionItems(WorkflowRepo):
             raise ValueError('document_id must not be empty')
         generation = self.read_control().get('account_generation', 0)
         if idempotency_key:
-            where = "q_idempotency_key=%s AND coalesce((doc->>'account_generation')::bigint,0)=%s AND q_deleted IS DISTINCT FROM TRUE"
+            where = "q_idempotency_key=%s AND " + ACCOUNT_GENERATION_SQL + " AND q_deleted IS DISTINCT FROM TRUE"
             if not reuse_finished:
                 where += " AND q_completed IS DISTINCT FROM TRUE AND coalesce(q_status,'active')='active'"
             matches = self.store.query('action_items', where, [idempotency_key, generation], limit=1)

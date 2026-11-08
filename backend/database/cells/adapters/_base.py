@@ -31,6 +31,11 @@ EVENT_SEQUENCE_DESC_SQL = (
 )
 
 
+# Typed generation match: a missing field is generation 0; wrong-typed legacy
+# values (strings, booleans) are nonmatches instead of a failing bigint cast.
+ACCOUNT_GENERATION_SQL = "coalesce(doc->'account_generation', '0'::jsonb)=to_jsonb(%s::bigint)"
+
+
 def event_payloads(model: type[BaseModel], rows):
     """Match the Firestore presentation model's skip-malformed read boundary."""
     for _, row in rows:

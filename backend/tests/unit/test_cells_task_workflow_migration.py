@@ -526,3 +526,16 @@ def test_event_decoder_signed_bigint_bounds_after_jsonb(pg, sequence, accepted):
         assert type(row['sequence']) is int
     expected = [{'sequence': int(sequence)}] if accepted else []
     assert list(event_payloads(EventPayload, [('event', row)])) == expected
+
+
+@pytest.mark.parametrize('case,generation', [(0, 'legacy'), (1, True), (2, '1'), (3, None)])
+def test_wrong_typed_workstream_generation_is_a_nonmatch(pg, case, generation):
+    sid = pg.space(f'legacy-generation-{case}')
+    now = datetime.now(timezone.utc)
+    base = {'title': 'Legacy', 'objective': 'Finish', 'status': 'open', 'created_at': now, 'updated_at': now}
+    pg.seed(sid, 'workstreams', 'ws-bad', {**base, 'workstream_id': 'ws-bad', 'account_generation': generation})
+    pg.seed(sid, 'workstreams', 'ws-one', {**base, 'workstream_id': 'ws-one', 'account_generation': 1})
+    pg.seed(sid, 'workstreams', 'ws-missing', {**base, 'workstream_id': 'ws-missing'})
+    repo = pg.workstreams(sid)
+    assert [row.id for row in repo.list_open(account_generation=1)] == ['ws-one']
+    assert [row.id for row in repo.list_open(account_generation=0)] == ['ws-missing']

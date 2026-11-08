@@ -24,7 +24,7 @@ from database.ports.workstreams import (
 )
 
 
-from ._base import EVENT_SEQUENCE_SQL, WorkflowRepo, atomic, event_payloads
+from ._base import ACCOUNT_GENERATION_SQL, EVENT_SEQUENCE_SQL, WorkflowRepo, atomic, event_payloads
 
 
 class CellWorkstreams(WorkflowRepo):
@@ -78,7 +78,7 @@ class CellWorkstreams(WorkflowRepo):
     def list_open(self, *, limit: int = 500, account_generation: int | None = None) -> list[WorkstreamEntity]:
         where, args = "q_status='open'", []
         if account_generation is not None:
-            where += " AND coalesce((doc->>'account_generation')::bigint,0)=%s"
+            where += " AND " + ACCOUNT_GENERATION_SQL
             args.append(account_generation)
         return [
             self._entity({**row, 'id': eid})
