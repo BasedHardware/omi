@@ -39,7 +39,8 @@ class CandidateQuery:
         return CandidateDocument(self._database, (*self._path, name))
 
     def where(self, *, filter):
-        assert filter.field_path == 'key' and filter.op_string in ('>=', '<')
+        if filter.field_path != 'key' or filter.op_string not in ('>=', '<'):
+            raise NotImplementedError('Candidate queries support only key >= and < filters')
         return CandidateQuery(self._database, self._path, (*self.filters, filter), self.count)
 
     def limit(self, count):
@@ -50,10 +51,20 @@ class CandidateQuery:
         for path, row in tuple(self._database.rows.items()):
             if path[:-1] != self._path or not isinstance(row.get('key'), str):
                 continue
-            if all(row['key'] >= f.value if f.op_string == '>=' else row['key'] < f.value for f in self.filters):
+            if all(self._matches(row['key'], f) for f in self.filters):
                 snapshot = CandidateSnapshot(row, path[-1])
                 matches.append(snapshot)
         return iter(matches if self.count is None else matches[: self.count])
+
+    @staticmethod
+    def _matches(key, filter):
+        if filter.field_path != 'key':
+            raise NotImplementedError('Candidate queries support only key filters')
+        if filter.op_string == '>=':
+            return key >= filter.value
+        if filter.op_string == '<':
+            return key < filter.value
+        raise NotImplementedError('Candidate queries support only >= and < filters')
 
 
 def _server_times(value: Any, *, now: datetime | None = None) -> Any:
