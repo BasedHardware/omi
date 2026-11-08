@@ -8,13 +8,8 @@ import logging
 import math
 import time
 
-from config.backlog_state_machine import (
-    HELD_EXHAUSTED_REASON,
-    MAX_HELD_REDRIVES,
-    held_redrive_counter_enabled,
-    held_redrive_stop_enabled,
-)
-from utils.batch_pipeline.scheduler import held_redrives
+from config.backlog_state_machine import HELD_EXHAUSTED_REASON, held_redrive_stop_enabled
+from utils.batch_pipeline.scheduler import held_redrive_budget_spent
 from config.batch_pipeline import batch_held_dead_letter_enabled
 from utils.backlog_metrics import record_transition
 from database.batch_pipeline_record_dead_letter import record_dead_letter_stock
@@ -82,7 +77,7 @@ class HeldDeadLetter:
             after = state.get('dead_after') if state.get('redrive_day') == day else None
             dead = dead_held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=after)
             for sid, job in dead:
-                if held_redrive_counter_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES:
+                if held_redrive_budget_spent(job):
                     # Class 6 counter: observe a spent re-drive budget (alerted),
                     # whether or not the terminal stop is enabled.
                     record_transition('held_redrive_budget_spent')

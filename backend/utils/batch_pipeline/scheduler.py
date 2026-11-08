@@ -1029,9 +1029,12 @@ class Scheduler:
             # bypass held_redrives and the attempt reset.
             return False
         control = read_control(tx, scheduler_control_key(job['owner_key']))
+        spent = False
         if automatic and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
             # With the terminal stop off a status poll may still reopen a retained
-            # held dead letter; it gets the nightly path's switched accounting.
+            # held dead letter; it gets the nightly path's switched accounting
+            # and the same spent-budget signal (reported by the caller after commit).
+            spent = held_redrive_budget_spent(job)
             account_held_redrive(job)
         job.update(
             state='ready',
@@ -1043,7 +1046,7 @@ class Scheduler:
         )
         _append(tx, control, job)
         tx.put('jobs', job['segment_id'], job)
-        return True
+        return 'spent' if spent else True
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
@@ -1096,3 +1099,12 @@ def account_held_redrive(job: dict) -> None:
     if held_redrive_budget_enabled():
         job['held_redrive_last_attempt'] = job.get('attempt', 0)
         job['attempt'] = 0
+
+
+def held_redrive_budget_spent(job: dict) -> bool:
+    """Class 6 counter: this re-drive starts at or over MAX_HELD_REDRIVES.
+
+    Shared by the nightly scan and status-poll re-drives so both report the
+    same held_redrive_budget_spent signal, whether or not the stop is on.
+    """
+    return held_redrive_counter_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES

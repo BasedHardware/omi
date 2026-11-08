@@ -337,10 +337,25 @@ def test_running_cap_kill_switch_through_the_sweep(db, monkeypatch, switch):
         assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
 
 
-def test_running_cap_only_observes_while_class_1_is_off(db, monkeypatch):
-    """CAPTURE_RETRY_CAP_ENFORCED off (default): the carried count never finalizes."""
-    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'false')
+@pytest.mark.parametrize('class1', ['false', None])
+@pytest.mark.parametrize('coverage', [None, 'serve_mode', 'serve_cohort'])
+def test_running_cap_only_observes_while_class_1_is_off(db, monkeypatch, class1, coverage):
+    """CAPTURE_RETRY_CAP_ENFORCED off (explicit or default): the carried count never finalizes.
+
+    Review wave 4 (finding 1): this holds for capture-coverage serving users
+    too (CAPTURE_COVERAGE_MODE=serve, or a uid in the serve cohort). Main never
+    capped running owners, so only class 1 may turn the running cap on.
+    """
+    from config.refactor_modes import uid_digest
+
+    if class1 is not None:
+        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
     account, expired = at_cap_running_owner(db, monkeypatch)
+    if coverage == 'serve_mode':
+        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    elif coverage == 'serve_cohort':
+        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'shadow')
+        monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S', uid_digest(account))
     failure = finalizer_mocks(monkeypatch)
     dispatch = Mock()
     monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
@@ -542,6 +557,34 @@ def test_client_poll_redrive_with_stop_off_keeps_the_nightly_accounting(monkeypa
     assert job['state'] == 'ready'
     assert job['held_redrives'] == (2 if counter == 'true' else 1)
     assert job['attempt'] == (0 if budget == 'true' else 5)
+
+
+def test_repeated_poll_redrives_report_a_spent_budget_with_the_stop_off(monkeypatch):
+    """Review wave 4 (finding 2): poll re-drives emit the same spent-budget signal as the nightly scan."""
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv(STOP_SWITCH, 'false')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    seen = []
+    for _ in range(sm.MAX_HELD_REDRIVES + 2):
+        # The unit failed again and its held window expired: a retained dead letter again.
+        store.rows['jobs', 'segment'].update(
+            state='dead', token='', lease_until=0, merge_pending=True, dead_letter_reason='held_expired'
+        )
+        before = transitions('held_redrive_budget_spent')
+        durable_status(store, 'synthetic-owner', 'bp_first')
+        assert store.rows['jobs', 'segment']['state'] == 'ready'
+        seen.append(transitions('held_redrive_budget_spent') - before)
+    # Below the budget (0..MAX-1 prior re-drives): no signal. At or over it: one per committed poll.
+    assert seen == [0] * sm.MAX_HELD_REDRIVES + [1, 1]
+    assert store.rows['jobs', 'segment']['held_redrives'] == sm.MAX_HELD_REDRIVES + 2
 
 
 def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):

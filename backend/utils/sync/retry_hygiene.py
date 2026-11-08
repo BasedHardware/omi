@@ -45,14 +45,16 @@ def running_expiries(owner: dict[str, Any]) -> int:
 def running_cap(uid: str, owner: dict) -> RetryCap | None:
     """Running-state cap: the job began and its worker died, which is proven failure.
 
-    Enforced for every uid by default (CAPTURE_RETRY_CAP_ENFORCED). Counts this
-    expiry plus earlier ones, never dispatch retries of a delayed queue.
+    Only class 1 (CAPTURE_RETRY_CAP_ENFORCED) may make it serve. Main never
+    capped running owners, so the CAPTURE_COVERAGE_MODE serve mode or cohort
+    must not turn it on while class 1 is off; then it only observes.
     """
-    if not retry_cap_enforced() and not refactor_modes.shadow_or_serve(MODE):
+    enforced = retry_cap_enforced()
+    if not enforced and not refactor_modes.shadow_or_serve(MODE):
         return None
     from utils.cloud_tasks import get_sync_tasks_max_attempts
 
-    return retry_cap(uid, running_expiries(owner) + 1, get_sync_tasks_max_attempts())
+    return RetryCap(running_expiries(owner) + 1 >= max(1, get_sync_tasks_max_attempts()), enforced)
 
 
 def running_attempt_carry(owner: dict[str, Any]) -> bool:

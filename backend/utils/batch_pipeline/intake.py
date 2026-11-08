@@ -231,7 +231,10 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 def durable_status(store, uid: str, job_id: str) -> dict | None:
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
 
+    spent_redrives: list[str] = []
+
     def read(tx):
+        spent_redrives.clear()  # a retried transaction reports only its own commit
         intake = tx.get('intakes', job_id)
         if not intake:
             return None
@@ -283,7 +286,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
             for job in jobs:
-                Scheduler.redrive_in_transaction(tx, job, time.time(), automatic=True)
+                if Scheduler.redrive_in_transaction(tx, job, time.time(), automatic=True) == 'spent':
+                    spent_redrives.append(job['segment_id'])
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must
             # never ACK custody of unresolved units, including after 30 minutes.
@@ -370,7 +374,13 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'poll_after_ms': 0 if completed or failed else 3000,
         }
 
-    return store.run(read)
+    status = store.run(read)
+    if spent_redrives:
+        # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
+        from utils.backlog_metrics import record_transition
+
+        record_transition('held_redrive_budget_spent', len(spent_redrives))
+    return status
 
 
 def start_response(status: dict) -> JSONResponse:
