@@ -333,6 +333,33 @@ def fifo_array_link_enabled() -> bool:
     )
 
 
+def control_steady_write_skip_enabled() -> bool:
+    """Skip the control-document write when admission activation changes nothing; false is the kill switch.
+
+    Every unit admission of an already-active owner appended the owner's
+    control document with byte-identical content: ``activate`` is
+    value-stable on the warm path (``active`` stays set, service is seeded
+    once at the cold frontier, both availability floors only ever move
+    down) and a warm queue's ring membership does not change. Under
+    sibling admission bursts those content-free writes carried the
+    hottest per-owner document inside every append transaction's write
+    set, so N concurrent sibling appends aborted each other through the
+    shared five-attempt budget — the ``firestore_transaction_contention
+    operation=batch_pipeline_store attempt=5/5 outcome=exhausted`` storm
+    family. The skip turns the write into a decision: identical snapshot
+    → no write (the abort set loses a member and the queue/job writes
+    keep their budget), any real activation change → the write,
+    byte-for-byte as before. Pull-grant service advances and cold
+    activations are real changes and always write.
+
+    Failure-Class: FC-control-document-carries-content-free-append-writes
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTROL_STEADY_WRITE_SKIP_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTROL_STEADY_WRITE_SKIP_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def shadow_slot_cas_enabled() -> bool:
     """Arbitrate the shadow slot ring with conditional writes by default.
 

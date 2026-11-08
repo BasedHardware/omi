@@ -76,7 +76,14 @@ record. Live transcription is a preview; the batch result is the record.
   ladder) so the same operation's next entry waits it out instead of
   re-striking immediately; a success clears the ladder (`event=batch_store_backoff`
   logs the waits at INFO; `BATCH_PIPELINE_CONTENTION_STORM_DAMPER_ENABLED=false`
-  restores immediate re-strikes).
+  restores immediate re-strikes). On top of that, the admission append itself
+  no longer writes the control document when activation is a value no-op: a
+  warm admission (queue already in the ring, priority already active,
+  availability floors at their floor) leaves the control bytes identical, so
+  the steady-write skip drops the write and the append's abort set loses the
+  hottest per-owner member entirely
+  (`BATCH_PIPELINE_CONTROL_STEADY_WRITE_SKIP_ENABLED=false` restores the
+  unconditional write; see `docs/batch-control-steady-write-skip.md`).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller
   concurrency regression after its process-level batch scenarios.
 - **Receipts**: durable upload status via `intake.py:durable_status`

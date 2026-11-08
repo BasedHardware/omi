@@ -23,6 +23,32 @@ def read_control(tx: Transaction, key: str) -> dict:
     return control
 
 
+def activation_surface(control: dict, priority: int, queue_key: str) -> tuple:
+    """Value snapshot of the exact fields the append path can change.
+
+    The scheduler append is the only control writer beside the pull's
+    service advance and the one-time migration: it may add ``queue_key``
+    to the priority's ring and ``activate`` may set ``active``, seed
+    ``service`` from the cold frontier and lower the batch/live
+    availability floors. A warm append — queue already in the ring,
+    priority already active, floors already at or below this job's
+    ``available_at`` — leaves every one of those values unchanged, so the
+    control write that followed it carried byte-identical content and
+    existed only to join the write set. Snapshots taken before and after
+    the append's mutations turn that write into a decision: identical
+    snapshots mean nothing changed and the write is skipped; any real
+    difference writes exactly as before.
+    """
+    ring = control.get('rings', {}).get(str(int(priority))) or ()
+    return (
+        ('ring', int(priority), queue_key in ring, len(ring)),
+        ('active', int(priority), bool(control.get(field(priority, 'active')))),
+        ('service', int(priority), control.get(field(priority, 'service'))),
+        ('batch_available_at', int(priority), control.get(field(priority, 'batch_available_at'))),
+        ('live_available_at', int(priority), control.get(field(priority, 'live_available_at'))),
+    )
+
+
 def activate(tx: Transaction, control: dict, priority: int, now: float, frontier: float = 0.0) -> None:
     """Activate ``priority`` on this shard, seeding service from the rejoin hint.
 

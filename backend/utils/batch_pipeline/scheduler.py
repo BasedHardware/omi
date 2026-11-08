@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
     SCHEDULER_SHARDS,
     control_candidate_fanout,
+    control_steady_write_skip_enabled,
     fifo_array_link_enabled,
     maintenance_contention_continuation_enabled,
     pull_multi_lease_enabled,
@@ -33,7 +34,7 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
-from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.control import activation_surface, activate, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure, validate_worker_failure_evidence
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
@@ -185,6 +186,12 @@ def _append_fifo_array(
     the walk on every append. The job document never joins the write set.
     ``frontier`` is the advisory rejoin seed read outside the transaction.
     """
+    # The control write below is decided, not unconditional: a warm append
+    # (queue already in the ring, priority already active, availability
+    # floors at or below this job's available_at) changes none of the
+    # fields this path can touch, so the snapshot pair skips a
+    # byte-identical write that only joined the abort set.
+    before = activation_surface(control, job['priority'], queue_key)
     if queue.get('link_mode') != 'fifo_array':
         probe_at = queue.get('link_probe_at')
         if probe_at is not None and now - probe_at < FIFO_LINK_PROBE_BACKOFF_SECONDS:
@@ -215,7 +222,8 @@ def _append_fifo_array(
         queue['continuing'] = False
     queue['tail'] = job['segment_id']
     activate(tx, control, job['priority'], job['available_at'], frontier)
-    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    if not control_steady_write_skip_enabled() or activation_surface(control, job['priority'], queue_key) != before:
+        tx.put('control', scheduler_control_key(job['owner_key']), control)
     tx.put('queues', queue_key, queue)
     return True
 
@@ -229,6 +237,10 @@ def _append(tx: Transaction, control: dict, job: dict, now: float, frontier: flo
     queue = tx.get('queues', queue_key) or {'head': '', 'tail': '', 'deficit': 0.0, 'continuing': False}
     if fifo_array_link_enabled() and _append_fifo_array(tx, queue, queue_key, control, job, now, frontier):
         return
+    # Same decided write as the fifo-array path: snapshot before the ring
+    # membership or activation mutations so a warm append can skip the
+    # byte-identical control write.
+    before = activation_surface(control, job['priority'], queue_key)
     ring = control['rings'][str(job['priority'])]
     if not queue['head']:
         if len(ring) >= MAX_ACTIVE_OWNERS:
@@ -246,7 +258,8 @@ def _append(tx: Transaction, control: dict, job: dict, now: float, frontier: flo
     job['next'] = ''
     tx.put('queues', queue_key, queue)
     activate(tx, control, job['priority'], job['available_at'], frontier)
-    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    if not control_steady_write_skip_enabled() or activation_surface(control, job['priority'], queue_key) != before:
+        tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:

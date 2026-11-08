@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 246,
+  "count": 247,
   "names": {
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},
     "PARAKEET_LID_ONLY": {"owner": "planscost", "review_by": "2026-11-30"},
@@ -78,6 +78,7 @@
     "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_FIFO_ARRAY_LINK_ENABLED": {"owner": "batch record lane / rollout lead", "review_by": "2026-12-15"},
+    "BATCH_PIPELINE_CONTROL_STEADY_WRITE_SKIP_ENABLED": {"owner": "batch record lane / rollout lead", "review_by": "2026-12-15"},
     "BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED": {"owner": "dazheng (batch record lane / rollout lead)", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_FLIGHT_BATCH_SECONDS": {"seeded": "2026-10-25"},
