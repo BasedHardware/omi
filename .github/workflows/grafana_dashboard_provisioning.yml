@@ -20,6 +20,7 @@ on:
       - '.github/scripts/provision_grafana_dashboards.py'
       - '.github/scripts/grafana_business.py'
       - 'web/admin/grafana/dashboards/omi-tv-v2.json'
+      - 'web/admin/grafana/dashboards/omi-tv-funnel.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -117,10 +118,12 @@ jobs:
             --grafana-url "$GRAFANA_URL" \
             --token-env BUSINESS_GRAFANA_TOKEN \
             --source-sha "$GIT_SHORT_SHA" \
-            --allowlist omi-tv-v2.json \
+            --allowlist omi-tv-v2.json,omi-tv-funnel.json \
             --folder-uid business
       - name: Apply production alert definitions and check drift
-        if: matrix.environment == 'prod'
+        # Dispatch-only: a push resolves to the dev environment anyway, so no
+        # dashboard-path push can reach this prod step.
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |

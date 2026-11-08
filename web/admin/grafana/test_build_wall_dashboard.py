@@ -24,17 +24,26 @@ def is_text_line(panel):
 
 
 class WallV2Contract(unittest.TestCase):
-    def test_funnel_row_sits_below_the_tv_wall(self):
+    def test_funnel_row_is_its_own_board_that_fills_the_screen(self):
         from build_wall_dashboard import WALL_H
-        row = [p for p in load("omi-tv-v2")["panels"] if p["gridPos"]["y"] >= WALL_H]
-        self.assertEqual({p["gridPos"]["y"] for p in row}, {WALL_H})
+        board = load("omi-tv-funnel")
+        self.assertEqual(board["uid"], "omi-tv-funnel")
+        row = board["panels"]
+        self.assertEqual({p["gridPos"]["y"] for p in row}, {0})
+        self.assertEqual({p["gridPos"]["h"] for p in row}, {WALL_H})  # fills 1920×1080, no scroll
         self.assertEqual(sum(p["gridPos"]["w"] for p in row), 24)
         self.assertEqual({p["targets"][0]["root_selector"] for p in row},
                          {"frames.funnel", "frames.funnelWeekly", "frames.funnelPlatforms"})
 
-    def test_checked_in_wall_matches_builder(self):
-        from build_wall_dashboard import build_wall_board
+    def test_wall_board_has_no_funnel_row(self):
+        board = load("omi-tv-v2")
+        self.assertFalse(any(p["targets"][0]["root_selector"].startswith("frames.funnel")
+                             for p in board["panels"] if p.get("targets")))
+
+    def test_checked_in_boards_match_builder(self):
+        from build_wall_dashboard import build_funnel_board, build_wall_board
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
+        self.assertEqual(load("omi-tv-funnel"), build_funnel_board())
 
     def test_wall_columns_plugins_and_utc(self):
         from build_wall_dashboard import BASE, COLUMNS, GEOMETRY, UPTIME_URL
