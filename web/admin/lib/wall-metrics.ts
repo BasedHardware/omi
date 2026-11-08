@@ -811,11 +811,13 @@ export async function computeWall(
           ]);
           if (billResult.status === "rejected") throw billResult.reason;
           // Measured Soniox per day from spend_daily (rows win over the balance
-          // series). A failed read leaves no spend rows; the fallback ladder runs.
+          // series). A failed read leaves no spend rows and is disclosed as a
+          // missing line; the fallback ladder runs.
           const sonioxSpend =
             spendResult.status === "fulfilled" && spendResult.value
               ? sonioxSpendByDay(spendResult.value)
               : null;
+          const spendReadFailed = spendResult.status === "rejected";
           const bill = billResult.value;
           const planCost =
             planCostResult.status === "fulfilled" ? planCostResult.value : null;
@@ -902,6 +904,13 @@ export async function computeWall(
           // Dark vendor-balance tables complete the leg with an estimate; the
           // missing disclosure still names the reason.
           if (vendorBalance?.dark) missingLines.push(vendorBalance.dark);
+          if (spendReadFailed)
+            missingLines.push(
+              wallFailure(
+                "Settled spend ledger (spend_daily stt_soniox)",
+                spendResult.reason
+              )
+            );
           // Soniox: the balance-delta day-rate while the snapshot series covers
           // the day; a covered-but-unpublished row is a disclosed gap, never a
           // reset; beyond the last covered day the dated constant returns with
@@ -958,6 +967,8 @@ export async function computeWall(
                     vendorBalance
                       ? vendorBalance.dark ??
                         `${vendorBalance.snapshots}/2 balance snapshots`
+                      : spendReadFailed
+                      ? "spend_daily unreadable (see missing lines); fallback shown"
                       : "no data yet (no spend_daily stt_soniox row, no balance series)"
                   }`
                 );
