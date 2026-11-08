@@ -116,7 +116,7 @@ def due_dates(entry: dict[str, Any]) -> list[tuple[str, date]]:
     return deadlines
 
 
-def _validate_extension(entry: dict[str, Any], key: str, errors: list[str]) -> None:
+def _validate_extension(entry: dict[str, Any], key: str, errors: list[str], as_of: date) -> None:
     if "extension" not in entry:
         return
     extension = entry["extension"]
@@ -131,6 +131,8 @@ def _validate_extension(entry: dict[str, Any], key: str, errors: list[str]) -> N
             errors.append(f"{key}: extension.{field} must be an ISO date")
     if len(dates) == 2 and not 0 <= (dates["until"] - dates["granted"]).days <= 14:
         errors.append(f"{key}: extension.until must be 0 to 14 days after extension.granted")
+    if "granted" in dates and dates["granted"] > as_of:
+        errors.append(f"{key}: extension.granted must not be in the future")
     reason = extension.get("reason")
     if (
         not isinstance(reason, str)
@@ -252,7 +254,7 @@ def validate_registry(
                         except (TypeError, ValueError):
                             errors.append(f"{label}: {field} must be an ISO date")
                 _validate_ramp(entry, label, errors)
-                _validate_extension(entry, key, errors)
+                _validate_extension(entry, key, errors, current_date)
                 if lifecycle == "ops_kill" and entry.get("fail") == "closed":
                     default_off_ops.add(key)
                     if key not in OPS_KILL_DEFAULT_OFF_ALLOWLIST:

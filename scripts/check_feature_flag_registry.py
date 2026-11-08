@@ -127,7 +127,7 @@ def check_diff_rules(base: dict[str, Any], registry: dict[str, Any], errors: lis
         old = base_flags[key]
         if "extension" in old and old["extension"]["until"] != entry.get("extension", {}).get("until"):
             errors.append(f"{key}: second extension refused: ramp or retire")
-        if entry.get("decision") not in {"pending", "undecided"}:
+        if not any(row.get("decision") in {"pending", "undecided"} for row in (old, entry)):
             continue
         for previous, current in (
             (old.get("review_by"), entry.get("review_by")),
@@ -142,14 +142,24 @@ def check_owner_backlog(
 ) -> None:
     base_keys = {entry["key"] for entry in base["flags"]}
     counts = owner_backlog(base, current_date)
+    added_debt = owner_backlog(
+        {"flags": [entry for entry in registry["flags"] if entry["key"] not in base_keys]}, current_date
+    )
     for entry in registry["flags"]:
         owner = normalize_owner(entry["owner"])
-        if entry["key"] in base_keys or entry["lifecycle"] != "rollout" or counts[owner] < MAX_UNRAMPED_PER_OWNER:
+        if entry["key"] in base_keys or entry["lifecycle"] != "rollout":
+            continue
+        if counts[owner] < MAX_UNRAMPED_PER_OWNER and counts[owner] + added_debt[owner] <= MAX_UNRAMPED_PER_OWNER:
             continue
         message = (
             f"{entry['key']}: owner={owner} had {counts[owner]} unramped flags at merge-base "
             f"(cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
         )
+        if counts[owner] < MAX_UNRAMPED_PER_OWNER:
+            message = (
+                f"{entry['key']}: owner={owner} would have {counts[owner] + added_debt[owner]} unramped flags "
+                f"after this diff (cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
+            )
         exception = OWNER_BACKLOG_EXCEPTIONS.get(owner)
         if exception is None:
             errors.append(message)

@@ -170,7 +170,7 @@ class RegistryFixture(unittest.TestCase):
         )
 
     def errors(self) -> list[str]:
-        return check(self.root, check_render=False, as_of=date(2026, 10, 1))[0]
+        return check(self.root, check_render=False, as_of=date(2026, 11, 8))[0]
 
     def write_flags(self, rows: list[dict[str, object]]) -> None:
         self.write("config/feature-flags.yaml", self.yaml(rows))
@@ -202,12 +202,28 @@ class RegistryFixture(unittest.TestCase):
         self.commit_fixture()
         self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(self.errors()))
         self.assertIn("ramp or retire before adding", "\n".join(self.errors()))
-        # The comparison uses the base count, not the current count (now 6).
+        # Existing merge-base debt still gates new rollout rows; additions in
+        # this diff must also fit within the remaining debt allowance.
         rows[-1]["decision"] = "ship"
         self.write_flags(rows)
         base = self.commit_fixture()
         subprocess.run(["git", "update-ref", "refs/remotes/origin/main", base], cwd=self.root, check=True)
+        self.write_flags(rows + [flag("UNDER_CAP_ENABLED")])
+        self.assertEqual([], self.errors())
         self.write_flags(rows + [flag("UNDER_CAP_ENABLED"), flag("ANOTHER_ENABLED")])
+        self.assertIn("would have 6 unramped flags after this diff", "\n".join(self.errors()))
+
+    def test_multiple_additions_cannot_bypass_owner_cap(self) -> None:
+        self.backlog_base(count=0)
+        rows = [flag(f"NEW_{index}_ENABLED") for index in range(6)]
+        self.write_flags(rows[:5])
+        self.assertEqual([], self.errors())
+        self.write_flags(rows)
+        self.assertIn("would have 6 unramped flags after this diff", "\n".join(self.errors()))
+
+    def test_multiple_live_ramps_do_not_consume_owner_debt_cap(self) -> None:
+        self.backlog_base(count=0)
+        self.write_flags([flag(f"NEW_{index}_ENABLED", ramp=ramp_plan(done_by="2026-11-15")) for index in range(6)])
         self.assertEqual([], self.errors())
 
     def test_pre_existing_rows_count_without_blocking_retroactively(self) -> None:
@@ -710,6 +726,24 @@ class RegistryFixture(unittest.TestCase):
         rows = self.backlog_base(count=1)
         self.write_flags(rows + [flag("NEW_ENABLED", review_by="2026-12-01", ramp=ramp_plan())])
         self.assertEqual([], self.errors())
+
+    def test_decision_change_cannot_hide_later_original_dates(self) -> None:
+        rows = self.backlog_base(count=1, ramp=ramp_plan(done_by="2026-11-01"))
+        for decision, terminal in (("ship", "on"), ("kill", "off")):
+            for changes in ({"review_by": "2026-12-01"}, {"ramp": ramp_plan(done_by="2026-11-02")}):
+                with self.subTest(decision=decision, changes=changes):
+                    self.write_flags([dict(rows[0], decision=decision, terminal=terminal, **changes)])
+                    self.assertIn("due date moved later without an extension", "\n".join(self.errors()))
+
+    def test_extension_grant_cannot_be_future_dated(self) -> None:
+        registry = {
+            "flags": [flag(extension=extension(granted="2099-01-01", until="2099-01-15"))],
+            "ignore": [],
+            "retired": [],
+        }
+        errors = validate_registry(registry, root=self.root, as_of=date(2026, 11, 8))
+        self.assertIn("EXAMPLE_ENABLED: extension.granted must not be in the future", errors)
+        self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2099, 1, 1)))
 
     def test_missing_base_warns_and_skips_all_diff_rules(self) -> None:
         self.write_flags([flag(extension=extension())])
