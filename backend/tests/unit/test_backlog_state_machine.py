@@ -69,7 +69,7 @@ EXPECTED_DEFAULTS = {
     sm.HELD_REDRIVE_BUDGET_SWITCH: False,
     sm.HELD_REDRIVE_COUNTER_SWITCH: True,
     sm.HELD_REDRIVE_STOP_SWITCH: False,
-    sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: True,
+    sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: False,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: True,
 }
 READERS = {
@@ -758,7 +758,8 @@ def barrier(live, status, present=True):
     return live.RecordBarrierOpen(live.BARRIER_NOT_CLOSED, conversation_present=present, conversation_status=status)
 
 
-def test_unfinished_conversation_redrives_weekly_then_dead_letters(drain):
+def test_unfinished_conversation_redrives_weekly_then_dead_letters(drain, monkeypatch):
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')  # class 4 (default off)
     live, store, seed, run, clock = drain
     seed(15 * DAY)
     redrives = transitions('record_barrier_redrive')
@@ -797,6 +798,7 @@ def park(live, run, clock):
 
 def test_parked_row_returns_to_the_ladder_after_the_switch_is_turned_off(drain, monkeypatch):
     """Review wave 1 (finding 4): park with the switch on, then roll back."""
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')  # class 4 (default off)
     live, store, seed, run, clock = drain
     seed(15 * DAY)
     park(live, run, clock)
@@ -813,6 +815,7 @@ def test_parked_row_returns_to_the_ladder_after_the_switch_is_turned_off(drain, 
 
 
 def test_parked_row_is_rechecked_without_admission_while_the_switch_is_on(drain, monkeypatch):
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'true')  # class 4 (default off)
     live, store, seed, run, clock = drain
     seed(15 * DAY)
     parked = park(live, run, clock)
@@ -851,9 +854,11 @@ def test_plain_barrier_error_from_the_transactional_recheck_is_not_parked(drain)
     assert delay == 3600 and 'barrier_redrives' not in job
 
 
-def test_record_dead_letter_kill_switch_keeps_the_hourly_ladder(drain, monkeypatch):
+@pytest.mark.parametrize('switch', ['false', None])
+def test_record_dead_letter_kill_switch_keeps_the_hourly_ladder(drain, monkeypatch, switch):
     live, _, seed, run, _ = drain
-    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'false')
+    if switch is not None:
+        monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, switch)
     seed(30 * DAY)
     job, delay = run(barrier(live, 'in_progress'))
     assert delay == 3600 and 'barrier_redrives' not in job

@@ -27,7 +27,8 @@ semantics. Turning a switch off restores the exact pre-change transition.
   ``held_exhausted``), status polls stop redriving retained held dead letters,
   and projection expiry stops re-arming after ``MAX_PROJECTION_REARMS``. Off
   restores the unbounded loop, including for units already marked exhausted.
-- ``RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED`` (class 4): an aged
+- ``RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED`` (class 4, default OFF:
+  parking changes custody): an aged
   record_pending row whose conversation exists but never completed is
   re-driven weekly with a counter, then parked as a retained dead letter.
 - ``BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED`` (class 5): an unrestorable
