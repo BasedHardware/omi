@@ -10,8 +10,9 @@ not perform production preflight reads.
 The runtime containment roster comes from named-ref backend reading sites and
 `backend/runtime_images.json`. Shared utils/config/database/models code checks
 the backend, pusher and batch image families; routers/services check backend
-and pusher; diarizer code checks the batch family. Record-seal is a registered
-consumer of the batch image. The uninstalled sync-backfill pilot is excluded.
+and pusher; diarizer code checks the batch family. Record-seal is derived from the batch chart
+as a consumer of the same image; the registry also drives direct deploy admission
+and does not declare child deployments separately. The uninstalled sync-backfill pilot is excluded.
 `_ramp` names bind the runtime reader and the name's writer schema so older
 readers cannot silently reject a newly written name.
 

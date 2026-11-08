@@ -153,16 +153,6 @@
         ".github/workflows/gcp_llm_gateway.yml"
       ]
     },
-    "record-seal-worker": {
-      "platform": "gke",
-      "role": "gpu-batch",
-      "image": "batch-pipeline-worker",
-      "current_image": "batch-pipeline-worker",
-      "current_deploy": [
-        "backend/charts/batch-pipeline-worker/templates/record-seal-worker.yaml"
-      ],
-      "image_built_elsewhere": "The record-seal worker consumes the batch-pipeline-worker digest built and probed by gcp_diarizer.yml."
-    },
     "batch-pipeline-worker": {
       "platform": "gke",
       "role": "gpu-batch",

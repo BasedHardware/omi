@@ -39,6 +39,7 @@ class LivePreflightTest(unittest.TestCase):
                     'scrape_jobs': [
                         {'name': 'cloud-run-application-metrics', 'source': 'prometheus.googleapis.com/omi_'},
                         {'name': 'batch-pipeline-worker-metrics'},
+                        {'name': 'record-seal-worker-metrics'},
                     ]
                 }
             ),
@@ -280,6 +281,7 @@ class LivePreflightTest(unittest.TestCase):
 
     def test_runtime_roster_fixture(self):
         inventory = json.loads((FIXTURES / 'roster.json').read_text())
+        self.assertNotIn('record-seal-worker', inventory['services'])
         names = lambda path: {r['name'] for r in lp.runtime_roster([path], inventory)}
         self.assertEqual(
             names('backend/utils/reader.py'),

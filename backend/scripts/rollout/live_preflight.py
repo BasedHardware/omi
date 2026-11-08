@@ -68,7 +68,15 @@ def runtime_roster(reading_sites: list[str], inventory: dict) -> list[dict]:
                 families.add('pusher')
             elif path.startswith('scripts/record_seal') or path == 'omi_logging.py':
                 families.add('batch-pipeline-worker')
-    services = inventory['services']
+    services = dict(inventory['services'])
+    # runtime_images.services also drives direct deploy admission. Record-seal
+    # is a child in charts/batch-pipeline-worker/templates/record-seal-worker.yaml,
+    # not a standalone deploy target: derive its identical image from the parent
+    # rather than changing that registry's admission semantics.
+    if 'batch-pipeline-worker' in services and 'record-seal-worker' not in services:
+        seal = dict(services['batch-pipeline-worker'])
+        seal.pop('deployed_as', None)
+        services['record-seal-worker'] = seal
     return [
         {'name': name, **spec}
         for name, spec in sorted(services.items())
