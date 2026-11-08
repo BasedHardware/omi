@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from datetime import date
+from datetime import date, datetime, timezone
 from io import StringIO
 from unittest import mock
 from pathlib import Path
@@ -85,6 +85,18 @@ class RegistryFixture(unittest.TestCase):
         )
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))
+
+    def test_default_as_of_uses_utc_even_when_local_date_is_ahead(self) -> None:
+        self.write_flags([flag(review_by="2026-11-01")])
+        # At UTC midnight minus one hour, a UTC+7 host already says Nov 9.
+        instant = datetime(2026, 11, 8, 23, tzinfo=timezone.utc)
+        with mock.patch("check_feature_flag_registry.datetime") as clock:
+            clock.now.return_value = instant
+            errors, warnings = check(self.root, check_render=False)
+        clock.now.assert_called_once_with(timezone.utc)
+        self.assertEqual([], errors)
+        self.assertIn("within the 7-day grace", "\n".join(warnings))
+        self.assertTrue(check(self.root, check_render=False, as_of=date(2026, 11, 9))[0])
 
     def test_shared_boolean_parser_fail_field_is_enforced(self) -> None:
         with mock.patch("check_feature_flag_registry.parser_defaults", return_value={"EXAMPLE_ENABLED": "open"}):
@@ -683,12 +695,24 @@ class RegistryFixture(unittest.TestCase):
         self.assertEqual([], self.errors())
 
     def test_missing_base_warns_and_skips_all_diff_rules(self) -> None:
-        self.write_flags([flag(owner="dazheng", extension=extension())])
+        self.write_flags([flag(extension=extension())])
         with mock.patch("check_feature_flag_registry.load_base_registry", side_effect=ValueError("base unavailable")):
             errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 1))
         self.assertEqual([], errors)
         self.assertIn("registry diff rules and owner backlog gate skipped", "\n".join(warnings))
         self.assertIn("base unavailable", "\n".join(warnings))
+
+    def test_account_owner_is_rejected_even_when_base_is_unavailable(self) -> None:
+        self.write_flags([flag(owner="dazheng")])
+        with mock.patch("check_feature_flag_registry.load_base_registry", side_effect=ValueError("base unavailable")):
+            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 1))
+        self.assertIn("EXAMPLE_ENABLED: owner names an account; name the owning lane or area", errors)
+        self.assertIn("base unavailable", "\n".join(warnings))
+
+    def test_permanent_rows_may_record_a_valid_bounded_extension(self) -> None:
+        row = flag(lifecycle="ops_kill", decision="keep", extension=extension())
+        row.pop("review_by")
+        self.assertEqual([], validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root))
 
     def test_unreadable_base_shape_warns_and_skips_all_diff_rules(self) -> None:
         with mock.patch("check_feature_flag_registry.load_base_registry", return_value={}):
@@ -714,9 +738,9 @@ class RegistryFixture(unittest.TestCase):
         errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 9))
         self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(errors))
 
-    def test_account_owner_is_refused_for_new_rows_only_in_any_lifecycle(self) -> None:
+    def test_account_owner_is_refused_for_all_rows_in_any_lifecycle(self) -> None:
         rows = self.backlog_base(count=1, owner="dazheng")
-        self.assertEqual([], self.errors())
+        self.assertIn("owner names an account", "\n".join(self.errors()))
         for lifecycle in ("rollout", "ops_kill", "config_switch"):
             row = flag("NEW_ENABLED", owner="  DAZHENG (backend) ", lifecycle=lifecycle)
             if lifecycle != "rollout":

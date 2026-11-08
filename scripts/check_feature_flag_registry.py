@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -69,11 +69,7 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
 MAX_UNRAMPED_PER_OWNER = 5
 ACCOUNT_OWNERS = {"dazheng"}
 # Keys use normalize_owner(); exceptions require an ISO expires date and reason.
-OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {
-    # 167 legacy rows name the account, not a lane; the retro N3 batch ruling ramps or retires them.
-    # New rows should name the owning lane. Expiry turns this back into an error.
-    "dazheng": {"expires": "2026-11-15", "reason": "retro N3 ramp-or-retire batch pending"},
-}
+OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {}
 
 
 def normalize_owner(owner: str) -> str:
@@ -84,7 +80,7 @@ def normalize_owner(owner: str) -> str:
 
 
 def owner_backlog(registry: dict[str, Any], as_of: date | None = None) -> Counter[str]:
-    current_date = as_of or date.today()
+    current_date = as_of or datetime.now(timezone.utc).date()
     return Counter(
         normalize_owner(entry["owner"])
         for entry in registry.get("flags", [])
@@ -127,8 +123,6 @@ def check_diff_rules(base: dict[str, Any], registry: dict[str, Any], errors: lis
     for entry in registry["flags"]:
         key = entry["key"]
         if key not in base_flags:
-            if normalize_owner(entry["owner"]) in ACCOUNT_OWNERS:
-                errors.append(f"{key}: owner names an account; name the owning lane or area")
             continue
         old = base_flags[key]
         if "extension" in old and old["extension"]["until"] != entry.get("extension", {}).get("until"):
@@ -175,12 +169,15 @@ def check_owner_backlog(
 
 
 def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -> tuple[list[str], list[str]]:
-    current_date = as_of or date.today()
+    current_date = as_of or datetime.now(timezone.utc).date()
     registry_path = root / "config/feature-flags.yaml"
     registry = load_registry(registry_path)
     errors = validate_registry(registry, root=root, as_of=current_date)
     if errors:
         return errors, []
+    for entry in registry["flags"]:
+        if normalize_owner(entry["owner"]) in ACCOUNT_OWNERS:
+            errors.append(f"{entry['key']}: owner names an account; name the owning lane or area")
     for owner, count in sorted(owner_backlog(registry, current_date).items()):
         print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
     warnings: list[str] = []
