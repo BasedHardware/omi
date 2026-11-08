@@ -103,6 +103,13 @@ it("opens the TV playlist when GRAFANA_TV_PLAYLIST_UID is set", async () => {
   expect(url.searchParams.get("kiosk")).toBe("");
 });
 
+it("keeps the admin dashboard on its board even when the TV playlist is set", async () => {
+  vi.stubEnv("GRAFANA_TV_PLAYLIST_UID", "omi-tv-rotation");
+  const { mintEmbed } = await import("@/lib/grafana-embed");
+  const admin = await mintEmbed("admin:1");
+  expect(new URL(admin.url).pathname).toBe("/d/omi-tv-v2");
+});
+
 it("mints a namespaced kiosk embed for a validated TV link", async () => {
   const response = await callRoute({ token: "a".repeat(43) });
   expect(response.status).toBe(200);
