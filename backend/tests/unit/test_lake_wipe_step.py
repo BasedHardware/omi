@@ -900,3 +900,12 @@ def test_account_expired_attempt_redeletes_former_bucket_immediately_before_eras
     lake_wipe.destroy_owner_lake_keys('owner', now=row['admitted_at'] + timedelta(hours=24, seconds=1))
     assert not blob.exists()
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_unconfigured_lake_without_candidates_skips_conversation_fence(world, monkeypatch):
+    # The usual unconfigured deployment adds one limited read per data class,
+    # never a tombstone write, to every conversation delete.
+    _, store = world
+    monkeypatch.delenv('BUCKET_OBJECT_LAKE')
+    assert lake_wipe.purge_conversation_lake_objects('owner', 'c', source_ids=('d',)) == 0
+    assert not any('deleted_conversations' in path for path in store.rows)

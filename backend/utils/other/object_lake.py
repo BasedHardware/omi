@@ -455,6 +455,23 @@ def _delete_candidate_object(row: dict) -> None:
         raise LakeFetchError('Lake candidate recorded-bucket purge unavailable') from None
 
 
+def entity_upload_candidates_exist(space_id: str, entity_id: str, *, firestore_client=None) -> bool:
+    """Cheap discovery probe: one limited key-range read per data class."""
+    try:
+        client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
+        base = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
+        collection = client.collection('lake_upload_candidates')
+        for data_class in DATA_CLASSES:
+            lo = f'{base}{data_class}/{_segment(entity_id)}/'
+            hi = lo[:-1] + '0'
+            query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
+            if next(iter(query.limit(1).stream()), None) is not None:
+                return True
+        return False
+    except Exception:
+        raise LakeFetchError('Lake conversation upload candidate discovery unavailable') from None
+
+
 def delete_entity_upload_candidates(
     space_id: str,
     entity_id: str,
