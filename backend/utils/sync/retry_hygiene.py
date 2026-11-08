@@ -118,7 +118,7 @@ def reconcile_dispatch_cap(
 ) -> str | None:
     # A dispatching owner's retry deadline passed (cohort-gated cap), or (with
     # attempt carry on) a running job's lease expired without a run lock
-    # (proven failure, cap enforced by default).
+    # (proven failure; the cap enforces only with CAPTURE_RETRY_CAP_ENFORCED on, default off).
     if owner.get('active_state') == 'dispatching':
         check, decision = 'sequencer_dispatch', dispatch_cap(uid, owner)
     elif lease_expired and running_attempt_carry(owner):

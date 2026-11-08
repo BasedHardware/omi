@@ -17,7 +17,7 @@ from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
-from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.batch_pipeline.scheduler import Scheduler, held_redrive_budget_spent, owner_key
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -128,9 +128,17 @@ class RecoveryStore:
         return self.store.run(commit)
 
     def requeue_quarantined(self, segment_id, now, *, dead_before=None):
-        """Operator and nightly entry: retain the content/privacy ownership CAS."""
+        """Operator and nightly entry: retain the content/privacy ownership CAS.
+
+        An operator requeue (dead_before=None) that starts at or over the held
+        re-drive budget reports held_redrive_budget_spent after commit, like
+        /redrive-dead and the status poll. The nightly pass (dead_before set)
+        already observes every candidate in its scan.
+        """
+        spent = [False]
 
         def commit(tx):
+            spent[0] = False
             job, _ = self.checked(tx, segment_id)
             if dead_before is not None:
                 expired_at = job.get('held_expired_at')
@@ -143,9 +151,17 @@ class RecoveryStore:
                     or expired_at >= dead_before
                 ):
                     return False
-            return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
+            budget_spent = held_redrive_budget_spent(job)
+            requeued = Scheduler.requeue_quarantined_in_transaction(tx, job, now)
+            spent[0] = requeued and budget_spent
+            return requeued
 
-        return self.store.run(commit)
+        requeued = self.store.run(commit)
+        if requeued and spent[0] and dead_before is None:
+            from utils.backlog_metrics import record_transition
+
+            record_transition('held_redrive_budget_spent')
+        return requeued
 
     def prepare(self, segment_id, owner_id, now):
         load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)

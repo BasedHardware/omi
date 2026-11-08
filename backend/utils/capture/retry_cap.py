@@ -1,9 +1,9 @@
 """Capture-mode retry caps (dependency-free core).
 
-The cap enforces for every uid by default (CAPTURE_RETRY_CAP_ENFORCED, on unless
-set off; see config/backlog_state_machine.py). With the switch off, the legacy
-CAPTURE_COVERAGE_MODE cohort decides, and shadow decisions never consume or
-terminalize work. Kept free of Cloud Tasks and other sync-only
+Enforcement is OFF by default: the cap enforces for every uid only with
+CAPTURE_RETRY_CAP_ENFORCED=true (see config/backlog_state_machine.py). With the
+switch off (the default), the legacy CAPTURE_COVERAGE_MODE cohort decides, and
+shadow decisions never consume or terminalize work. Kept free of Cloud Tasks and other sync-only
 imports so the GPU batch worker image can use it (its dependency closure has no google-cloud-tasks).
 """
 

@@ -4,7 +4,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Backlog state machine",
-    "title": "Retry cap quarantine rate (enforced by default)",
+    "title": "Retry cap quarantine rate (enforcement off by default)",
     "condition": "C",
     "data": [
       {
@@ -508,6 +508,139 @@
     },
     "labels": {
       "alert_identity": "omi-backlog-held-redrive-budget-spent",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-unit-looping",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "A held unit is still being re-driven after spending its re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 691200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[8d])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "At least one held recording was re-driven again, or seen awaiting re-drive, after spending its re-drive budget (3 re-drives) in the last 8 days.",
+      "user_impact": "That recording has failed processing at least three times and keeps cycling through held, expiry and re-drive without a transcript; with no terminal stop in core it loops until someone looks.",
+      "scope": "Fires on a single unit: one held_redrive_budget_spent observation keeps it firing for 8 days, and a looping unit is observed again each cycle (7-day held window plus the next nightly pass), so a stuck unit keeps it firing. Counted by the nightly pass, status-poll, /redrive-dead and /requeue-quarantined re-drives with BATCH_HELD_REDRIVE_COUNTER_ENABLED on. The >64/h rule omi-backlog-held-redrive-budget-spent covers volume. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} over 8d, then find batch jobs with held_redrives >= 3 and their last failure reason.",
+      "safe_next_action": "Find why the unit keeps failing (worker crash, bad audio, provider error) before another re-drive. Audio and results are retained; do not delete anything. Rollback of the counter: BATCH_HELD_REDRIVE_COUNTER_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">0 in 8d for 30m; one spent-budget re-drive is already 3 failed re-drives, so a single unit is enough.",
+      "evaluated_bad": "Synthetic: one recording observed with a spent budget on consecutive nightly passes.",
+      "evaluated_good": "Synthetic: re-drives below the budget, or the last spent-budget observation more than 8 days ago."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-unit-looping",
       "component": "batch-pipeline",
       "impact": "product",
       "severity": "warning",

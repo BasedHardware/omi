@@ -125,7 +125,7 @@
       "metrics": [
         "omi_capture_retry_cap_total"
       ],
-      "owner_title": "Retry cap quarantine rate (enforced by default)",
+      "owner_title": "Retry cap quarantine rate (enforcement off by default)",
       "owner_uid": "omi-backlog-retry-cap-quarantine-rate",
       "panel": null,
       "pointer": "/data/0/model/expr",
@@ -166,6 +166,19 @@
       ],
       "owner_title": "Held units with a spent re-drive budget",
       "owner_uid": "omi-backlog-held-redrive-budget-spent",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[8d])) or vector(0)",
+      "file": "alerts/backlog-state-machine.json",
+      "issues": [],
+      "metrics": [
+        "omi_backlog_state_transitions_total"
+      ],
+      "owner_title": "A held unit is still being re-driven after spending its re-drive budget",
+      "owner_uid": "omi-backlog-held-redrive-unit-looping",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -4012,7 +4025,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 269
+    "query_consumers": 270
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
