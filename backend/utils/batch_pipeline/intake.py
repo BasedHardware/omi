@@ -283,7 +283,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
             for job in jobs:
-                Scheduler.redrive_in_transaction(tx, job, time.time())
+                Scheduler.redrive_in_transaction(tx, job, time.time(), automatic=True)
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must
             # never ACK custody of unresolved units, including after 30 minutes.

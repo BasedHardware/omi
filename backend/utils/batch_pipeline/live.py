@@ -34,7 +34,7 @@ from config.backlog_state_machine import (
     MAX_RECORD_BARRIER_REDRIVES,
     RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS,
     RECORD_BARRIER_DEAD_LETTER_REASON,
-    RECORD_BARRIER_PARK_SECONDS,
+    RECORD_BARRIER_PARK_RECHECK_SECONDS,
     RECORD_BARRIER_REDRIVE_SECONDS,
     record_barrier_dead_letter_enabled,
 )
@@ -617,6 +617,21 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
         now = time.time()
         if latest.get('state') != 'record_pending' or latest.get('available_at', 0) > now:
             return None
+        if latest.get('barrier_dead_letter'):
+            # A parked dead letter is rechecked daily without admission. With the
+            # switch off (rollback) it returns to the ordinary barrier ladder, so
+            # parked rows are never stranded behind a far-future available_at.
+            if record_barrier_dead_letter_enabled():
+                latest['available_at'] = now + RECORD_BARRIER_PARK_RECHECK_SECONDS
+            else:
+                history = [*(latest.get('barrier_dead_letter_history') or []), latest.pop('barrier_dead_letter')]
+                latest['barrier_dead_letter_history'] = history
+                enqueued = latest.get('enqueued_at')
+                age = now - enqueued if isinstance(enqueued, (int, float)) else 0.0
+                delay = barrier_retry_delay(age) if record_drain_barrier_backoff_enabled() else 60
+                latest.update(barrier_redrives=0, barrier_unparked_at=now, available_at=now + delay)
+            tx.put('jobs', segment, latest)
+            return None
         lease = now + lease_seconds
         latest['available_at'] = lease
         tx.put('jobs', segment, latest)
@@ -675,7 +690,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                     if step == 'redrive':
                         delay = RECORD_BARRIER_REDRIVE_SECONDS
                     elif step == 'dead_letter':
-                        delay = RECORD_BARRIER_PARK_SECONDS
+                        delay = RECORD_BARRIER_PARK_RECHECK_SECONDS
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)

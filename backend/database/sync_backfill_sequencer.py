@@ -921,7 +921,13 @@ def owner_release_due(
 
 
 def redrive_job(
-    uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
+    uid: str,
+    job_id: str,
+    epoch: int,
+    *,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+    crashed: bool = True,
 ) -> Optional[dict[str, Any]]:
     """Retry queued dispatch within its cap; fence expired running work."""
     _require_production()
@@ -952,7 +958,9 @@ def redrive_job(
         # the fenced terminal handoff; refusing here would strand the owner.
         carry = dispatching or running_attempt_carry(owner)
         dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if carry else 0
-        expiries = running_expiries(owner) + (0 if dispatching else 1) if carry else 0
+        # A running expiry is a crash unless a budget deferral's delayed
+        # replacement is still pending (crashed=False from the sweeper).
+        expiries = running_expiries(owner) + (0 if dispatching or not crashed else 1) if carry else 0
         # Restore the persisted budget chain count across lease expiry.
         payload = dict(owner['active_payload'])
         deferrals = owner.get('active_budget_deferrals')

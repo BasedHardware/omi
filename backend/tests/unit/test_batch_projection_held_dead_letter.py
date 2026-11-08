@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from config.backlog_state_machine import ASSIGNMENT_HOLD_DEADLINE_SECONDS
 from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
 from utils.batch_pipeline import held_dead_letter as held_sweep
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
@@ -66,7 +67,12 @@ def test_expiry_never_bypasses_original_eligibility(blocked):
         seeded[RESULT]['owner_key'] = 'someone-else'
     client, store = store_for(seeded)
     assert not ProjectionReleaseStore(store).release('held', 100)
-    assert client.rows == seeded
+    expected = deepcopy(seeded)
+    if blocked == 'persisted':
+        # A persisted assignment hold never expires; its only write is the
+        # backlog-state-machine deadline stamp, never held_expired.
+        expected[RESULT]['assignment_hold_deadline_at'] = 100 + ASSIGNMENT_HOLD_DEADLINE_SECONDS
+    assert client.rows == expected
 
 
 def test_flag_off_old_held_behavior_is_byte_identical(monkeypatch):

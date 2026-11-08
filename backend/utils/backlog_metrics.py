@@ -22,6 +22,8 @@ TRANSITIONS = (
     'record_barrier_dead_letter',
     # A running sync job whose carried dispatch attempts reached the cap.
     'sync_running_cap_reached',
+    # An unrestorable assignment hold past its deadline (retained parking marker).
+    'assignment_hold_escalated',
 )
 TERMINAL_TRANSITIONS = Counter(
     'omi_backlog_state_transitions_total',

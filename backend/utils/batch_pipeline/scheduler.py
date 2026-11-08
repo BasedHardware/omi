@@ -1023,8 +1023,13 @@ class Scheduler:
         return True
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def redrive_in_transaction(tx: Transaction, job: dict, now: float, *, automatic: bool = False) -> bool:
         if job.get('state') != 'dead' or not job.get('merge_pending'):
+            return False
+        if automatic and held_redrive_budget_enabled() and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
+            # A retained held dead letter moves only through the counted nightly
+            # re-drive or an explicit operator redrive; a status poll would
+            # bypass held_redrives and the attempt reset.
             return False
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(

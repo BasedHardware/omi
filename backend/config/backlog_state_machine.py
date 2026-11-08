@@ -26,6 +26,7 @@ RETRY_CAP_SWITCH = 'CAPTURE_RETRY_CAP_ENFORCED'
 SYNC_ATTEMPT_CARRY_SWITCH = 'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED'
 HELD_REDRIVE_BUDGET_SWITCH = 'BATCH_HELD_REDRIVE_BUDGET_ENABLED'
 RECORD_BARRIER_DEAD_LETTER_SWITCH = 'RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED'
+ASSIGNMENT_HOLD_ESCALATION_SWITCH = 'BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED'
 
 # Automatic held re-drives per unit. Each grants a full scheduler attempt
 # budget, so a unit gets (MAX_HELD_REDRIVES + 1) budgets before it stops.
@@ -45,10 +46,18 @@ RECORD_BARRIER_DEAD_LETTER_AGE_SECONDS = 14 * 86400
 RECORD_BARRIER_REDRIVE_SECONDS = 7 * 86400
 MAX_RECORD_BARRIER_REDRIVES = 4
 # Parked rows stay record_pending (merge order, seal repair, erasure and the
-# missing-conversation cancel all key on that state) but are never due again
-# until an operator requeues them.
-RECORD_BARRIER_PARK_SECONDS = 10 * 365 * 86400
+# missing-conversation cancel all key on that state). They are not admitted
+# again until an operator requeues them or the switch is turned off.
 RECORD_BARRIER_DEAD_LETTER_REASON = 'conversation_not_completed'
+# A parked row is due again after this long. With the switch on it is only
+# re-parked (no admission); with the switch off it returns to the ladder, so
+# a rollback never strands parked rows behind a far-future available_at.
+RECORD_BARRIER_PARK_RECHECK_SECONDS = 86400
+
+# An assignment hold whose target never becomes restorable escalates (a parking
+# marker; the obligation, receipt and audio stay) after this long.
+ASSIGNMENT_HOLD_DEADLINE_SECONDS = 7 * 86400
+ASSIGNMENT_HOLD_ESCALATION_REASON = 'target_unrestorable'
 
 
 def retry_cap_enforced() -> bool:
@@ -65,3 +74,7 @@ def held_redrive_budget_enabled() -> bool:
 
 def record_barrier_dead_letter_enabled() -> bool:
     return kill_switch(RECORD_BARRIER_DEAD_LETTER_SWITCH)
+
+
+def assignment_hold_escalation_enabled() -> bool:
+    return kill_switch(ASSIGNMENT_HOLD_ESCALATION_SWITCH)

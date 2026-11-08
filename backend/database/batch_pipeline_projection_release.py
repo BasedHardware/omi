@@ -33,7 +33,13 @@ from config.batch_pipeline import (
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
 from utils.backlog_metrics import record_transition
-from config.backlog_state_machine import MAX_PROJECTION_REARMS, held_redrive_budget_enabled
+from config.backlog_state_machine import (
+    ASSIGNMENT_HOLD_DEADLINE_SECONDS,
+    ASSIGNMENT_HOLD_ESCALATION_REASON,
+    MAX_PROJECTION_REARMS,
+    assignment_hold_escalation_enabled,
+    held_redrive_budget_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +133,7 @@ class ProjectionReleaseStore:
         self.store = store
         self.expired = False
         self.rearm_exhausted = False
+        self.escalated = False
         self.ghost_budget = max(0, min(ghost_budget, GHOST_SETTLE_MAX_PER_PASS))
         self.ghost_settled = False
         self.ghost_skip: str | None = None
@@ -187,6 +194,17 @@ class ProjectionReleaseStore:
                 entry.get('held_expired_at')
             )
             attempts = entry.get('projection_release_attempts', int(entry.get('projection_redriven_at') is not None))
+            rearm_restored = (
+                # Rollback of the re-arm stop: only a receipt this feature marked
+                # exhausted regains the legacy one-time re-arm when budgeting is off.
+                expired
+                and entry.get('held_rearm_exhausted_at') is not None
+                and not held_redrive_budget_enabled()
+                and type(attempts) is int
+                and attempts >= MAX_RELEASE_ATTEMPTS
+            )
+            if rearm_restored:
+                attempts = 0
             if (
                 binding is None
                 or segment_id not in binding.segment_ids
@@ -235,6 +253,30 @@ class ProjectionReleaseStore:
                 if not expired or not finite_timestamp(expired_at) or expired_at >= dead_before:
                     return False
             restorable = self._target_restorable(transaction, binding)
+            if not restorable and entry.get('projection_state') == 'persisted':
+                # An assignment hold still owes multipart follow-ups, so it never
+                # expires. It still gets an owner and a deadline: after it, a
+                # retained escalation marker (no state, receipt, payload, job or
+                # audio change). A later restored target still releases it.
+                if entry.get('assignment_hold_escalated_at') is not None or not assignment_hold_escalation_enabled():
+                    return False
+                deadline = entry.get('assignment_hold_deadline_at')
+                if deadline is None:
+                    transaction.update(
+                        self.store.ref('results', segment_id),
+                        {'assignment_hold_deadline_at': now + ASSIGNMENT_HOLD_DEADLINE_SECONDS},
+                    )
+                    return False
+                if not finite_timestamp(deadline) or deadline > now:
+                    return False
+                transaction.update(
+                    self.store.ref('results', segment_id),
+                    {
+                        'assignment_hold_escalated_at': now,
+                        'assignment_hold_escalation_reason': ASSIGNMENT_HOLD_ESCALATION_REASON,
+                    },
+                )
+                return 'assignment_hold_escalated'
             if not restorable:
                 # Only settled assignment holds expire. Persisted multipart
                 # suffixes still owe follow-ups; privacy holds never qualify.
@@ -288,6 +330,8 @@ class ProjectionReleaseStore:
                 reset['held_deadline_at'] = None
             if expired:
                 reset.update(held_expired_at=None, held_expired_reason=None)
+            if 'held_rearm_exhausted_at' in entry:
+                reset['held_rearm_exhausted_at'] = None
             if entry.get('lineage_quarantine_version') == 1:
                 # Old-binaries fence for the held receipt; the receipt is gone.
                 reset['protocol_version'] = 1
@@ -318,11 +362,14 @@ class ProjectionReleaseStore:
         if self.ghost_settled and outcome[2]:
             logger.warning('event=batch_projection_ghost_cohort outcome=invalid_fallback count=1')
         self.rearm_exhausted = outcome == 'expired_rearm_exhausted'
+        self.escalated = outcome == 'assignment_hold_escalated'
+        if self.escalated:
+            record_transition('assignment_hold_escalated')
         self.expired = outcome == 'expired' or self.rearm_exhausted
         if self.rearm_exhausted:
             record_transition('projection_rearm_exhausted')
         released = outcome is True
-        if released or self.expired or self.ghost_settled:
+        if released or self.expired or self.ghost_settled or self.escalated:
             try:
                 mirror_refresh(
                     self.store.store.namespace,

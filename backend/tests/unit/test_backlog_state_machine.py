@@ -37,6 +37,7 @@ SWITCHES = (
     sm.SYNC_ATTEMPT_CARRY_SWITCH,
     sm.HELD_REDRIVE_BUDGET_SWITCH,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH,
+    sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH,
 )
 
 
@@ -63,10 +64,12 @@ def test_switches_are_registered_safety_kill_switches_default_on(monkeypatch):
         assert KILL_SWITCHES[name] is True
     assert sm.retry_cap_enforced() and sm.sync_attempt_carry_enabled()
     assert sm.held_redrive_budget_enabled() and sm.record_barrier_dead_letter_enabled()
+    assert sm.assignment_hold_escalation_enabled()
     for name in SWITCHES:
         monkeypatch.setenv(name, 'false')
     assert not sm.retry_cap_enforced() and not sm.sync_attempt_carry_enabled()
     assert not sm.held_redrive_budget_enabled() and not sm.record_barrier_dead_letter_enabled()
+    assert not sm.assignment_hold_escalation_enabled()
 
 
 # 1. Retry cap enforced by default ------------------------------------------------
@@ -193,16 +196,61 @@ def test_delayed_queue_dispatch_retries_are_not_terminalized_by_default(db, monk
     assert decision.reached and not decision.serving
 
 
-def test_budget_deferral_chain_keeps_its_own_count_and_terminal(db, monkeypatch):
-    account, epoch = running_owner(db, monkeypatch, attempts='2')
-    for _ in range(3):
-        assert registry.begin_job(account, 'crashy', epoch, now=NOW)
-        assert registry.note_budget_deferral(account, 'crashy', epoch, 1, now=NOW)
-        expired = NOW + timedelta(seconds=registry.LEASE_SECONDS + 1)
-        replacement = registry.redrive_job(account, 'crashy', epoch, now=expired)
-        # budget_chain_exhausted owns this chain; its dispatch count keeps the legacy reset.
-        assert replacement['dispatch_attempt'] == 0
-        epoch = replacement['epoch']
+def finalizer_mocks(monkeypatch):
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _: 'lock')
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_sync_job_run_lock', lambda _: 'lock')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', Mock())
+    failure = Mock(
+        return_value=sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED, job={'status': 'failed'}
+        )
+    )
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', failure)
+    monkeypatch.setattr(uid_sequencer, '_cleanup_capped_chain_job_side_effects', Mock(return_value=True))
+    monkeypatch.setattr(uid_sequencer, 'kick', Mock())
+    monkeypatch.setattr(uid_sequencer, '_dispatch', Mock())
+    return failure
+
+
+def test_budget_deferred_owner_that_keeps_crashing_reaches_a_terminal_outcome(db, monkeypatch):
+    """Review wave 1 (finding 2): one budget deferral must not disable crash accounting.
+
+    The chain deferred once, then every replacement crashed (lease expired, no
+    run lock, no live deferred_until marker). The UID lane must terminate.
+    """
+    account, epoch = running_owner(db, monkeypatch, attempts='5')
+    failure = finalizer_mocks(monkeypatch)
+    now, outcomes = NOW, []
+    for _ in range(8):
+        owner = registry.get_owner(account)
+        if not owner.get('active_job_id'):
+            break
+        epoch = owner['active_epoch']
+        assert registry.begin_job(account, 'crashy', epoch, now=now)
+        assert registry.note_budget_deferral(account, 'crashy', epoch, 1, now=now)
+        now += timedelta(seconds=registry.LEASE_SECONDS + 1)
+        outcomes.append(uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=now))
+    assert outcomes[-1] == 'dispatch_retry_cap_reached', outcomes
+    assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
+    assert not registry.get_owner(account).get('active_job_id')
+
+
+def test_expiry_during_a_live_budget_deferral_is_not_counted_as_a_crash(db, monkeypatch):
+    import time as _time
+
+    account, epoch = running_owner(db, monkeypatch, attempts='5')
+    finalizer_mocks(monkeypatch)
+    monkeypatch.setattr(
+        uid_sequencer, 'get_sync_job', lambda _: {'status': 'processing', 'deferred_until': _time.time() + 3600}
+    )
+    now = NOW
+    for _ in range(4):
+        epoch = registry.get_owner(account)['active_epoch']
+        assert registry.begin_job(account, 'crashy', epoch, now=now)
+        assert registry.note_budget_deferral(account, 'crashy', epoch, 1, now=now)
+        now += timedelta(seconds=registry.LEASE_SECONDS + 1)
+        assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=now) == 'lease_expired'
+    assert registry.get_owner(account)['running_expiries'] == 0
 
 
 def test_running_owner_at_cap_with_terminal_job_is_not_stranded(db, monkeypatch):
@@ -337,6 +385,57 @@ def test_held_budget_switch_off_keeps_legacy_unbounded_nightly_redrive(setup, mo
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
 
 
+@pytest.mark.parametrize('reason', ['held_expired', sm.HELD_EXHAUSTED_REASON])
+def test_client_poll_never_redrives_a_retained_held_dead_letter(monkeypatch, reason):
+    """Review wave 1 (finding 1): the real status-poll path, not RecoveryStore.
+
+    durable_status() redrove every dead merge-pending unit on each phone poll,
+    which bypassed held_redrives and the attempt reset. Only an operator or the
+    counted nightly pass may move a retained held dead letter.
+    """
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    queue = Scheduler(store)
+    queue.pull(100)
+    store.rows['jobs', 'segment'].update(
+        state='dead',
+        token='',
+        lease_until=0,
+        merge_pending=True,
+        dead_letter_reason=reason,
+        held_redrives=sm.MAX_HELD_REDRIVES,
+        attempt=5,
+    )
+    durable_status(store, 'synthetic-owner', 'bp_first')
+    job = store.rows['jobs', 'segment']
+    assert job['state'] == 'dead' and job['attempt'] == 5
+    assert queue.pull(9999999999) == []
+    # Explicit operator recovery still works.
+    assert queue.redrive_dead('segment', 10**10)
+    assert store.rows['jobs', 'segment']['state'] == 'ready'
+
+
+def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    store.rows['jobs', 'segment'].update(state='dead', token='', lease_until=0)
+    durable_status(store, 'synthetic-owner', 'bp_first')
+    assert store.rows['jobs', 'segment']['state'] == 'ready'
+
+
 def test_nightly_tick_counts_exhausted_separately(monkeypatch):
     from utils.batch_pipeline import held_dead_letter as sweep
 
@@ -400,6 +499,49 @@ def test_projection_rearm_counts_and_stops_after_max(projection, monkeypatch, sw
         assert entry['projection_state'] == 'quarantine_held'
 
 
+def test_rearm_exhausted_receipt_releases_after_budget_switch_off_and_target_restored(projection, monkeypatch):
+    """Review wave 1 (finding 3): on -> exhausted -> off -> restored must release."""
+    from database.batch_pipeline_projection_release import MAX_RELEASE_ATTEMPTS, ProjectionReleaseStore
+
+    rows, store_for = projection
+    result = ('batch_pipeline_prod_results', 'held')
+    conversation = ('users', 'synthetic-owner', 'conversations', 'rec-target')
+    client, store = store_for(
+        rows(
+            discarded=True,
+            held_deadline_at=1,
+            projection_release_attempts=MAX_RELEASE_ATTEMPTS,
+            held_expired_rearms=sm.MAX_PROJECTION_REARMS,
+        )
+    )
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 2.0) is False and release.rearm_exhausted
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'false')
+    client.rows[conversation]['discarded'] = False
+    assert ProjectionReleaseStore(store).release('held', 3.0) is True
+    entry = client.rows[result]
+    assert entry['projection_state'] == 'pending'
+    assert entry.get('held_rearm_exhausted_at') is None
+
+
+def test_rearm_exhausted_receipt_stays_spent_while_budget_switch_on(projection):
+    from database.batch_pipeline_projection_release import MAX_RELEASE_ATTEMPTS, ProjectionReleaseStore
+
+    rows, store_for = projection
+    conversation = ('users', 'synthetic-owner', 'conversations', 'rec-target')
+    client, store = store_for(
+        rows(
+            discarded=True,
+            held_deadline_at=1,
+            projection_release_attempts=MAX_RELEASE_ATTEMPTS,
+            held_expired_rearms=sm.MAX_PROJECTION_REARMS,
+        )
+    )
+    assert ProjectionReleaseStore(store).release('held', 2.0) is False
+    client.rows[conversation]['discarded'] = False
+    assert ProjectionReleaseStore(store).release('held', 3.0) is False
+
+
 # 4. record_pending with a present but unfinished conversation -----------------------
 
 DAY = 86400.0
@@ -452,22 +594,61 @@ def test_unfinished_conversation_redrives_weekly_then_dead_letters(drain):
         assert job['barrier_redrives'] == spent and job['state'] == 'record_pending'
         clock[0] += delay
     job, delay = run(barrier(live, 'processing'))
-    assert delay == sm.RECORD_BARRIER_PARK_SECONDS
+    assert delay == sm.RECORD_BARRIER_PARK_RECHECK_SECONDS
     assert job['state'] == 'record_pending'  # Custody and erasure keep owning the row.
     assert job['barrier_dead_letter']['reason'] == sm.RECORD_BARRIER_DEAD_LETTER_REASON
     assert job['barrier_dead_letter']['redrives'] == sm.MAX_RECORD_BARRIER_REDRIVES
     assert job['audio_uri'] == 'gs://synthetic/record'
     assert transitions('record_barrier_redrive') == redrives + sm.MAX_RECORD_BARRIER_REDRIVES
     assert transitions('record_barrier_dead_letter') == dead + 1
-    # Parked: never due again, so the drain stops reading it.
-    clock[0] += 365 * DAY
-    assert store.due('record_pending', clock[0], 100) == []
+    # Parked: not due inside the daily recheck window; a recheck never admits
+    # it (test_parked_row_is_rechecked_without_admission_while_the_switch_is_on).
+    assert store.due('record_pending', clock[0] + sm.RECORD_BARRIER_PARK_RECHECK_SECONDS - 1, 100) == []
     # Operator exit: one fresh budget, history retained.
     assert live.requeue_barrier_dead_letter(store, 's', clock[0])
     job = store.rows['jobs', 's']
     assert job['available_at'] == clock[0] and job['barrier_redrives'] == 0
     assert 'barrier_dead_letter' not in job and len(job['barrier_dead_letter_history']) == 1
     assert not live.requeue_barrier_dead_letter(store, 's', clock[0])
+
+
+def park(live, run, clock):
+    for _ in range(sm.MAX_RECORD_BARRIER_REDRIVES + 1):
+        job, delay = run(barrier(live, 'in_progress'))
+        clock[0] += delay
+    assert job['barrier_dead_letter']
+    return job
+
+
+def test_parked_row_returns_to_the_ladder_after_the_switch_is_turned_off(drain, monkeypatch):
+    """Review wave 1 (finding 4): park with the switch on, then roll back."""
+    live, store, seed, run, clock = drain
+    seed(15 * DAY)
+    park(live, run, clock)
+    monkeypatch.setenv(sm.RECORD_BARRIER_DEAD_LETTER_SWITCH, 'false')
+    clock[0] += sm.RECORD_BARRIER_PARK_RECHECK_SECONDS
+    assert store.due('record_pending', clock[0], 100) == ['s']
+    admission = Mock(side_effect=AssertionError('rollback reschedules before admitting'))
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    asyncio.run(live.drain_recordings(store))
+    job = store.rows['jobs', 's']
+    assert 'barrier_dead_letter' not in job and job['barrier_dead_letter_history']
+    assert job['available_at'] - clock[0] == 3600  # back on the #24863 ladder
+    assert job['audio_uri'] == 'gs://synthetic/record'
+
+
+def test_parked_row_is_rechecked_without_admission_while_the_switch_is_on(drain, monkeypatch):
+    live, store, seed, run, clock = drain
+    seed(15 * DAY)
+    parked = park(live, run, clock)
+    clock[0] += sm.RECORD_BARRIER_PARK_RECHECK_SECONDS
+    assert store.due('record_pending', clock[0], 100) == ['s']
+    admission = Mock(side_effect=AssertionError('a parked row is not re-admitted'))
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    asyncio.run(live.drain_recordings(store))
+    job = store.rows['jobs', 's']
+    assert job['barrier_dead_letter'] == parked['barrier_dead_letter']
+    assert job['available_at'] - clock[0] == sm.RECORD_BARRIER_PARK_RECHECK_SECONDS
 
 
 @pytest.mark.parametrize(
@@ -557,3 +738,52 @@ def test_assignment_held_releases_automatically_only_when_target_restorable(proj
     else:
         assert result['projection_state'] == 'persisted'
         assert 'held_deadline_at' not in result
+
+
+def test_unrestorable_assignment_hold_escalates_after_its_deadline_and_keeps_its_obligation(projection, monkeypatch):
+    """Review wave 1 (finding 5): every non-terminal state has an owner and a deadline."""
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    rows, store_for = projection
+    client, store = store_for(rows(projection_state='persisted', discarded=True, payload={'words': ['kept']}))
+    job_key, result_key = ('batch_pipeline_prod_jobs', 'held'), ('batch_pipeline_prod_results', 'held')
+    client.rows[job_key]['state'] = 'committed'
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: [])
+    monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ['held'])
+    release.release_scan_pass(store, limit=2, after_id=None, now=500.0)
+    entry = client.rows[result_key]
+    assert entry['assignment_hold_deadline_at'] == 500.0 + sm.ASSIGNMENT_HOLD_DEADLINE_SECONDS
+    assert 'assignment_hold_escalated_at' not in entry
+    before = transitions('assignment_hold_escalated')
+    later = 501.0 + sm.ASSIGNMENT_HOLD_DEADLINE_SECONDS
+    release.release_scan_pass(store, limit=2, after_id=None, now=later)
+    entry, job = client.rows[result_key], client.rows[job_key]
+    assert entry['assignment_hold_escalated_at'] == later
+    assert entry['assignment_hold_escalation_reason'] == 'target_unrestorable'
+    # A parking transition: obligation, receipt, payload and audio all retained.
+    assert entry['projection_state'] == 'persisted' and entry['payload'] == {'words': ['kept']}
+    assert entry['projection']['state'] == 'quarantined'
+    assert job['recovery_state'] == 'held' and job['audio_uri'] == 'gs://synthetic/audio'
+    assert transitions('assignment_hold_escalated') == before + 1
+    # Idempotent: a later pass does not re-escalate or re-count.
+    release.release_scan_pass(store, limit=2, after_id=None, now=later + 10)
+    assert client.rows[result_key]['assignment_hold_escalated_at'] == later
+    assert transitions('assignment_hold_escalated') == before + 1
+    # A restored target still releases an escalated hold automatically.
+    client.rows[('users', 'synthetic-owner', 'conversations', 'rec-target')]['discarded'] = False
+    counts, _ = release.release_scan_pass(store, limit=2, after_id=None, now=later + 20)
+    assert counts['released'] == 1
+
+
+def test_assignment_hold_escalation_kill_switch_writes_nothing(projection, monkeypatch):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv(sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH, 'false')
+    rows, store_for = projection
+    client, store = store_for(rows(projection_state='persisted', discarded=True))
+    client.rows[('batch_pipeline_prod_jobs', 'held')]['state'] = 'committed'
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: [])
+    monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ['held'])
+    release.release_scan_pass(store, limit=2, after_id=None, now=500.0)
+    assert 'assignment_hold_deadline_at' not in client.rows[('batch_pipeline_prod_results', 'held')]

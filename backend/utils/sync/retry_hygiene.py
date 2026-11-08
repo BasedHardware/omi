@@ -56,14 +56,22 @@ def running_cap(uid: str, owner: dict) -> RetryCap | None:
 
 
 def running_attempt_carry(owner: dict[str, Any]) -> bool:
-    """Whether a running owner's lease expiry counts as a spent delivery.
+    """Whether a running owner's lease expiry carries dispatch_attempt.
 
-    A budget-deferral chain keeps its own count (active_budget_deferrals) and its
-    own terminal (budget_chain_exhausted), so it keeps the legacy reset.
+    Budget-deferral chains carry too: their own count (active_budget_deferrals)
+    bounds deferrals, while running_expiries bounds crashes. A deferral that is
+    still pending is not a crash; the caller passes that from the job's live
+    deferred_until marker (see deferral_pending).
     """
-    deferrals = owner.get('active_budget_deferrals')
-    budget_chain = isinstance(deferrals, int) and not isinstance(deferrals, bool) and deferrals > 0
-    return not budget_chain and sync_attempt_carry_enabled()
+    return sync_attempt_carry_enabled()
+
+
+def deferral_pending(job: Any, now_seconds: float) -> bool:
+    """A budget deferral's delayed replacement has not run yet (live marker)."""
+    if not isinstance(job, dict):
+        return False
+    marker = job.get('deferred_until')
+    return isinstance(marker, (int, float)) and not isinstance(marker, bool) and now_seconds < marker
 
 
 def reconcile_dispatch_cap(
