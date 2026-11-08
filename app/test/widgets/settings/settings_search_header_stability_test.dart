@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -18,6 +19,15 @@ import 'package:omi/utils/platform/platform_manager.dart';
 // and the field sits 4 pt off the cards. Header height must remain constant (48 pt)
 // and search field must align with the settings cards (padding left OmiSpacing.lg = 20 pt).
 
+/// No device connected: the Device row reads Disconnected.
+class _Device extends ChangeNotifier implements DeviceProvider {
+  @override
+  bool get isConnected => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 Widget _buildHarness() {
   return MultiProvider(
     providers: [
@@ -25,6 +35,7 @@ Widget _buildHarness() {
       ChangeNotifierProvider<HomeProvider>.value(value: HomeProvider()),
       ChangeNotifierProvider<UserProvider>.value(value: UserProvider()),
       ChangeNotifierProvider<UsageProvider>.value(value: UsageProvider()),
+      ChangeNotifierProvider<DeviceProvider>.value(value: _Device()),
     ],
     child: const MaterialApp(
       localizationsDelegates: [
