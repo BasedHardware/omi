@@ -4107,6 +4107,7 @@ export interface PendingWorkItem {
   duration_seconds: number;
   id: string;
   kind: "conversation" | "sync_job";
+  recording_count?: number;
   started_at: string | null;
   state: "queued" | "transcribing" | "summarizing";
   updated_at: string | null;
@@ -19296,7 +19297,7 @@ export async function save_paypal_payment_details_v1_paypal_payment_details_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function pending_work_v1_pending_work_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PendingWorkSnapshot> {
+export async function pending_work_v1_pending_work_get(header: { X_Omi_App_Channel?: string | null, X_Omi_Home_Ownership?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PendingWorkSnapshot> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/pending-work`;
   const _search = "";
@@ -19305,6 +19306,8 @@ export async function pending_work_v1_pending_work_get(header: { authorization?:
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.X_Omi_Home_Ownership !== undefined ? { "X-Omi-Home-Ownership": String(header.X_Omi_Home_Ownership) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),

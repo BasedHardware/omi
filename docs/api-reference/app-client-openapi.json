@@ -25651,6 +25651,11 @@
             "title": "Kind",
             "type": "string"
           },
+          "recording_count": {
+            "default": 1,
+            "title": "Recording Count",
+            "type": "integer"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -69462,6 +69467,38 @@
       "get": {
         "operationId": "pending_work_v1_pending_work_get",
         "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Home-Ownership",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Home-Ownership"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
