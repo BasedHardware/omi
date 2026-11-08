@@ -82,6 +82,10 @@
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
     {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED",
+      "why": "Reviewed 2026-11-07 (settle PR, David 16:24Z de6f03): read only in database/batch_pipeline_projection_release.py, reached only from Serving release_held_scan (utils/batch_pipeline/serving.py:316) on the serving maintenance leader; the GPU worker never runs the release scan, so the flag is not executed there."
+    },
+    {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
     },
