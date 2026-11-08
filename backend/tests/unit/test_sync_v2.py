@@ -1551,7 +1551,6 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=False)
         sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
         sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
         sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
         sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
             return_value=MagicMock(allowed=True, reason=None, retry_after=None)
@@ -3607,7 +3606,6 @@ class TestV2EndpointExecution:
         sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=False)
         sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
         sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
         sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
         sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
             return_value=MagicMock(allowed=True, reason=None, retry_after=None)

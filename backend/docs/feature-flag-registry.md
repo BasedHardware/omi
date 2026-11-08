@@ -446,7 +446,6 @@ and an explicit empty literal renders as `''`.
 | `STT_VOCAB_MODE_SHADOW_PERCENT` | Shadow vocabulary source-read sample percentage; default 1 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | dazheng |
 | `SUMMARY_DEBT_REPAIR_ENABLED` | Code default false; production off (held with the 2026-10-20 deferral) on scheduled backend-sync; bounded completed server-minimum repair; requires first-summary gate | backend | env | closed | — | — | {value: 'false', category: rollout} | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` | Bounded fresh-transaction retries for sync assignment contention | backend | env | closed | declared | false | true | — | pending | undecided | 2026-11-04 | dazheng |
-| `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | with_legacy | off | 2026-11-07 | dazheng |
 | `SYNC_BACKFILL_ORDER` | Default oldest; newest selects descending pending capture time and earlier direct-task eligibility for the selected UID cohort | backend | env | closed | — | — | newest | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_BACKFILL_ORDER_PERCENT` | Stable SHA-256 UID cohort for newest ordering; default 100 only when order is newest | backend | env | closed | — | — | 0 (cloud_run/backend-sync-backfill); 100 (cloud_run/backend-sync) | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` | Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
@@ -1582,7 +1581,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
-| `CLIENT_TELEMETRY_TRANSPORT` | 2026-11-08 | Previously unregistered dead backend declaration: migration_flags() had no serving callers, only a unit test. Collector ingestion was unconditional. Retired for PROJECTION_DRAIN_LIVE_TARGET_BACKOFF under the net-zero flag rule; the separate macOS PostHog transport flag is unchanged. |
+| `SYNC_BACKFILL_INFLIGHT_LIMIT` | 2026-11-08 | Counted seed slot replaced by PROJECTION_DRAIN_LIVE_TARGET_BACKOFF. Only reader fed unused try_acquire_backfill_slot; C6 retired the v1 caller and v2 does not acquire Redis admission slots. Registry already specified removal with C6. Legacy token-fenced release and daily-cap controls remain. |
 | `SYNC_LINEAGE_S1_REQUIRED` | 2026-10-20 | David 2026-10-20, DEC-SYN-005 graduate |
 | `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-SYN-007 graduate |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | 2026-10-20 | David 2026-10-20, DEC-SYN-008 graduate |

@@ -77,9 +77,10 @@ def _accept(db, payload, owner=OWNER, now=NOW):
 
 
 def test_migration_flags_default_off(monkeypatch):
+    monkeypatch.delenv("CLIENT_TELEMETRY_TRANSPORT", raising=False)
     monkeypatch.delenv("CLIENT_TELEMETRY_READER", raising=False)
     monkeypatch.delenv("CLIENT_TELEMETRY_RETIREMENT", raising=False)
-    assert migration_flags() == {"reader": False, "retirement": False}
+    assert migration_flags() == {"transport_shadow": False, "reader": False, "retirement": False}
 
 
 def test_invalid_payloads_reject_the_whole_batch():
@@ -538,11 +539,7 @@ def _app(owner: str | None):
     return app
 
 
-@pytest.mark.parametrize('retired_transport', ['off', 'on'])
-def test_http_auth_size_and_admin_gate(monkeypatch, retired_transport):
-    # The retired backend declaration never gated ingestion; client rollout
-    # remains owned by the separate macOS PostHog flag.
-    monkeypatch.setenv('CLIENT_TELEMETRY_TRANSPORT', retired_transport)
+def test_http_auth_size_and_admin_gate(monkeypatch):
     db = TelemetryMemoryFirestore()
     monkeypatch.setattr(store, "get_firestore_client", lambda: db)
     monkeypatch.setenv("ADMIN_KEY", "test-admin-key-value-0123456789")

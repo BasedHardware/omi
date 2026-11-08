@@ -418,13 +418,14 @@ class TelemetryContractError(Exception):
 
 
 def migration_flags(environ: dict[str, str] | None = None) -> dict[str, bool]:
-    """Unused reader and retirement declarations. Both default off."""
+    """Reader, transport-shadow and retirement flags. All default off."""
     env = os.environ if environ is None else environ
 
     def enabled(name: str) -> bool:
         return env.get(name, "off").strip().lower() in _FLAG_TRUE
 
     return {
+        "transport_shadow": enabled("CLIENT_TELEMETRY_TRANSPORT"),
         "reader": enabled("CLIENT_TELEMETRY_READER"),
         "retirement": enabled("CLIENT_TELEMETRY_RETIREMENT"),
     }

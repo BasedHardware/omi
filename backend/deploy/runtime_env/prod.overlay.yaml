@@ -1247,9 +1247,6 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
@@ -1606,9 +1603,6 @@ overlay:
           # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
-            category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'

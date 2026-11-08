@@ -257,8 +257,9 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
         elif name == 'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF':
-            # The retired telemetry declaration lived outside SCOPE, so this
-            # helper needs an owned exception rather than claiming a seed slot.
+            assert entry['replaces'] == 'SYNC_BACKFILL_INFLIGHT_LIMIT'
+            assert 'SYNC_BACKFILL_INFLIGHT_LIMIT' not in names
+            assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
         else:

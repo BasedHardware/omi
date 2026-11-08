@@ -1243,10 +1243,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
-              category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
               value: 'off'
@@ -1552,10 +1548,6 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
-              category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
@@ -3738,10 +3730,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
-              category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
               value: 'on'
@@ -4180,10 +4168,6 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
-              category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
