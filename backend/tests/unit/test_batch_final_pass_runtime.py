@@ -33,7 +33,8 @@ def test_all_production_pass_hosts_have_explicit_consistent_switch(config, monke
     for platform, name in HOSTS:
         if platform == 'cloud_run':
             env = {entry['name']: entry.get('value') for entry in state['services'][name]['env']}
-            assert env[FLAG] == 'true'
+            # backend-integration has no diarizer URL and is switched off alone (ruling B).
+            assert env[FLAG] == ('false' if name == 'backend-integration' else 'true')
 
 
 @pytest.mark.parametrize('platform,name', HOSTS)
