@@ -196,7 +196,14 @@ export function decodeStoredDoc(
   if (key.startsWith(`${STORE_PREFIX}:lease:`)) {
     if (!data?.payload)
       throw new SyntaxError("wall-series lease doc has no payload");
-    return JSON.parse(data.payload);
+    const lease = JSON.parse(data.payload);
+    if (
+      typeof lease?.holder !== "string" ||
+      typeof lease?.token !== "string" ||
+      typeof lease?.until !== "number"
+    )
+      throw new SyntaxError("wall-series lease doc has an invalid shape");
+    return lease as Lease;
   }
   return decodeStoredPayload(data);
 }
