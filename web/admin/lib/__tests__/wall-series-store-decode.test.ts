@@ -44,7 +44,14 @@ describe("decodeStoredPayload", () => {
         payload: '{"holder":"h","token":"a","until":5}',
       })
     ).toEqual({ holder: "h", token: "a", until: 5 });
-    for (const payload of ["null", "{}", '{"token":"a"}', "[]"]) {
+    for (const payload of [
+      "null",
+      "{}",
+      '{"token":"a"}',
+      "[]",
+      '{"holder":"h","token":"a","until":-1e309}',
+      '{"holder":"h","token":"a","until":"5"}',
+    ]) {
       expect(() => decodeStoredDoc(leaseKey("headline"), { payload })).toThrow(
         SyntaxError
       );

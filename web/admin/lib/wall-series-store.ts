@@ -200,7 +200,7 @@ export function decodeStoredDoc(
     if (
       typeof lease?.holder !== "string" ||
       typeof lease?.token !== "string" ||
-      typeof lease?.until !== "number"
+      !Number.isFinite(lease?.until)
     )
       throw new SyntaxError("wall-series lease doc has an invalid shape");
     return lease as Lease;
