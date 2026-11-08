@@ -20,5 +20,7 @@ Do not TTL unresolved intents or infer unreferenced status from age alone.
 This change records candidates only and does not run or provision a janitor.
 
 Each put adds one Firestore intent read and, for a new candidate, one create.
+When concurrent first puts race on the same candidate, the loser's create
+returns AlreadyExists and it reads the candidate once more (two reads total).
 It adds no GCS or KMS calls. The production write gate remains closed pending
 C4; no runtime flags, bucket permissions or deployment values change.

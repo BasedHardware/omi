@@ -137,6 +137,19 @@ def test_enabled_write_requires_real_bindings(enabled):
         assert any(f'enabled writes require a real {name}' in error for error in errors)
 
 
+@pytest.mark.parametrize('percent,needs_bindings', [('0', False), ('0.0', False), (' 0 ', False), ('0.01', True), ('bad', True)])
+def test_enabled_write_binding_check_parses_percent_numerically(percent, needs_bindings):
+    document = runtime()
+    bindings = document['environments']['dev']['gke']['pusher']['env']
+    bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = 'true'
+    bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = percent
+    for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
+        bindings[name]['value'] = ''
+    errors = validator.validate_write_admission('dev', document['environments']['dev'])
+    missing = [error for error in errors if 'enabled writes require a real' in error]
+    assert bool(missing) is needs_bindings
+
+
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
 @pytest.mark.parametrize('plane,service', validator.EXPECTED_SERVICES)
 @pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '0.01'), ('true', '100')])
