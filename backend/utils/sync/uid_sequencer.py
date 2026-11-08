@@ -640,6 +640,10 @@ def reconcile_uid(
     replacement = registry.redrive_job(uid, job_id, epoch, now=current, crashed=not pending_deferral)
     if replacement is None:
         return 'raced'
+    if outcome == 'lease_expired' and not pending_deferral:
+        from utils.sync.retry_hygiene import running_cap_observed
+
+        running_cap_observed(owner)
     logger.warning(
         'event=sync_uid_sequencer action=sweep outcome=%s job_id=%s uid_hash=%s',
         outcome,

@@ -46,22 +46,26 @@ A running lease expiry keeps the epoch bump that fences the dead worker, carries
 `deferred_until` marker is live is not a crash. `dispatch_attempt_base` restarts
 the legacy dispatching-deadline budget at each new epoch, exactly as main's reset
 did, so the carry never spends that budget. Alert: `omi-backlog-sync-running-cap-rate`
-(fires only with class 1 on).
+(fires only with class 1 on). With class 1 off, every running-lease expiry at or
+over the cap is still redriven, never terminalized, and records
+`sync_running_cap_observed` after the redrive commits. Alert:
+`omi-backlog-sync-running-cap-unenforced`.
 
 ## Classes 3 and 6 (counter): held re-drives
 
-Every held re-drive (nightly re-drive, operator requeue, status poll of a
-`held_expired` dead letter) goes through one helper:
+Every held re-drive (nightly re-drive, operator requeue, operator
+`/redrive-dead` or status poll of a `held_expired` dead letter) goes through one
+helper:
 the counter increments `held_redrives`, and class 3 resets `attempt` to 0 and keeps
 the prior value in `held_redrive_last_attempt`. The nightly scan and committed
-poll re-drives record `held_redrive_budget_spent` at or over 3 re-drives.
+poll and `/redrive-dead` re-drives record `held_redrive_budget_spent` at or over 3 re-drives.
 Alert: `omi-backlog-held-redrive-budget-spent`. There is no terminal stop in core;
 it ships in the follow-up branch behind its own default-off switch.
 
 ## Metrics
 
 `omi_backlog_state_transitions_total{transition}`: `sync_running_cap_reached`,
-`held_redrive_budget_spent`. Batch and sync cap decisions are in
+`sync_running_cap_observed`, `held_redrive_budget_spent`. Batch and sync cap decisions are in
 `omi_capture_retry_cap_total{check,outcome}`. Counted once per committed
 transaction, never inside a retryable callback.
 

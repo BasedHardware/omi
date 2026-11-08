@@ -8,6 +8,7 @@ Classes from the 2026-11-07 backlog root-cause review:
 6. (counter) held re-drives are counted and a spent budget is reported.
 """
 
+from copy import deepcopy
 from datetime import timedelta
 from unittest.mock import Mock
 from uuid import uuid4
@@ -374,6 +375,67 @@ def test_running_cap_only_observes_while_class_1_is_off(db, monkeypatch, class1,
     assert registry.get_owner(account)['running_expiries'] == 2
 
 
+def decisions(check, outcome):
+    from utils.capture.retry_cap import DECISIONS
+
+    return DECISIONS.labels(check, outcome)._value.get()
+
+
+@pytest.mark.parametrize('class1', [None, 'false', 'true'])
+def test_unenforced_running_cap_is_observed_and_alertable(db, monkeypatch, class1):
+    """Custody review (luna-core-2): class 1 unset and CAPTURE_COVERAGE_MODE off.
+
+    A running lease that expires at the cap is redriven, never terminalized,
+    and every such expiry records sync_running_cap_observed (alert
+    omi-backlog-sync-running-cap-unenforced) plus a would_quarantine decision.
+    Class 1 on is the control: the same expiry finalizes and is not "observed".
+    """
+    if class1 is not None:
+        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
+    account, expired = at_cap_running_owner(db, monkeypatch)
+    failure = finalizer_mocks(monkeypatch)
+    dispatch = Mock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    observed = transitions('sync_running_cap_observed')
+    would = decisions('sequencer_running', 'would_quarantine')
+    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
+    if class1 == 'true':
+        assert outcome == 'dispatch_retry_cap_reached'
+        failure.assert_called_once()
+        assert transitions('sync_running_cap_observed') == observed
+        return
+    assert outcome == 'lease_expired'
+    dispatch.assert_called_once()
+    failure.assert_not_called()
+    owner = registry.get_owner(account)
+    assert owner['active_job_id'] == 'crashy' and owner['running_expiries'] == 2
+    assert transitions('sync_running_cap_observed') == observed + 1
+    assert decisions('sequencer_running', 'would_quarantine') == would + 1
+    # Over the cap: the next expiry is observed again, still never terminalized.
+    replacement_epoch = owner['active_epoch']
+    assert registry.begin_job(account, 'crashy', replacement_epoch, now=expired)
+    again = expired + timedelta(seconds=registry.LEASE_SECONDS + 1)
+    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=again) == 'lease_expired'
+    failure.assert_not_called()
+    assert transitions('sync_running_cap_observed') == observed + 2
+
+
+@pytest.mark.parametrize('case', ['below_cap', 'carry_off'])
+def test_running_cap_observation_needs_a_carried_count_at_the_cap(db, monkeypatch, case):
+    # carry_off: a cap of 1 is reached on the first expiry, but with class 2 off
+    # there is no carried count to observe (main's reset).
+    if case == 'carry_off':
+        monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, 'false')
+    account, epoch = running_owner(db, monkeypatch, attempts='1' if case == 'carry_off' else '5')
+    assert registry.begin_job(account, 'crashy', epoch, now=NOW)
+    expired = NOW + timedelta(seconds=registry.LEASE_SECONDS + 1)
+    finalizer_mocks(monkeypatch)
+    monkeypatch.setattr(uid_sequencer, '_dispatch', Mock())
+    observed = transitions('sync_running_cap_observed')
+    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'lease_expired'
+    assert transitions('sync_running_cap_observed') == observed
+
+
 # 6. Held re-drive counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON) ----------
 
 
@@ -549,3 +611,77 @@ def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, 
     assert job['state'] == 'ready'
     assert job['held_redrives'] == (2 if counter == 'true' else 1)
     assert job['attempt'] == (0 if budget == 'true' else 5)
+
+
+def operator_redrive_app(store, monkeypatch):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from routers import batch_pipeline as router
+
+    monkeypatch.setattr(
+        router, 'serving_for_stage', lambda stage: SimpleNamespace(store=store, queue=lambda: Scheduler(store))
+    )
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[router.verify_worker] = lambda: None
+    return app
+
+
+@pytest.mark.parametrize('counter', ['true', 'false'])
+@pytest.mark.parametrize('budget', ['true', 'false'])
+@pytest.mark.parametrize('prior', [0, sm.MAX_HELD_REDRIVES])
+def test_operator_redrive_dead_route_keeps_the_switched_accounting(setup, monkeypatch, counter, budget, prior):
+    """Custody review (luna-core-1, luna-core-2): /redrive-dead on a held_expired row.
+
+    The operator route must count the re-drive (class 6), reset attempt
+    (class 3) and report a spent budget after commit, like the nightly and
+    poll re-drives. Each switch off keeps main's behavior for its field.
+    """
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), attempt=5)
+    if prior:
+        bad(client)['held_redrives'] = prior
+    before = transitions('held_redrive_budget_spent')
+    app = operator_redrive_app(store, monkeypatch)
+    with TestClient(app) as api:
+        assert api.post('/v2/batch-pipeline/redrive-dead', json={'stage': 'prod', 'segment_id': 'bad'}).json() == {
+            'accepted': True
+        }
+        job = deepcopy(bad(client))
+        # Idempotent: a second call finds no dead row and changes nothing.
+        assert api.post('/v2/batch-pipeline/redrive-dead', json={'stage': 'prod', 'segment_id': 'bad'}).json() == {
+            'accepted': False
+        }
+    app.dependency_overrides.clear()
+    assert bad(client) == job
+    assert job['state'] == 'ready' and job['audio_uri'] == 'gs://synthetic/audio'
+    if counter == 'true':
+        assert job['held_redrives'] == prior + 1
+    else:
+        assert job.get('held_redrives', 0) == prior
+    if budget == 'true':
+        assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 5
+    else:
+        assert job['attempt'] == 5 and 'held_redrive_last_attempt' not in job
+    spent = counter == 'true' and prior >= sm.MAX_HELD_REDRIVES
+    assert transitions('held_redrive_budget_spent') == before + (1 if spent else 0)
+
+
+def test_operator_redrive_of_a_plain_dead_row_is_not_held_accounting(monkeypatch):
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('plain', owner=uuid4().hex), 0)
+    store.rows['jobs', 'plain'].update(state='dead', merge_pending=True, attempt=4)
+    assert queue.redrive_dead('plain', 10)
+    job = store.rows['jobs', 'plain']
+    assert job['state'] == 'ready' and job['attempt'] == 4
+    assert 'held_redrives' not in job and 'held_redrive_last_attempt' not in job

@@ -993,17 +993,16 @@ class Scheduler:
         return True
 
     @staticmethod
-    def redrive_in_transaction(
-        tx: Transaction, job: dict, now: float, *, automatic: bool = False
-    ) -> bool | Literal['spent']:
-        """True on redrive; 'spent' when a poll re-drive starts at or over the held budget."""
+    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool | Literal['spent']:
+        """True on redrive; 'spent' when a held re-drive starts at or over the held budget."""
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
         spent = False
-        if automatic and job.get('dead_letter_reason') == 'held_expired':
-            # A status poll reopening a retained held dead letter gets the nightly
-            # path's switched accounting and the same spent-budget signal
-            # (reported by the caller after commit).
+        if job.get('dead_letter_reason') == 'held_expired':
+            # Every re-drive of a retained held dead letter (status poll or the
+            # operator /redrive-dead route) gets the nightly path's switched
+            # accounting and the same spent-budget signal, reported by the
+            # caller after commit.
             spent = held_redrive_budget_spent(job)
             account_held_redrive(job)
         control = read_control(tx, scheduler_control_key(job['owner_key']))
@@ -1021,7 +1020,12 @@ class Scheduler:
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return bool(self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now)))
+        outcome = self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        if outcome == 'spent':
+            from utils.backlog_metrics import record_transition
+
+            record_transition('held_redrive_budget_spent')
+        return bool(outcome)
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.

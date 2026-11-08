@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 TRANSITIONS = (
     # A running sync job whose carried crash count reached the cap.
     'sync_running_cap_reached',
+    # A running sync lease expired at or over the cap while class 1 does not
+    # enforce it: redriven again, observed only (never terminalized).
+    'sync_running_cap_observed',
     # A held unit re-driven at or over MAX_HELD_REDRIVES (counter only).
     'held_redrive_budget_spent',
 )

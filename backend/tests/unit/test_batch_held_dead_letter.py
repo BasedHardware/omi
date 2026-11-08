@@ -86,6 +86,8 @@ def test_expired_row_requeues_through_unchanged_legacy_redrive_with_flag_off(set
     assert row(client)['merge_pending'] is True
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Main's retain-attempt contract; class 3 on resets attempt (test_backlog_state_machine.py).
+    monkeypatch.setenv('BATCH_HELD_REDRIVE_BUDGET_ENABLED', 'false')
     # Only the unchanged, pre-feature path is available after a code rollback.
     queue = Scheduler(store)
     assert queue.redrive_dead('bad', 31)

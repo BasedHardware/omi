@@ -16,6 +16,7 @@ __all__ = [
     'retry_cap',
     'dispatch_cap',
     'running_cap',
+    'running_cap_observed',
     'running_expiries',
     'reconcile_dispatch_cap',
 ]
@@ -52,19 +53,37 @@ def running_expiries(owner: dict[str, Any]) -> int:
     return count if type(count) is int and count >= 0 else 0
 
 
-def running_cap(uid: str, owner: dict) -> RetryCap | None:
+def running_cap(uid: str, owner: dict) -> RetryCap:
     """Running-state cap: the job began and its worker died, which is proven failure.
 
     Only class 1 (CAPTURE_RETRY_CAP_ENFORCED) may make it serve. Main never
     capped running owners, so the CAPTURE_COVERAGE_MODE serve mode or cohort
-    must not turn it on while class 1 is off; then it only observes.
+    must not turn it on while class 1 is off; then it only observes. It
+    observes with coverage mode off too, so a lease that keeps expiring past
+    the cap is never silent (see running_cap_observed).
     """
-    enforced = retry_cap_enforced()
-    if not enforced and not refactor_modes.shadow_or_serve(MODE):
-        return None
+    return RetryCap(running_cap_reached(owner), retry_cap_enforced())
+
+
+def running_cap_reached(owner: dict[str, Any]) -> bool:
     from utils.cloud_tasks import get_sync_tasks_max_attempts
 
-    return RetryCap(running_expiries(owner) + 1 >= max(1, get_sync_tasks_max_attempts()), enforced)
+    return running_expiries(owner) + 1 >= max(1, get_sync_tasks_max_attempts())
+
+
+def running_cap_observed(owner: dict[str, Any]) -> None:
+    """After a committed running-lease redrive: count one at-or-over-cap expiry class 1 did not enforce.
+
+    The caller passes the pre-commit owner snapshot the reconciler decided on.
+    Alert: omi-backlog-sync-running-cap-unenforced.
+    """
+    if owner.get('active_state') == 'dispatching' or not running_attempt_carry(owner):
+        return
+    if retry_cap_enforced() or not running_cap_reached(owner):
+        return
+    from utils.backlog_metrics import record_transition
+
+    record_transition('sync_running_cap_observed')
 
 
 def running_attempt_carry(owner: dict[str, Any]) -> bool:

@@ -32700,5 +32700,138 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-backlog-sync-running-cap-unenforced",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Sync running job kept redriving past the attempt cap (cap not enforced)",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"sync_running_cap_observed\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A running sync job whose worker keeps dying was redriven again at or over SYNC_TASKS_MAX_ATTEMPTS because the running cap is not enforced.",
+      "user_impact": "The affected offline-sync upload keeps retrying and never reaches a result or a terminal failure, holding its user's sync queue.",
+      "scope": "Counts committed running-lease redrives at or over the carried crash cap while CAPTURE_RETRY_CAP_ENFORCED is off (the default), with SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED on. Observation only: nothing is terminalized. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"sync_running_cap_observed\"} and backend-sync-backfill worker crash, OOM and timeout logs.",
+      "safe_next_action": "Fix the worker crash cause. Enforcing the cap (CAPTURE_RETRY_CAP_ENFORCED=true) is a custody change behind its ramp plan, not a page response.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">0 in 1h for 30m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 1 unenforced at-cap redrive in the last hour, sustained 30m.",
+      "evaluated_good": "Synthetic: 0 in 1h, or only enforced terminations (sync_running_cap_reached)."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-sync-running-cap-unenforced",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]
