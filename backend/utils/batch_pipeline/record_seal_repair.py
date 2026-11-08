@@ -5,14 +5,12 @@ from datetime import datetime
 import hashlib
 import json
 import math
-import time
 from typing import Any
 
 from google.cloud import firestore
 from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_enabled
 
 from database._client import run_transactional
-from database.batch_pipeline_recovery import terminalize_discarded_restore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
@@ -262,13 +260,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
     for entry in plan['entries']:
         check_budget()
         if entry['disposition'] != 'eligible':
-            disposition = entry['disposition']
-            if disposition == 'privacy_refused':
-                disposition = (
-                    terminalize_discarded_restore(store.client, store.namespace, entry['job_id'], time.time())
-                    or disposition
-                )
-            outcomes[disposition] += 1
+            outcomes[entry['disposition']] += 1
             continue
         if plan.get('overlap_trim_enabled') and not overlap_trim_enabled():
             outcomes['state_changed'] += 1
@@ -308,13 +300,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:
-            disposition = run_transactional(store.client, commit, transient=True)
-            if disposition == 'privacy_refused':
-                disposition = (
-                    terminalize_discarded_restore(store.client, store.namespace, entry['job_id'], time.time())
-                    or disposition
-                )
-            outcomes[disposition] += 1
+            outcomes[run_transactional(store.client, commit, transient=True)] += 1
         except BatchPrivacyBlocked:
             outcomes['privacy_refused'] += 1
         except Exception:

@@ -1,6 +1,5 @@
 """Restrictive lease revocation for privacy-fenced work, without resurrection."""
 
-import logging
 from typing import Any
 from google.cloud import firestore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
@@ -9,7 +8,6 @@ from database.batch_pipeline_shadow_hook import mirror_refresh
 # A provider-STT unit (C8) has no lease to revoke; its fenced release also clears merge_pending so
 # OrderedMerge stops holding the owner's later captures behind it (no purge follows every fence).
 PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
-logger = logging.getLogger(__name__)
 
 
 def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) -> bool:
@@ -101,49 +99,3 @@ def defer_privacy_blocked_record(client: Any, namespace: str, segment_id: str, u
     if deferred:
         mirror_refresh(namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
     return deferred
-
-
-def terminalize_discarded_restore(client: Any, namespace: str, segment_id: str, now: float) -> str | None:
-    """Settle only register-first restore debt whose visibility write never landed.
-
-    This restrictive job-only update bypasses the normal privacy write fence:
-    it publishes no content, retains the job/audio, and never recreates a job.
-    Both the origin and the current discard fence are read in this transaction.
-    ``privacy_blocked`` is terminal queue state; ``discarded`` is its disposition.
-    """
-    reference = client.collection(f'{namespace}_jobs').document(segment_id)
-
-    @firestore.transactional
-    def settle(transaction):
-        job = reference.get(transaction=transaction).to_dict() or {}
-        if job.get('registration_origin') != 'restore':
-            return None, False
-        uid, cid = job.get('owner_id'), job.get('conversation_id')
-        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
-            return None, False
-        row_ref = client.collection('users').document(uid).collection('conversations').document(cid)
-        row = row_ref.get(transaction=transaction).to_dict() or {}
-        if row.get('discarded') is not True:
-            return None, False
-        if job.get('state') == 'privacy_blocked' and job.get('disposition') == 'discarded':
-            return 'discarded', False
-        if job.get('state') != 'record_pending':
-            return None, False
-        transaction.update(
-            reference,
-            {
-                'state': 'privacy_blocked',
-                'disposition': 'discarded',
-                'privacy_blocked_at': now,
-                'token': '',
-                'lease_until': 0.0,
-                'merge_pending': False,
-            },
-        )
-        return 'discarded', True
-
-    outcome, changed = settle(client.transaction())
-    if changed:
-        logger.info('event=restore_recording_terminal outcome=discarded')
-        mirror_refresh(namespace, [('jobs', segment_id)])
-    return outcome
