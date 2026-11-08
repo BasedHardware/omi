@@ -88,18 +88,33 @@ def reload():
         run('docker','cp',str(path),f'{NAME}:/var/lib/grafana/boards/omi-tv-v2.json')
 
 
-def screens(out: Path | None = None):
-    """Render the real board; fail on scroll at 1920×1080, truncated titles or panel errors."""
+def screens(out: Path | None = None, wait_seconds: int = 240):
+    """Render the real board; fail on scroll at 1920×1080, truncated titles or panel errors.
+
+    A cold wall can still be refreshing when the page settles. The heading and
+    loading waits are bounded but soft: a board that never finishes is still
+    screenshotted, named `-partial`, and reported, so the render is not lost."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
     out = out or RECORD/'build-screens'
     out.mkdir(parents=True,exist_ok=True)
+    wait_ms = wait_seconds * 1000
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         for width,height in [(1920,1080),(1440,900)]:
             page = browser.new_page(viewport={'width':width,'height':height},device_scale_factor=1)
             page.goto('http://127.0.0.1:3207/d/omi-tv-v2/omi-tv-v2?orgId=1&kiosk',wait_until='networkidle',timeout=120000)
-            page.get_by_text('Data & coverage',exact=True).wait_for(timeout=60000)
-            page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=120000)
+            partial = []
+            try:
+                page.get_by_text('Data & coverage',exact=True).wait_for(timeout=wait_ms)
+            except PlaywrightTimeoutError:
+                partial.append('no "Data & coverage" heading')
+            try:
+                page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=wait_ms)
+            except PlaywrightTimeoutError:
+                partial.append('still loading')
+            if partial:
+                print(f'partial board at {width}px: {"; ".join(partial)}')
             page.evaluate('document.fonts.ready')
             page.wait_for_timeout(2000)
             truncated = page.locator('[data-testid="data-testid header-container"] h2').evaluate_all(
@@ -115,7 +130,7 @@ def screens(out: Path | None = None):
                                      ".map(e => (e.closest('[data-viz-panel-key]')?.innerText || 'page').split('\\n')[0])")
             if width == 1920 and overflow:
                 raise RuntimeError(f'Content overflows at 1920×1080: {overflow}')
-            page.screenshot(path=str(out/f'omi-tv-v3-{width}.png'))
+            page.screenshot(path=str(out/f"omi-tv-v3-{width}{'-partial' if partial else ''}.png"))
             page.close()
         browser.close()
 
@@ -125,6 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('command',choices=['serve','provision','reload','screens'])
     parser.add_argument('--replay',help='Optional local aggregate wall payload; source timestamps are preserved')
     parser.add_argument('--out',type=Path,help='Screenshot directory (default: the run record build-screens/)')
+    parser.add_argument('--wait-seconds',type=int,default=240,help='Bound on the screens heading and loading waits (default 240); a timeout screenshots a partial board')
     args = parser.parse_args()
     if args.command == 'serve':
         serve(args.replay)
@@ -133,4 +149,4 @@ if __name__ == '__main__':
     elif args.command == 'reload':
         reload()
     else:
-        screens(args.out)
+        screens(args.out, args.wait_seconds)
