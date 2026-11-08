@@ -14,6 +14,7 @@ from unittest.mock import Mock
 
 from fastapi import HTTPException
 import pytest
+from google.cloud import firestore
 
 from config.policy import BatchUnitPolicy, RecoveryPolicy
 from database.batch_pipeline_intake import admit
@@ -293,7 +294,12 @@ def test_lease_token_shape_does_not_release_held_custody(store_backend, monkeypa
             'signal_source': 'frames',
         }
     }
-    ref.update({'record_upload_sessions': tokens})
+
+    @firestore.transactional
+    def attach(tx):
+        tx.update(ref, {'record_upload_sessions': tokens})
+
+    attach(h.customer.client.transaction())
     monkeypatch.setattr(intake, 'time', SimpleNamespace(time=lambda: T0 + 20))
     patch(h, {'status': 'partial', 'result': PARTIAL['result']}, 'content', f'{owner}/{binding.content_id}')
     assert intake.durable_status(h.store, owner, binding.job_id)['status'] != 'completed'

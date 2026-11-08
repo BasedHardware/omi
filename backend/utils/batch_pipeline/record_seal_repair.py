@@ -219,7 +219,8 @@ def plan_seals(
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
         diagnostics = {}
         try:
-            job = _job_state(store.run(lambda tx: tx.get('jobs', job_id)))
+            current_job = store.run(lambda tx: tx.get('jobs', job_id))
+            job = _job_state(current_job)
             check_budget()
             uid, cid = job.get('owner_id'), job.get('conversation_id')
             if not uid or not cid or '/' in uid or '/' in cid:
@@ -229,7 +230,7 @@ def plan_seals(
             check_budget()
             entry.update(job=job, row=seal_row_state(row))
             refusal = seal_refusal(
-                job,
+                current_job,
                 row,
                 producer_proof=producer_proof,
                 producers_stopped=producers_stopped,
@@ -243,7 +244,7 @@ def plan_seals(
                     producer_proof,
                     uid=uid,
                     row=row,
-                    job=job,
+                    job=current_job,
                     producers_stopped=producers_stopped,
                 ):
                     entry['lease_reason'] = 'lease_would_expire'

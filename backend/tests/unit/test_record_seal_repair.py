@@ -438,3 +438,18 @@ def test_lease_kill_switch_after_plan_and_tail_refusal(source, monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     source[1].rows[PATH]['finished_at'] = datetime.fromtimestamp(150, timezone.utc)
     assert plan(source)['entries'][0]['disposition'] == 'proof_refused'
+
+
+@pytest.mark.parametrize('available_at,expected', [(9900, 'upload_pending'), (200, 'eligible')])
+def test_stock_seed_uses_same_available_anchor_in_plan_and_apply(source, monkeypatch, available_at, expected):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    source[1].rows[PATH]['record_upload_sessions'] = {'s': {'pod': 'live', 'process_started_at': 100}}
+    source[1].rows[JOB_PATH]['available_at'] = available_at
+    result = plan(source)
+    assert result['entries'][0]['disposition'] == expected
+    assert repair.apply_seals(source[0], result, result['plan_sha256']) == (
+        {'sealed': 1} if expected == 'eligible' else {'upload_pending': 1}
+    )

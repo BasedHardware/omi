@@ -201,7 +201,8 @@ def test_stock_seed_clamps_every_durable_anchor_and_never_uses_process_start(ena
         (ROW, {'available_at': NOW - 10}, POD),
         (ROW, {}, {**POD, 'abandoned_at': NOW - 10}),
     ]:
-        assert not producer_tokens_dead({'s': token}, None, uid='synthetic', row=row, job=job)
+        assert lease.token_lease_clocks(token, row=row, job=job)[0] == NOW - 10
+        assert producer_tokens_dead({'s': token}, None, uid='synthetic', row=row, job=job) is ('abandoned_at' in token)
     monkeypatch.delenv('RECORD_TOKEN_LEASE_DEPLOYED_AT')
     assert not producer_tokens_dead({'s': POD}, None, uid='synthetic', row=ROW)
 
@@ -218,3 +219,10 @@ def test_generic_mode_reader_uses_dark_default(monkeypatch):
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     assert refactor_modes.mode('RECORD_TOKEN_LEASE_MODE') == 'off'
     assert not refactor_modes.serving_for('RECORD_TOKEN_LEASE_MODE', 'synthetic')
+
+
+def test_stock_seed_preserves_original_pod_and_abandon_authorities(enabled, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 10))
+    proof = {'namespace': 'prod-omi-backend', 'captured_at': NOW, 'pods': {}}
+    assert producer_tokens_dead({'s': POD}, proof, uid='synthetic', row=ROW)
+    assert producer_tokens_dead({'s': {**POD, 'abandoned_at': NOW - 10}}, None, uid='synthetic', row=ROW)

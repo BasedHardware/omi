@@ -3986,7 +3986,13 @@ class TestV2EndpointExecution:
             conversation_id='record',
             files=[SimpleNamespace(name='synthetic.bin', model_dump=lambda: {'name': 'synthetic.bin'})],
         )
-        result = await module.create_sync_capture_manifest(payload, uid='synthetic')
+        result = await module.create_sync_capture_manifest(
+            payload,
+            uid='synthetic',
+            x_app_platform=None,
+            x_device_id_hash=None,
+            x_app_version=None,
+        )
         assert result.manifest == 'synthetic-manifest'
         assert events == (['claim'] if mode == 'off' else ['renew', 'claim'])
 

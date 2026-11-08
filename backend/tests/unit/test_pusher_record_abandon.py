@@ -352,7 +352,10 @@ async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(r
     epoch = [10000.0]
     monotonic = [10000.0]
     monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
-    monkeypatch.setattr(barriers.time, 'monotonic', lambda: monotonic[0])
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 9000})
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(barriers, 'time', SimpleNamespace(time=lambda: epoch[0], monotonic=lambda: monotonic[0]))
     barrier = barriers.PusherRecordBarrier('uid-at')
     await barrier.begin_recording('record')
     token = barrier.upload_sessions['record']

@@ -209,7 +209,15 @@ async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, ex
     sim = lifecycle_sim
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    sim.seed()
+
+    class CaptureClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) - timedelta(hours=3)
+
+    with monkeypatch.context() as capture_clock:
+        capture_clock.setattr(harness, 'datetime', CaptureClock)
+        sim.seed()
     assert sim.register()
     now = datetime.now(timezone.utc).timestamp()
     token = {
@@ -234,7 +242,16 @@ async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, ex
         assert not sim.row()['record_audio_closed']
     elif exit_name == 'partial_finish':
         # An old finished_at with retained bytes ending earlier must not seal.
-        sim.ref.update({'finished_at': datetime.fromtimestamp(now - 1801, timezone.utc)})
+        sim.ref.update({'finished_at': sim.row()['finished_at'] + timedelta(seconds=10)})
+        plan = record_seal_repair.plan_seals(
+            sim.store,
+            [sim.job_ref.id],
+            sim.storage,
+            sim.artifacts,
+            producer_proof=sim.proof(live_producer=True),
+        )
+        assert plan['entries'][0]['disposition'] == 'proof_refused'
+        assert plan['entries'][0]['proof_reason'] == 'tail_lagging'
         result = finish_partial(
             sim.store, sim.ref.path, reason='tail_lagging', proof=sim.proof(live_producer=True), now=now
         )

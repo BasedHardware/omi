@@ -34,3 +34,10 @@ re-read the exact token map. Live custody leases override stale pod/abandon proo
 because uploaders can outlive the pusher. Tail/partial/privacy gates still apply;
 late bytes after seal remain retained and are counted for gap-fill/revert.
 Part B discovery and indexes are unchanged. Land after #24866 rebase/merge.
+
+Implementation review risk: the design's stock seed includes the job's current
+`available_at`. The pending drainer advances that retry wake every minute, so
+such stock can remain fenced indefinitely even with an old deployment epoch.
+This lane preserves the written formula, including matching plan/apply anchor
+reads. The lead must resolve whether post-deployment retry wakes should be
+excluded before relying on stock drainage. No age-only escape is layered on.

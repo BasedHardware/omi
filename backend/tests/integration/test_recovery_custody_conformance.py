@@ -15,6 +15,7 @@ from unittest.mock import ANY, Mock, call
 import wave
 
 import pytest
+from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from testing.store_fixtures import store_backend  # noqa: F401
@@ -253,7 +254,12 @@ def test_record_lease_metadata_never_consumes_recovery_audio(h, monkeypatch):
             'signal_source': 'custody_append',
         }
     }
-    ref.update({'record_upload_sessions': tokens})
+
+    @firestore.transactional
+    def attach(tx):
+        tx.update(ref, {'record_upload_sessions': tokens})
+
+    attach(h.customer.client.transaction())
     assert recovery.recover(item.segment_id, item.owner_id) == 'recovered'
     assert ref.get().to_dict()['record_upload_sessions'] == tokens
     assert job(h)['audio_uri'] == item.audio_uri

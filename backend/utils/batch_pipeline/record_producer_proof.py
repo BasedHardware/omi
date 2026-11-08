@@ -104,9 +104,11 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, ro
             if clocks:
                 if lease.token_lease_lapsed(value, now, row=row, job=job):
                     continue
-                # A custody uploader can outlive its pusher. Fresh server
-                # signals re-fence even an abandoned/gone producer identity.
-                return False
+                # A custody uploader can outlive its pusher. Actual server
+                # signals re-fence an abandoned/gone identity. A computed stock
+                # seed is not a live signal and preserves the original proofs.
+                if 'last_signal_at' in value:
+                    return False
         if 'abandoned_at' in value:
             abandoned = value['abandoned_at']
             if (
