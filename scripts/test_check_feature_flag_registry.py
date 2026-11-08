@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from io import StringIO
 from unittest import mock
 from pathlib import Path
@@ -577,9 +577,32 @@ class RegistryFixture(unittest.TestCase):
         with mock.patch("check_feature_flag_registry.REVIEW_OVERDUE", exception):
             errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 21))
             self.assertEqual(errors, [])
-            self.assertTrue(any("BLOCKER for David: review_overdue exception EXAMPLE_ENABLED" in w for w in warnings))
+            self.assertTrue(any("review_overdue exception EXAMPLE_ENABLED" in w for w in warnings))
             errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 21))
             self.assertIn("review_overdue exception expired 2026-11-20", "\n".join(errors))
+
+    def test_review_overdue_exception_may_cover_a_row_still_inside_grace(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
+        exception = {"EXAMPLE_ENABLED": {"expires": "2026-11-20", "reason": "sweep in progress"}}
+        with mock.patch("check_feature_flag_registry.REVIEW_OVERDUE", exception):
+            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 15))
+            self.assertEqual(errors, [])
+            self.assertTrue(any("review_overdue exception EXAMPLE_ENABLED" in w for w in warnings))
+            errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 21))
+            self.assertIn("review_overdue exception expired 2026-11-20", "\n".join(errors))
+
+    def test_default_as_of_is_the_utc_date(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
+        utc_now = datetime(2026, 10, 20, 23, 0, tzinfo=timezone.utc)
+
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return utc_now if tz is not None else utc_now.replace(tzinfo=None) + timedelta(hours=7)
+
+        with mock.patch("check_feature_flag_registry.datetime", FrozenDatetime):
+            errors, _ = check(self.root, check_render=False)
+        self.assertEqual(errors, [])
 
     def test_duplicate_ramp_declarations_fail_across_sources(self) -> None:
         self.write(
