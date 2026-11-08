@@ -38,6 +38,7 @@ KILL_SWITCHES = {
     # lead2 rule: ON only where the change just cuts wasted work or retries, OFF
     # where it changes custody, settle or expiry semantics.
     'CAPTURE_RETRY_CAP_ENFORCED': False,
+    'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED': True,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 # Parsed literally (true means on); never re-read through the capture-coverage
@@ -45,6 +46,7 @@ DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
     {
         'CAPTURE_RETRY_CAP_ENFORCED',
+        'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED',
     }
 )
 logger = logging.getLogger(__name__)
