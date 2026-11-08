@@ -137,7 +137,9 @@ def test_enabled_write_requires_real_bindings(enabled):
         assert any(f'enabled writes require a real {name}' in error for error in errors)
 
 
-@pytest.mark.parametrize('percent,needs_bindings', [('0', False), ('0.0', False), (' 0 ', False), ('0.01', True), ('bad', True)])
+@pytest.mark.parametrize(
+    'percent,needs_bindings', [('0', False), ('0.0', False), (' 0 ', False), ('0.01', True), ('bad', True)]
+)
 def test_enabled_write_binding_check_parses_percent_numerically(percent, needs_bindings):
     document = runtime()
     bindings = document['environments']['dev']['gke']['pusher']['env']
