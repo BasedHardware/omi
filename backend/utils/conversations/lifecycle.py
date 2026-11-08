@@ -1092,6 +1092,23 @@ def complete_finalization_fanout(
     )
 
 
+def complete_discarded_server_batch_fanout(
+    uid: str,
+    conversation_id: str,
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+) -> bool:
+    """Close a discarded zero-preview fanout; the still-bound parent leaves processing."""
+    return jobs_db.mark_discarded_server_batch_fanout_completed(
+        uid,
+        conversation_id,
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+    )
+
+
 def complete_fenced_finalization(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
     """Close a current finalization lease when durable state fenced its fanout."""
     return jobs_db.mark_finalization_fenced(job_id, dispatch_generation, lease_epoch)

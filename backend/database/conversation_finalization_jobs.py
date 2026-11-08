@@ -1495,6 +1495,74 @@ def mark_finalization_fanout_completed(
     )
 
 
+def _complete_discarded_server_batch_fanout_txn(
+    transaction: Any,
+    job_ref: Any,
+    conversation_ref: Any,
+    dispatch_generation: int,
+    lease_epoch: int,
+    now: datetime,
+) -> bool:
+    """Close a discarded zero-preview fanout and advance its still-bound parent.
+
+    The parent is still `processing` from the raw capture. Without this write a
+    restore's batch admission fails require_record_audio_barrier until stale
+    orphan reconciliation. Both writes commit together. All reads precede writes.
+    """
+    job_snapshot = job_ref.get(transaction=transaction)
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(job_snapshot, 'exists', False):
+        return False
+    job = job_snapshot.to_dict() or {}
+    current = conversation_snapshot.to_dict() or {}
+    if job.get('fanout_status') == 'completed':
+        return int(job.get('fanout_lease_epoch') or 0) == lease_epoch
+    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+        return False
+    bound = current.get('finalization_job_id') == job_ref.id and current.get('finalization_revision') == job.get(
+        'finalization_revision'
+    )
+    if bound and current.get('status') == 'processing':
+        # A completed write carries its decision. The discard verdict is preserved.
+        terminal = {**current, 'status': 'completed'}
+        stamp_terminal_decision(terminal, path='lifecycle_terminal')
+        transaction.update(
+            conversation_ref,
+            {'status': 'completed', 'relevance_decision': terminal['relevance_decision']},
+        )
+    transaction.update(
+        job_ref,
+        {
+            'fanout_status': 'completed',
+            'fanout_lease_epoch': lease_epoch,
+            'fanout_completed_at': now,
+            'updated_at': now,
+        },
+    )
+    return True
+
+
+def mark_discarded_server_batch_fanout_completed(
+    uid: str,
+    conversation_id: str,
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    client = _client(firestore_client)
+    transactional = firestore.transactional(_complete_discarded_server_batch_fanout_txn)
+    return transactional(
+        client.transaction(),
+        _job_ref(client, job_id),
+        _conversation_ref(client, uid, conversation_id),
+        dispatch_generation,
+        lease_epoch,
+        _now(),
+    )
+
+
 def _mark_finalization_retryable_txn(
     transaction: Any,
     job_ref: Any,

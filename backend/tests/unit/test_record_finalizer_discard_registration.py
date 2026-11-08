@@ -131,7 +131,7 @@ async def test_discarded_server_batch_fast_path_terminalizes_once_without_regist
     original_run = finalizer.run_blocking
 
     async def run(executor, function, *args, **kwargs):
-        if function is finalizer.lifecycle_service.complete_finalization_fanout:
+        if function is finalizer.lifecycle_service.complete_discarded_server_batch_fanout:
             return function(*args, **kwargs)
         return await original_run(executor, function, *args, **kwargs)
 
@@ -194,7 +194,7 @@ async def test_discarded_fast_path_retries_when_fanout_completion_is_refused(har
     original = finalizer.run_blocking
 
     async def run(executor, function, *args, **kwargs):
-        if function is finalizer.lifecycle_service.complete_finalization_fanout:
+        if function is finalizer.lifecycle_service.complete_discarded_server_batch_fanout:
             return False
         return await original(executor, function, *args, **kwargs)
 

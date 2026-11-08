@@ -8,8 +8,9 @@ import pytest
 from fastapi import HTTPException
 
 from config.policy import BatchUnitPolicy
-from config.record_audio import record_identity
+from config.record_audio import BARRIER_NOT_CLOSED, record_identity, require_record_audio_barrier
 from database import batch_pipeline_privacy, batch_pipeline_store
+from database import conversation_finalization_jobs as jobs
 from database import conversations as conversations_db
 from database import processing_attention as attention_db
 from database.batch_pipeline_store import FirestoreStore
@@ -318,3 +319,31 @@ def test_local_non_batch_restore_never_constructs_batch_store(restore_store, mon
     assert restored['sync_relevance_user_kept'] is True
     assert restored['relevance_decision']['reason'] == 'restored'
     assert JOB_PATH not in restore_store.rows
+
+
+def test_discarded_zero_preview_parent_passes_restore_barrier_after_fanout_close(restore_store, monkeypatch):
+    monkeypatch.setattr(jobs, 'get_firestore_client', lambda: restore_store)
+    job_path = (jobs.FINALIZATION_JOBS_COLLECTION, 'fjob')
+    row = restore_store.rows[ROW_PATH]
+    row.update(status='processing', finalization_job_id='fjob', finalization_revision=1)
+    restore_store.rows[job_path] = {
+        'uid': UID,
+        'conversation_id': CID,
+        'status': 'leased',
+        'dispatch_generation': 1,
+        'lease_epoch': 7,
+        'finalization_revision': 1,
+        'fanout_status': 'pending',
+    }
+    with pytest.raises(ValueError) as parked:
+        require_record_audio_barrier(row)
+    assert str(parked.value) == BARRIER_NOT_CLOSED
+
+    assert jobs.mark_discarded_server_batch_fanout_completed(UID, CID, 'fjob', 1, 7) is True
+    assert jobs.mark_finalization_completed('fjob', 1, 7) is True
+    assert restore_store.rows[ROW_PATH]['status'] == 'completed'
+
+    assert lifecycle.restore_discarded(UID, CID) is True
+    restored = restore_store.rows[ROW_PATH]
+    assert restored['discarded'] is False
+    require_record_audio_barrier(restored)

@@ -283,7 +283,9 @@ async def finalize_persisted_conversation(
         if conversation_data.get('discarded'):
             if not await run_blocking(
                 db_executor,
-                lifecycle_service.complete_finalization_fanout,
+                lifecycle_service.complete_discarded_server_batch_fanout,
+                uid,
+                conversation_id,
                 finalization_job_id,
                 dispatch_generation,
                 lease_epoch,
