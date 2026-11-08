@@ -138,6 +138,21 @@ class QueueMetrics:
         self.held_expired_observed_at = Gauge(
             'omi_batch_held_expired_observed_at_seconds', 'Last successful held-expired stock sample', registry=registry
         )
+        self.record_dead_letter = Counter(
+            'omi_batch_record_dead_letter_total',
+            'Committed record barrier aged dead letters; custody retained',
+            registry=registry,
+        )
+        self.record_dead_letter_stock = Gauge(
+            'omi_batch_record_dead_letter_units',
+            'Retained record_barrier_aged job stock',
+            registry=registry,
+        )
+        self.record_dead_letter_observed_at = Gauge(
+            'omi_batch_record_dead_letter_observed_at_seconds',
+            'Last successful record dead-letter stock sample',
+            registry=registry,
+        )
         # Serving instances share one global queue; workers keep 0 for the HPA.
         self.min_refresh_seconds = min_refresh_seconds
         self._refresh_due = 0.0

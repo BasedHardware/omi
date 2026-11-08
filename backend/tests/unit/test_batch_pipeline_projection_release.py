@@ -636,3 +636,206 @@ def test_real_hold_never_gets_a_cohort_marker(monkeypatch):
     client, store = store_for(rows())
     assert ProjectionReleaseStore(store).release('held', GHOST_NOW)
     assert 'ghost_settled_cohort' not in client.rows[RESULT_KEY]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('recovery', [None, 'recovered', 'held'])
+@pytest.mark.parametrize('deadline', [None, GHOST_NOW - 1])
+def test_completed_assignment_receipt_never_stamps_or_expires(monkeypatch, enabled, recovery, deadline):
+    from copy import deepcopy
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
+    seeded = ghost_rows(age=30 * 86400, recovery=recovery)
+    if deadline is not None:
+        seeded[RESULT_KEY]['held_deadline_at'] = deadline
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert not release.release('held', GHOST_NOW)
+    assert not release.expired
+    settled = enabled and recovery != 'held'
+    assert release.ghost_settled is settled
+    assert release.ghost_skip == ('job_held' if recovery == 'held' else None if enabled else 'count_only')
+    assert client.rows == {
+        **before,
+        RESULT_KEY: {
+            **before[RESULT_KEY],
+            **({'projection_state': 'ready', 'ghost_settled_cohort': 'g1'} if settled else {}),
+        },
+    }
+    assert client.transactions[-1].updates == (
+        [(RESULT_KEY, {'projection_state': 'ready', 'ghost_settled_cohort': 'g1'})] if settled else []
+    )
+
+
+@pytest.mark.parametrize('deadline', [None, GHOST_NOW - 1])
+def test_cap_skipped_ghost_never_stamps_or_expires(monkeypatch, deadline):
+    from copy import deepcopy
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    seeded = ghost_rows(age=30 * 86400)
+    if deadline is not None:
+        seeded[RESULT_KEY]['held_deadline_at'] = deadline
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store, ghost_budget=0)
+    assert not release.release('held', GHOST_NOW)
+    assert release.ghost_skip == 'cap'
+    assert not release.expired and not release.ghost_settled
+    assert client.rows == before
+    assert not client.transactions[-1].updates
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('deadline', [None, GHOST_NOW - 1])
+def test_young_ghost_never_stamps_or_expires(monkeypatch, enabled, deadline):
+    from copy import deepcopy
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
+    seeded = ghost_rows(age=86400 - 1)
+    if deadline is not None:
+        seeded[RESULT_KEY]['held_deadline_at'] = deadline
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert not release.release('held', GHOST_NOW)
+    assert release.ghost_skip == 'young'
+    assert not release.expired and not release.ghost_settled
+    assert client.rows == before
+    assert not client.transactions[-1].updates
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('receipt', [{}, {'state': 'quarantined', 'disposition': 'legacy_assignment'}])
+def test_aged_assignment_gate_fail_uses_identical_expiry_markers(monkeypatch, receipt, enabled):
+    from copy import deepcopy
+
+    monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    seeded = rows(projection=receipt, held_deadline_at=100.0, payload={'retained': True})
+    seeded[('batch_pipeline_prod_jobs', 'held')]['state'] = 'committed'
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 100.0) is False
+    assert release.expired
+    result = ('batch_pipeline_prod_results', 'held')
+    assert client.rows == {
+        **before,
+        result: {
+            **before[result],
+            'held_expired_reason': 'held_expired',
+            'held_expired_at': 100.0,
+        },
+    }
+    assert len(client.transactions[-1].updates) == 1
+    assert release.release('held', 101.0) is False
+    assert not release.expired
+    assert not client.transactions[-1].updates
+
+
+@pytest.mark.parametrize(
+    'block',
+    [
+        'speech_redrive',
+        'terminal_disposition',
+        'silence_disposition',
+        'privacy',
+        'wrong-owner',
+        'wrong-segment',
+        'no-binding',
+        'not-committed',
+        'not-held',
+        'persisted',
+        'flag-off',
+    ],
+)
+def test_assignment_gate_failure_never_expires_through_fences(monkeypatch, block):
+    from copy import deepcopy
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    seeded = rows(projection={}, held_deadline_at=1)
+    job, result = seeded[('batch_pipeline_prod_jobs', 'held')], seeded[('batch_pipeline_prod_results', 'held')]
+    job['state'] = 'committed'
+    if block in {'speech_redrive', 'terminal_disposition', 'silence_disposition'}:
+        job[block] = {'state': 'pending'}
+    elif block == 'privacy':
+        result['projection_privacy_refusal'] = {'reason': 'retained'}
+    elif block == 'wrong-owner':
+        result['owner_key'] = 'other'
+    elif block == 'wrong-segment':
+        result['segment_id'] = 'other'
+    elif block == 'no-binding':
+        job.pop('projection_binding')
+    elif block == 'not-committed':
+        job['state'] = 'ready'
+    elif block == 'not-held':
+        job['recovery_state'] = 'running'
+    elif block == 'persisted':
+        result['projection_state'] = 'persisted'
+    else:
+        monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert not release.release('held', 100)
+    assert not release.expired
+    assert client.rows == before
+    assert not client.transactions[-1].updates
+
+
+@pytest.mark.parametrize('deadline', [True, '1', float('nan'), float('inf'), {}, []])
+def test_assignment_gate_fail_malformed_anchor_stays_held(monkeypatch, deadline):
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    seeded = rows(projection={}, held_deadline_at=deadline)
+    seeded[('batch_pipeline_prod_jobs', 'held')]['state'] = 'committed'
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert not release.release('held', 1_000_000)
+    assert not release.expired
+    assert not client.transactions[-1].updates
+
+
+def test_assignment_gate_fail_backfills_full_window_then_expires(monkeypatch):
+    from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    seeded = rows(projection={}, committed_at=1)
+    seeded[('batch_pipeline_prod_jobs', 'held')]['state'] = 'committed'
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert not release.release('held', 1_000_000)
+    deadline = client.rows[('batch_pipeline_prod_results', 'held')]['held_deadline_at']
+    assert deadline == 1_000_000 + HELD_DEAD_LETTER_SECONDS
+    assert not release.release('held', deadline - 1)
+    assert not release.expired
+    assert not release.release('held', deadline)
+    assert release.expired
+
+
+@pytest.mark.parametrize('deadline', [None, GHOST_NOW - 1])
+@pytest.mark.parametrize('privacy_location', ['receipt', 'part'])
+def test_completed_held_job_privacy_markers_never_stamp_or_expire(monkeypatch, deadline, privacy_location):
+    from copy import deepcopy
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv(GHOST_FLAG, 'true')
+    seeded = ghost_rows(age=30 * 86400, recovery='held')
+    entry = seeded[RESULT_KEY]
+    if deadline is not None:
+        entry['held_deadline_at'] = deadline
+    if privacy_location == 'receipt':
+        entry['projection']['privacy_reason'] = 'conversation_deleted'
+    else:
+        entry['projection_parts'] = {'0': {'state': 'ready', 'privacy_reason': 'conversation_deleted'}}
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert not release.release('held', GHOST_NOW)
+    assert release.ghost_skip == 'privacy'
+    assert not release.expired and not release.ghost_settled
+    assert client.rows == before
+    assert not client.transactions[-1].updates
