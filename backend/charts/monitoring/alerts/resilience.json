@@ -100,7 +100,7 @@
     "annotations": {
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "severity": "ticket",
-      "summary": "Dependency health — elevated LLM gateway fallback rate, not a product outage by itself",
+      "summary": "Dependency health \u2014 elevated LLM gateway fallback rate, not a product outage by itself",
       "threshold": "0.05 (5% fallback share over 30m)",
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "5",
@@ -3489,7 +3489,7 @@
       "__panelId__": "31",
       "summary": "New BYOK blocked state exceeds three days",
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
-      "scope": "Only blocked_byok entries stamped blocked_byok_at in the last seven days. Existing unstamped/13-day legacy stock remains informational; threshold 3d precedes automatic 14d abandonment.",
+      "scope": "Only blocked_byok entries stamped blocked_byok_at in the last seven days. Existing unstamped/13-day legacy stock remains informational; threshold 3d precedes automatic 14d abandonment. Day-1 import disposition: active agent-tier warning, muted by omi-tier-silent; UID and 259200s/1h threshold remain unchanged. BYOK blocked-state triage owns the real debt; this rule does not page on import.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
       "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
@@ -3500,13 +3500,13 @@
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
     },
     "labels": {
-      "severity": "critical",
+      "severity": "warning",
       "instatus_component": "speech-processing",
       "alert_identity": "omi-finalization-byok-dwell-page",
       "component": "speech-processing",
       "impact": "user-experience",
-      "tier": "page",
-      "audience": "human",
+      "tier": "agent",
+      "audience": "agent",
       "owner": "two-lane-lead"
     },
     "isPaused": false,
@@ -3515,10 +3515,12 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
-      "mute_time_intervals": []
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -4398,7 +4400,7 @@
       "threshold": "exhausted / listen-accepted > 0.35 with >= 50 accepted sockets in 5m, for 10m",
       "user_impact": "Live transcription is failing for a large minority of sessions; clients reconnect and audio falls to offline sync. This is the standing 16-25% degradation becoming worse, not yet the 2026-09-19 outage.",
       "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge — increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
       "safe_next_action": "Confirm the ratio on Resilience / Fallbacks panel 15, then inspect which to_mode is exhausting (panel 16) before changing provider credentials or capacity.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
       "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
@@ -4552,7 +4554,7 @@
       "threshold": "exhausted / listen-accepted > 0.60 with >= 50 accepted sockets in 5m, for 5m",
       "user_impact": "Most live sessions die in initialize_stt(); clients reconnect every ~35s and conversations fragment. This is the 2026-09-19 04:40Z failure class (82-89%), separated from the 16-25% standing baseline.",
       "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge — increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
       "safe_next_action": "Confirm panel 15 is above 0.60, then check Deepgram/Parakeet fallback-leg health on panel 16 and the live-STT failure-ratio panel before rolling credentials or disabling a provider.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
       "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
@@ -5170,13 +5172,14 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "record_pending entered via enqueued_at within the last 24h; legacy 8-72h stock is excluded from this page. Up to 1000 cohort rows, capped stock COUNT 5001. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_batch_record_pending_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900)) > 7200 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">7200 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 7200 continuously for 10m.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
+      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "severity": "critical",
@@ -5188,7 +5191,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -6122,13 +6125,14 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active obligations entered via first_pending_at within the last 24h; fresh includes non-backfill and pending first summaries. Dormant receipts and legacy stock are excluded. Cohort page cap 1000. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_enrichment_obligation_new_oldest_age_seconds{lane=\"fresh\"} and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200)) > 3600 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">3600 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 3600 continuously for 10m.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
+      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "severity": "critical",
@@ -6140,7 +6144,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [

@@ -12749,7 +12749,7 @@
       "__panelId__": "31",
       "summary": "New BYOK blocked state exceeds three days",
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
-      "scope": "Only blocked_byok entries stamped blocked_byok_at in the last seven days. Existing unstamped/13-day legacy stock remains informational; threshold 3d precedes automatic 14d abandonment.",
+      "scope": "Only blocked_byok entries stamped blocked_byok_at in the last seven days. Existing unstamped/13-day legacy stock remains informational; threshold 3d precedes automatic 14d abandonment. Day-1 import disposition: active agent-tier warning, muted by omi-tier-silent; UID and 259200s/1h threshold remain unchanged. BYOK blocked-state triage owns the real debt; this rule does not page on import.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
       "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
@@ -12760,13 +12760,13 @@
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
     },
     "labels": {
-      "severity": "critical",
+      "severity": "warning",
       "instatus_component": "speech-processing",
       "alert_identity": "omi-finalization-byok-dwell-page",
       "component": "speech-processing",
       "impact": "user-experience",
-      "tier": "page",
-      "audience": "human",
+      "tier": "agent",
+      "audience": "agent",
       "owner": "two-lane-lead"
     },
     "isPaused": false,
@@ -12775,10 +12775,12 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
-      "mute_time_intervals": []
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -24773,7 +24775,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
+          "expr": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -24850,14 +24852,14 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for two minutes.",
+      "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for fifteen minutes.",
       "user_impact": "Late batch transcripts may go unnoticed while a bounded scan is saturated or the worker sample is unavailable.",
       "scope": "Production queue freshness and oldest/retry NaN samples. A saturated exempt prefix is incomplete, never proven late work or a healthy empty queue.",
-      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates.",
+      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05–14:59Z; the prior 120s arm falsely paged between healthy samples.",
       "safe_next_action": "Classify the saturated prefix and real overdue work; retain all held audio and custody. Do not delete rows, reset paid intents, or waive allowance to silence the alarm.",
       "runbook": "backend/docs/runbooks/batch-queue-safety.md",
-      "threshold": "$A > 0 for 5m; stale means at least 120s",
-      "evaluated_bad": "Synthetic: one oldest or retry NaN priority alongside a finite zero, or no successful queue sample for two minutes.",
+      "threshold": "$A > 0 for 5m; stale means at least 900s",
+      "evaluated_bad": "Synthetic: one oldest or retry NaN priority alongside a finite zero, or no successful queue sample for fifteen minutes.",
       "evaluated_good": "Synthetic: all priority age samples are finite and the queue sample is fresh."
     },
     "labels": {
@@ -25045,11 +25047,12 @@
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
       "scope": "One lateness page: new-cohort uncommitted, quarantined, assignment-held and projection legs, plus all-epoch active compute commitments. Each source requires its own fresh sample; deliberate policy holds and dispositioned queue states remain excluded from the compute proxy.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
-      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach.",
+      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
       "threshold": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120) for 5m",
       "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
-      "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page."
+      "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page.",
+      "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "alert_identity": "omi-batch-unit-unpublished-2h",
@@ -25061,7 +25064,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -25466,13 +25469,14 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "record_pending entered via enqueued_at within the last 24h; legacy 8-72h stock is excluded from this page. Up to 1000 cohort rows, capped stock COUNT 5001. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_batch_record_pending_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900)) > 7200 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">7200 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 7200 continuously for 10m.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
+      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "severity": "critical",
@@ -25484,7 +25488,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -26418,13 +26422,14 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active obligations entered via first_pending_at within the last 24h; fresh includes non-backfill and pending first summaries. Dormant receipts and legacy stock are excluded. Cohort page cap 1000. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_enrichment_obligation_new_oldest_age_seconds{lane=\"fresh\"} and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200)) > 3600 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">3600 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 3600 continuously for 10m.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
+      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "severity": "critical",
@@ -26436,7 +26441,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -28653,12 +28658,13 @@
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
       "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 900 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
-      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
       "review_by": "2026-11-07",
       "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
-      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt."
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
+      "unpause_criteria": "After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "alert_identity": "omi-pipeline-projection-drain-stall",
@@ -28670,7 +28676,7 @@
       "audience": "human",
       "owner": "omi-pipeline"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -28759,12 +28765,13 @@
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "All-epoch stock age by leg, including rows before the timeliness epoch and older than 24h. Fresh sample required; no capped lifecycle cohort gauge. Alert-only; no scheduler, ramp, rollback or autoscaling consumer.",
       "verification": "Read the leg label and compare the oldest indexed row timestamp: committed_at for quarantine_held, enqueued_at for assignment_held and record_pending. Check the existing sample-stale alert.",
-      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "$A > 21600 for 10m",
       "review_by": "2026-11-07",
       "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
-      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt."
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
+      "unpause_criteria": "After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy."
     },
     "labels": {
       "alert_identity": "omi-pipeline-held-row-age",
@@ -28776,7 +28783,7 @@
       "audience": "human",
       "owner": "omi-pipeline"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [

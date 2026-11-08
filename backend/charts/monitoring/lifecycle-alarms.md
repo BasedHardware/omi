@@ -124,3 +124,21 @@ always-on rule contract still pins the reviewed expressions. Local release
 validation includes the real engine check. Cases cover a newer clear, ongoing
 drift across leader changes, independent legs, stale observations and absent
 observers.
+
+## Day-1 import disposition, 2026-11-08
+
+Lead2 ruling 699300 (15:13Z) keeps thresholds intact while suppressing known
+backlog pages at import. `omi-record-pending-dwell` lands paused until #24893
+drain work ships and fresh, untruncated cohort age remains below 7200s for 24h.
+`omi-enrichment-fresh-dwell` lands paused until its #24893 drain ships and fresh,
+untruncated fresh-cohort age remains below 3600s for 24h. Missing or stale samples
+do not count as healthy. Each needs a separate lifecycle-owner-approved unpause.
+The full five-rule pause list and criteria are in
+[the pipeline alert runbook](batch-projection/pipeline-alerts.md#production-import-disposition-lead2-ruling-699300-2026-11-08t1513z).
+
+`omi-finalization-byok-dwell-page` remains active with the same UID, strict
+259200s/1h threshold and freshness gate. It now routes as an agent-tier warning
+with audience agent and `omi-tier-silent`, so known BYOK debt does not page on
+import. The blocked-state triage owner still tracks the debt; the threshold
+does not authorize lifecycle changes. Read back pause flags and BYOK mute/tier
+after the separately authorized prod provisioning dispatch.

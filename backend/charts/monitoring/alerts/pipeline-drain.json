@@ -326,12 +326,13 @@
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
       "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 900 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
-      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
       "review_by": "2026-11-07",
       "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
-      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt."
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
+      "unpause_criteria": "After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "alert_identity": "omi-pipeline-projection-drain-stall",
@@ -343,7 +344,7 @@
       "audience": "human",
       "owner": "omi-pipeline"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -432,12 +433,13 @@
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "All-epoch stock age by leg, including rows before the timeliness epoch and older than 24h. Fresh sample required; no capped lifecycle cohort gauge. Alert-only; no scheduler, ramp, rollback or autoscaling consumer.",
       "verification": "Read the leg label and compare the oldest indexed row timestamp: committed_at for quarantine_held, enqueued_at for assignment_held and record_pending. Check the existing sample-stale alert.",
-      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "$A > 21600 for 10m",
       "review_by": "2026-11-07",
       "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
-      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt."
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
+      "unpause_criteria": "After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy."
     },
     "labels": {
       "alert_identity": "omi-pipeline-held-row-age",
@@ -449,7 +451,7 @@
       "audience": "human",
       "owner": "omi-pipeline"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [

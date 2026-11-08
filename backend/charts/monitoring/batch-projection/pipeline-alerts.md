@@ -137,4 +137,40 @@ query and no-data state in Grafana. The flat rule is expected quiet given the N5
 Rollback: pause the new UID or revert its split definition and regenerate/reapply.
 Revert the sampler commit through the backend train if needed; no data repair is
 required. The existing held-row-age rule's tier and 21600-second threshold are
-unchanged; the deployer owns its pending rollout ruling.
+unchanged; it lands paused under the import ruling below.
+
+## Production import disposition (lead2 ruling 699300, 2026-11-08T15:13Z)
+
+The dry-run of the 66 unprovisioned/changed rules measured production aggregates
+at 2026-11-08T14:05–14:59Z. Known backlog pages land paused, with their existing
+thresholds intact. Pausing suppresses notification coverage; the drain owners
+track the known debt until an explicit unpause change. This is alert preparation,
+not permission to deploy, drain, alter row state or unpause automatically.
+
+| Paused UID | Written unpause criteria |
+| --- | --- |
+| `omi-pipeline-held-row-age` | After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy. |
+| `omi-batch-unit-unpublished-2h` | After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+| `omi-enrichment-fresh-dwell` | After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+| `omi-record-pending-dwell` | After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+| `omi-pipeline-projection-drain-stall` | After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+
+`omi-batch-queue-safety-blind` remains an active page: its freshness arm now
+requires at least 900s staleness plus 5m pending. The worker-plane cadence was
+approximately 514s in the dry-run; 120s falsely breached between healthy samples.
+Other query arms and all backlog thresholds are unchanged. This adjusts alert
+freshness only; worker sampling, custody and admission are unchanged.
+
+`omi-finalization-byok-dwell-page` keeps its UID, strict 259200s threshold and 1h
+pending window, but lands active as severity warning, tier/audience agent, with
+`omi-tier-silent` and sibling warning notification timings. It reaches no human
+page receiver while muted. The measured 219900s BYOK stock could cross in about
+11h if it keeps aging; that prediction is conditional, not fresh acceptance.
+
+After an authorized prod provisioning dispatch, read back all five paused flags,
+900s freshness, BYOK routing, exact unchanged backlog thresholds and the agent
+mute. Record the running backend release identity and fresh clock-guard sample
+before importing. Undo an incorrect import using the provisioner's backup; do
+not restore the known 120s false-page arm as a rollout shortcut. Reverting these
+definitions requires another authorized provisioning apply; source edits alone
+do not change production Grafana.
