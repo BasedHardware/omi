@@ -383,7 +383,7 @@ environments:
             value: g1
             category: config
           PUSHER_STORAGE_PCM_BUDGET_MB:
-            value: '0'
+            value: '512'
             category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
@@ -1243,10 +1243,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
-              category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
               value: 'off'
@@ -1552,10 +1548,6 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
-              category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
@@ -3738,10 +3730,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
-              category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
               value: 'on'
@@ -4180,10 +4168,6 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
-              category: rollout
-            SYNC_BACKFILL_INFLIGHT_LIMIT:
-              provisional: true
-              value: 'false'
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
@@ -4663,7 +4647,7 @@ environments:
               value: '7200'
               category: config
             BATCH_FINAL_PASS_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
@@ -4779,6 +4763,7 @@ environments:
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
+          - HOSTED_DIARIZATION_API_URL
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:

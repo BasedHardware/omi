@@ -1551,7 +1551,6 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=False)
         sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
         sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
         sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
         sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
             return_value=MagicMock(allowed=True, reason=None, retry_after=None)
@@ -1704,6 +1703,26 @@ class TestAsyncCoordinatorBehavioral:
             yield module, stubs
         finally:
             self._cleanup(stubs['saved_modules'])
+
+    def test_direct_live_member_deferral_preserves_intake_and_siblings(self, fenced_worker_module):
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=[
+                pipeline.processing_hold.ProcessingDeferred('live_episode_notes', 1000),
+                None,
+            ]
+        )
+        pipeline.logger = MagicMock()
+        response = {
+            '_merged': {'live-member': 'en', 'outside': 'en'},
+            'updated_memories': {'live-member', 'outside'},
+            'new_memories': set(),
+        }
+        pipeline._reprocess_merged_conversations('uid', response)
+        assert response['updated_memories'] == {'live-member', 'outside'}
+        assert pipeline._reprocess_conversation_after_update.call_count == 2
+        pipeline.logger.error.assert_not_called()
 
     def test_merged_reprocess_fence_isolated_to_its_conversation(self, fenced_worker_module):
         """One replaced merge target must not supersede its sibling conversations."""
@@ -3607,7 +3626,6 @@ class TestV2EndpointExecution:
         sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=False)
         sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
         sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
         sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
         sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
             return_value=MagicMock(allowed=True, reason=None, retry_after=None)

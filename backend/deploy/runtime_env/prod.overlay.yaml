@@ -1247,9 +1247,6 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
@@ -1607,9 +1604,6 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
@@ -1684,10 +1678,13 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        - HOSTED_DIARIZATION_API_URL
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
-          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
+          # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
+          # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
+          BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past

@@ -56,16 +56,23 @@ def key_cache_ttl_seconds() -> int:
 _FAKE_KMS_STAGES = frozenset({'local', 'offline'})
 
 
+# Production stays refused at runtime too, not only in deploy validation, until
+# the C4 wipe-coverage gate is green.
+_WRITE_STAGES = _FAKE_KMS_STAGES | {'dev'}
+
+
+def _stage() -> str:
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower()
+
+
 def fake_kms_allowed() -> bool:
-    return os.getenv('OMI_ENV_STAGE', '').strip().lower() in _FAKE_KMS_STAGES
+    return _stage() in _FAKE_KMS_STAGES
 
 
 def write_admitted(space_id: str) -> bool:
-    # TODO(#24811, per-object DEK follow-up): remove this stage fence only after each
-    # object has its own DEK; a configured KMS key does not bound nonce reuse.
     return (
-        fake_kms_allowed()
-        and bool(space_id)
+        bool(space_id)
+        and _stage() in _WRITE_STAGES
         and write_enabled()
         and bool(bucket())
         and bool(release())
@@ -76,10 +83,10 @@ def write_admitted(space_id: str) -> bool:
 
 def validate_write_settings(stage: str, enabled: object, percent: object) -> list[str]:
     """Deployment gate independent of cohort admission or provisioned bindings."""
-    if stage.strip().lower() in _FAKE_KMS_STAGES:
+    if stage.strip().lower() in _WRITE_STAGES:
         return []
     errors = []
-    reason = 'must stay off outside local/offline until per-object DEKs are implemented'
+    reason = 'must stay off until the C4 wipe-coverage gate is green'
     if str(enabled).strip().lower() in {'true', '1', 'on', 'yes'}:
         errors.append(f'OBJECT_LAKE_WRITE_ENABLED {reason}')
     try:

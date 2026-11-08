@@ -3,6 +3,8 @@
 import logging
 import threading
 import time
+from collections import OrderedDict
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
@@ -20,6 +22,7 @@ from config.episodes import (
     COMPOSER_READ_THROTTLE_SECONDS,
     MAX_EPISODE_SECONDS,
 )
+from config.firestore_read_levers import lever_enabled
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
@@ -120,7 +123,21 @@ MEMBER_FIELDS = [
 ]
 
 
+MEMBERS_CACHE_TTL_SECONDS = 60
+MEMBERS_CACHE_MAX_ENTRIES = 128
+MEMBERS_CACHE_MAX_IDS = 1000
+_members_cache: OrderedDict[tuple[str, tuple[str, ...]], tuple[float, dict[str, dict[str, Any]]]] = OrderedDict()
+_members_cache_lock = threading.Lock()
+
+
 def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> dict[str, dict[str, Any]]:
+    """Read prepared members, optionally accepting a snapshot up to 60 seconds old.
+
+    With episode_members_cache on, the same uid and member set reuse the map:
+    edits, deletions and visibility changes may remain stale until expiry. Hits
+    never extend the TTL; expired entries must read again (including on errors).
+    This memo is only a read projection, never authority for a mutation.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     root = client.collection('users').document(uid).collection('conversations')
     all_ids: list[str] = []
@@ -128,17 +145,37 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
         row_ids: list[str] = row.get('conversation_ids') or []
         all_ids.extend(row_ids)
     ids = list(dict.fromkeys(all_ids))
+    cache_key = None
+    cache_deadline = 0.0
+    if lever_enabled('episode_members_cache', uid) and len(ids) <= MEMBERS_CACHE_MAX_IDS:
+        cache_key = (uid, tuple(sorted(ids)))
+        cache_deadline = time.monotonic() + MEMBERS_CACHE_TTL_SECONDS
+        with _members_cache_lock:
+            cached = _members_cache.pop(cache_key, None)
+            if cached is not None and time.monotonic() < cached[0]:
+                _members_cache[cache_key] = cached
+                return deepcopy(cached[1])
     members: dict[str, dict[str, Any]] = {}
     for offset in range(0, len(ids), episodes.MEMBERSHIP_BATCH_LIMIT):
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
         for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
             if snapshot.exists:
                 members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
-    return {
+    result = {
         cid: row
         for cid, raw in members.items()
         if (row := conversations.prepare_conversation_for_read(raw, uid)) is not None
     }
+    if cache_key is not None:
+        with _members_cache_lock:
+            # Count read/prepare latency against the TTL, so a slow fetch never
+            # publishes a snapshot older than the promised staleness window.
+            if time.monotonic() < cache_deadline:
+                _members_cache[cache_key] = (cache_deadline, deepcopy(result))
+                _members_cache.move_to_end(cache_key)
+                while len(_members_cache) > MEMBERS_CACHE_MAX_ENTRIES:
+                    _members_cache.popitem(last=False)
+    return result
 
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:

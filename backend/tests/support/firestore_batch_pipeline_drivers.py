@@ -17,6 +17,10 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.batch_pipeline_record_dead_letter.record_dead_letter_stock',
+            domains={'namespace': namespaces},
+        ),
+        DriverEntry(
             'utils.record_projection_rebuild.run',
             domains={'mode': ['apply', 'plan']},
             neutrals={'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only')},
@@ -344,12 +348,19 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.timeliness_sample',
-            domains={'namespace': namespaces, 'terminal_empty_processed': [False, True]},
+            domains={
+                'namespace': namespaces,
+                'terminal_empty_processed': [False, True],
+            },
             neutrals={
                 'epoch': (1.0, 'cohort boundary operand only'),
                 'now': (10000.0, 'SLA cutoff operand only; due > epoch drives the new-breach counts'),
                 'sla': (7200.0, 'SLA width operand only'),
             },
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.timeliness_all_time_counts',
+            domains={'namespace': namespaces},
         ),
         DriverEntry(
             'database.batch_pipeline_store.first_pending',
@@ -441,9 +452,19 @@ def entries():
                 'database.batch_pipeline_projection_release.held_page_ids',
                 'database.batch_pipeline_projection_release.assignment_held_page_ids',
             ),
+            reason='thin 2-tuple wrapper over release_page_settled; no queries of its own',
+            expect_observed=False,
+            body_digest='15ce4bf78a33ea401c5eeb56e895c088a75ffc45471d268784f7f174e6474f30',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_page_settled',
+            covered_by=(
+                'database.batch_pipeline_projection_release.held_page_ids',
+                'database.batch_pipeline_projection_release.assignment_held_page_ids',
+            ),
             reason='bounded release scan delegates queries to both page builders; resets are document transactions',
             expect_observed=False,
-            body_digest='342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
+            body_digest='d863e83874910f88595eb18925f58f8129e1665d7b14dbde81179c443a75c632',
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_scan_pass',
@@ -451,8 +472,18 @@ def entries():
                 'database.batch_pipeline_projection_release.held_page_ids',
                 'database.batch_pipeline_projection_release.assignment_held_page_ids',
             ),
-            reason='two durable cursors share release_page; cursor reads and writes are document operations',
+            reason='thin 2-tuple wrapper over release_scan_pass_settled; no queries of its own',
             expect_observed=False,
-            body_digest='6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
+            body_digest='92308c42482933a9adde1ca3fc20dff803d3c7c3be88d134d608e532061a1d22',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_scan_pass_settled',
+            covered_by=(
+                'database.batch_pipeline_projection_release.held_page_ids',
+                'database.batch_pipeline_projection_release.assignment_held_page_ids',
+            ),
+            reason='two durable cursors share release_page_settled; cursor reads and writes are document operations',
+            expect_observed=False,
+            body_digest='0b064975a7115e66ee082bdf546b2b9bcfc75cbdf14bf08e67ccb595027c4de2',
         ),
     )
