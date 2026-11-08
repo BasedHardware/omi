@@ -1,8 +1,10 @@
 """Synthetic key/purge races on loopback Firestore with real transactions, never cloud."""
 
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import os
 from threading import Barrier, Event
+from unittest.mock import Mock
 import uuid
 
 from google.auth.credentials import AnonymousCredentials
@@ -28,7 +30,7 @@ def state(tmp_path, monkeypatch):
         'OBJECT_LAKE_RELEASE': 'v1',
         'OBJECT_LAKE_WRITE_ENABLED': 'true',
         'OBJECT_LAKE_WRITE_PERCENT': '100',
-        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '0',
+        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '5',
         'OMI_ENV_STAGE': 'offline',
     }.items():
         monkeypatch.setenv(key, value)
@@ -37,6 +39,7 @@ def state(tmp_path, monkeypatch):
         space_keys, 'space_key_firestore_client', lambda supplied=None: supplied if supplied is not None else client
     )
     monkeypatch.setattr(lake, '_lake_bucket', lambda: bucket)
+    monkeypatch.setattr(lake_wipe, 'time', Mock(sleep=Mock()))
     monkeypatch.setattr(
         lake_wipe.users_db,
         'get_user_deletion_wipe_status',
@@ -143,6 +146,7 @@ def test_inflight_put_self_deletes_during_purge_drain(state, monkeypatch):
         assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
+    assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
     assert lake.delete_space_upload_candidates(uid) == 0
 
 
@@ -185,11 +189,39 @@ def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
     lake._record_upload_candidate(bucket.name, f'v1/spaces/{sibling}/transcript/keep/digest')
     client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
     try:
-        assert lake_wipe.purge_owner_lake_content(uid)['candidates_deleted'] == 1
+        assert lake_wipe.purge_owner_lake_content(uid)['candidates_deleted'] == 0
+        assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
         assert lake.delete_space_upload_candidates(uid) == 0
         assert lake.delete_space_upload_candidates(sibling) == 1
     finally:
         lake.delete_space_upload_candidates(sibling)
+
+
+def test_late_upload_worker_loss_keeps_discovery_until_final_purge(state, monkeypatch):
+    client, uid, bucket = state
+    upload = LocalBlob.upload_from_string
+
+    class WorkerLost(BaseException):
+        pass
+
+    def crash_after_late_upload(blob, *args, **kwargs):
+        client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+        assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
+        assert not list(bucket.list_blobs())
+        upload(blob, *args, **kwargs)
+        raise WorkerLost()
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', crash_after_late_upload)
+    with pytest.raises(WorkerLost):
+        lake.put_space_object(uid, 'transcript', 'late', b'worker lost after upload')
+    assert len(list(bucket.list_blobs())) == 1
+    key = next(iter(bucket.list_blobs())).name
+    candidate_id = hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
+    assert client.collection('lake_upload_candidates').document(candidate_id).get().exists
+    assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
+    assert not list(bucket.list_blobs())
+    assert lake.delete_space_upload_candidates(uid) == 0
+    assert_destroyed(client, uid)
 
 
 def test_delayed_candidate_cannot_reappear_after_wipe_scan(state, monkeypatch):

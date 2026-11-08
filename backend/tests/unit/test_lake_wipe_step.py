@@ -2,7 +2,9 @@
 
 import hashlib
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from types import ModuleType
 from unittest.mock import Mock
 
@@ -13,7 +15,7 @@ from database import transcript_pointer as pointer
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
 from utils.other import lake_wipe, object_lake as lake, space_keys
-from utils.other.local_storage import LocalStorageClient
+from utils.other.local_storage import LocalStorageClient, LocalBlob
 
 
 @pytest.fixture
@@ -24,7 +26,7 @@ def world(tmp_path, monkeypatch):
         'OBJECT_LAKE_WRITE_ENABLED': 'true',
         'OBJECT_LAKE_WRITE_PERCENT': '100',
         'OBJECT_LAKE_READ_ENABLED': 'true',
-        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '0',
+        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '5',
         'OMI_ENV_STAGE': 'offline',
     }.items():
         monkeypatch.setenv(key, value)
@@ -32,6 +34,7 @@ def world(tmp_path, monkeypatch):
     store = StrictFirestore()
     bucket = LocalStorageClient(tmp_path).bucket('lake-c4-test')
     monkeypatch.setattr(lake, '_lake_bucket', lambda: bucket)
+    monkeypatch.setattr(lake_wipe, 'time', Mock(sleep=Mock()))
     monkeypatch.setattr(
         space_keys, 'space_key_firestore_client', lambda client=None: store if client is None else client
     )
@@ -109,7 +112,7 @@ def test_drain_is_between_fence_and_purge(world, monkeypatch):
     assert events == ['fence', ('drain', 2.5), 'purge']
 
 
-@pytest.mark.parametrize('value,expected', [(None, 5), ('-1', 0), ('70', 60), ('0', 0), ('1.25', 1.25)])
+@pytest.mark.parametrize('value,expected', [(None, 5), ('60', 60), ('1.25', 1.25)])
 def test_drain_bounds(monkeypatch, value, expected):
     if value is None:
         monkeypatch.delenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', raising=False)
@@ -118,7 +121,7 @@ def test_drain_bounds(monkeypatch, value, expected):
     assert config.wipe_drain_seconds() == expected
 
 
-@pytest.mark.parametrize('value', ['nan', 'inf', '-inf', 'bad'])
+@pytest.mark.parametrize('value', ['nan', 'inf', '-inf', 'bad', '-1', '0', '70'])
 def test_invalid_drain_fails_closed(monkeypatch, value):
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', value)
     with pytest.raises(ValueError):
@@ -302,6 +305,95 @@ def test_failed_prefix_never_destroys_keys_or_user_documents(world, ceremony, mo
     assert space_keys.get_space_keys('owner') is not None
 
 
+def test_late_upload_worker_loss_is_purged_again_before_keys(world, ceremony, monkeypatch):
+    bucket, store = world
+    service, events = ceremony
+    admitted, release, dead = Event(), Event(), Event()
+    upload = LocalBlob.upload_from_string
+    post_put_check = Mock(side_effect=AssertionError('dead worker reached its post-put check'))
+    monkeypatch.setattr(lake, '_check_put_authority', post_put_check)
+
+    class WorkerLost(BaseException):
+        pass
+
+    def late_upload(blob, *args, **kwargs):
+        admitted.set()
+        assert release.wait(timeout=10)
+        upload(blob, *args, **kwargs)
+        # Model loss after the object commits but before control returns to the
+        # writer. No self-cleanup or post-put authority check can execute.
+        raise WorkerLost()
+
+    def worker():
+        try:
+            lake.put_space_object('owner', 'transcript', 'late', b'late upload')
+        finally:
+            dead.set()
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', late_upload)
+
+    def firestore_step(uid):
+        # The first prefix purge has completed, with candidates still durable.
+        assert events[-1] == 'lake_prefix'
+        assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
+        assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+        release.set()
+        assert dead.wait(timeout=10)
+        assert len(list(bucket.list_blobs(prefix='v1/spaces/owner/'))) == 1
+        events.append('firestore')
+        return {'status': 'ok'}
+
+    monkeypatch.setattr(service.users_db, 'delete_user_data', firestore_step)
+    destroy = space_keys.destroy_space_keys
+
+    def checked_destroy(uid):
+        # The final step has independently purged the late object's metadata
+        # and bytes, verified prefix absence, and erased discovery rows.
+        assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
+        assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+        return destroy(uid)
+
+    monkeypatch.setattr(space_keys, 'destroy_space_keys', checked_destroy)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(worker)
+        try:
+            assert admitted.wait(timeout=10)
+            assert service.background_wipe_user_data('owner') is True
+        finally:
+            release.set()
+        with pytest.raises(WorkerLost):
+            future.result(timeout=10)
+    post_put_check.assert_not_called()
+    assert events[-2:] == ['lake_keys', 'completed']
+    assert store.rows[('space_keys', 'owner')]['state'] == 'destroyed'
+    assert store.rows[('account_deletions', 'owner')]['wipe_status'] == 'completed'
+
+
+def test_final_prefix_failure_retains_candidates_and_keys_for_retry(world, ceremony, monkeypatch):
+    _, store = world
+    service, events = ceremony
+    lake.put_space_object('owner', 'transcript', 'c', b'[]')
+    purge = lake.delete_space_prefix
+    calls = []
+
+    def final_failure(uid):
+        calls.append(uid)
+        if len(calls) == 2:
+            raise lake.LakePurgeIncomplete('final prefix not absent')
+        return purge(uid)
+
+    monkeypatch.setattr(lake, 'delete_space_prefix', final_failure)
+    assert service.background_wipe_user_data('owner') is False
+    assert len(calls) == 2
+    assert events[-2:] == ['lake_keys', 'failed']
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert space_keys.get_space_keys('owner') is not None
+    monkeypatch.setattr(lake, 'delete_space_prefix', purge)
+    assert service.background_wipe_user_data('owner') is True
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert store.rows[('space_keys', 'owner')]['state'] == 'destroyed'
+
+
 def test_grace_restore_never_runs_lake_steps(ceremony, monkeypatch):
     service, events = ceremony
     monkeypatch.setattr(
@@ -431,19 +523,21 @@ def test_candidate_purge_covers_orphans_old_bucket_and_owner_boundary(world):
     lake._record_upload_candidate('lake-c4-test', 'v1/spaces/owner-other/transcript/keep/digest')
     marker(store)
     result = lake_wipe.purge_owner_lake_content('owner')
-    assert result['objects_deleted'] == 0 and result['candidates_deleted'] == 1
+    assert result['objects_deleted'] == 0 and result['candidates_deleted'] == 0
+    assert sum(path[0] == 'lake_upload_candidates' for path in store.rows) == 2
+    lake_wipe.destroy_owner_lake_keys('owner')
     remaining = [row['key'] for path, row in store.rows.items() if path[0] == 'lake_upload_candidates']
     assert remaining == ['v1/spaces/owner-other/transcript/keep/digest']
     assert lake_wipe.purge_owner_lake_content('owner')['candidates_deleted'] == 0
 
 
-def test_candidate_purge_failure_prevents_keys_and_firestore(world, ceremony, monkeypatch):
+def test_candidate_purge_failure_prevents_key_destroy_and_completion(world, ceremony, monkeypatch):
     _, store = world
     service, events = ceremony
     lake.put_space_object('owner', 'transcript', 'c', b'[]')
     monkeypatch.setattr(lake, 'delete_space_upload_candidates', Mock(side_effect=lake.LakeFetchError('candidate down')))
     assert service.background_wipe_user_data('owner') is False
-    assert 'failed' in events and 'lake_keys' not in events and 'firestore' not in events
+    assert 'failed' in events and 'lake_keys' in events and 'firestore' in events and 'completed' not in events
     assert space_keys.get_space_keys('owner') is not None
 
 

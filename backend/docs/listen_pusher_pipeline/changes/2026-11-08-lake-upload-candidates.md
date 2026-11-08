@@ -15,7 +15,20 @@ retain their intents too: an intent is a candidate, never proof of an orphan.
 A fenced writer removes only a blob generation it just created; it retains the
 shared intent because another pre-fence writer may still be uploading that name.
 Reused referenced objects remain for the deleting orchestrator. Account wipe
-erases intents after its durable owner fence and verified object-prefix purge.
+retains intents after its first drained object-prefix purge. Immediately before
+key destruction it purges and verifies prefix absence again, then erases intents,
+then destroys keys. This catches an admitted late upload whose worker dies before
+the post-put fence check; a final purge or intent erasure failure blocks completion
+and retains keys for retry.
+
+Every put has a monotonic success deadline derived as half the strictly positive
+wipe drain interval. Upload and create-only replay requests disable SDK retries
+and split the remaining budget between connect/read timeouts. Expired puts never
+return a pointer and retain their blob and intent, since another writer may have
+referenced the same name. Only a deletion fence permits self-cleanup of a newly
+created generation. SDK socket timeouts do not guarantee total remote request
+time, so these client budgets alone
+do not prove quiescence of an ambiguous in-flight remote upload.
 
 C3 owns candidate consumption. Its janitor must fence/quiesce writers and check
 all live and historical references before deleting an unreferenced object;
