@@ -115,3 +115,25 @@ isolated guard files passed. It also detected that the implementer had appended
 validation results to this note during the run. The rerun freezes all inputs and
 uses the existing 900-second budget override; it skips no checks. Terminal
 preflight results are in the final implementation handoff.
+
+## Terminal preflight result
+
+The 900-second-budget rerun on implementation commit
+`ca484a9540f2bacfef446346ddd47a0f6ba2ecd7` exited **2 after 849.27s**. The
+canonical Firestore index guard passed all **7 isolated files** (729.17s including
+setup). The async-blocking, runtime image third-party closure, dead-code,
+batch-policy, notification-dispatch, and speaker-label checks also passed.
+
+The sole reported failure was `feature-flag-registry`:
+`review overdue beyond the 7-day grace: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+(review_by 2026-11-01)`. Its complete registry row is unchanged between the
+starting base `c2c07908de2ebfa52cb12cd074771d4833bc0559` and the implementation
+commit; only the new `RECORD_SEAL_REPAIR_AGE_ORDER` row was added. No error was
+reported for the new flag. Other repository checks were cancelled after this
+failure, so this is **not a fully green preflight**. The unrelated review date
+and ruling were left untouched to preserve Part B scope.
+
+The implementation remains locally committed only; no push, PR, index apply,
+cloud read, deploy, or token-lease change was performed. A subsequent local
+commit records only this terminal validation result; production code and tests
+are unchanged from the tested implementation commit.
