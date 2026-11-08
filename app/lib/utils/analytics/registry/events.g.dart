@@ -2436,7 +2436,8 @@ enum PaywallOpenedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  appOpenReask("app_open_reask");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2982,7 +2983,8 @@ enum PaywallVariantShownSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  appOpenReask("app_open_reask");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
