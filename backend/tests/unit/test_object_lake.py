@@ -74,7 +74,9 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
         assert sum(kwargs['timeout']) <= lake.config.put_deadline_seconds()
         candidate_id = hashlib.sha256(f'{bucket.name}/{blob.name}'.encode()).hexdigest()
         row = store.rows[('lake_upload_candidates', candidate_id)]
-        assert set(row) == {'bucket', 'key', 'created_at'}
+        assert set(row) == {'bucket', 'key', 'created_at', 'admitted_at', 'in_flight', 'settled'}
+        assert row['settled'] is False and len(row['in_flight']) == 1
+        assert all(value.tzinfo is not None for value in row['in_flight'].values())
         assert row['bucket'] == bucket.name and row['key'] == blob.name
         assert row['created_at'].tzinfo is not None
         return upload(blob, *args, **kwargs)
@@ -83,7 +85,11 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
     first = put()
     candidates = {path: row.copy() for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'}
     assert put() == first
-    assert {path: row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'} == candidates
+    for path, previous in candidates.items():
+        row = store.rows[path]
+        assert row['created_at'] == previous['created_at']
+        assert row['admitted_at'] >= previous['admitted_at']
+        assert row['settled'] is True and row['in_flight'] == {}
 
 
 @pytest.mark.parametrize('replay', [False, True])
@@ -118,8 +124,9 @@ def test_expired_candidate_admission_never_starts_put(storage, monkeypatch):
     record = lake._record_upload_candidate
 
     def delayed_record(*args):
-        record(*args)
+        attempt = record(*args)
         clock.monotonic.return_value += lake.config.put_deadline_seconds()
+        return attempt
 
     monkeypatch.setattr(lake, '_record_upload_candidate', delayed_record)
     forbidden = Mock(side_effect=AssertionError('expired put started upload'))
@@ -734,3 +741,83 @@ def test_candidate_absence_verification_failure_is_retryable(storage, monkeypatc
     monkeypatch.setattr(CandidateDocument, 'delete', lambda self: None)
     with pytest.raises(lake.LakeFetchError, match='remain after purge'):
         lake.delete_space_upload_candidates('s')
+
+
+def test_settlement_of_one_same_key_request_leaves_other_inflight(storage):
+    bucket, store = storage
+    key = 'v1/spaces/s/transcript/c/' + hashlib.sha256(b'new').hexdigest()
+    one = lake._record_upload_candidate(bucket.name, key)
+    two = lake._record_upload_candidate(bucket.name, key)
+    lake._settle_upload_candidate(bucket.name, key, two)
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert set(row['in_flight']) == {one} and row['settled'] is False
+    with pytest.raises(lake.LakeFetchError, match='still in flight'):
+        lake.assert_space_uploads_quiescent('s')
+    lake._settle_upload_candidate(bucket.name, key, one)
+    lake.assert_space_uploads_quiescent('s')
+    assert lake.delete_space_upload_candidates('s') == 1
+    lake._settle_upload_candidate(bucket.name, key, one)
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_failed_put_settles_admitted_request(storage, monkeypatch):
+    _, store = storage
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', Mock(side_effect=RuntimeError('transport failed')))
+    with pytest.raises(lake.LakeFetchError):
+        put()
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert row['settled'] is True and row['in_flight'] == {}
+
+
+def test_settlement_store_failure_retains_inflight_discovery(storage, monkeypatch):
+    bucket, store = storage
+    settle = Mock(side_effect=RuntimeError('settlement unavailable'))
+    monkeypatch.setattr(lake, '_settle_upload_candidate', settle)
+    with pytest.raises(lake.LakeFetchError):
+        put()
+    assert len(list(bucket.list_blobs())) == 1
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert row['settled'] is False and len(row['in_flight']) == 1
+
+
+def test_large_payload_refuses_resumable_upload_before_admission(storage, monkeypatch):
+    bucket, store = storage
+    monkeypatch.setattr(lake, '_MAX_SINGLE_REQUEST_BYTES', 1)
+    forbidden = Mock(side_effect=AssertionError('resumable upload admitted'))
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', forbidden)
+    with pytest.raises(lake.LakeObjectCorrupt, match='single-request upload limit'):
+        put(b'content')
+    forbidden.assert_not_called()
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_single_request_limit_matches_installed_sdk_dispatch(monkeypatch):
+    from google.cloud.storage import Blob, Client
+    from google.auth.credentials import AnonymousCredentials
+    from io import BytesIO
+
+    client = Client(project='demo-pgf-c4', credentials=AnonymousCredentials())
+    try:
+        blob = client.bucket('synthetic-lake').blob('synthetic-object')
+        response = Mock(json=Mock(return_value={}))
+        multipart = Mock(return_value=response)
+        resumable = Mock(side_effect=AssertionError('resumable request dispatched'))
+        monkeypatch.setattr(Blob, '_do_multipart_upload', multipart)
+        monkeypatch.setattr(Blob, '_do_resumable_upload', resumable)
+        blob._do_upload(
+            client,
+            BytesIO(),
+            'application/octet-stream',
+            lake._MAX_SINGLE_REQUEST_BYTES,
+            num_retries=None,
+            predefined_acl=None,
+            if_generation_match=0,
+            if_generation_not_match=None,
+            if_metageneration_match=None,
+            if_metageneration_not_match=None,
+            retry=None,
+        )
+        multipart.assert_called_once()
+        resumable.assert_not_called()
+    finally:
+        client.close()

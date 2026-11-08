@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+from datetime import timedelta
 import os
 from threading import Barrier, Event
 from unittest.mock import Mock
@@ -30,7 +31,9 @@ def state(tmp_path, monkeypatch):
         'OBJECT_LAKE_RELEASE': 'v1',
         'OBJECT_LAKE_WRITE_ENABLED': 'true',
         'OBJECT_LAKE_WRITE_PERCENT': '100',
-        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '5',
+        # Real transaction contention on a shared host needs the supported
+        # maximum put-success budget; wipe sleeping remains mocked out.
+        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '60',
         'OMI_ENV_STAGE': 'offline',
     }.items():
         monkeypatch.setenv(key, value)
@@ -185,7 +188,8 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
 def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
     client, uid, bucket = state
     sibling = uid + '-sibling'
-    lake._record_upload_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest')
+    attempt = lake._record_upload_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest')
+    lake._settle_upload_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest', attempt)
     lake._record_upload_candidate(bucket.name, f'v1/spaces/{sibling}/transcript/keep/digest')
     client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
     try:
@@ -217,8 +221,13 @@ def test_late_upload_worker_loss_keeps_discovery_until_final_purge(state, monkey
     assert len(list(bucket.list_blobs())) == 1
     key = next(iter(bucket.list_blobs())).name
     candidate_id = hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
-    assert client.collection('lake_upload_candidates').document(candidate_id).get().exists
-    assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
+    row = client.collection('lake_upload_candidates').document(candidate_id).get().to_dict()
+    assert row['settled'] is False and len(row['in_flight']) == 1
+    with pytest.raises(lake.LakeFetchError, match='still in flight'):
+        lake_wipe.destroy_owner_lake_keys(uid)
+    assert space_keys.get_space_keys(uid) is not None
+    now = row['admitted_at'] + timedelta(seconds=lake.config.put_quiescence_seconds() + 1)
+    assert lake_wipe.destroy_owner_lake_keys(uid, now=now)['status'] == 'destroyed'
     assert not list(bucket.list_blobs())
     assert lake.delete_space_upload_candidates(uid) == 0
     assert_destroyed(client, uid)
@@ -268,3 +277,22 @@ def test_concurrent_upload_candidates_are_idempotent_under_real_transactions(sta
     assert first == second
     assert lake.get_space_object(first) == b'[]'
     assert lake.delete_space_upload_candidates(uid) == 1
+
+
+def test_same_key_admissions_use_server_times_and_settle_independently(state):
+    client, uid, bucket = state
+    key = f'v1/spaces/{uid}/transcript/concurrent/digest'
+    one = lake._record_upload_candidate(bucket.name, key)
+    two = lake._record_upload_candidate(bucket.name, key)
+    candidate_id = hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
+    row = client.collection('lake_upload_candidates').document(candidate_id).get().to_dict()
+    assert row['admitted_at'].tzinfo is not None
+    assert set(row['in_flight']) == {one, two}
+    assert all(timestamp.tzinfo is not None for timestamp in row['in_flight'].values())
+    client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+    lake._settle_upload_candidate(bucket.name, key, two)
+    with pytest.raises(lake.LakeFetchError, match='still in flight'):
+        lake_wipe.destroy_owner_lake_keys(uid)
+    lake._settle_upload_candidate(bucket.name, key, one)
+    assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
+    assert lake.delete_space_upload_candidates(uid) == 0

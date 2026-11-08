@@ -1,6 +1,7 @@
 """C4 erasure acceptance: real encrypted lake and key authority, synthetic ceremony deps."""
 
 import hashlib
+from datetime import datetime, timedelta, timezone
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -309,6 +310,9 @@ def test_late_upload_worker_loss_is_purged_again_before_keys(world, ceremony, mo
     bucket, store = world
     service, events = ceremony
     admitted, release, dead = Event(), Event(), Event()
+    now = datetime.now(timezone.utc)
+    quiescence = lake.assert_space_uploads_quiescent
+    monkeypatch.setattr(lake, 'assert_space_uploads_quiescent', lambda uid, **kw: quiescence(uid, now=now))
     upload = LocalBlob.upload_from_string
     post_put_check = Mock(side_effect=AssertionError('dead worker reached its post-put check'))
     monkeypatch.setattr(lake, '_check_put_authority', post_put_check)
@@ -337,9 +341,7 @@ def test_late_upload_worker_loss_is_purged_again_before_keys(world, ceremony, mo
         assert events[-1] == 'lake_prefix'
         assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
         assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
-        release.set()
-        assert dead.wait(timeout=10)
-        assert len(list(bucket.list_blobs(prefix='v1/spaces/owner/'))) == 1
+        # Leave the request in flight through the final destructive step.
         events.append('firestore')
         return {'status': 'ok'}
 
@@ -358,6 +360,27 @@ def test_late_upload_worker_loss_is_purged_again_before_keys(world, ceremony, mo
         future = pool.submit(worker)
         try:
             assert admitted.wait(timeout=10)
+            assert service.background_wipe_user_data('owner') is False
+            assert 'completed' not in events and events[-1] == 'failed'
+            assert not list(bucket.list_blobs())
+            # The upload commits only after the refused final step, then loses
+            # its worker before any completion or authority check.
+            release.set()
+            assert dead.wait(timeout=10)
+            assert len(list(bucket.list_blobs())) == 1
+            assert space_keys.get_space_keys('owner') is not None
+            assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+            # Still blocked at the exact bound. Retry only once all pre-fence
+            # requests are older than the bound; no real-time sleeps.
+            admission = next(
+                row['admitted_at'] for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'
+            )
+            now = admission + timedelta(seconds=config.put_quiescence_seconds())
+            marker(store)
+            with pytest.raises(lake.LakeFetchError, match='still in flight'):
+                lake_wipe.destroy_owner_lake_keys('owner', now=now)
+            now += timedelta(microseconds=1)
+            monkeypatch.setattr(service.users_db, 'delete_user_data', lambda uid: {'status': 'ok'})
             assert service.background_wipe_user_data('owner') is True
         finally:
             release.set()
@@ -519,7 +542,8 @@ def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, 
 
 def test_candidate_purge_covers_orphans_old_bucket_and_owner_boundary(world):
     _, store = world
-    lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest')
+    attempt = lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest')
+    lake._settle_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest', attempt)
     lake._record_upload_candidate('lake-c4-test', 'v1/spaces/owner-other/transcript/keep/digest')
     marker(store)
     result = lake_wipe.purge_owner_lake_content('owner')
@@ -543,9 +567,44 @@ def test_candidate_purge_failure_prevents_key_destroy_and_completion(world, cere
 
 def test_lake_dark_key_step_also_erases_existing_upload_intents(world, monkeypatch):
     _, store = world
-    lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest')
+    attempt = lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest')
+    lake._settle_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/orphan/digest', attempt)
     marker(store)
     monkeypatch.delenv('BUCKET_OBJECT_LAKE')
     lake_wipe.destroy_owner_lake_keys('owner')
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
     assert store.rows[('space_keys', 'owner')]['state'] == 'destroyed'
+
+
+def test_settled_young_candidate_does_not_block_final_step(world):
+    _, store = world
+    ref = lake.put_space_object('owner', 'transcript', 'c', b'[]')
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert row['settled'] is True and row['in_flight'] == {}
+    marker(store)
+    assert lake_wipe.destroy_owner_lake_keys('owner', now=row['admitted_at'])['status'] == 'destroyed'
+    assert store.rows[('space_keys', 'owner')]['state'] == 'destroyed'
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+@pytest.mark.parametrize('bad_time', [None, 'invalid', datetime(2026, 1, 1)])
+def test_invalid_admission_time_blocks_key_destruction(world, bad_time):
+    _, store = world
+    lake.put_space_object('owner', 'transcript', 'c', b'[]')
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    row.update(settled=False, in_flight={'lost': bad_time})
+    marker(store)
+    with pytest.raises(lake.LakeFetchError, match='admission time unavailable'):
+        lake_wipe.destroy_owner_lake_keys('owner')
+    assert space_keys.get_space_keys('owner') is not None
+
+
+def test_quiescence_discovery_failure_blocks_final_purge(world, monkeypatch):
+    _, store = world
+    marker(store)
+    monkeypatch.setattr(lake, '_space_upload_candidates', Mock(side_effect=RuntimeError('Firestore down')))
+    forbidden = Mock(side_effect=AssertionError('purged before quiescence'))
+    monkeypatch.setattr(lake, 'delete_space_prefix', forbidden)
+    with pytest.raises(lake.LakeFetchError, match='quiescence unavailable'):
+        lake_wipe.destroy_owner_lake_keys('owner')
+    forbidden.assert_not_called()

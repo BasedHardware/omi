@@ -27,10 +27,11 @@ def purge_owner_lake_content(uid: str) -> dict:
     return {'status': 'purged', 'objects_deleted': count, 'candidates_deleted': 0}
 
 
-def destroy_owner_lake_keys(uid: str) -> dict:
+def destroy_owner_lake_keys(uid: str, *, now: datetime | None = None) -> dict:
     """LAST destructive wipe step, including when bucket configuration is absent."""
     if users_db.get_user_deletion_wipe_status(uid) != 'running':
         raise RuntimeError('lake key destroy requires a running account wipe')
+    object_lake.assert_space_uploads_quiescent(uid, now=now)
     # Re-list and verify absence at the last possible point, before erasing the
     # discovery rows and then key authority. Any failure retains keys for retry.
     if config.bucket():

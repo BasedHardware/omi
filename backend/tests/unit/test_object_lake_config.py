@@ -123,3 +123,11 @@ def test_local_write_settings_remain_available(monkeypatch, stage):
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '100')
     assert object_lake.validate_write_settings(stage, 'true', '100') == []
     assert object_lake.write_admitted('owner')
+
+
+def test_quiescence_bound_covers_maximum_put_budget_and_ten_minute_margin(monkeypatch):
+    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '60')
+    assert object_lake.put_quiescence_seconds() >= object_lake.put_deadline_seconds() + 600
+    bound = object_lake.put_quiescence_seconds()
+    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '1')
+    assert object_lake.put_quiescence_seconds() == bound

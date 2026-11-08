@@ -6,6 +6,7 @@ pointer admission at the codec seam. Reads never return ciphertext on failure.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,7 @@ import re
 import struct
 import threading
 import time
+import uuid
 import zlib
 
 from cryptography.exceptions import InvalidTag
@@ -22,6 +24,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap, aes_key_wrap
 from google.api_core.exceptions import NotFound, PreconditionFailed
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config import object_lake as config
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -31,6 +34,9 @@ from utils.other.local_storage import create_storage_client
 # 32 MiB accommodates long transcripts while bounding authenticated zlib expansion.
 # Every future class must choose its own reviewed limit before admission.
 MAX_PLAINTEXT_BYTES = {'transcript': 32 * 1024 * 1024}
+# The pinned GCS SDK uses one multipart request only up to 8 MiB. Refuse
+# resumable uploads: their later chunk requests could outlive admission's bound.
+_MAX_SINGLE_REQUEST_BYTES = 8 * 1024 * 1024
 DATA_CLASSES = tuple(MAX_PLAINTEXT_BYTES)
 _HEADER = struct.Struct('>4sBI12s')
 _HEADER_V2 = struct.Struct('>4sBI12s40s')
@@ -214,6 +220,8 @@ def put_space_object(
             del dek
     finally:
         del kek
+    if len(payload) > _MAX_SINGLE_REQUEST_BYTES:
+        raise LakeObjectCorrupt('Lake payload exceeds single-request upload limit')
     stamp = {
         'space_id': space_id,
         'data_class': data_class,
@@ -233,38 +241,38 @@ def put_space_object(
         # Write-ahead intent survives a refused replay, an ambiguous upload
         # result or worker loss before the pointer commits. Never self-delete:
         # another writer may already reference this content-addressed name.
-        _record_upload_candidate(config.bucket(), key)
-        # The SDK accepts (connect, read) tuples and retry=None; its signatures
-        # type both from their defaults, so call it untyped.
-        gcs: Any = blob
-        try:
-            remaining = _remaining_put_seconds(deadline)
-            # No SDK retries: their per-attempt timeouts can outlive the drain.
-            # Split the remaining budget between connect and response waits.
-            gcs.upload_from_string(
-                payload,
-                content_type=content_type,
-                if_generation_match=0,
-                timeout=(remaining / 2, remaining / 2),
-                retry=None,
-            )
-        except PreconditionFailed:
-            remaining = _remaining_put_seconds(deadline)
-            gcs.reload(timeout=(remaining / 2, remaining / 2), retry=None)
-            existing = blob.metadata or {}
-            if any(existing.get(k) != stamp[k] for k in ('plaintext_sha256', 'space_id', 'data_class')):
-                raise LakeObjectConflict('Existing lake object metadata conflicts')
+        with _upload_candidate(config.bucket(), key):
+            # The SDK accepts (connect, read) tuples and retry=None; its signatures
+            # type both from their defaults, so call it untyped.
+            gcs: Any = blob
             try:
-                size = blob.size
-                if size is None:
-                    raise LakeObjectConflict('Existing lake object size is unavailable')
-                ref = LakeObjectRef(config.bucket(), key, digest, size, data_class, int(existing['dek_version']))
-                _parse_ref(ref)
-            except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
-                raise LakeObjectConflict('Existing lake object metadata is invalid') from None
-            _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline)
-            return ref
-        _check_put_authority(space_id, entity_id, blob, created=True, deadline=deadline)
+                remaining = _remaining_put_seconds(deadline)
+                # No SDK retries: their per-attempt timeouts can outlive the drain.
+                # Split the remaining budget between connect and response waits.
+                gcs.upload_from_string(
+                    payload,
+                    content_type=content_type,
+                    if_generation_match=0,
+                    timeout=(remaining / 2, remaining / 2),
+                    retry=None,
+                )
+            except PreconditionFailed:
+                remaining = _remaining_put_seconds(deadline)
+                gcs.reload(timeout=(remaining / 2, remaining / 2), retry=None)
+                existing = blob.metadata or {}
+                if any(existing.get(k) != stamp[k] for k in ('plaintext_sha256', 'space_id', 'data_class')):
+                    raise LakeObjectConflict('Existing lake object metadata conflicts')
+                try:
+                    size = blob.size
+                    if size is None:
+                        raise LakeObjectConflict('Existing lake object size is unavailable')
+                    ref = LakeObjectRef(config.bucket(), key, digest, size, data_class, int(existing['dek_version']))
+                    _parse_ref(ref)
+                except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
+                    raise LakeObjectConflict('Existing lake object metadata is invalid') from None
+                _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline)
+                return ref
+            _check_put_authority(space_id, entity_id, blob, created=True, deadline=deadline)
     except (space_keys.SpaceKeyDestroyed, space_keys.SpaceKeyUnavailable):
         raise
     except ObjectLakeError:
@@ -274,7 +282,21 @@ def put_space_object(
     return LakeObjectRef(config.bucket(), key, digest, len(payload), data_class, keys.active_version)
 
 
-def _record_upload_candidate(bucket: str, key: str) -> None:
+@contextmanager
+def _upload_candidate(bucket: str, key: str):
+    attempt = _record_upload_candidate(bucket, key)
+    try:
+        yield
+    except Exception:
+        _settle_upload_candidate(bucket, key, attempt)
+        raise
+    else:
+        _settle_upload_candidate(bucket, key, attempt)
+    # Process loss leaves the attempt unsettled. No finally: a killed writer
+    # cannot establish that its remote request has finished.
+
+
+def _record_upload_candidate(bucket: str, key: str) -> str:
     """Commit discovery before put, serialized against durable deletion fences.
 
     Intents survive successful commits and ambiguous uploads for C3's janitor.
@@ -282,6 +304,7 @@ def _record_upload_candidate(bucket: str, key: str) -> None:
     recreating an owner-derived intent after account wipe's final scan.
     """
     _, _, space_id, _, entity_id, _ = key.split('/')
+    attempt = uuid.uuid4().hex
     candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
     client = space_keys.space_key_firestore_client()
     candidate = client.collection('lake_upload_candidates').document(candidate_id)
@@ -290,19 +313,97 @@ def _record_upload_candidate(bucket: str, key: str) -> None:
     def record(transaction):
         _assert_owner_write_allowed(space_id, entity_id, firestore_client=client, transaction=transaction)
         snapshot = candidate.get(transaction=transaction)
-        if not snapshot.exists:
-            transaction.create(candidate, {'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
-            return
         existing = snapshot.to_dict() or {}
-        if (
+        if snapshot.exists and (
             existing.get('bucket') != bucket
             or existing.get('key') != key
             or not isinstance(existing.get('created_at'), datetime)
             or existing['created_at'].tzinfo is None
         ):
             raise LakeObjectConflict('Existing lake upload candidate is invalid')
+        pending = dict(existing.get('in_flight', {}))
+        # Preserve pre-protocol candidates conservatively until their bound.
+        if snapshot.exists and 'in_flight' not in existing:
+            pending['legacy'] = existing['created_at']
+        pending[attempt] = firestore.SERVER_TIMESTAMP
+        state = {'admitted_at': firestore.SERVER_TIMESTAMP, 'in_flight': pending, 'settled': False}
+        if snapshot.exists:
+            transaction.update(candidate, state)
+        else:
+            transaction.create(
+                candidate,
+                {
+                    'bucket': bucket,
+                    'key': key,
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                    **state,
+                },
+            )
 
     record(client.transaction())
+    return attempt
+
+
+def _settle_upload_candidate(bucket: str, key: str, attempt: str) -> None:
+    """Settle only this request; a concurrent upload of the same key stays live."""
+    client = space_keys.space_key_firestore_client()
+    candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
+    candidate = client.collection('lake_upload_candidates').document(candidate_id)
+
+    @firestore.transactional
+    def settle(transaction):
+        snapshot = candidate.get(transaction=transaction)
+        if not snapshot.exists:
+            return  # Never recreate discovery after the wipe's final erasure.
+        pending = dict((snapshot.to_dict() or {}).get('in_flight', {}))
+        pending.pop(attempt, None)
+        transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
+
+    settle(client.transaction())
+
+
+def _space_upload_candidates(space_id: str, client):
+    prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
+    collection = client.collection('lake_upload_candidates')
+    query = collection.where(filter=FieldFilter('key', '>=', prefix)).where(
+        filter=FieldFilter('key', '<', prefix[:-1] + '0')
+    )
+    return collection, query
+
+
+def assert_space_uploads_quiescent(space_id: str, *, now: datetime | None = None, firestore_client=None) -> None:
+    """Fail closed until every pre-fence request is settled or safely aged out.
+
+    Call only behind the durable owner fence, before final prefix verification.
+    The bound uses the maximum permitted put budget plus ten minutes, so a
+    configuration change cannot shorten the lifetime of an admitted request.
+    """
+    now = now if now is not None else datetime.now(timezone.utc)
+    try:
+        client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
+        _, query = _space_upload_candidates(space_id, client)
+        for snapshot in query.stream():
+            row = snapshot.to_dict() or {}
+            pending = row.get('in_flight')
+            if pending is None:
+                pending = {'legacy': row.get('created_at')}
+            if (
+                not isinstance(pending, dict)
+                or row.get('settled') is True
+                and pending
+                or pending == {}
+                and row.get('settled') is not True
+            ):
+                raise LakeFetchError('Lake upload candidate state invalid')
+            for admitted_at in pending.values():
+                if not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None:
+                    raise LakeFetchError('Lake upload admission time unavailable')
+                if (now - admitted_at).total_seconds() <= config.put_quiescence_seconds():
+                    raise LakeFetchError('Lake uploads still in flight; retry wipe later')
+    except ObjectLakeError:
+        raise
+    except Exception:
+        raise LakeFetchError('Lake upload quiescence unavailable') from None
 
 
 def _assert_owner_write_allowed(space_id, entity_id, *, firestore_client=None, transaction=None):
@@ -470,15 +571,9 @@ def delete_space_upload_candidates(space_id: str, *, firestore_client=None) -> i
     No bucket filter: a config change must not strand the owner's old intents.
     The release pin matches delete_space_prefix; widen both on a release bump.
     """
-    from google.cloud.firestore_v1.base_query import FieldFilter
-
-    prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
     try:
         client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
-        collection = client.collection('lake_upload_candidates')
-        query = collection.where(filter=FieldFilter('key', '>=', prefix)).where(
-            filter=FieldFilter('key', '<', prefix[:-1] + '0')
-        )
+        collection, query = _space_upload_candidates(space_id, client)
         count = 0
         for row in query.stream():
             collection.document(row.id).delete()
