@@ -30,6 +30,7 @@ from config.batch_pipeline import (
     HELD_DEAD_LETTER_SECONDS,
     projection_ghost_settle_enabled,
     projection_ghost_settle_cohort,
+    projection_restorable_cap_expiry_enabled,
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
 
@@ -285,6 +286,10 @@ class ProjectionReleaseStore:
                     return 'expired'
                 return False
             if attempts >= MAX_RELEASE_ATTEMPTS:
+                if projection_restorable_cap_expiry_enabled():
+                    # Use the same deadline/one-time CAS as unrestorable holds;
+                    # any release must wait for a later pass after the reset.
+                    return self._expire_assignment(transaction, segment_id, entry, now, expired, attempts)
                 return False
             reset: dict[str, Any] = {
                 'projection_state': 'pending',
