@@ -14,6 +14,7 @@
   (``omi_episode_client_requests_total``)
 - closed-episode composer runs by outcome and their latency
   (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
+- Home attach-gap read observations (``omi_episode_home_attach_gap_total``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
 - closed-episode size by join-variant arm recorded when the episode opened, ``f`` or
@@ -42,6 +43,21 @@ def reuse_or_create(factory, name: str, documentation: str, labelnames: list[str
             raise ValueError(f'metric {name} already registered with a different shape')
         return existing
     return factory(name, documentation, labelnames, **kwargs)
+
+
+EPISODE_HOME_ATTACH_GAP_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_home_attach_gap_total',
+    'Home reads observing an unlinked recording wholly inside a live ownership window; repeated reads count again.',
+    [],
+)
+
+
+def record_home_attach_gap() -> None:
+    try:
+        EPISODE_HOME_ATTACH_GAP_TOTAL.inc()
+    except Exception:
+        pass  # Telemetry must never fail a Home read.
 
 
 MOMENT_OUTCOMES = frozenset(

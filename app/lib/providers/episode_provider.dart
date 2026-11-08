@@ -66,13 +66,13 @@ class EpisodeProvider extends ChangeNotifier {
     _homeConversations = provider;
     provider.heldHomeEpisodes = () => {
           for (final episode in homeEpisodes)
-            if (!episode.live &&
-                episode.composed &&
-                episode.members
-                        .where(
-                            (m) => !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
-                        .length >=
-                    2)
+            if (episode.live ||
+                (episode.composed &&
+                    episode.members
+                            .where((m) =>
+                                !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
+                            .length >=
+                        2))
               episode.id: episode.members
                   .where((m) => !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
                   .toList(),

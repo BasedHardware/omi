@@ -131,7 +131,10 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     if (pairs.length == 50) break;
   }
   var response = await makeApiCall(
-      url: url, headers: {if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')}, method: 'GET', body: '');
+      url: url,
+      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      method: 'GET',
+      body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;
@@ -400,10 +403,11 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
-    headers: {},
+    headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'},
     method: 'GET',
     body: '',
   );
@@ -458,8 +462,8 @@ extension _Let<T> on T {
   R let<R>(R Function(T) f) => f(this);
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
-  return (await getConversationByIdResult(conversationId)).item;
+Future<ServerConversation?> getConversationById(String conversationId, {bool userInitiated = false}) async {
+  return (await getConversationByIdResult(conversationId, userInitiated: userInitiated)).item;
 }
 
 String conversationCollectionUrl(
@@ -547,9 +551,12 @@ class ConversationApi {
         debugName: 'conversation_parse',
       );
 
-  Future<ApiResult<ServerConversation>> byId(String id) async {
+  Future<ApiResult<ServerConversation>> byId(String id, {bool userInitiated = false}) async {
     final sent = await executeApi<String>(
-      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      request: ApiRequest(
+          url: '${_baseUrl}v1/conversations/$id',
+          method: 'GET',
+          headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'}),
       send: _send,
       decode: (body) => body,
     );
