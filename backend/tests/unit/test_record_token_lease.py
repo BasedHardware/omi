@@ -193,20 +193,50 @@ def test_stock_seed_replaces_24832_age_grace(enabled, monkeypatch, age, tokens, 
     assert producer_tokens_dead(tokens, None, uid='synthetic', row=row) is expired
 
 
-def test_stock_seed_clamps_every_durable_anchor_and_never_uses_process_start(enabled, monkeypatch):
+def test_stock_seed_is_bounded_by_serve_enable_and_never_uses_process_start(enabled, monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 100))
     assert not producer_tokens_dead({'s': POD}, None, uid='synthetic', row=ROW)
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 7200))
-    assert producer_tokens_dead({'s': POD}, None, uid='synthetic', row=ROW)
+    enabled_at = NOW - 7200
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(enabled_at))
     for row, job, token in [
+        (ROW, {}, POD),
+        ({**ROW, 'finished_at': NOW - 10}, {}, POD),
         ({**ROW, 'record_seal_refused_at': NOW - 10}, {}, POD),
         (ROW, {'available_at': NOW - 10}, POD),
         (ROW, {}, {**POD, 'abandoned_at': NOW - 10}),
     ]:
-        assert lease.token_lease_clocks(token, row=row, job=job)[0] == NOW - 10
-        assert producer_tokens_dead({'s': token}, None, uid='synthetic', row=row, job=job) is ('abandoned_at' in token)
+        assert lease.token_lease_clocks(token, row=row, job=job) == (enabled_at, enabled_at + 3600)
+        assert producer_tokens_dead({'s': token}, None, uid='synthetic', row=row, job=job)
     monkeypatch.delenv('RECORD_TOKEN_LEASE_DEPLOYED_AT')
     assert not producer_tokens_dead({'s': POD}, None, uid='synthetic', row=ROW)
+
+
+def test_moving_retry_wake_cannot_extend_legacy_lease(enabled, monkeypatch):
+    enabled_at = NOW - 3601
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(enabled_at))
+    for wake in (enabled_at, NOW - 60, NOW, NOW + 86400):
+        job = {'available_at': wake, 'updated_at': wake}
+        assert lease.token_lease_clocks(POD, row=ROW, job=job)[1] == enabled_at + 3600
+        assert producer_tokens_dead({'s': POD}, None, uid='synthetic', row=ROW, job=job)
+
+
+@pytest.mark.parametrize('authority', ['pod', 'abandon'])
+def test_server_signal_newer_than_stoppage_proof_keeps_token_alive(enabled, authority):
+    # The pod list predates an observed append; uploader custody outlives pusher.
+    proof = {'namespace': 'prod-omi-backend', 'captured_at': NOW - 120, 'pods': {}}
+    token = {**TOKEN, 'last_signal_at': NOW - 60, 'lease_expires_at': NOW + 3540}
+    if authority == 'abandon':
+        # Also exercise an expired signal: an older abandonment cannot regain
+        # authority merely because a newer server signal has aged out.
+        token = {**TOKEN, 'abandoned_at': TOKEN['last_signal_at'] - 60}
+        proof = None
+    assert not producer_tokens_dead({'s': token}, proof, uid='synthetic', row=ROW)
+
+
+@pytest.mark.parametrize('proof_offset', [-60, 0, 60])
+def test_only_strictly_newer_signal_supersedes_abandon_proof(enabled, proof_offset):
+    token = {**TOKEN, 'abandoned_at': TOKEN['last_signal_at'] + proof_offset}
+    assert producer_tokens_dead({'s': token}, None, uid='synthetic', row=ROW) is (proof_offset >= 0)
 
 
 def test_partial_late_custody_bytes_invalidate_barrier_even_after_map_was_cleared(enabled):

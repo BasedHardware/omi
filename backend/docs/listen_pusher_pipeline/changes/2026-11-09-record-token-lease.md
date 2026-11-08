@@ -16,13 +16,16 @@ including queued drain batches after socket close. An async conversation lock
 coalesces concurrent receive/projection renewals; custody appends renew before
 admission, including memoized retry waits. No users.py or client-state changes.
 A renewal outage returns retryable custody refusal; the phone retains WAL/audio.
-`RECORD_TOKEN_LEASE_DEPLOYED_AT` is a fixed release epoch (pinned by the release owner with the shadow flip and
-inherited by children), not process-start time. The Helm guard refuses an enabled
+`RECORD_TOKEN_LEASE_DEPLOYED_AT` is the fixed serve-enable epoch (set by the release owner at first serve enable
+and held fixed throughout the ramp; shadow uses a fixed preview epoch), not process-start time. The Helm guard refuses an enabled
 mode without that epoch; off keeps the inert default zero. Bind the same epoch
 on every pusher/custody writer through runtime_env and on repair through
 recordTokenLease.deployedAt, so late stock renewals compute the same lapse and
 revision bump as repair. Identified legacy tokens use
-max(finished_at, refusal, abandoned_at, job available_at, deployment epoch);
+max(finished_at, abandoned_at, serve-enable epoch), bounded at the enable epoch;
+only explicit server signals can extend beyond enable + lease. Retry wakes are
+excluded. The refusal stamp is excluded because a successful seal clears it,
+so a reopened record can receive a new stamp; it is not globally write-once.
 bare True and malformed tokens remain fenced. Missing epoch fails closed.
 
 Dark deployment → shadow for **48h** → serve **1 → 10 → 50 → 100%**.
@@ -40,12 +43,12 @@ because uploaders can outlive the pusher. Tail/partial/privacy gates still apply
 late bytes after seal remain retained and are counted for gap-fill/revert.
 Part B discovery and indexes are unchanged. Land after #24866 rebase/merge.
 
-Implementation review risk: the design's stock seed includes the job's current
-`available_at`. The pending drainer advances that retry wake every minute, so
-such stock can remain fenced indefinitely even with an old deployment epoch.
-This lane preserves the written formula, including matching plan/apply anchor
-reads. The lead must resolve whether post-deployment retry wakes should be
-excluded before relying on stock drainage. No age-only escape is layered on.
+Lead resolution (2026-11-09): moving repair/defer metadata cannot postpone stock
+lapse. Historical anchors are capped at serve enable; post-enable metadata alone
+is not a heartbeat. Server-observed signals newer than pod/abandon proof keep the
+token alive, including a stale abandoned marker on an otherwise lapsed token.
+The exact two pending alert objects are in `.agent-brief/alert-rules-addition.json`
+for the aggregate owner; the aggregate mirror tests intentionally remain red.
 
 ## Local validation receipt
 

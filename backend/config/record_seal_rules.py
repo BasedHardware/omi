@@ -47,7 +47,7 @@ def lease_timestamp(value):
 def token_lease_clocks(token, *, row=None, job=None):
     """Legacy clocks are computed, never backfilled. Bare legacy True stays fenced.
 
-    The deployment epoch is shared by all repair processes (including children
+    The serve-enable epoch is shared by all repair processes (including children
     and new CronJobs). Process start/now would re-anchor stock on every scan.
     A missing epoch deliberately cannot expire stock tokens.
     """
@@ -62,7 +62,7 @@ def token_lease_clocks(token, *, row=None, job=None):
         signal = lease_timestamp(token.get('last_signal_at'))
         expiry = lease_timestamp(token.get('lease_expires_at'))
         return (signal, expiry) if signal and expiry and expiry >= signal else None
-    row, job = row or {}, job or {}
+    row = row or {}
     if row.get('status') != 'completed' or not token.get('pod') or not lease_timestamp(token.get('process_started_at')):
         return None
     try:
@@ -71,17 +71,13 @@ def token_lease_clocks(token, *, row=None, job=None):
         return None
     if deployed is None:
         return None
-    signal = max(
+    # Retry/defer clocks are not activity. The refusal stamp can be cleared
+    # on seal and stamped again after reopen, so it is not write-once either.
+    # Historical anchors are bounded by enable: later metadata alone must not
+    # extend stock beyond enable + lease. Only explicit server signals may.
+    signal = min(
+        max(deployed, lease_timestamp(row.get('finished_at')) or 0, lease_timestamp(token.get('abandoned_at')) or 0),
         deployed,
-        *(
-            lease_timestamp(value) or 0
-            for value in (
-                row.get('finished_at'),
-                row.get('record_seal_refused_at'),
-                token.get('abandoned_at'),
-                job.get('available_at'),
-            )
-        ),
     )
     return signal, signal + token_lease_seconds()
 

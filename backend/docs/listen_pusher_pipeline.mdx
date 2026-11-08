@@ -192,8 +192,8 @@ without changing seal decisions. Serve honors `RECORD_TOKEN_LEASE_MODE_SERVE_PER
 (default 0) with salt `record-token-lease`. Only observed custody appends and
 frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` inside
 the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
-Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` release epoch, clamped
-to their last durable signal. Lease lapse never substitutes for retained-tail
+Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` serve-enable epoch. Stock lapses by enable + lease; retry wakes and refusal
+stamps cannot extend it. Only explicit server-observed activity renews it. Lease lapse never substitutes for retained-tail
 proof. Late appends renew and bump upload revision; raw audio stays retained.
 See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).
 

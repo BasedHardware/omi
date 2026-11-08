@@ -102,6 +102,16 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, ro
         if use_lease:
             clocks = lease.token_lease_clocks(value, row=row, job=job)
             if clocks:
+                signal = lease.lease_timestamp(value.get('last_signal_at'))
+                abandoned = lease.lease_timestamp(value.get('abandoned_at'))
+                # Observed activity supersedes earlier stoppage evidence, even
+                # if a stale token still carries that evidence after renewal.
+                # A computed stock seed is never evidence of activity.
+                if signal and (
+                    (abandoned and abandoned >= started and signal > abandoned)
+                    or (proof_valid and signal > proof['captured_at'])
+                ):
+                    return False
                 if lease.token_lease_lapsed(value, now, row=row, job=job):
                     continue
                 # A custody uploader can outlive its pusher. Actual server

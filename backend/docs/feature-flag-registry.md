@@ -1463,7 +1463,7 @@ reason:
 | Key | Reason | owner | decision | review_by | notes |
 | --- | --- | --- | --- | --- | --- |
 | `RECORD_TOKEN_LEASE_SECONDS` | Lease timing parameter, default 3600 seconds; bounded to 1800-7200; mode owns rollback | — | — | — | — |
-| `RECORD_TOKEN_LEASE_DEPLOYED_AT` | Shared deployment epoch for stock-token seed; missing epoch preserves the legacy producer fence | — | — | — | — |
+| `RECORD_TOKEN_LEASE_DEPLOYED_AT` | Shared serve-enable epoch for bounded stock-token seed; missing epoch preserves the legacy producer fence | — | — | — | — |
 | `K_REVISION` | Cloud Run revision identity for process-local discovery phase, not a behavior flag | — | — | — | — |
 | `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag | — | — | — | — |
 | `DD_LOGS_ENABLED` | Datadog telemetry log routing switch, not a product behavior flag | — | — | — | — |
