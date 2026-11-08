@@ -17,7 +17,8 @@ import zlib
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from google.api_core.exceptions import NotFound, PreconditionFailed
+from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap, aes_key_wrap
+from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
 
 from config import object_lake as config
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -29,6 +30,8 @@ from utils.other.local_storage import create_storage_client
 MAX_PLAINTEXT_BYTES = {'transcript': 32 * 1024 * 1024}
 DATA_CLASSES = tuple(MAX_PLAINTEXT_BYTES)
 _HEADER = struct.Struct('>4sBI12s')
+_HEADER_V2 = struct.Struct('>4sBI12s40s')
+_PREFIX = struct.Struct('>4sB')
 _bucket_lock = threading.Lock()
 _bucket_instance = None
 _bucket_name: str | None = None
@@ -183,16 +186,21 @@ def put_space_object(
         f'{_segment(config.release())}/spaces/{_segment(space_id)}/{_class(data_class)}/{_segment(entity_id)}/{digest}'
     )
     _assert_owner_write_allowed(space_id)
-    keys, dek = space_keys.active_space_dek(space_id)
+    keys, kek = space_keys.active_space_dek(space_id)
     # Two authority reads per put: get/create before encryption and a fresh
     # post-upload check. Share the first snapshot with unwrap, never cache authority.
-    nonce = os.urandom(12)
     try:
-        payload = _HEADER.pack(b'OLK1', 1, keys.active_version, nonce) + AESGCM(dek).encrypt(
-            nonce, zlib.compress(plaintext, level=6), key.encode('utf-8')
-        )
+        dek = os.urandom(32)
+        try:
+            nonce = os.urandom(12)
+            wrapped = aes_key_wrap(kek, dek)
+            payload = _HEADER_V2.pack(b'OLK1', 2, keys.active_version, nonce, wrapped) + AESGCM(dek).encrypt(
+                nonce, zlib.compress(plaintext, level=6), key.encode('utf-8')
+            )
+        finally:
+            del dek
     finally:
-        del dek
+        del kek
     stamp = {
         'space_id': space_id,
         'data_class': data_class,
@@ -209,6 +217,10 @@ def put_space_object(
     try:
         blob = _lake_bucket().blob(key)
         blob.metadata = stamp
+        # Write-ahead intent survives a refused replay, an ambiguous upload
+        # result or worker loss before the pointer commits. Never self-delete:
+        # another writer may already reference this content-addressed name.
+        _record_upload_candidate(config.bucket(), key)
         try:
             blob.upload_from_string(payload, content_type=content_type, if_generation_match=0)
         except PreconditionFailed:
@@ -234,6 +246,33 @@ def put_space_object(
     except Exception:
         raise LakeFetchError('Lake upload unavailable') from None
     return LakeObjectRef(config.bucket(), key, digest, len(payload), data_class, keys.active_version)
+
+
+def _record_upload_candidate(bucket: str, key: str) -> None:
+    """Durable discovery for C3's janitor, not authorization to delete an object.
+
+    Entries deliberately survive successful commits too: the janitor must
+    establish absence of live AND historical references under a writer fence
+    before removing any object. No TTL may discard an unresolved candidate.
+    """
+    candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
+    candidate = space_keys.space_key_firestore_client().collection('lake_upload_candidates').document(candidate_id)
+    snapshot = candidate.get()
+    if not snapshot.exists:
+        try:
+            candidate.create({'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
+            return
+        except AlreadyExists:
+            # A concurrent writer must have made the SAME intent durable.
+            snapshot = candidate.get()
+    existing = snapshot.to_dict() or {}
+    if (
+        existing.get('bucket') != bucket
+        or existing.get('key') != key
+        or not isinstance(existing.get('created_at'), datetime)
+        or existing['created_at'].tzinfo is None
+    ):
+        raise LakeObjectConflict('Existing lake upload candidate is invalid')
 
 
 def _assert_owner_write_allowed(space_id):
@@ -278,12 +317,24 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
         raise LakeFetchError('Lake download unavailable') from None
     if len(payload) != ref.bytes or len(payload) < _HEADER.size + 16:
         raise LakeObjectCorrupt('Lake envelope length mismatch')
-    magic, envelope_version, dek_version, nonce = _HEADER.unpack_from(payload)
-    if magic != b'OLK1' or envelope_version != 1 or dek_version != ref.dek_version:
+    magic, envelope_version = _PREFIX.unpack_from(payload)
+    if magic != b'OLK1' or envelope_version not in (1, 2):
         raise LakeObjectCorrupt('Invalid lake envelope header')
-    dek = space_keys.unwrap_space_dek(sid, dek_version)
+    header = _HEADER if envelope_version == 1 else _HEADER_V2
+    if len(payload) < header.size + 16:
+        raise LakeObjectCorrupt('Lake envelope length mismatch')
+    _, _, dek_version, nonce, *wrapped = header.unpack_from(payload)
+    if dek_version != ref.dek_version:
+        raise LakeObjectCorrupt('Invalid lake envelope header')
+    kek = space_keys.unwrap_space_dek(sid, dek_version)
     try:
-        compressed = AESGCM(dek).decrypt(nonce, payload[_HEADER.size :], ref.key.encode('utf-8'))
+        # v1 used the space key directly. v2 uses it only for nonce-less AES-KW;
+        # each random object DEK performs exactly one GCM encryption.
+        dek = kek if envelope_version == 1 else aes_key_unwrap(kek, wrapped[0])
+        try:
+            compressed = AESGCM(dek).decrypt(nonce, payload[header.size :], ref.key.encode('utf-8'))
+        finally:
+            del dek
         decoder = zlib.decompressobj()
         limit = MAX_PLAINTEXT_BYTES[data_class]
         plaintext = decoder.decompress(compressed, limit + 1)
@@ -292,10 +343,10 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
         if not decoder.eof or decoder.unused_data or hashlib.sha256(plaintext).hexdigest() != digest:
             raise LakeObjectCorrupt('Lake plaintext digest or compression mismatch')
         return plaintext
-    except (InvalidTag, ValueError, zlib.error):
+    except (InvalidTag, InvalidUnwrap, ValueError, zlib.error):
         raise LakeObjectCorrupt('Lake authentication or decompression failed') from None
     finally:
-        del dek
+        del kek
 
 
 def delete_space_object(ref: LakeObjectRef) -> bool:

@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import wave
+from unittest.mock import Mock
 
 import pytest
 
@@ -267,6 +268,69 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
     lease = 1000 + live.record_drain_lease_seconds()
     expected = lease if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
     assert row['available_at'] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['pending', 'expired', 'admitted'])
+async def test_record_defer_preserves_attention_and_dead_letter_metrics(monkeypatch, outcome):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 0,
+        'enqueued_at': 900,
+        'record_dead_letter_deadline_at': 999 if outcome == 'expired' else 1001,
+    }
+    clock = [1000]
+    monkeypatch.setattr(live.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(live.pipeline_policy, 'mode', lambda: 'serve')
+    monkeypatch.setattr(live.pipeline_policy, 'record_fast_enabled', lambda: True)
+    monkeypatch.setattr(live.record_attention.attention, 'serving', lambda _: True)
+    monkeypatch.setattr(live.record_attention.attention, 'admitted', lambda _: True)
+    monkeypatch.setattr(live.record_attention, 'select', lambda rows, limit: rows)
+    deferred, completed, stage, dead_letter = Mock(), Mock(), Mock(), Mock()
+    monkeypatch.setattr(live.record_attention, 'defer', deferred)
+    monkeypatch.setattr(live.record_attention, 'completed', completed)
+    monkeypatch.setattr(live.record_attention.metrics, 'stage', stage)
+    monkeypatch.setattr(live, 'batch_held_dead_letter_enabled', lambda: True)
+    monkeypatch.setattr(live, 'record_drain_barrier_backoff_enabled', lambda: True)
+
+    def retry_delay(age):
+        assert age == 100
+        # Deferral must use the scheduling time, while expiry uses its snapshot.
+        clock[0] = 1005
+        return 60
+
+    monkeypatch.setattr(live, 'barrier_retry_delay', retry_delay)
+
+    async def admission(store, pending):
+        if outcome == 'admitted':
+            store.rows['jobs', 'synthetic']['state'] = 'ready'
+        else:
+            raise ValueError(live.BARRIER_NOT_CLOSED)
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store, metrics=Mock(record_dead_letter=dead_letter))
+    row = store.rows['jobs', 'synthetic']
+    assert row['state'] == {'pending': 'record_pending', 'expired': 'dead', 'admitted': 'ready'}[outcome]
+    assert dead_letter.inc.call_count == int(outcome == 'expired')
+    assert deferred.call_args_list[0].args == ('synthetic', 1000 + live.record_drain_lease_seconds())
+    if outcome == 'pending':
+        assert row['available_at'] == 1065
+        assert deferred.call_args_list[1].args == ('synthetic', 1065)
+        completed.assert_not_called()
+    else:
+        assert deferred.call_count == 1
+        completed.assert_called_once_with('synthetic')
+    if outcome != 'admitted':
+        assert 'pipeline_record_lease_until' not in row
+        assert row['pipeline_record_deferred'] is True
+    if outcome == 'expired':
+        assert row['dead_letter_reason'] == 'record_barrier_aged'
+        assert row['record_dead_letter_at'] == 1000
+    assert [call.args[0] for call in stage.call_args_list] == ['record_queue', 'record_admission']
 
 
 @pytest.mark.asyncio
