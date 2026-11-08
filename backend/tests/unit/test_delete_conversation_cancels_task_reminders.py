@@ -15,7 +15,9 @@ DUE = datetime(2026, 9, 20, 15, tzinfo=timezone.utc)
 
 def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=None):
     cancelled = []
-    monkeypatch.setattr(conversations_router.conversations_db, 'get_conversation', source_lookup or (lambda *a: {}))
+    monkeypatch.setattr(
+        conversations_router.conversations_db, 'get_conversation_raw_snapshot', source_lookup or (lambda *a: {})
+    )
     monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a: None)
     monkeypatch.setattr(conversations_router, 'delete_owner_prompt_embedding_cache', lambda *a: None)
     vectors = []

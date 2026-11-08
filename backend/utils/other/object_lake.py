@@ -20,7 +20,6 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap, aes_key_wrap
 from google.api_core.exceptions import NotFound, PreconditionFailed
 from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config import object_lake as config
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -441,6 +440,8 @@ def delete_space_upload_candidates(space_id: str, *, firestore_client=None) -> i
     No bucket filter: a config change must not strand the owner's old intents.
     The release pin matches delete_space_prefix; widen both on a release bump.
     """
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
     prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
     try:
         client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
