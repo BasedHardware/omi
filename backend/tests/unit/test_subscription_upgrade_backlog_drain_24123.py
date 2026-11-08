@@ -167,7 +167,7 @@ def test_choose_automatic_on_unlimited_starts_processing(monkeypatch):
     start_mock = Mock(return_value={'state': 'processing', 'period': '2026-10'})
     monkeypatch.setattr('database.processing_backlog.start', start_mock)
 
-    intent_at = time.time()
+    intent_at = datetime(2026, 10, 15, 12, 0, 0, tzinfo=timezone.utc).timestamp()
     result = backlog.choose(uid, request_key='auto-key-1', automatic=True, intent_at=intent_at)
 
     assert result is not None
@@ -175,3 +175,39 @@ def test_choose_automatic_on_unlimited_starts_processing(monkeypatch):
     start_mock.assert_called_once()
     assert start_mock.call_args.kwargs['begin'] is True
     assert start_mock.call_args.kwargs['remaining'] is None
+
+
+def test_reconcile_basic_plan_with_stripe_drain_failure_surfaces(monkeypatch):
+    from utils import subscription as sub_utils
+
+    uid = 'user-drain-fail-24123'
+    basic_sub = Subscription(
+        plan=PlanType.basic,
+        stripe_subscription_id='sub_active_in_stripe',
+        status=SubscriptionStatus.active,
+    )
+
+    now = int(time.time())
+    stripe_dict = {
+        'status': 'active',
+        'current_period_start': now - 86400,
+        'current_period_end': now + 86400 * 30,
+        'cancel_at_period_end': False,
+        'customer': 'cus_123',
+        'items': {'data': [{'price': {'id': 'price_pro_month'}}]},
+    }
+
+    monkeypatch.setattr(sub_utils.stripe.Subscription, 'retrieve', lambda _sub_id: SimpleNamespace(
+        to_dict=lambda: stripe_dict
+    ))
+    monkeypatch.setattr(sub_utils, 'get_plan_type_from_price_id', lambda _p: PlanType.unlimited_v2)
+    monkeypatch.setattr(sub_utils.users_db, 'set_stripe_customer_id', Mock())
+    monkeypatch.setattr(sub_utils.users_db, 'update_user_subscription', Mock())
+
+    failing_upgrade = Mock(side_effect=RuntimeError('drain failure'))
+    monkeypatch.setattr('utils.processing_backlog_worker.upgrade', failing_upgrade)
+
+    # When upgrade fails, it is not swallowed by except Exception: pass,
+    # so the failure surfaces to the caller.
+    with pytest.raises(RuntimeError, match='drain failure'):
+        sub_utils.reconcile_basic_plan_with_stripe(uid, basic_sub)

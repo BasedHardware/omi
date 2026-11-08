@@ -2177,6 +2177,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
     if subscription.plan != PlanType.basic and not _stored_paid_period_lapsed(subscription):
         return subscription
 
+    reconciled_sub = None
     try:
         if subscription.stripe_subscription_id:
             try:
@@ -2218,43 +2219,32 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
                                 if customer_id and isinstance(customer_id, str):
                                     users_db.set_stripe_customer_id(uid, customer_id)
                                 users_db.update_user_subscription(uid, subscription.model_dump())
-                                try:
-                                    from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
-                                    if funded_processing_enabled(uid):
-                                        from utils.processing_backlog_worker import upgrade
+                                reconciled_sub = subscription
 
-                                        upgrade(
-                                            uid,
-                                            f'reconcile-upgrade:{subscription.stripe_subscription_id}:{price_id}',
-                                            intent_at=time.time(),
-                                        )
-                                except Exception:
-                                    pass
-                                return subscription
-
-        active = find_active_paid_subscription_for_user(uid)
-        if active:
-            users_db.update_user_subscription(uid, active.model_dump())
-            if is_paid_plan(active.plan):
-                try:
-                    from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
-                    if funded_processing_enabled(uid):
-                        from utils.processing_backlog_worker import upgrade
-
-                        upgrade(
-                            uid,
-                            f'reconcile-upgrade:{active.stripe_subscription_id}:{active.current_price_id}',
-                            intent_at=time.time(),
-                        )
-                except Exception:
-                    pass
-            return active
+        if not reconciled_sub:
+            active = find_active_paid_subscription_for_user(uid)
+            if active:
+                users_db.update_user_subscription(uid, active.model_dump())
+                reconciled_sub = active
 
     except Exception as e:
         # Don't break user flows on reconciliation issues; just log and continue with existing data.
         logger.error(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
+        return subscription
 
-    return subscription
+    if reconciled_sub and is_paid_plan(reconciled_sub.plan):
+        from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
+        if funded_processing_enabled(uid):
+            from utils.processing_backlog_worker import upgrade
+
+            price_id = getattr(reconciled_sub, 'current_price_id', None)
+            upgrade(
+                uid,
+                f'reconcile-upgrade:{reconciled_sub.stripe_subscription_id}:{price_id}',
+                intent_at=time.time(),
+            )
+
+    return reconciled_sub or subscription
 
 
 def get_usage_units(uid: str) -> dict:
