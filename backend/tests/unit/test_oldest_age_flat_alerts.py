@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from utils.batch_pipeline import vendor_route_contracts, vendor_route_metrics
+
 BACKEND = Path(__file__).resolve().parents[2]
 MONITORING = BACKEND / 'charts/monitoring'
 spec = importlib.util.spec_from_file_location('oldest_age_alert_backtest', BACKEND / 'scripts/alert_backtest.py')
@@ -102,3 +104,7 @@ def test_existing_held_age_page_and_threshold_are_preserved():
     assert held['labels']['tier'] == 'page'
     assert held['labels']['audience'] == 'human'
     assert next(d['model']['expression'] for d in held['data'] if d['refId'] == 'D') == '$A > 21600'
+
+
+def test_vendor_held_collector_literal_matches_the_frozen_contract():
+    assert vendor_route_metrics.HELD_OLDEST_AGE._name == vendor_route_contracts.METRIC_HELD_OLDEST_AGE
