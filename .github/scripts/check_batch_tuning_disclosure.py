@@ -35,7 +35,10 @@ STATE_CONTEXT = re.compile(r"\b(?:\w+_)?(?:status|state|phase|disposition|outcom
 EXIT = re.compile(r"\b(?:exit\w*|terminal\w*|dead.letter\w*|re-?entr\w*|clear\w*|recover\w*)\b", re.I)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 FIELD_VALUE = re.compile(r"(?P<field>[a-zA-Z_]\w*)['\"]?\]?\s*(?::|(?<![=!<>])=(?!=))\s*$")
-FIELD_LOOKUP = re.compile(r"(?:\.(?:get|pop|setdefault)\(|[\w)\]]\[)\s*$")
+FIELD_LOOKUP = re.compile(
+    r"(?:\.(?:get|pop|setdefault)\(|[\w)\]]\[|\b(?:Counter|Gauge|Histogram|Summary|Info|Enum)\()\s*$"
+    r"|\b(?:getattr|hasattr|setattr)\([^,\n]+,\s*$"
+)
 
 
 def triggered(path: str) -> bool:
@@ -68,7 +71,7 @@ def code(line: str) -> bool:
     return bool(line.strip()) and not line.lstrip().startswith(("#", "//", "/*", "* ", '"""', "'''"))
 
 
-def state_literals(line: str) -> set[str]:
+def state_literals(line: str, prefix: str = "") -> set[str]:
     """Ignore field names/lookups and values explicitly assigned to other fields.
 
     The historical sweep found registration_origin next to state updates: a
@@ -76,7 +79,7 @@ def state_literals(line: str) -> set[str]:
     """
     values: set[str] = set()
     for match in LITERAL.finditer(line):
-        before, after = line[: match.start()], line[match.end() :]
+        before, after = prefix + line[: match.start()], line[match.end() :]
         field = FIELD_VALUE.search(before)
         if after.lstrip().startswith(":") or FIELD_LOOKUP.search(before):
             continue
@@ -101,7 +104,8 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
                 continue
             nearby = added_side[max(0, i - 3) : i + 4]
             if any(code(text) and STATE_CONTEXT.search(text) for _, text in nearby):
-                candidates.update(state_literals(line))
+                prefix = "\n".join(text for _, text in added_side[max(0, i - 3) : i] if code(text)) + "\n"
+                candidates.update(state_literals(line, prefix))
     return knobs, {literal for literal in candidates if not exists_at_base(literal)}
 
 
