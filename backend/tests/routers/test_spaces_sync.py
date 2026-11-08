@@ -299,6 +299,63 @@ def test_changes_content_free_coalesced_current_state_and_tail(api):
     assert request(api, 'changes', params={'cursor': 4}).json()['next_cursor'] == 5
 
 
+@pytest.mark.parametrize('endpoint', ['changes', 'snapshot', 'mutations'])
+def test_byte_documents_round_trip_through_every_row_response(api, endpoint):
+    enroll(api)
+    doc = {
+        'binary': b'\x00\xff\x80',
+        'nested': [{'binary': b'\xfe\x00'}, b'', b'plain UTF-8'],
+        'json': {'$bytes': 'ordinary field', 'other': [None, 42, True]},
+    }
+    wire_doc = {
+        'binary': {'$bytes': 'AP+A'},
+        'nested': [{'binary': {'$bytes': '/gA='}}, {'$bytes': ''}, {'$bytes': 'cGxhaW4gVVRGLTg='}],
+        'json': doc['json'],
+    }
+    api.cell.run(api.sid, lambda tx: tx.put('notes', 'a', doc), actor_uid=api.sid, now=time.time())
+    response = request(api, endpoint)
+    assert response.status_code == (409 if endpoint == 'mutations' else 200), response.text
+    row = response.json()['row'] if endpoint == 'mutations' else response.json()['rows'][0]
+    assert row['doc'] == wire_doc
+
+    # Send exactly the document a sync client received, with its authoritative revision.
+    payload = mutation()
+    payload.update(base_revision=row['rev'], client_mutation_id='bytes-round-trip')
+    payload['operation']['fields'] = row['doc']
+    applied = request(api, 'mutations', json=payload)
+    assert applied.status_code == 200, applied.text
+    assert api.cell.read_doc(api.sid, 'notes', 'a') == doc
+    replay = request(api, 'mutations', json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json() == {**applied.json(), 'replayed': True}
+    # A different byte value must retain exactly-once fingerprint protection.
+    payload['operation']['fields']['binary'] = {'$bytes': '/w=='}
+    reused = request(api, 'mutations', json=payload)
+    assert reused.status_code == 409, reused.text
+    assert reused.json()['code'] == 'mutation_id_reused'
+    assert reused.json()['row']['doc'] == wire_doc
+
+
+@pytest.mark.parametrize('value', [None, 42, [], {}, '!', 'a', '/w', '/w==\n', 'é'])
+def test_malformed_byte_tags_are_rejected_before_cell_io(api, monkeypatch, value):
+    enroll(api)
+    monkeypatch.setattr(serving, 'cell_store', no_io)
+    payload = mutation()
+    payload['operation']['fields'] = {'nested': [{'binary': {'$bytes': value}}]}
+    response = request(api, 'mutations', json=payload)
+    assert response.status_code == 422, response.text
+
+
+def test_byte_mutations_retain_wire_size_limit(api, monkeypatch):
+    enroll(api)
+    monkeypatch.setattr(serving, 'cell_store', no_io)
+    payload = mutation()
+    payload['operation']['fields'] = {'binary': {'$bytes': base64.b64encode(b'\xff' * (100 * 1024)).decode()}}
+    response = request(api, 'mutations', json=payload)
+    assert response.status_code == 422, response.text
+    assert 'operation exceeds 128 KiB' in response.text
+
+
 def test_cursor_floor_ahead_and_monotonic_ack(api):
     enroll(api)
     for seq in [1, 0]:
