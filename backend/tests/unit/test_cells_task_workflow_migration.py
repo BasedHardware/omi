@@ -58,7 +58,7 @@ def test_expand_only_numbering_and_b2_dependency():
     assert len(re.findall(r'ALTER\s+TABLE\s+cell_docs', sql, re.IGNORECASE)) == 1
     assert len(re.findall(r'ADD\s+COLUMN', sql, re.IGNORECASE)) == 10
     assert 'ACCESS EXCLUSIVE' in sql
-    assert migrations[2].checksum == '988e6cee89fc7bba01c4a50f0c2e82dfac32a6389c271bf2d94115e42e7ba052'
+    assert migrations[2].checksum == 'a4b59f64c52cb2d01626a4e083f4f52c9ba971d20617cab21b2d2e6a2caf42d2'
     for migration in migrations[1:]:
         # Inspect statements, not the descriptive comments or string literals.
         statements = re.sub(r"--[^\n]*|'(?:''|[^'])*'", '', migration.sql)
@@ -273,6 +273,73 @@ def test_folder_keyset_preserves_legacy_scalar_order(pg):
         if cursor is None:
             break
     assert ids == expected
+
+
+@pytest.mark.parametrize('values', [[['a'], ['b']], [{'a': 0}, {'b': 0}]])
+@pytest.mark.parametrize('limit', [1, 2])
+@pytest.mark.parametrize('pending', [False, True])
+def test_folder_keyset_preserves_legacy_json_order(pg, values, limit, pending):
+    sid = pg.space('json-order')
+    # Equal order values also exercise the document-key tiebreak at a boundary.
+    rows = [(key, {'name': key, 'order': values[i]}) for i in range(2) for key in (f'{i}-a', f'{i}-z')]
+    store = pg.store(sid)
+    if not pending:
+        for key, row in rows:
+            pg.seed(sid, 'folders', key, row)
+
+    def body(tx):
+        if pending:
+            for key, row in rows:
+                tx.state['folders'][key] = row
+        repo = tx.folders
+        expected = [key for key, _ in rows]
+        assert [row.id for row in repo.list().items] == expected
+        ids, cursor = [], None
+        for _ in rows:
+            page = repo.list(limit=limit, cursor=cursor)
+            ids.extend(row.id for row in page.items)
+            cursor = page.next_cursor
+            if cursor is None:
+                break
+        assert cursor is None
+        assert ids == expected
+
+    store.run(body)
+
+
+@pytest.mark.parametrize(
+    'domain, index', [('action_items', 'cell_docs_ai_list'), ('folders', 'cell_docs_folder_order')]
+)
+def test_list_order_is_supplied_by_its_index(pg, monkeypatch, domain, index):
+    store = pg.store(pg.space('list-index'))
+    plans = []
+    query = CellSpaceTx.query
+
+    def explain(tx, entity, *args, **kwargs):
+        if entity == domain:
+            # With sequential/bitmap scans disabled, a mismatched index still
+            # requires Sort. Explain the actual adapter SQL, including filters.
+            execute = tx.raw.conn.execute
+
+            def record(sql, params):
+                plans.extend(row[0] for row in execute('EXPLAIN ' + sql, params).fetchall())
+                return execute(sql, params)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(tx.raw.conn, 'execute', record)
+                return query(tx, entity, *args, **kwargs)
+        return query(tx, entity, *args, **kwargs)
+
+    monkeypatch.setattr(CellSpaceTx, 'query', explain)
+
+    def body(tx):
+        tx.raw.conn.execute('SET LOCAL enable_seqscan=off')
+        tx.raw.conn.execute('SET LOCAL enable_bitmapscan=off')
+        getattr(tx, domain).list(limit=2)
+
+    store.run(body)
+    assert any(index in line for line in plans), plans
+    assert not any('Sort' in line for line in plans), plans
 
 
 def test_reserved_task_create_records_noop_mutation_without_cache_bump(pg, monkeypatch):

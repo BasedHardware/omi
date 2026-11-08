@@ -22,6 +22,13 @@ from database.ports.base import Page
 
 from ._base import WorkflowRepo, atomic
 
+# Normalize DESC created time to a negative epoch for a uniform keyset. The UTC
+# conversion makes EXTRACT immutable, so migration 0003 can index the same key.
+_LIST_KEY = """coalesce(q_completed,false), (q_due_at IS NULL),
+    coalesce(extract(epoch FROM q_due_at AT TIME ZONE 'UTC'),'Infinity'::numeric),
+    -coalesce(extract(epoch FROM q_created_at AT TIME ZONE 'UTC'),'-Infinity'::numeric),
+    entity_id COLLATE "C" """
+
 
 class CellActionItems(WorkflowRepo):
     domain = 'action_items'
@@ -285,13 +292,11 @@ class CellActionItems(WorkflowRepo):
             if upper is not None:
                 filters.append(column + '<=%s')
                 params.append(upper)
-        # Normalize DESC created time to a negative epoch for a uniform keyset.
-        key = """coalesce(q_completed,false), (q_due_at IS NULL), coalesce(extract(epoch FROM q_due_at),'Infinity'::numeric), -coalesce(extract(epoch FROM q_created_at),'-Infinity'::numeric), entity_id COLLATE "C" """
         if cursor is not None:
-            filters.append('(' + key + ') > (%s,%s,%s,%s,%s)')
+            filters.append('(' + _LIST_KEY + ') > (%s,%s,%s,%s,%s)')
             params.extend(json.loads(base64.urlsafe_b64decode(cursor)))
         rows = self.store.query(
-            'action_items', ' AND '.join(filters), params, order=key, limit=None if limit is None else limit + 1
+            'action_items', ' AND '.join(filters), params, order=_LIST_KEY, limit=None if limit is None else limit + 1
         )
         items = [self._entity(prepare_action_item_for_read({**row, 'id': eid})) for eid, row in rows]
         more = limit is not None and len(items) > limit

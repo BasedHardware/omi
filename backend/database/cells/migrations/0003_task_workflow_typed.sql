@@ -22,6 +22,23 @@ EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow OR invalid_tim
 END;
 $$;
 
+-- The polymorphic jsonb_build_array is STABLE in PostgreSQL. These fixed
+-- jsonb/numeric/text inputs are immutable; the timestamp decoder pins UTC.
+-- Sharing this function keeps folder ordering, cursor keys and the index exact.
+CREATE FUNCTION cell_folder_order_key(value jsonb) RETURNS jsonb
+LANGUAGE sql IMMUTABLE PARALLEL UNSAFE
+AS $$
+    SELECT CASE jsonb_typeof(value)
+        WHEN 'null' THEN jsonb_build_array(0, 0)
+        WHEN 'boolean' THEN jsonb_build_array(1, value)
+        WHEN 'number' THEN jsonb_build_array(2, value)
+        WHEN 'object' THEN CASE WHEN value ? '$datetime'
+            THEN jsonb_build_array(3, extract(epoch FROM cell_query_timestamp(value) AT TIME ZONE 'UTC'))
+            ELSE jsonb_build_array(5, value::text) END
+        WHEN 'string' THEN jsonb_build_array(4, value)
+        ELSE jsonb_build_array(5, value::text) END;
+$$;
+
 ALTER TABLE cell_docs ADD COLUMN q_completed boolean GENERATED ALWAYS AS
     (CASE WHEN entity = 'action_items' THEN doc->'completed' = 'true'::jsonb END) STORED,
     ADD COLUMN q_deleted boolean GENERATED ALWAYS AS
@@ -42,8 +59,8 @@ ALTER TABLE cell_docs ADD COLUMN q_completed boolean GENERATED ALWAYS AS
 
 CREATE INDEX cell_docs_ai_list ON cell_docs
     (space_id, (coalesce(q_completed, false)), (q_due_at IS NULL),
-     (coalesce(q_due_at, 'infinity'::timestamptz)),
-     (coalesce(q_created_at, '-infinity'::timestamptz)) DESC, entity_id COLLATE "C")
+     (coalesce(extract(epoch FROM q_due_at AT TIME ZONE 'UTC'), 'Infinity'::numeric)),
+     (-coalesce(extract(epoch FROM q_created_at AT TIME ZONE 'UTC'), '-Infinity'::numeric)), entity_id COLLATE "C")
     WHERE entity = 'action_items' AND q_deleted IS DISTINCT FROM TRUE;
 CREATE INDEX cell_docs_ai_due ON cell_docs (space_id, q_due_at) WHERE entity = 'action_items';
 CREATE INDEX cell_docs_ai_conv ON cell_docs (space_id, q_conversation_id) WHERE entity = 'action_items';
@@ -52,5 +69,6 @@ CREATE INDEX cell_docs_sync_keyset ON cell_docs (space_id, q_updated_at, entity_
     WHERE entity = 'action_items';
 CREATE INDEX cell_docs_ws_goal ON cell_docs (space_id, q_goal_id) WHERE entity = 'workstreams';
 CREATE INDEX cell_docs_goal_status ON cell_docs (space_id, q_status) WHERE entity = 'goals';
-CREATE INDEX cell_docs_folder_order ON cell_docs (space_id, q_order, entity_id COLLATE "C") WHERE entity = 'folders';
+CREATE INDEX cell_docs_folder_order ON cell_docs
+    (space_id, cell_folder_order_key(q_order), entity_id COLLATE "C") WHERE entity = 'folders';
 CREATE INDEX cell_docs_people_name ON cell_docs (space_id, (doc->>'name'), entity_id COLLATE "C") WHERE entity = 'people';

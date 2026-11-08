@@ -158,12 +158,22 @@ class CellSpaceTx:
             self.task_fence = ActionItemCommitFence(self.space_id)
             self.register_commit_fence(self.task_fence)
 
-    def query(self, entity, where='', params=(), order='entity_id COLLATE "C"', limit=None, offset=0):
+    def query(
+        self,
+        entity,
+        where='',
+        params=(),
+        order='entity_id COLLATE "C"',
+        limit=None,
+        offset=0,
+        *,
+        columns='entity_id, doc',
+    ):
         """Internal SQL fragments are constants owned by domain adapters."""
         identity = self.state.maps.get(entity)
         edits = {} if identity is None else {key: row for key, row in identity.rows.items() if identity.changed(key)}
         args = [self.space_id, entity]
-        sql = 'SELECT entity_id, doc FROM cell_docs WHERE space_id=%s AND entity=%s'
+        sql = 'SELECT ' + columns + ' FROM cell_docs WHERE space_id=%s AND entity=%s'
         if edits:
             # A relational overlay preserves read-your-writes without flushing
             # early or reading the entire collection into Python. LIMIT still
@@ -177,15 +187,15 @@ class CellSpaceTx:
                 projections['q_' + field] = "cell_query_timestamp(doc->'" + field + "')"
             for field in ('conversation_id', 'idempotency_key', 'goal_id', 'status'):
                 projections['q_' + field] = "doc->>'" + field + "'"
-            columns = 'entity_id, doc, ' + ', '.join(projections)
+            overlay_columns = 'entity_id, doc, ' + ', '.join(projections)
             expressions = 'entity_id, doc, ' + ', '.join(projections.values())
             values = [{'entity_id': key, 'doc': row} for key, row in edits.items() if row is not _MISSING]
             sql = (
-                'WITH domain_rows AS (SELECT ' + columns + ' FROM cell_docs '
+                'WITH domain_rows AS (SELECT ' + overlay_columns + ' FROM cell_docs '
                 'WHERE space_id=%s AND entity=%s AND entity_id <> ALL(%s) UNION ALL SELECT '
                 + expressions
                 + ' FROM jsonb_to_recordset(%s::jsonb) AS overlay(entity_id text, doc jsonb)) '
-                'SELECT entity_id, doc FROM domain_rows WHERE TRUE'
+                'SELECT ' + columns + ' FROM domain_rows WHERE TRUE'
             )
             args.extend([list(edits), dumps(values)])
         if where:

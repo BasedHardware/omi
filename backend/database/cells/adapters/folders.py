@@ -13,17 +13,10 @@ from database.ports.folders import FolderCreate, FolderEntity, FolderUpdate, SYS
 
 from ._base import Repo, atomic, scalar_order
 
-# Firestore scalar order differs from jsonb's built-in type order. Retain the
-# storage contract for legacy heterogeneous order values, including tagged dates.
-_FOLDER_KEY = """CASE jsonb_typeof(q_order)
-    WHEN 'null' THEN jsonb_build_array(0, 0)
-    WHEN 'boolean' THEN jsonb_build_array(1, q_order)
-    WHEN 'number' THEN jsonb_build_array(2, q_order)
-    WHEN 'object' THEN CASE WHEN q_order ? '$datetime'
-        THEN jsonb_build_array(3, extract(epoch FROM cell_query_timestamp(q_order)))
-        ELSE jsonb_build_array(5, q_order::text) END
-    WHEN 'string' THEN jsonb_build_array(4, q_order)
-    ELSE jsonb_build_array(5, q_order::text) END"""
+# The immutable SQL function is shared with the expression index. Return its
+# exact value for cursors too: Python repr differs from jsonb::text for legacy
+# objects/arrays, and Python timestamps can lose PostgreSQL's numeric precision.
+_FOLDER_KEY = 'cell_folder_order_key(q_order)'
 
 
 class CellFolders(Repo):
@@ -41,27 +34,20 @@ class CellFolders(Repo):
         if cursor is not None:
             value, eid = json.loads(base64.urlsafe_b64decode(cursor))
             where += ' AND (' + _FOLDER_KEY + ', entity_id COLLATE "C") > (%s::jsonb,%s)'
-            args = [json.dumps(value), eid]
+            args = [value, eid]
         rows = self.store.query(
             'folders',
             where,
             args,
             order=_FOLDER_KEY + ', entity_id COLLATE "C"',
             limit=None if limit is None else limit + 1,
+            columns='entity_id, doc, ' + _FOLDER_KEY + '::text',
         )
         more = limit is not None and len(rows) > limit
-        items = [self.entity({**row, 'id': eid}) for eid, row in (rows if limit is None else rows[:limit])]
-        resume = (
-            base64.urlsafe_b64encode(json.dumps([self._cursor_order(items[-1].order), items[-1].id]).encode()).decode()
-            if more
-            else None
-        )
+        page = rows if limit is None else rows[:limit]
+        items = [self.entity({**row, 'id': eid}) for eid, row, _ in page]
+        resume = base64.urlsafe_b64encode(json.dumps([page[-1][2], page[-1][0]]).encode()).decode() if more else None
         return Page(items, resume)
-
-    @staticmethod
-    def _cursor_order(value):
-        rank, scalar = scalar_order(value)
-        return [rank, scalar.decode() if isinstance(scalar, bytes) else scalar]
 
     @atomic
     def get(self, folder_id: str) -> FolderEntity | None:
