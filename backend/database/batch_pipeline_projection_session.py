@@ -85,7 +85,7 @@ class ProjectionSession:
         return {} if receipt.get('privacy_control_only') else receipt
 
     def write_receipt(self, transaction, receipt) -> bool:
-        """Ready acknowledgment and summary share one result-keyed receipt. Return a sibling hold for post-commit logging."""
+        """Write the receipt and return a sibling hold transition for post-commit logging."""
         if self.entry.get('projection_privacy_refusal') or self._privacy_refusal_transaction is transaction:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
@@ -98,10 +98,13 @@ class ProjectionSession:
         if summary and all(part.get('state') in {'ready', 'quarantined'} for part in parts.values()):
             if any(part.get('state') == 'quarantined' for part in parts.values()):
                 # A successful sibling's follow-up cannot acknowledge held text.
+                sibling_hold_changed = (
+                    summary.get('state') != 'quarantined' or self.entry.get('projection_state') != 'quarantine_held'
+                )
                 summary['state'] = 'quarantined'
                 changes.update(projection=summary, projection_state='quarantine_held')
                 transaction.update(self.result_ref, changes)
-                return True
+                return sibling_hold_changed
             summary['state'] = 'ready'
             changes.update(projection=summary, projection_state='ready')
         transaction.update(self.result_ref, changes)

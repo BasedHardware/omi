@@ -108,6 +108,50 @@ def test_failed_or_replayed_disposition_has_no_success_line(monkeypatch, caplog,
     assert not hold_lines(caplog)
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+def test_sibling_receipt_replay_logs_only_the_first_transition(real_projection, monkeypatch, caplog, enabled):
+    lane = real_projection
+    lane.entry.update(
+        projection={'state': 'quarantined'},
+        projection_state='persisted',
+        projection_parts={'0': {'state': 'quarantined'}, '1': {'state': 'persisted'}},
+        projection_part_count=2,
+    )
+    monkeypatch.setenv(FLAG, str(enabled).lower())
+    caplog.set_level(logging.INFO)
+    first = lane.projector.store.ready('unit', lane.binding, 30000, part_index=1, policy=ProjectionPolicy())
+    committed = deepcopy(lane.client.rows)
+    assert len(hold_lines(caplog)) == int(enabled)
+    second = lane.projector.store.ready('unit', lane.binding, 30001, part_index=1, policy=ProjectionPolicy())
+    assert first == second == {'state': 'ready'}
+    assert lane.client.rows == committed
+    assert [record.getMessage() for record in hold_lines(caplog)] == (
+        ['event=batch_projection outcome=quarantine_persisted hold_reason=sibling'] if enabled else []
+    )
+
+
+@pytest.mark.parametrize(
+    'summary_state,projection_state',
+    [('persisted', 'persisted'), ('quarantined', 'persisted'), ('persisted', 'quarantine_held')],
+)
+def test_first_sibling_hold_transition_logs_once(real_projection, monkeypatch, caplog, summary_state, projection_state):
+    lane = real_projection
+    lane.entry.update(
+        projection={'state': summary_state},
+        projection_state=projection_state,
+        projection_parts={'0': {'state': 'quarantined'}, '1': {'state': 'persisted'}},
+        projection_part_count=2,
+    )
+    monkeypatch.setenv(FLAG, 'true')
+    caplog.set_level(logging.INFO)
+    lane.projector.store.ready('unit', lane.binding, 30000, part_index=1, policy=ProjectionPolicy())
+    assert lane.entry['projection']['state'] == 'quarantined'
+    assert lane.entry['projection_state'] == 'quarantine_held'
+    assert [record.getMessage() for record in hold_lines(caplog)] == [
+        'event=batch_projection outcome=quarantine_persisted hold_reason=sibling'
+    ]
+
+
 def test_sibling_commit_failure_has_no_success_line(real_projection, monkeypatch, caplog):
     lane = real_projection
     lane.entry.update(

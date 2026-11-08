@@ -561,7 +561,9 @@ operator lane. Recovery redrive of `failed_held`: the redrive owner named in eac
 `BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED` defaults OFF. Explicit `true` adds
 one INFO `event=batch_projection outcome=quarantine_persisted hold_reason=...`
 after a successful quarantine disposition commit, including partial multipart
-persists, and after a committed sibling acknowledgment retains a held summary.
+persists, and after a committed sibling acknowledgment transitions the summary
+state to `quarantined` or its projection hint to `quarantine_held`. Rewriting an
+already-held summary is silent, using the transaction's prior summary and hint.
 The closed reasons are `ambiguous_generation`, `conflict`, `poison_head`,
 `payload_contract`, and `sibling`. Transaction retries and receipt replays emit
 no additional success line; no identifiers or content enter the new line.

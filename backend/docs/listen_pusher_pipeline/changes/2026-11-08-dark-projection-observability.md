@@ -82,4 +82,25 @@ baseline, no companion operations when OFF, and unchanged legacy-failure
 behavior with the companion switch either ON or OFF.
 
 Both switches remain default OFF. No production access, deployment or PR
-creation is included. Additional review findings have not been supplied yet.
+creation is included.
+
+## Review round 2 — sibling receipt replay
+
+`write_receipt` now returns a sibling hold logging signal only when the summary
+state or projection hint transitions into held state. It uses the prior values
+already read inside the transaction, so an already-ready acknowledgment that
+rewrites the same held summary is silent. Transaction retry attempts read the
+current committed state; logging remains after the successful commit. Receipt
+updates and OFF-path writes remain unchanged; no reads or deduplication markers
+were added.
+
+Regression coverage calls `ready` twice against the same sibling receipt and
+checks exactly one hold line when ON, zero when OFF, identical ready receipts,
+and unchanged durable contents on replay. Separate cases verify the first
+transition logs once when either or both summary state and hint change.
+
+The same focused command passed **58 tests**, slowest call **0.26 seconds**.
+The same ten-file file-isolated backend subset passed **428 tests**. Both ran
+through the workspace `bin/omi-heavy` from this lane. Only the existing `audioop`
+deprecation warning appeared. Live concurrent Firestore transactions and log
+ingestion were not exercised; tests use the strict transactional fake store.
