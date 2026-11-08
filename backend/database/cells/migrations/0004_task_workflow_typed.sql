@@ -25,8 +25,11 @@ $$;
 -- The polymorphic jsonb_build_array is STABLE in PostgreSQL. These fixed
 -- jsonb/numeric/text inputs are immutable; the timestamp decoder pins UTC.
 -- Sharing this function keeps folder ordering, cursor keys and the index exact.
+-- PostgreSQL 17 builds indexes under a restricted search_path, so pin the
+-- creation path; otherwise the index build cannot resolve the decoder.
 CREATE FUNCTION cell_folder_order_key(value jsonb) RETURNS jsonb
 LANGUAGE sql IMMUTABLE PARALLEL UNSAFE
+SET search_path FROM CURRENT
 AS $$
     SELECT CASE jsonb_typeof(value)
         WHEN 'null' THEN jsonb_build_array(0, 0)

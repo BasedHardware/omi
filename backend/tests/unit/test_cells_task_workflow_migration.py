@@ -64,7 +64,7 @@ def test_expand_only_numbering_and_b2_dependency():
     assert len(re.findall(r'ALTER\s+TABLE\s+cell_docs', sql, re.IGNORECASE)) == 1
     assert len(re.findall(r'ADD\s+COLUMN', sql, re.IGNORECASE)) == 10
     assert 'ACCESS EXCLUSIVE' in sql
-    assert migrations[3].checksum == '67f15b5d745aed142657b0ac4778f8faa620bce202c3f7e988aeafff90013219'
+    assert migrations[3].checksum == '6fa2c33f3b437a22030994d346bd401f8148f2bbcb8758d11f4e3b168e012493'
     for migration in migrations[1:]:
         # Inspect statements, not the descriptive comments or string literals.
         statements = re.sub(r"--[^\n]*|'(?:''|[^'])*'", '', migration.sql)
@@ -619,3 +619,11 @@ def test_pending_overlay_keeps_numeric_idempotency_key_typed(pg):
         return tx.action_items.create(ActionItemDraft(data={'description': 'New'}), idempotency_key='123')
 
     assert pg.store(sid).run(body) != 't-legacy'
+
+
+def test_folder_order_index_rebuilds_under_restricted_search_path(pg):
+    # PostgreSQL 17 runs index builds with search_path = pg_catalog, pg_temp;
+    # the order key must still resolve the timestamp decoder.
+    with dial(cells_dsn()) as conn:
+        conn.execute('SET search_path = pg_catalog, pg_temp')
+        conn.execute('REINDEX INDEX public.cell_docs_folder_order')
