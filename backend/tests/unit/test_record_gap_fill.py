@@ -1141,3 +1141,42 @@ def test_the_listed_span_rate_is_authoritative(monkeypatch):
     monkeypatch.setattr(record_retained_ack, 'read_reference', lambda client, ref, *a, **kw: ramp(5))
     wal = [audio_unit(100.0, ramp(5))]
     assert record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0) == 'skipped_lossy_source'
+
+
+def test_a_stalled_storage_gate_past_the_deadline_never_uploads(world, monkeypatch):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(105.0, ramp(5))]
+    gate = record_gap_fill.owner_storage_write_gate
+
+    class Stalled:
+        def __init__(self, *a):
+            self.inner = gate(*a)
+
+        def __enter__(self):
+            monkeypatch.setattr(record_gap_fill.time, 'monotonic', lambda: 1e12)
+            return self.inner.__enter__()
+
+        def __exit__(self, *exc):
+            return self.inner.__exit__(*exc)
+
+    monkeypatch.setattr(record_gap_fill, 'owner_storage_write_gate', Stalled)
+    assert fill(world) == 'skipped_no_audio'
+    assert fills(world) == {} and world.bucket.calls == []
+
+
+def test_overlapping_objects_that_together_hold_every_sample_are_acked(monkeypatch):
+    whole = ramp(10)
+    first = bytearray(whole)
+    first[6 * RATE * 2 : 6 * RATE * 2 + 2] = (12345).to_bytes(2, 'little', signed=True)
+    objects = {
+        f'chunks/{UID}/{CID}/100.000.bin': bytes(first),
+        f'chunks/{UID}/{CID}/105.000000.bin': whole[5 * RATE * 2 :],
+    }
+    listing = held_listing(*[(path, float(path.rsplit('/', 1)[1][:-4]), {}) for path in objects])
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', lambda *a, **kw: listing)
+    monkeypatch.setattr(record_retained_ack, 'read_reference', lambda client, ref, *a, **kw: objects[ref['path']])
+    wal = [audio_unit(100.0, whole)]
+    assert record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0) == 'acked'
+    # Without the second object the differing sample is unproven.
+    listing.pop()
+    assert record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0) == 'skipped_bytes_differ'

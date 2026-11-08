@@ -121,13 +121,26 @@ def gap_fill_bucket(uid: str, client=None):
     return client.bucket(regional or private_cloud_sync_bucket)
 
 
+class LeaseLapsing(Exception):
+    """The write deadline passed before a piece could start uploading."""
+
+
 def create_gap_fill_chunk(
-    pcm: bytes, uid: str, conversation_id: str, timestamp: float, protection_level: str, metadata: dict, *, bucket
+    pcm: bytes,
+    uid: str,
+    conversation_id: str,
+    timestamp: float,
+    protection_level: str,
+    metadata: dict,
+    *,
+    bucket,
+    deadline: float | None = None,
 ) -> str | None:
     """Create-only write of one gap-fill PCM16 object; None if the key exists.
 
     Unlike ``upload_audio_chunk`` there is no overwrite fallback: an existing
-    object at the key always wins and this write is skipped.
+    object at the key always wins and this write is skipped. Raises
+    ``LeaseLapsing`` if the write deadline passed while waiting on the gate.
     """
     if not pcm or len(pcm) % 2:
         raise ValueError('gap fill needs aligned PCM16')
@@ -142,6 +155,10 @@ def create_gap_fill_chunk(
             'codec': 'pcm16',
             'record_sample_rate': str(RATE),
         }
+        # The gate's own authority reads have no deadline: re-check right
+        # before the upload, whose time is then bounded inside the margin.
+        if deadline is not None and time.monotonic() >= deadline:
+            raise LeaseLapsing()
         try:
             # Bounded so a piece started before the write deadline lands before
             # the drain lease lapses: per request and across retries. Every
@@ -252,15 +269,19 @@ def _write_window(
                 return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE, gapped
             count = min(last - cursor, PIECE_SECONDS * RATE)
             timestamp = round(unit.capture_at + cursor / RATE, 6)
-            path = create_gap_fill_chunk(
-                pcm[cursor * 2 : (cursor + count) * 2],
-                uid,
-                conversation_id,
-                timestamp,
-                protection_level,
-                metadata,
-                bucket=bucket,
-            )
+            try:
+                path = create_gap_fill_chunk(
+                    pcm[cursor * 2 : (cursor + count) * 2],
+                    uid,
+                    conversation_id,
+                    timestamp,
+                    protection_level,
+                    metadata,
+                    bucket=bucket,
+                    deadline=deadline,
+                )
+            except LeaseLapsing:
+                return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE, gapped
             if path is None:
                 # The key's owner proves only that the key exists, not that it
                 # covers this span. Advancing past it could write a later tail

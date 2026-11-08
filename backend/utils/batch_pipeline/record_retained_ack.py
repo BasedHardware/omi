@@ -107,6 +107,20 @@ def _held(uid, conversation_id, chunks, client, low, high):
     return held, lossy
 
 
+def _matching(held, wal) -> int:
+    """Leading samples of equal-length ``held`` and ``wal`` that are byte-equal."""
+    if held == wal:
+        return len(wal) // 2
+    low, high = 0, len(wal) // 2  # held[:low] matches; held[:high] does not
+    while high - low > 1:
+        mid = (low + high) // 2
+        if held[: mid * 2] == wal[: mid * 2]:
+            low = mid
+        else:
+            high = mid
+    return low
+
+
 def _covering(held, at):
     """Objects holding the sample at ``at`` on its grid, as (offset_samples, pcm)."""
     for start, pcm in held:
@@ -143,13 +157,13 @@ def prove(uid, conversation_id, wal, client, *, finish, started) -> str:
             best, differs = 0, False
             for offset, source in _covering(held, at):
                 length = min(frames - cursor, len(source) // 2 - offset)
-                if (
-                    memoryview(source)[offset * 2 : (offset + length) * 2]
-                    == memoryview(pcm)[cursor * 2 : (cursor + length) * 2]
-                ):
-                    best = max(best, length)
-                else:
-                    differs = True
+                matched = _matching(
+                    memoryview(source)[offset * 2 : (offset + length) * 2],
+                    memoryview(pcm)[cursor * 2 : (cursor + length) * 2],
+                )
+                # A matching prefix still counts; another object may hold the rest.
+                best = max(best, matched)
+                differs = differs or matched < length
             if best == 0:
                 if differs:
                     return 'skipped_bytes_differ'
