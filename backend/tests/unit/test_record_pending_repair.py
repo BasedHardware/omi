@@ -15,7 +15,7 @@ from database.record_pending_repair import cancel_missing
 from tests.unit.test_record_seal_cluster_repair import FakeProcess, proof, settle
 from tests.unit.test_record_seal_nojob import source, PATH, JOB_PATH, SERVER, SCOPE
 from tests.unit.test_record_partial import source as partial_source, finish, pending, ROW, FLAGS, NOW
-from utils.batch_pipeline import record_seal_cluster_repair as cluster
+from utils.batch_pipeline import record_seal_cluster_repair as cluster, record_producer_proof
 from utils.batch_pipeline.record_seal_budget import SweepBudget, BudgetExhausted
 
 
@@ -584,7 +584,6 @@ def test_jobs_switch_off_during_proof_prevents_aged_partial_rearm(partial_source
 def test_lease_expired_pending_runs_existing_full_proof_exit(source, proof, monkeypatch, mode, expected):
     assert settle(source, proof) == 'sealed_registered'
     row = source[1].rows[PATH]
-    from utils.batch_pipeline import record_producer_proof
 
     now = 10000
     monkeypatch.setattr(record_producer_proof.time, 'time', lambda: now)

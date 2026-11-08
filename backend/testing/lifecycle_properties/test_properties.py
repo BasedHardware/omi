@@ -9,8 +9,9 @@ import pytest
 from testing.lifecycle_sim.test_scenarios import lifecycle_sim, stack  # noqa: F401 -- shared pytest fixtures
 from testing.lifecycle_sim import harness
 from database import record_audio
+from database.record_partial import finish_partial
 from tests.support.lifecycle_state_table import ORDERING_RULES, durable_titling_rearm, ordering_holds
-from utils.batch_pipeline import live, record_producer_proof, record_seal_sweeper
+from utils.batch_pipeline import live, record_producer_proof, record_seal_sweeper, record_seal_repair
 from utils.conversations.phase import ConversationPhase, derive_conversation_phase
 from utils.enrichment import outbox
 from utils.other.storage import upload_audio_chunks_batch
@@ -203,8 +204,6 @@ async def test_full_tail_proven_dead_repair_clears_only_after_proof(lifecycle_si
 @pytest.mark.parametrize('exit_name', ['seal', 'partial_finish', 'reactivated'])
 async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, exit_name):
     """Real Firestore transactions: computed expiry never fabricates tail proof."""
-    from database.record_partial import finish_partial
-    from utils.batch_pipeline import record_seal_repair
 
     sim = lifecycle_sim
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')

@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 
@@ -353,7 +354,6 @@ async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(r
     monotonic = [10000.0]
     monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
     monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 9000})
-    from types import SimpleNamespace
 
     monkeypatch.setattr(barriers, 'time', SimpleNamespace(time=lambda: epoch[0], monotonic=lambda: monotonic[0]))
     barrier = barriers.PusherRecordBarrier('uid-at')
@@ -417,7 +417,6 @@ async def test_receive_and_projection_batches_share_one_committed_renewal(record
 
 
 async def test_delayed_begin_response_cannot_hide_a_lapsed_lease(records, monkeypatch):
-    from types import SimpleNamespace
 
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
@@ -441,3 +440,19 @@ async def test_delayed_begin_response_cannot_hide_a_lapsed_lease(records, monkey
     assert records.rows[PATH]['record_upload_revision'] == 2
     assert not producer_tokens_dead(records.rows[PATH]['record_upload_sessions'], None, uid='uid-at')
     await barrier.finish_recording('record')
+
+
+async def test_projection_after_partial_clear_restores_its_exact_producer(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 100})
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    token = barrier.upload_sessions['record']
+    revision = records.rows[PATH]['record_upload_revision']
+    records.rows[PATH].update(record_upload_sessions={}, record_audio_partial={'upload_revision': revision})
+    barrier.lease_renewed_at['record'] -= 3601
+    await barrier.renew_recording('record')
+    assert set(records.rows[PATH]['record_upload_sessions']) == {token}
+    assert records.rows[PATH]['record_upload_revision'] == revision + 1
+    await barrier.finish_recording('record')
+    assert not records.rows[PATH].get('record_audio_closed')  # Partial is never a complete seal.

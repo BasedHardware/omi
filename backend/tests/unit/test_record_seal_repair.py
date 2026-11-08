@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from database.batch_pipeline_store import FirestoreStore
+from database.record_audio import renew_record_token_lease
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import record_seal_repair as repair
@@ -394,7 +395,6 @@ def test_lease_dead_plan_and_shadow_dispositions(source, monkeypatch, mode, disp
 
 
 def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, monkeypatch):
-    from database.record_audio import renew_record_token_lease
 
     store, client, _ = source
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')

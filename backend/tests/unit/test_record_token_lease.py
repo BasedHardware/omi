@@ -237,3 +237,28 @@ def test_legacy_custody_reactivation_shares_repair_deployment_epoch(enabled, mon
     assert not producer_tokens_dead(
         enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic', row=enabled.rows[PATH]
     )
+
+
+def test_unclaimed_owner_keeps_its_token_live_until_batch_owner_resolution(enabled):
+    enabled.rows[PATH]['record_lane_owner'] = None
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', firestore_client=enabled
+    )
+    assert enabled.rows[PATH]['record_upload_sessions']['s']['last_signal_at'] == NOW
+    enabled.rows[PATH]['record_lane_owner'] = 'batch_live_v1'
+    assert not producer_tokens_dead(enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic')
+
+
+def test_partial_clear_reactivates_exact_server_token_but_complete_seal_never_reopens(enabled):
+    enabled.rows[PATH].update(record_upload_sessions={}, record_audio_partial={'upload_revision': 7})
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
+    )
+    assert enabled.rows[PATH]['record_upload_revision'] == 8
+    assert enabled.rows[PATH]['record_upload_sessions']['s']['pod'] == POD['pod']
+    enabled.rows[PATH].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    before = deepcopy(enabled.rows)
+    assert not record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
+    )
+    assert enabled.rows == before

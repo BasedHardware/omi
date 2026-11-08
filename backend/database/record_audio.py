@@ -160,12 +160,13 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
     return run_transactional(client, commit, transient=True)
 
 
-def renew_record_token_lease(uid, conversation_id, *, source, session=None, firestore_client=None):
+def renew_record_token_lease(uid, conversation_id, *, source, session=None, producer=None, firestore_client=None):
     """Fence before admitting bytes. Off does no IO, even with inert lease fields.
 
     Custody appends renew every identified open producer for the conversation;
-    frame batches renew only the socket's exact token. Never invent an identity
-    for bare True tokens or recreate a closed/deleted conversation.
+    frame batches renew only the socket's exact server identity, including a
+    partial finish's cleared token. Bare True never gains an invented identity;
+    complete seals and deleted conversations are never reopened.
     """
     if record_seal_rules.token_lease_mode() == 'off':
         return False
@@ -177,7 +178,11 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, fire
     @firestore.transactional
     def commit(tx):
         row = ref.get(transaction=tx).to_dict() or {}
-        if not row or row.get('deleted') or row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
+        if (
+            not row
+            or row.get('deleted')
+            or row.get('record_lane_owner') not in {None, 'batch_live_v1', 'batch_sync_v1'}
+        ):
             return False, False, []
         now = time.time()
         sessions = dict(row.get('record_upload_sessions') or {})
@@ -185,6 +190,23 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, fire
         late = bool(row.get('record_audio_closed') or row.get('record_audio_partial'))
         reactivated = bool(row.get('record_audio_partial'))
         changed = False
+        # Partial finish can clear a lapsed token while this pusher still holds
+        # queued bytes. A new frame batch restores only its exact server-minted
+        # identity before the next append; a complete seal stays closed.
+        if (
+            source == 'frames'
+            and session is not None
+            and session not in sessions
+            and not row.get('record_audio_closed')
+            and isinstance(producer, dict)
+            and isinstance(producer.get('pod'), str)
+            and producer['pod']
+            and record_seal_rules.lease_timestamp(producer.get('process_started_at'))
+        ):
+            if len(sessions) >= 128:
+                raise RecordUploadCapacityExceeded('record upload session budget exceeded')
+            sessions[session] = dict(producer)
+            reactivated = late = True
         for key, token in sessions.items():
             if session is not None and key != session:
                 continue

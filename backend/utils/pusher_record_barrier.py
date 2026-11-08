@@ -359,6 +359,7 @@ class PusherRecordBarrier:
                 conversation_id,
                 source='frames',
                 session=self.upload_sessions[conversation_id],
+                producer=producer_identity(),
             )
             if conversation_id not in self.lease_renewed_at:
                 lease_metrics.ACTIVE.inc()

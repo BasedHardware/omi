@@ -14,7 +14,7 @@ import pytest
 
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.policy import BatchUnitPolicy
-from database.record_audio import seal_record_audio, set_record_upload_pending
+from database.record_audio import seal_record_audio, set_record_upload_pending, renew_record_token_lease
 from database.record_partial import finish_partial, PAYER_REFUSALS
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_intake import admit
@@ -998,7 +998,6 @@ def test_lease_dead_partial_exit_and_hourly_coordinator(source, monkeypatch, mod
 
 
 def test_renewal_before_partial_transaction_keeps_live_uploader_fenced(source, monkeypatch):
-    from database.record_audio import renew_record_token_lease
 
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')

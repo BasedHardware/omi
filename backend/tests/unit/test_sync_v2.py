@@ -35,6 +35,7 @@ import sys
 import threading
 import time
 import types
+from types import SimpleNamespace
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -50,6 +51,7 @@ from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
 from routers import batch_pipeline as _batch_router  # noqa: F401
 from models import sync_job_status as _sync_job_status  # noqa: F401
 from fastapi.routing import APIRoute
+from fastapi import HTTPException
 from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
 
@@ -3966,7 +3968,6 @@ class TestV2EndpointExecution:
 
     @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
     async def test_custody_manifest_lease_fences_before_claim(self, sync_endpoint_module, monkeypatch, mode):
-        from types import SimpleNamespace
 
         _, _, module = sync_endpoint_module
         events = []
@@ -3997,8 +3998,6 @@ class TestV2EndpointExecution:
         assert events == (['claim'] if mode == 'off' else ['renew', 'claim'])
 
     async def test_custody_lease_outage_preserves_retry_before_claim(self, sync_endpoint_module, monkeypatch):
-        from fastapi import HTTPException
-        from types import SimpleNamespace
 
         _, _, module = sync_endpoint_module
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
