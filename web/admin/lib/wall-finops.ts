@@ -1,6 +1,12 @@
 import { BigQueryDate } from "@google-cloud/bigquery";
 import { getGcpBillingClient } from "@/lib/services/gcp-billing";
 import { bigQueryFailure, WallSourceError } from "./wall-source-error";
+import {
+  spendDailyQuery,
+  spendDays,
+  type SpendDay,
+  type SpendDayRow,
+} from "./wall-spend";
 
 /** Every `omi_finops` table the admin reads. The reader identity
  * (`GCP_BILLING_SA_JSON`, omi-admin-billing-ro) holds table-level dataViewer
@@ -519,6 +525,30 @@ export interface VendorBalanceHistory {
   spend: Record<string, number | null>;
   /** date → producer flag ('' normal, 'gap_spread', 'baseline_reset'). */
   flags: Record<string, string>;
+  /** Set when the vendor-balance tables are not created yet: the leg completes
+   * dark with this reason instead of failing. */
+  dark?: string;
+}
+
+/** Shown on the Soniox line while the vendor-balance tables do not exist. */
+export const VENDOR_BALANCE_DARK_REASON =
+  "Soniox balance not tracked (org key off)";
+
+export function darkVendorBalance(): VendorBalanceHistory {
+  return {
+    snapshots: 0,
+    latestTs: null,
+    asOf: null,
+    spend: {},
+    flags: {},
+    dark: VENDOR_BALANCE_DARK_REASON,
+  };
+}
+
+/** True only for the not-created-yet 404 on a vendor-balance table, as
+ * bigQueryFailure classifies it. Grants (403) and other errors stay errors. */
+export function isVendorBalanceDark(failure: WallSourceError): boolean {
+  return /\(table not created yet\)$/.test(failure.message);
 }
 
 export async function fetchVendorBalanceHistory(
@@ -538,7 +568,7 @@ export async function fetchVendorBalanceHistory(
       jobTimeoutMs: 30_000,
     });
   } catch (error) {
-    throw bigQueryFailure(
+    const failure = bigQueryFailure(
       error,
       [
         "omi_finops.vendor_balance_snapshot",
@@ -546,8 +576,38 @@ export async function fetchVendorBalanceHistory(
       ],
       "Soniox measured STT unavailable (balance line dark: org key unmounted or table not created)"
     );
+    if (isVendorBalanceDark(failure)) return darkVendorBalance();
+    throw failure;
   }
   return parseVendorBalance(rows[0]?.history || "{}");
+}
+
+/** Settled daily spend (`omi_finops.spend_daily`) over `days` days ending on
+ * `today`. A table that is not created yet reads as no rows, so the Soniox
+ * line shows "no data yet" instead of failing the leg; other errors throw. */
+export async function fetchSpendDays(
+  today: string,
+  days = HEALTH_HISTORY_DAYS
+): Promise<SpendDay[]> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: SpendDayRow[];
+  try {
+    [rows] = await bq.query({
+      query: spendDailyQuery(today, days),
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch (error) {
+    const failure = bigQueryFailure(
+      error,
+      ["omi_finops.spend_daily"],
+      "Settled spend ledger unavailable (spend_daily unreadable)"
+    );
+    if (isVendorBalanceDark(failure)) return [];
+    throw failure;
+  }
+  return spendDays(rows);
 }
 
 export function parseVendorBalance(json: string): VendorBalanceHistory {
