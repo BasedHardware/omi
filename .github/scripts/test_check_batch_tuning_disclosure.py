@@ -145,6 +145,10 @@ class DisclosureTests(unittest.TestCase):
         self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "- MAX_DRAINS\n    from 4 to 8")[0])
         self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "    example\n\nMAX_DRAINS from 4 to 8")[0])
         self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "> MAX_DRAINS from 4 to 8")[0])
+        for title in ('"MAX_DRAINS from 4 to 8"', "'MAX_DRAINS from 4 to 8'", "(MAX_DRAINS from 4 to 8)"):
+            self.assertTrue(check.validate({"MAX_DRAINS"}, set(), f"[notes](/guide {title})")[0])
+        self.assertFalse(check.validate({"MAX_DRAINS"}, set(), "[MAX_DRAINS from 4 to 8](/guide)")[0])
+        self.assertTrue(check.validate({"MAX_DRAINS"}, set(), "> ## Tuning\n> MAX_DRAINS before 4\n> ## Separate\n> after 8")[0])
 
     def test_from_to_and_arrow_disclosures(self) -> None:
         for body in (

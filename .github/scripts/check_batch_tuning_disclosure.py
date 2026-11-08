@@ -4,6 +4,10 @@
 This is a disclosure ratchet, not semantic analysis: indirect/formula tuning
 can escape detection. Only changed code is evidence; unchanged diff context
 can identify a state field but cannot introduce a knob or literal.
+
+Body evidence must be visible rendered prose: comments, code, and link titles
+are removed. It guards against omission by honest authors, not adversarial
+Markdown; reviewers still read the rendered body.
 """
 
 from __future__ import annotations
@@ -152,13 +156,15 @@ def prose(body: str) -> str:
             lines.append("\n")
         else:
             lines.append(line)
-    return re.sub(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)", " ", "".join(lines), flags=re.S)
+    text = re.sub(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)", " ", "".join(lines), flags=re.S)
+    # Link titles only show on hover: keep [text](url), drop "title".
+    return re.sub(r"(\]\(\s*<?[^\s()<>]*>?)\s+(?:\"[^\"]*\"|'[^']*'|\([^()]*\))\s*\)", r"\1)", text)
 
 
 def sections(body: str) -> list[str]:
     # Any Markdown heading starts a section; don't combine unrelated before and
     # after claims. HTML template examples cannot satisfy the contract.
-    return re.split(r"(?m)(?=^ {0,3}#{1,6}[ \t]+)", body)
+    return re.split(r"(?m)(?=^(?: {0,3}> ?)* {0,3}#{1,6}[ \t]+)", body)
 
 
 def token(name: str, text: str) -> bool:
