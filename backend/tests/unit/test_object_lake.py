@@ -760,13 +760,15 @@ def test_settlement_of_one_same_key_request_leaves_other_inflight(storage):
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
 
 
-def test_failed_put_settles_admitted_request(storage, monkeypatch):
+def test_failed_put_keeps_ambiguous_request_in_flight(storage, monkeypatch):
+    # A raised transport error can still commit server-side: only the
+    # quiescence bound, never the exception, may release the attempt.
     _, store = storage
     monkeypatch.setattr(LocalBlob, 'upload_from_string', Mock(side_effect=RuntimeError('transport failed')))
     with pytest.raises(lake.LakeFetchError):
         put()
     row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
-    assert row['settled'] is True and row['in_flight'] == {}
+    assert row['settled'] is not True and len(row['in_flight']) == 1
 
 
 def test_settlement_store_failure_retains_inflight_discovery(storage, monkeypatch):

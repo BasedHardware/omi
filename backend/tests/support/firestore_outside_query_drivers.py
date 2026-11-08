@@ -553,15 +553,21 @@ _driver(
 _driver(
     'utils.other.object_lake.delete_space_upload_candidates',
     base={'space_id': UID},
+    profile='maintenance-lake-account-erasure',
+    serving=False,
 )
 _driver(
     'utils.other.object_lake.assert_space_uploads_quiescent',
     base={'space_id': UID},
+    profile='maintenance-lake-erasure-quiescence',
+    serving=False,
     neutrals={'now': (None, 'clock injection only; the query shape is a fixed key range')},
 )
 
 _driver(
     'utils.other.object_lake.delete_entity_upload_candidates',
     base={'space_id': UID, 'entity_id': 'conversation-1'},
+    profile='maintenance-lake-conversation-erasure',
+    serving=False,
     neutrals={'now': (None, 'clock injection only; the query shape is a fixed entity key range')},
 )

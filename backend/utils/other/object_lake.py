@@ -285,15 +285,11 @@ def put_space_object(
 @contextmanager
 def _upload_candidate(bucket: str, key: str):
     attempt = _record_upload_candidate(bucket, key)
-    try:
-        yield attempt
-    except Exception:
-        _settle_upload_candidate(bucket, key, attempt)
-        raise
-    else:
-        _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True)
-    # Process loss leaves the attempt unsettled. No finally: a killed writer
-    # cannot establish that its remote request has finished.
+    yield attempt
+    _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True)
+    # Only a returned put settles. A raised storage error or process loss can
+    # leave the remote outcome ambiguous, so the attempt stays in flight until
+    # the quiescence bound ages it out.
 
 
 def _record_upload_candidate(bucket: str, key: str) -> str:
