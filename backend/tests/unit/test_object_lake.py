@@ -843,3 +843,36 @@ def test_deletion_after_post_put_check_fails_the_put(storage, monkeypatch):
     with pytest.raises(lake.LakeWriteFenced, match='fenced the upload'):
         put()
     assert not list(bucket.list_blobs())
+
+
+def test_deletion_between_settlement_preread_and_transaction_fails_the_put(storage, monkeypatch):
+    # The tombstone lands after settlement's non-transactional pre-read but
+    # before its transaction; the transaction must see it, purge, and refuse.
+    bucket, store = storage
+    original_client = lake.space_keys.space_key_firestore_client
+    original_settle = lake._settle_upload_candidate
+
+    class _FenceOnFirstTransaction:
+        def __init__(self, inner):
+            self._inner, self._armed = inner, True
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        def transaction(self, *args, **kwargs):
+            if self._armed:
+                self._armed = False
+                store.collection('users').document('s').collection('deleted_conversations').document('c').create({})
+            return self._inner.transaction(*args, **kwargs)
+
+    def fence_inside_settle(*args, **kwargs):
+        client = _FenceOnFirstTransaction(original_client())
+        with monkeypatch.context() as scoped:
+            scoped.setattr(lake.space_keys, 'space_key_firestore_client', lambda: client)
+            return original_settle(*args, **kwargs)
+
+    monkeypatch.setattr(lake, '_settle_upload_candidate', fence_inside_settle)
+    with pytest.raises(lake.LakeWriteFenced, match='fenced the upload'):
+        put()
+    assert not list(bucket.list_blobs())
+    assert [doc.to_dict() for doc in store.collection('lake_upload_candidates').stream()] == []

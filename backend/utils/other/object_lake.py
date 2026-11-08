@@ -354,26 +354,36 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_f
     _, _, space_id, _, entity_id, _ = key.split('/')
     tombstone = client.collection('users').document(space_id).collection('deleted_conversations').document(entity_id)
 
-    # Storage IO stays outside the transaction. A tombstone that appears later
-    # leaves a settled row for the deleting orchestrator rather than erasing it
-    # without a recorded-bucket absence check.
+    # Storage IO stays outside the transaction, so the transaction re-reads
+    # the tombstone. A fence that lands after the pre-read keeps this attempt
+    # in flight until its object is purged, so deletion's re-purge still owns
+    # it and the caller never receives a reference to an erased object.
     purged = delete_if_fenced and tombstone.get().exists
     if purged:
         _delete_candidate_object({'bucket': bucket, 'key': key})
 
     @firestore.transactional
-    def settle(transaction):
+    def settle(transaction, purged):
+        fenced = tombstone.get(transaction=transaction).exists
         snapshot = candidate.get(transaction=transaction)
         if not snapshot.exists:
-            return  # Never recreate discovery after the wipe's final erasure.
+            # Never recreate discovery after the wipe's final erasure, and never
+            # hand out a reference that erasure may already have removed.
+            return delete_if_fenced and not purged
+        if fenced and delete_if_fenced and not purged:
+            return True
         pending = dict((snapshot.to_dict() or {}).get('in_flight', {}))
         pending.pop(attempt, None)
-        if purged and not pending and tombstone.get(transaction=transaction).exists:
+        if purged and not pending and fenced:
             transaction.delete(candidate)
         else:
             transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
+        return False
 
-    settle(client.transaction())
+    if settle(client.transaction(), purged):
+        _delete_candidate_object({'bucket': bucket, 'key': key})
+        purged = True
+        settle(client.transaction(), purged)
     return purged
 
 
