@@ -2,7 +2,8 @@ import Redis from "ioredis";
 
 let _redis: Redis | null = null;
 let _warnedUnset = false;
-let _lastErrorMessage: string | null = null;
+// Distinct error messages seen since the last "ready" event.
+const _reportedErrors = new Set<string>();
 
 /**
  * Shared best-effort Redis client. Redis is optional: when REDIS_HOST is
@@ -35,13 +36,13 @@ export function getRedis(): Redis | null {
     autoResendUnfulfilledCommands: false,
   });
   _redis.on("ready", () => {
-    _lastErrorMessage = null;
+    _reportedErrors.clear();
   });
   // ioredis keeps retrying an unreachable host about every 2s. Log the first
   // failure for each distinct message, then stay quiet until the link recovers.
   _redis.on("error", (err) => {
-    if (err.message === _lastErrorMessage) return;
-    _lastErrorMessage = err.message;
+    if (_reportedErrors.has(err.message)) return;
+    _reportedErrors.add(err.message);
     console.error("Redis unavailable, using fallbacks:", err.message);
   });
   return _redis;

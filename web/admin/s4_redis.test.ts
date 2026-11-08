@@ -80,6 +80,15 @@ describe("shared admin Redis accessor", () => {
       listener("ready")?.();
       onError?.(enotfound);
       expect(error).toHaveBeenCalledTimes(2);
+
+      // Alternating distinct messages must each be logged once, not just the last one.
+      listener("ready")?.();
+      const refused = new Error("connect ECONNREFUSED 10.0.0.1:6379");
+      onError?.(refused);
+      onError?.(enotfound);
+      onError?.(refused);
+      onError?.(enotfound);
+      expect(error).toHaveBeenCalledTimes(4);
     } finally {
       error.mockRestore();
     }
