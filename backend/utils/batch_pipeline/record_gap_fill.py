@@ -188,7 +188,8 @@ def _source_units(paths):
 def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, protection_level, metadata, bucket):
     """Write WAL PCM inside [lower, upper) create-only, contiguous from ``anchor``.
 
-    Returns (written, collisions, seconds, gapped). Admission checks only the
+    Returns (written, collisions, seconds, gapped); a create collision ends
+    the write. Admission checks only the
     final end, so a fill that skipped ahead would let a record admit with a
     hole the drain could never fill again. Writing stops at the first WAL
     sample more than ``tolerance`` after the audio already held (the retained
@@ -226,9 +227,13 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
                 bucket=bucket,
             )
             if path is None:
+                # The key's owner proves only that the key exists, not that it
+                # covers this span. Advancing past it could write a later tail
+                # over a hole, so stop; a later upload continues from the new
+                # retained end.
                 collisions += 1
-            else:
-                written += 1
+                return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE, gapped
+            written += 1
             budget -= count
             cursor += count
         expected = unit.capture_at + last / RATE

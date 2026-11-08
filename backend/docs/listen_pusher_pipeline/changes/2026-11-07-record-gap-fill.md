@@ -45,7 +45,9 @@ admit with a hole; a later upload continues from the new held end. At most
 objects of at most 300 s. Each object is lossless PCM16 at
 `chunks/{uid}/{cid}/{start:.6f}.bin` (`.enc` for enhanced protection), with
 span metadata and `source=phone_wal`, `rendition=gap-fill-v1`, `record=` and
-`wal=` hash prefixes. The write is create-only with no overwrite fallback.
+`wal=` hash prefixes. The write is create-only with no overwrite fallback, and a
+collision ends the fill: an existing key does not prove it covers the span, so
+a later upload continues from the new retained end.
 
 Who wins a key or a frame: every other `chunks/` writer uses 3-decimal names,
 so no writer can address a gap-fill object and a fill never addresses theirs.

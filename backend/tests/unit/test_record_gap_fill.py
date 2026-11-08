@@ -464,6 +464,28 @@ def test_racing_writer_at_the_key_wins_and_is_never_overwritten(world, monkeypat
     assert world.bucket.objects == {path: racing}
 
 
+def test_a_collision_with_a_shorter_object_stops_the_fill(world, monkeypatch):
+    # A concurrent fill (another WAL) wins key 100 with only 100..101. Writing
+    # on from 104 would let the tail pass with 101..104 missing.
+    monkeypatch.setattr(record_gap_fill, 'PIECE_SECONDS', 4)
+    path = f'chunks/{UID}/{CID}/100.000000.bin'
+
+    def listing_then_race(*a, **kw):
+        listed = world.bucket.listing()
+        world.bucket.put(path, tone(1, 9))
+        return listed
+
+    monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', listing_then_race)
+    world.wal['units'] = [audio_unit(100.0, ramp(11))]
+    assert fill(world) == 'skipped_collision'
+    assert list(world.bucket.objects) == [path]
+    monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', lambda *a, **kw: world.bucket.listing())
+    # The next upload resumes from the winner's real end.
+    assert fill(world, wal_content_id='next-wal') == 'written'
+    assert sorted(fills(world)) == [f'chunks/{UID}/{CID}/{ts:.6f}.bin' for ts in (101.0, 105.0, 109.0)]
+    validate_record_tail(admitted_units(world)[1], closed_row()['finished_at'])
+
+
 def test_pusher_commit_between_listing_and_create_is_untouched(world, monkeypatch):
     """(b) lead2's race: a pusher object lands after the retained listing.
 
