@@ -814,7 +814,7 @@ def test_invalid_goal_relationship_disposition_is_atomic(domain_backend):
     )
 
 
-@pytest.mark.parametrize('malformed', ['not-a-sequence', None, {'legacy': 42}, '9' * 40])
+@pytest.mark.parametrize('malformed', ['not-a-sequence', None, {'legacy': 42}, [], 1.5, 0, -1, False, NOW])
 def test_event_lists_skip_malformed_legacy_sequences(domain_backend, malformed):
     h = domain_backend
     sid, goal, ws = workflow(h, 'malformed-events')
@@ -830,6 +830,87 @@ def test_event_lists_skip_malformed_legacy_sequences(domain_backend, malformed):
         h.seed(sid, entity, parent + '/bad', bad)
     assert [e.event_id for e in goals.list_progress_events(goal.id)] == [good_goal.event_id]
     assert [e.event_id for e in streams.list_events(ws.workstream_id)] == [good_ws.event_id]
-    assert [e.event_id for e in goals.list_progress_events(goal.id, limit=1)] == [good_goal.event_id]
+    # Non-numeric types sort above numbers in Firestore (null sorts below).
+    first_goal = [] if isinstance(malformed, (str, dict, list, datetime)) or malformed == 1.5 else [good_goal.event_id]
+    assert [e.event_id for e in goals.list_progress_events(goal.id, limit=1)] == first_goal
     assert [e.event_id for e in streams.list_events(ws.workstream_id, limit=1)] == [good_ws.event_id]
     assert streams.list_events(ws.workstream_id, after_sequence=good_ws.sequence) == []
+
+
+@pytest.mark.parametrize('domain', ['goal', 'workstream'])
+def test_event_limit_precedes_payload_validation(domain_backend, domain):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'event-window-' + domain)
+    if domain == 'goal':
+        repo, parent, entity = h.goals(sid), goal.id, 'goal_events'
+        good = repo.append_progress_event(
+            parent, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+        )
+        read = lambda limit: repo.list_progress_events(parent, limit=limit)
+        bad_sequence = 2  # DESC: malformed payload consumes the first slot.
+    else:
+        repo, parent, entity = h.workstreams(sid), ws.workstream_id, 'workstream_events'
+        good = repo.append_event(
+            parent, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+        )
+        read = lambda limit: repo.list_events(parent, limit=limit)
+        bad_sequence = 0.5  # ASC, > 0, but not an integer: consumes the first slot.
+    h.seed(
+        sid, entity, parent + '/bad', {**good.model_dump(), 'event_id': 'bad', 'sequence': bad_sequence, 'kind': 'bad'}
+    )
+    assert read(1) == []
+    assert [event.event_id for event in read(2)] == [good.event_id]
+    # Missing ordered fields never enter Firestore's window.
+    missing = {**good.model_dump(), 'event_id': 'missing'}
+    missing.pop('sequence')
+    h.seed(sid, entity, parent + '/missing', missing)
+    assert [event.event_id for event in read(100)] == [good.event_id]
+
+
+@pytest.mark.parametrize('sequence', ['2', '9' * 40, 1e25])
+def test_event_sequences_preserve_valid_coercions_without_bigint_overflow(domain_backend, sequence):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'event-coercion')
+    goals, streams = h.goals(sid), h.workstreams(sid)
+    good_goal = goals.append_progress_event(
+        goal.id, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    good_ws = streams.append_event(
+        ws.workstream_id, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    for entity, parent, good in [('goal_events', goal.id, good_goal), ('workstream_events', ws.workstream_id, good_ws)]:
+        h.seed(sid, entity, parent + '/large', {**good.model_dump(), 'event_id': 'large', 'sequence': sequence})
+    # Goal order_by includes strings; the model accepts integer strings beyond bigint.
+    events = goals.list_progress_events(goal.id, limit=1)
+    assert [(e.event_id, e.sequence) for e in events] == [('large', int(sequence))]
+    # Numeric inequality excludes strings, but accepts an integral double beyond bigint.
+    expected = [(good_ws.event_id, good_ws.sequence)]
+    if not isinstance(sequence, str):
+        expected.append(('large', int(sequence)))
+    assert [(e.event_id, e.sequence) for e in streams.list_events(ws.workstream_id)] == expected
+    assert [e.event_id for e in streams.list_events(ws.workstream_id, limit=1)] == [good_ws.event_id]
+
+
+def test_event_order_uses_stored_types_and_document_key_tiebreaks(domain_backend):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'event-order')
+    goal_event = h.goals(sid).append_progress_event(
+        goal.id, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='base', account_generation=0
+    )
+    ws_event = h.workstreams(sid).append_event(
+        ws.workstream_id, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='base', account_generation=0
+    )
+    for entity, parent, base in [
+        ('goal_events', goal.id, goal_event),
+        ('workstream_events', ws.workstream_id, ws_event),
+    ]:
+        for key, sequence in [('z', 2), ('a', 2.0), ('s2', '2'), ('s10', '10')]:
+            h.seed(sid, entity, parent + '/' + key, {**base.model_dump(), 'event_id': key, 'sequence': sequence})
+    assert [e.event_id for e in h.goals(sid).list_progress_events(goal.id)] == [
+        's2',
+        's10',
+        'z',
+        'a',
+        goal_event.event_id,
+    ]
+    assert [e.event_id for e in h.workstreams(sid).list_events(ws.workstream_id)] == [ws_event.event_id, 'a', 'z']

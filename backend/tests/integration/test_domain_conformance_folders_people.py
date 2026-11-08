@@ -344,7 +344,7 @@ def test_legacy_folder_and_person_ids_come_from_document_keys(domain_backend):
 
 
 @pytest.mark.parametrize('include_discarded', [False, True])
-def test_folder_listing_includes_missing_discarded_before_paging(domain_backend, include_discarded):
+def test_folder_listing_requires_explicit_false_before_paging(domain_backend, include_discarded):
     h = domain_backend
     sid = h.space('missing-discarded')
     repo = h.folders(sid)
@@ -353,8 +353,8 @@ def test_folder_listing_includes_missing_discarded_before_paging(domain_backend,
         h.seed(
             sid, 'conversations', str(i), {'folder_id': folder.id, 'created_at': NOW - timedelta(seconds=i), **fields}
         )
-    expected = ['0', '1', '2', '3'] if include_discarded else ['1', '2']
-    assert [r['id'] for r in repo.conversations_in_folder(folder.id)] == ['1', '2']
+    expected = ['0', '1', '2', '3'] if include_discarded else ['2']
+    assert [r['id'] for r in repo.conversations_in_folder(folder.id)] == ['2']
     assert [r['id'] for r in repo.conversations_in_folder(folder.id, include_discarded=include_discarded)] == expected
     assert [
         r['id'] for r in repo.conversations_in_folder(folder.id, limit=1, offset=1, include_discarded=include_discarded)

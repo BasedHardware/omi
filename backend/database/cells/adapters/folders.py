@@ -191,7 +191,7 @@ class CellFolders(Repo):
     ) -> list[dict]:
         where = "doc->>'folder_id'=%s"
         if not include_discarded:
-            where += " AND (NOT (doc ? 'discarded') OR doc->'discarded'='false'::jsonb)"
+            where += " AND doc->'discarded'='false'::jsonb"
         rows = self.store.query(
             'conversations',
             where,

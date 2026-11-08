@@ -10,7 +10,7 @@ from typing import Any
 from database.ports.action_items import ActionItemDraft, TaskRelationshipRule
 from database.ports.goals import GoalNotFoundError
 from database.read_boundary import parse_payload_strict
-from models.workstream import WorkstreamUpdate as WorkstreamPatch
+from models.workstream import WorkstreamEvent, WorkstreamUpdate as WorkstreamPatch
 from database.ports.workstreams import (
     WorkstreamCreate,
     WorkstreamUpdate,
@@ -24,7 +24,7 @@ from database.ports.workstreams import (
 )
 
 
-from ._base import EVENT_SEQUENCE_SQL, WorkflowRepo, atomic
+from ._base import EVENT_SEQUENCE_SQL, WorkflowRepo, atomic, event_payloads
 
 
 class CellWorkstreams(WorkflowRepo):
@@ -163,13 +163,12 @@ class CellWorkstreams(WorkflowRepo):
     ) -> list[WorkstreamEventEntity]:
         rows = self.store.query(
             'workstream_events',
-            f"doc->>'workstream_id'=%s AND ({EVENT_SEQUENCE_SQL}) BETWEEN 1 AND 9223372036854775807 "
-            f"AND ({EVENT_SEQUENCE_SQL}) > %s",
+            f"doc->>'workstream_id'=%s AND ({EVENT_SEQUENCE_SQL}) > %s",
             [workstream_id, after_sequence],
-            order=f"({EVENT_SEQUENCE_SQL})",
+            order=f'({EVENT_SEQUENCE_SQL}), entity_id COLLATE "C"',
             limit=limit,
         )
-        return [WorkstreamEventEntity.model_construct(**deepcopy(row)) for _, row in rows]
+        return [WorkstreamEventEntity.model_construct(**row) for row in event_payloads(WorkstreamEvent, rows)]
 
     @atomic
     def create_artifact_descriptor(

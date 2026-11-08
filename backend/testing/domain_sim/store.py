@@ -30,7 +30,9 @@ from database.ports.goals import (
     GoalNotFoundError,
 )
 from database.read_boundary import parse_payload_strict
-from models.workstream import WorkstreamUpdate as WorkstreamPatch
+from models.workstream import WorkstreamEvent, WorkstreamUpdate as WorkstreamPatch
+from models.goal import GoalProgressEvent
+from pydantic import ValidationError
 from database.ports.workstreams import (
     WorkstreamCreate,
     WorkstreamUpdate,
@@ -62,15 +64,6 @@ def _chat_encode(value):
     if isinstance(value, list):
         return [_chat_encode(item) for item in value]
     return value
-
-
-def _event_sequence(row):
-    value = row.get('sequence')
-    text = str(value)
-    if not (text.isascii() and text.isdecimal() and len(text) <= 19):
-        return None
-    sequence = int(text)
-    return sequence if 1 <= sequence <= 9223372036854775807 else None
 
 
 def _scalar_order(value):
@@ -345,7 +338,7 @@ class SimFolders(_Repo):
         rows = [
             {**row, 'id': eid}
             for eid, row in self.store.state['conversations'].items()
-            if row.get('folder_id') == folder_id and (include_discarded or row.get('discarded', False) is False)
+            if row.get('folder_id') == folder_id and (include_discarded or row.get('discarded') is False)
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)
         return deepcopy([row for row in rows[offset : offset + limit] if not row.get('deleted')])
@@ -1072,14 +1065,19 @@ class SimGoals(_WorkflowRepo):
 
     def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
         rows = [
-            v
+            (k, v)
             for k, v in self.store.state['goal_events'].items()
-            if k.startswith(goal_id + '/') and _event_sequence(v) is not None
+            if k.startswith(goal_id + '/') and 'sequence' in v
         ]
-        return [
-            GoalProgressEventEntity.model_construct(**deepcopy(r))
-            for r in sorted(rows, key=lambda r: _event_sequence(r) or 0, reverse=True)[:limit]
-        ]
+        rows.sort(key=lambda pair: (_scalar_order(pair[1]['sequence']), pair[0]), reverse=True)
+        result = []
+        for _, row in rows[:limit]:
+            try:
+                parsed = GoalProgressEvent.model_validate(deepcopy(row))
+            except (ValidationError, TypeError):
+                continue
+            result.append(GoalProgressEventEntity.model_construct(**parsed.model_dump()))
+        return result
 
     def update_progress(
         self,
@@ -1280,15 +1278,25 @@ class SimWorkstreams(_WorkflowRepo):
     def list_events(
         self, workstream_id: str, *, after_sequence: int = 0, limit: int = 100
     ) -> list[WorkstreamEventEntity]:
+        # Firestore inequality filters match the operand's numeric type, unlike
+        # an unfiltered order_by which includes every stored sequence type.
         rows = [
-            v
+            (k, v)
             for k, v in self.store.state['workstream_events'].items()
-            if k.startswith(workstream_id + '/') and (_event_sequence(v) or 0) > max(0, after_sequence)
+            if k.startswith(workstream_id + '/')
+            and isinstance(v.get('sequence'), (int, float))
+            and not isinstance(v['sequence'], bool)
+            and v['sequence'] > after_sequence
         ]
-        return [
-            WorkstreamEventEntity.model_construct(**deepcopy(r))
-            for r in sorted(rows, key=lambda r: _event_sequence(r) or 0)[:limit]
-        ]
+        rows.sort(key=lambda pair: (pair[1]['sequence'], pair[0]))
+        result = []
+        for _, row in rows[:limit]:
+            try:
+                parsed = WorkstreamEvent.model_validate(deepcopy(row))
+            except (ValidationError, TypeError):
+                continue
+            result.append(WorkstreamEventEntity.model_construct(**parsed.model_dump()))
+        return result
 
     @_locked
     def create_artifact_descriptor(

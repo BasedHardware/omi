@@ -9,13 +9,35 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Iterable, ParamSpec, TypeVar, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from database.ports.base import MutationConflict, RevisionConflict
 
-# Legacy event payloads may contain arbitrary JSON. Cast only bounded digit
-# strings, and leave invalid values NULL so callers can skip them.
-EVENT_SEQUENCE_SQL = "CASE WHEN doc->>'sequence' ~ '^[0-9]{1,19}$' " "THEN (doc->>'sequence')::numeric END"
+# Keep malformed rows in the ordered window, then validate after LIMIT. JSON
+# numbers can exceed bigint; numeric is safe only behind the JSON type guard.
+EVENT_SEQUENCE_SQL = (
+    "CASE WHEN jsonb_typeof(doc->'sequence')='number' "
+    "AND doc->>'sequence' ~ '^-?[0-9]+([.][0-9]+)?$' THEN (doc->>'sequence')::numeric END"
+)
+EVENT_SEQUENCE_TYPE_SQL = (
+    "CASE jsonb_typeof(doc->'sequence') WHEN 'null' THEN 0 WHEN 'boolean' THEN 1 "
+    "WHEN 'number' THEN 2 WHEN 'string' THEN 4 WHEN 'array' THEN 8 "
+    "WHEN 'object' THEN CASE WHEN doc->'sequence' ? '$datetime' THEN 3 ELSE 10 END ELSE 10 END"
+)
+EVENT_SEQUENCE_DESC_SQL = (
+    f"({EVENT_SEQUENCE_TYPE_SQL}) DESC, ({EVENT_SEQUENCE_SQL}) DESC NULLS LAST, "
+    "(CASE WHEN jsonb_typeof(doc->'sequence') IN ('string','boolean') THEN doc->>'sequence' END) "
+    'COLLATE "C" DESC, entity_id COLLATE "C" DESC'
+)
+
+
+def event_payloads(model: type[BaseModel], rows):
+    """Match the Firestore presentation model's skip-malformed read boundary."""
+    for _, row in rows:
+        try:
+            yield model.model_validate(row).model_dump()
+        except (ValidationError, TypeError):
+            continue
 
 
 def scalar_order(value):

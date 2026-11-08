@@ -17,7 +17,9 @@ from database.ports.goals import (
 )
 
 
-from ._base import EVENT_SEQUENCE_SQL, WorkflowRepo, atomic
+from models.goal import GoalProgressEvent
+
+from ._base import EVENT_SEQUENCE_DESC_SQL, WorkflowRepo, atomic, event_payloads
 
 
 class CellGoals(WorkflowRepo):
@@ -278,12 +280,12 @@ class CellGoals(WorkflowRepo):
     def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
         rows = self.store.query(
             'goal_events',
-            f"doc->>'goal_id'=%s AND ({EVENT_SEQUENCE_SQL}) BETWEEN 1 AND 9223372036854775807",
+            "doc->>'goal_id'=%s AND doc ? 'sequence'",
             [goal_id],
-            order=f"({EVENT_SEQUENCE_SQL}) DESC",
+            order=EVENT_SEQUENCE_DESC_SQL,
             limit=limit,
         )
-        return [GoalProgressEventEntity.model_construct(**deepcopy(row)) for _, row in rows]
+        return [GoalProgressEventEntity.model_construct(**row) for row in event_payloads(GoalProgressEvent, rows)]
 
     @atomic
     def update_progress(
