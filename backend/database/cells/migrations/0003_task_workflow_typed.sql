@@ -23,22 +23,22 @@ END;
 $$;
 
 ALTER TABLE cell_docs ADD COLUMN q_completed boolean GENERATED ALWAYS AS
-    (CASE WHEN entity = 'action_items' THEN doc->'completed' = 'true'::jsonb END) STORED;
-ALTER TABLE cell_docs ADD COLUMN q_deleted boolean GENERATED ALWAYS AS
-    (doc->'deleted' = 'true'::jsonb) STORED;
-ALTER TABLE cell_docs ADD COLUMN q_due_at timestamptz GENERATED ALWAYS AS
-    (cell_query_timestamp(doc->'due_at')) STORED;
-ALTER TABLE cell_docs ADD COLUMN q_created_at timestamptz GENERATED ALWAYS AS
-    (cell_query_timestamp(doc->'created_at')) STORED;
-ALTER TABLE cell_docs ADD COLUMN q_updated_at timestamptz GENERATED ALWAYS AS
-    (cell_query_timestamp(doc->'updated_at')) STORED;
-ALTER TABLE cell_docs ADD COLUMN q_conversation_id text GENERATED ALWAYS AS
-    (doc->>'conversation_id') STORED;
-ALTER TABLE cell_docs ADD COLUMN q_idempotency_key text GENERATED ALWAYS AS
-    (doc->>'idempotency_key') STORED;
-ALTER TABLE cell_docs ADD COLUMN q_goal_id text GENERATED ALWAYS AS (doc->>'goal_id') STORED;
-ALTER TABLE cell_docs ADD COLUMN q_status text GENERATED ALWAYS AS (doc->>'status') STORED;
-ALTER TABLE cell_docs ADD COLUMN q_order jsonb GENERATED ALWAYS AS (doc->'order') STORED;
+    (CASE WHEN entity = 'action_items' THEN doc->'completed' = 'true'::jsonb END) STORED,
+    ADD COLUMN q_deleted boolean GENERATED ALWAYS AS
+    (doc->'deleted' = 'true'::jsonb) STORED,
+    ADD COLUMN q_due_at timestamptz GENERATED ALWAYS AS
+    (cell_query_timestamp(doc->'due_at')) STORED,
+    ADD COLUMN q_created_at timestamptz GENERATED ALWAYS AS
+    (cell_query_timestamp(doc->'created_at')) STORED,
+    ADD COLUMN q_updated_at timestamptz GENERATED ALWAYS AS
+    (cell_query_timestamp(doc->'updated_at')) STORED,
+    ADD COLUMN q_conversation_id text GENERATED ALWAYS AS
+    (doc->>'conversation_id') STORED,
+    ADD COLUMN q_idempotency_key text GENERATED ALWAYS AS
+    (doc->>'idempotency_key') STORED,
+    ADD COLUMN q_goal_id text GENERATED ALWAYS AS (doc->>'goal_id') STORED,
+    ADD COLUMN q_status text GENERATED ALWAYS AS (doc->>'status') STORED,
+    ADD COLUMN q_order jsonb GENERATED ALWAYS AS (doc->'order') STORED;
 
 CREATE INDEX cell_docs_ai_list ON cell_docs
     (space_id, (coalesce(q_completed, false)), (q_due_at IS NULL),
