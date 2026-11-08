@@ -697,6 +697,7 @@ def test_promotion_keeps_due_time_while_projection_siblings_are_pending(state, m
 def test_full_intake_clock_is_pinned_before_projection_and_survives_worker_envelope(state, monkeypatch):
     from tests.unit.test_pipeline_attention import sealed
 
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
     rows, tasks = state
     monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
     monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')

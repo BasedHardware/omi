@@ -162,7 +162,9 @@ may consume that boundary; deadline pressure never clears a pending split decisi
 The absolute deadline is pinned to the complete, barrier-bound native intake's
 `record_ranges`, not to a live preview or the first projected speech unit. The
 content-free `pipeline_capture_end` travels with the existing durable obligation
-and worker envelope. A later unit cannot move the accepted deadline; missing or
+and worker envelope into the consumer's processing context, alongside the
+`pipeline_record` gate, matching the legacy runner. A later unit cannot move the
+accepted deadline; missing or
 invalid intake ranges or unknown presence retain legacy hold timing rather than inventing a patient deadline. The accepted `pipeline_record` gate still waits for complete projection, including after rollback; clock availability never authorizes partial-text notes.
 First-note capture latency and capture-to-seal use this same physical extent;
 recorded-span/finished-to-seal remain separately named clocks. No range query,
