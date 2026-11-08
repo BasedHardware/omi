@@ -177,3 +177,104 @@ def test_embedding_endpoint_v2_success():
 
     np.testing.assert_allclose(result, [3.3, 4.4], rtol=1e-5)
     mod.embedding_inference_v2.assert_called_once_with({"waveform": "wf", "sample_rate": 16000})
+
+
+def test_initialize_embeddings():
+    mod = _load_module()
+    mod._get_inference = MagicMock()
+
+    # Test batch_only=False
+    mod.initialize_embeddings(batch_only=False)
+    assert mod._get_inference.call_count == 2
+    mod._get_inference.assert_any_call(1)
+    mod._get_inference.assert_any_call(2)
+
+    mod._get_inference.reset_mock()
+
+    # Test batch_only=True
+    mod.initialize_embeddings(batch_only=True)
+    mod._get_inference.assert_called_once_with(2)
+
+
+def test_embedding_inference():
+    mod = _load_module()
+    mock_inference = MagicMock(return_value="mock_result_1")
+    mod._get_inference = MagicMock(return_value=mock_inference)
+
+    audio = {"waveform": "wf", "sample_rate": 16000}
+    result = mod.embedding_inference(audio)
+
+    mod._get_inference.assert_called_once_with(1)
+    mock_inference.assert_called_once_with(audio)
+    assert result == "mock_result_1"
+
+
+def test_embedding_inference_v2():
+    mod = _load_module()
+    mock_inference = MagicMock(return_value="mock_result_2")
+    mod._get_inference = MagicMock(return_value=mock_inference)
+
+    audio = {"waveform": "wf", "sample_rate": 16000}
+    result = mod.embedding_inference_v2(audio)
+
+    mod._get_inference.assert_called_once_with(2)
+    mock_inference.assert_called_once_with(audio)
+    assert result == "mock_result_2"
+
+
+def test_load_audio_for_inference():
+    mod = _load_module()
+    mod.torchaudio.load.return_value = ("mock_wf", 48000)
+
+    result = mod._load_audio_for_inference("dummy.wav")
+
+    mod.torchaudio.load.assert_called_once_with("dummy.wav")
+    assert result == {"waveform": "mock_wf", "sample_rate": 48000}
+
+
+def test_get_inference():
+    mod = _load_module()
+
+    # We need to clear the lru_cache since we'll be mocking things
+    mod._get_inference.cache_clear()
+
+    with patch.object(mod.torch, 'device') as mock_device, patch.object(
+        mod.torch.cuda, 'is_available', return_value=True
+    ), patch.object(mod.Model, 'from_pretrained') as mock_from_pretrained, patch.object(
+        mod.os, 'getenv', return_value="fake_token"
+    ):
+
+        # Call with version 1
+        inference = mod._get_inference(1)
+
+        mock_device.assert_called_once_with("cuda")
+        mock_from_pretrained.assert_called_once_with("pyannote/embedding", token="fake_token")
+
+        mock_from_pretrained.reset_mock()
+
+        # Call with version 2
+        inference_v2 = mod._get_inference(2)
+
+        mock_from_pretrained.assert_called_once_with(
+            "pyannote/wespeaker-voxceleb-resnet34-LM",
+            revision="837717ddb9ff5507820346191109dc79c958d614",
+            token="fake_token",
+        )
+
+
+def test_get_inference_cpu():
+    mod = _load_module()
+
+    # We need to clear the lru_cache since we'll be mocking things
+    mod._get_inference.cache_clear()
+
+    with patch.object(mod.torch, 'device') as mock_device, patch.object(
+        mod.torch.cuda, 'is_available', return_value=False
+    ), patch.object(mod.Model, 'from_pretrained') as mock_from_pretrained, patch.object(
+        mod.os, 'getenv', return_value="fake_token"
+    ):
+
+        # Call with version 1
+        inference = mod._get_inference(1)
+
+        mock_device.assert_called_once_with("cpu")

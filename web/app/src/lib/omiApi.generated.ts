@@ -1461,6 +1461,12 @@ export interface ColdStartSequenceTerminalReceipt {
   terminal_state: "completed" | "abandoned";
 }
 
+export interface ConnectorAccess {
+  client_ids: Array<string>;
+  default_scopes: Array<string>;
+  required_scopes: Array<string>;
+}
+
 export interface ConnectorSynthesisRequest {
   existing_memories?: Array<string>;
   items: Array<string>;
@@ -3454,6 +3460,7 @@ export interface McpApiKeyCreate {
 
 export interface McpApiKeyCreated {
   app_id?: string | null;
+  connector_access?: ConnectorAccess;
   created_at: string;
   id: string;
   key: string;
@@ -3474,6 +3481,7 @@ export interface McpCreateActionItem {
 }
 
 export interface McpOauthGrantsResponse {
+  connector_access?: Record<string, ConnectorAccess>;
   grants?: Array<Record<string, unknown>>;
 }
 
@@ -6838,6 +6846,7 @@ export interface OmiApiSchemas {
   "ClientProcessing": ClientProcessing;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
+  "ConnectorAccess": ConnectorAccess;
   "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
   "ConnectorSynthesisResponse": ConnectorSynthesisResponse;
   "ConnectorSynthesisTask": ConnectorSynthesisTask;
@@ -10363,6 +10372,15 @@ export interface OmiApiPaths {
         "200": McpApiKeyCreated;
         "401": void;
         "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/keys/scopes": {
+    get: {
+      operationId: "get_mcp_key_scope_contract";
+      responses: {
+        "200": ConnectorAccess;
+        "401": void;
       };
     };
   };
@@ -18593,6 +18611,21 @@ export async function create_key_v1_mcp_keys_post(body: McpApiKeyCreate, init?: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_mcp_key_scope_contract(init?: OmiApiClientInit): Promise<ConnectorAccess> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/keys/scopes`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function delete_key_v1_mcp_keys__key_id__delete(path: { key_id: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/keys/${path.key_id}`;
@@ -23837,4 +23870,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 544 client methods generated.
+// Total: 545 client methods generated.

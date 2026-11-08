@@ -134,3 +134,23 @@ Each file ran in its own command, from `backend`, with:
 Only the first file is added/changed by the follow-up itself. Other test-file
 changes in a main-based diff belong to #24865. No real service acceptance or
 production observation is claimed by these hermetic tests.
+
+## Publication update, 2026-11-08T08:03:44Z
+
+#24865 merged independently at 2026-11-08T07:00:42Z. Current main was refreshed
+to `0b49927c68e9957a8302a1c2b2bc0d63a5071011` and integrated locally. All three
+consumer files above are identical between that main revision and the #24865
+head: both pending-work calls remain, the rehome probe still uses only length,
+and the Dart parser still reads conversation IDs and defaults recording count
+to one. This follow-up changes none of those payloads.
+
+The complete shared local preflight passed 71 checks at `0c803611a9acff9136b36058d02f24c90529f603`,
+including all 558 query-shape tests (556 seconds with the documented 900-second
+per-file wall deadline) and 1,006 web tests. The independent backend typecheck
+then found one optional-member narrowing error in the cache serializer. The
+follow-up commit stores that dictionary value in a local before its datetime
+check; runtime behavior and imports are unchanged. Cache tests pass again (33),
+and the file's targeted Pyright run using the worktree Python reports zero
+errors. Publication reruns full backend typing and the remaining push checks;
+the already completed shared preflight is reused explicitly, not claimed as a
+fresh full run of the final integration revision. Normal PR CI remains enabled.
