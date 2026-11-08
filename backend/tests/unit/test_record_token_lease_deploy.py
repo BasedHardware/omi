@@ -50,3 +50,12 @@ def test_alerts_use_exported_counters_and_no_combined_file_edit():
     assert 'rate(omi_record_token_late_append_total[5m])' in rules[0]['data'][0]['model']['expr']
     assert rules[0]['labels']['tier'] == 'page'
     assert rules[0]['for'] == '0s'
+
+
+def test_late_append_page_keeps_fleet_notification_timing():
+    path = Path(__file__).resolve().parents[2] / 'charts/monitoring/alerts/record-token-lease.json'
+    rule = json.loads(path.read_text())[0]
+    assert rule['notification_settings']['group_wait'] == '30s'
+    assert rule['notification_settings']['group_interval'] == '5m'
+    assert rule['notification_settings']['repeat_interval'] == '4h'
+    assert rule['notification_settings']['mute_time_intervals'] == []
