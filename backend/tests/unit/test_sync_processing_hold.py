@@ -1,7 +1,10 @@
 """Occasion step 1: paid admission over synthetic content and durable worker wakes."""
 
 from unittest.mock import Mock
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
+import fakeredis
 import pytest
 
 from database.outbox_firestore import ENRICHMENT_OUTBOX
@@ -101,7 +104,6 @@ def test_patient_dispatch_deadline_clamps_the_existing_durable_outbox(state, mon
         lambda *_: {
             'recorded_end': 100,
             'pipeline_capture_end': 100,
-            'pipeline_patient_admitted': True,
             'record_lane_owner': 'batch_sync_v1',
         },
     )
@@ -649,7 +651,6 @@ def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monk
         lambda *_: {
             'recorded_end': 100,
             'pipeline_capture_end': 100,
-            'pipeline_patient_admitted': True,
             'record_lane_owner': 'batch_sync_v1',
         },
     )
@@ -747,17 +748,94 @@ def test_missing_intake_clock_never_uses_preview_as_capture_end(state, monkeypat
     assert rows[outbox.key('u', 'c')]['pipeline_record']
 
 
-def test_unknown_presence_cannot_silently_admit_a_patient_window(state, monkeypatch):
+def test_unknown_presence_after_double_lease_expiry_still_gets_absolute_deadline(state, monkeypatch):
     from tests.unit.test_pipeline_attention import sealed
 
     rows, _ = state
+    attention = outbox.pipeline_attention
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(attention, 'client', lambda: redis)
     monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
-    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unknown')
-    monkeypatch.setattr(outbox.pipeline_attention, 'promoted', lambda *_: False)
+    attention.observe_surface('u', 'home', {'foreground': True, 'home_visible': True}, now=100)
+    assert attention.attention('u', now=100) == 'watched'
+    assert attention.attention('u', now=191) == 'unwatched'
+    assert attention.attention('u', now=280) == 'unknown'
+    assert not attention.promoted('u')
     monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed())
     monkeypatch.setattr(
         outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, 1000)
     )
     outbox.mark('u', 'c', 'en', now=1100)
-    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+    assert rows[outbox.key('u', 'c')]['pipeline_dispatch_at'] == 1000 + 1680
     assert rows[outbox.key('u', 'c')]['pipeline_record']
+
+
+@pytest.mark.asyncio
+async def test_durable_record_registration_and_intake_precede_deadline_creation(state, monkeypatch):
+    from database.batch_pipeline_staging import artifact_id
+    from tests.unit.test_batch_pipeline_live import recording
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from utils.batch_pipeline import live
+
+    rows, _ = state
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_prod'
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'client', lambda: fakeredis.FakeRedis())
+    monkeypatch.setattr(outbox.record_attention, 'FirestoreStore', lambda *a, **k: store)
+    current = recording(
+        record_audio_closed=True, record_upload_revision=3, finished_at=datetime.fromtimestamp(101, timezone.utc)
+    )
+    store.rows['conversations', 'u/record'] = current
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: current)
+    key = outbox.key('u', 'record')
+    outbox.mark('u', 'record', 'en', now=99)
+    assert 'pipeline_dispatch_at' not in rows[key]
+
+    # Real registration commits the record_pending job before any intake or deadline exists.
+    assert live.register_recording('u', current, store=store, now=100)
+    content, segment = live.record_identity('u', 'record')
+    pending = store.run(lambda tx: tx.get('jobs', segment))
+    assert pending['state'] == 'record_pending'
+    assert store.run(lambda tx: tx.get('intakes', 'bp_' + content)) == {}
+    outbox.mark('u', 'record', 'en', now=110)
+    assert 'pipeline_dispatch_at' not in rows[key]
+
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value.to_dict.return_value = (
+        current
+    )
+    store.client = client
+    monkeypatch.setattr(live, 'create_storage_client', lambda: None)
+    monkeypatch.setattr(
+        live,
+        'list_audio_chunks',
+        lambda *a, **k: [{'path': 'chunks/u/record/audio', 'generation': 1, 'timestamp': 100}],
+    )
+    monkeypatch.setattr(live, 'read_reference', lambda *a, **k: b'\x01\x00' * 16000)
+
+    def stage(item, body):
+        uri = 'gs://synthetic-manifest/audio#1'
+        store.rows['artifacts', artifact_id(item.segment_id, uri)] = {'owner_id': 'u', 'privacy_generation': 0}
+        return uri
+
+    monkeypatch.setattr(
+        live,
+        'create_artifact_store',
+        lambda *a: SimpleNamespace(
+            key_for_owner=lambda _: b'a' * 32,
+            stage_audio=stage,
+            authorize=lambda _: SimpleNamespace(level='standard'),
+        ),
+    )
+    assert await live.admit_recording(store, pending, now=300) == {'outcome': 'batch', 'job_id': 'bp_' + content}
+    intake = store.run(lambda tx: tx.get('intakes', 'bp_' + content))
+    assert intake['pipeline_record_barrier']['record_upload_revision'] == 3
+    assert intake['record_ranges'] == [{'start': 100, 'end': 101}]
+    # Read the committed intake through the real receipt and outbox paths; projection is still pending.
+    assert outbox.record_attention.receipt('u', 'record', current, store=store).projected is False
+    outbox.mark('u', 'record', 'en', now=300)
+    assert rows[key]['pipeline_capture_end'] == 101
+    assert rows[key]['pipeline_dispatch_at'] == 101 + 1680

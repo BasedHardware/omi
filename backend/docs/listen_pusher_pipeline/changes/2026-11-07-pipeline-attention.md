@@ -164,8 +164,12 @@ The absolute deadline is pinned to the complete, barrier-bound native intake's
 content-free `pipeline_capture_end` travels with the existing durable obligation
 and worker envelope into the consumer's processing context, alongside the
 `pipeline_record` gate, matching the legacy runner. A later unit cannot move the
-accepted deadline; missing or
-invalid intake ranges or unknown presence retain legacy hold timing rather than inventing a patient deadline. The accepted `pipeline_record` gate still waits for complete projection, including after rollback; clock availability never authorizes partial-text notes.
+accepted deadline; missing or invalid intake ranges retain legacy hold timing.
+Every enrolled capture with a valid intake clock gets the absolute capture-end
++1,680s dispatch deadline regardless of presence, per David's 2026-11-08 ruling.
+Presence only chooses fast scheduling; unknown presence cannot remove the deadline.
+The accepted `pipeline_record` gate still waits for complete projection, including
+after rollback; clock availability never authorizes partial-text notes.
 First-note capture latency and capture-to-seal use this same physical extent;
 recorded-span/finished-to-seal remain separately named clocks. No range query,
 index, historical backfill, or producer-grace bypass is introduced.

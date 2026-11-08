@@ -1,7 +1,7 @@
 """Owner-gated pipeline scheduling over existing durable obligations.
 
 Lifecycle: rollout, default off; owner pipeline-approved; review 2026-11-21.
-Redis never proves a seal or completion. Unknown presence keeps legacy timing.
+Redis never proves a seal or completion. Presence only chooses fast scheduling.
 """
 
 from collections.abc import Mapping

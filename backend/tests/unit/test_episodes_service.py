@@ -831,6 +831,36 @@ def test_pipeline_close_rechecks_member_seal_and_snapshot_in_strict_transaction(
     assert store.rows[('users', UID, 'conversations', 'c1')]['transcript_segments'] == row['transcript_segments']
 
 
+def test_flag_on_close_on_seal_closes_fully_projected_capture_early(monkeypatch):
+    import fakeredis
+    from tests.unit.test_pipeline_attention import sealed
+    from utils.conversations import pipeline_attention
+    from utils.episodes import pipeline_settlement
+
+    store = StrictFirestore()
+    assert _attach(store, 'c1', minutes=0) == 'opened'
+    row = sealed(id='c1', finished_at=T0 + timedelta(seconds=60))
+    assert row['record_projection_revision'] == 1
+    store.rows[('users', UID, 'conversations', 'c1')] = row
+    monkeypatch.setattr(episodes_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setenv('PIPELINE_CLOSE_ON_SEAL_ENABLED', 'true')
+    monkeypatch.setattr(pipeline_attention.omi_flags, 'resolve', lambda *a: SimpleNamespace(enabled=True))
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(pipeline_attention, 'client', lambda: redis)
+    now = T0.timestamp() + 100
+    deadline = T0.timestamp() + 60 + 1680
+    pipeline_attention.observe_surface(UID, 'home', {'foreground': True, 'home_visible': True}, now=now)
+    assert now < deadline
+    assert pipeline_settlement.settle(UID, 'c1', row, deadline, now=now)
+    closed = episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)
+    assert closed['status'] == 'closed' and closed['close_reason'] == 'boundary'
+    assert closed['closed_at'] == datetime.fromtimestamp(now, timezone.utc)
+    assert closed['pipeline_dispatch_at'] == deadline
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+
+
 def test_a_finalize_tail_never_opens_an_episode_after_its_own_closed():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['A', 'B']})
