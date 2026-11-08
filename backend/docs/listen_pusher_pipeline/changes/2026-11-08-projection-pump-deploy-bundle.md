@@ -56,39 +56,50 @@ corresponding approval/execution. No workflow, runtime manifest or alert rule is
 changed by this prep PR. IAM/secret grants, if needed, are separate explicit asks.
 
 For (iv), use the actual GMP dedicated-service label (verify whether it is
-`service_name`; substitute the verified label consistently). Proposed condition:
+`service_name`; substitute the verified label consistently). Proposed condition
+(fires when fewer than four instances have a tick in the last 120 seconds; this
+covers a missing instance, a stale instance, and zero, and `or vector(0)` makes
+an empty result count as zero rather than NoData):
 
 ```promql
-absent(omi_batch_projection_pump_last_tick_seconds{project_id="based-hardware",service_name="backend-projection-pump"})
-or
-(time() - min(omi_batch_projection_pump_last_tick_seconds{project_id="based-hardware",service_name="backend-projection-pump"}) > 120)
+(count((time() - omi_batch_projection_pump_last_tick_seconds{project_id="based-hardware",service_name="backend-projection-pump"}) <= 120) or vector(0)) < 4
 ```
 
 Proposed pending time: 2 minutes, with query errors/NoData alerting, routed to the
-existing pipeline receiver. Zero is stale. This is a tick-liveness signal, not
-success: failed ticks also update the gauge. Test missing, zero, stale, recovery
-and receiver delivery; verify four instances export fresh ticks. The `min` catches
-a stale exported instance; absence of one instance among healthy peers also needs
-instance-count/scrape coverage verification. Do not assert four-instance coverage
-from a single fresh series.
+existing pipeline receiver. This is a tick-liveness signal, not success: failed
+ticks also update the gauge (the write sits in a `finally` block in
+`backend/utils/batch_pipeline/serving.py`, so it runs after a retry too), so it
+must never gate step (v). Test
+missing, zero, stale, recovery and receiver delivery; verify four instances export
+fresh ticks. Do not assert four-instance coverage from a single fresh series.
 
-The (v) gate is **owner_drain >=20 advanced rows/s continuously for 30 minutes**,
-using this unfilled query evaluated every minute over the settled window:
+The (v) gate is **blocked** and cannot be satisfied by this bundle as written,
+for two reasons:
+
+1. **No success-only signal exists.** A sustained successful-pump signal must
+   hold for the agreed window before (v). The only pump gauge is the tick-liveness
+   heartbeat above, which failed ticks also update. A separately reviewed, dark
+   code change must add a gauge set only after a successful sweep, with its own
+   tests; until that lands and is deployed dark, (v) does not run.
+2. **The owner_drain metric excludes the dedicated service.** The candidate query
+   below covers only backend-sync, backend-sync-backfill and backend-integration. It
+   proves the serving owner-drain floor, not pump throughput, so it cannot be the
+   throughput gate for pump enablement. A pump-inclusive rate metric needs its own
+   reviewed filter change and renewed observation.
+
+Candidate serving owner-drain query, for reference only (not the (v) gate):
 
 ```promql
 sum(rate(logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum{monitored_resource="cloud_run_revision",project_id="based-hardware"}[5m] offset 10m))
 ```
 
-Require all samples present and >=20, with a full 30-minute observation window
-entirely after enablement (plus the 10-minute ingestion offset and 5-minute rate
-lookback). A short spike or a missing sample fails admission. This metric's
-committed filter covers backend-sync, backend-sync-backfill and backend-integration;
-it excludes the proposed dedicated service, so it proves the documented serving
-owner-drain gate, not pump-only throughput. If pump-only attribution is required,
-stop for a separately reviewed filter change and renewed observation window.
-After (v), compare claim_busy share with the baseline; it must not increase.
-Watch sweep duration and executor saturation throughout. If any gate fails,
-leave serving sweeps on.
+When both are satisfied, the (v) gate is **owner_drain >=20 advanced rows/s
+continuously for 30 minutes** on a pump-inclusive metric, evaluated every minute
+over a settled window that starts after enablement, plus the 10-minute ingestion
+offset and 5-minute rate lookback. All samples must be present and >=20; a short
+spike or a missing sample fails admission. After (v), compare claim_busy share with
+the baseline; it must not increase. Watch sweep duration and executor saturation
+throughout. If any gate fails, leave serving sweeps on.
 
 ## Rollback for each step
 
