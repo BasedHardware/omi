@@ -82,13 +82,16 @@ def test_source_copy_skips_untracked_scratch_directories(contracts_module, tmp_p
     assert not (dest / scratch).exists()
 
 
-def test_scratch_directory_names_do_not_hide_real_source(contracts_module, tmp_path):
+def test_scratch_directory_names_do_not_hide_nested_source(contracts_module, tmp_path):
     source = tmp_path / 'backend'
-    (source / 'utils' / 'segments').mkdir(parents=True)
-    (source / 'utils' / 'segments' / 'merge.py').write_text('ok\n', encoding='utf-8')
+    (source / 'utils' / '_segments').mkdir(parents=True)
+    (source / 'utils' / '_segments' / 'merge.py').write_text('ok\n', encoding='utf-8')
+    (source / 'utils' / '_temp').mkdir()
+    (source / 'utils' / '_temp' / 'helper.py').write_text('ok\n', encoding='utf-8')
     dest = tmp_path / 'staged'
     contracts_module._copy_source(source, dest)
-    assert (dest / 'utils' / 'segments' / 'merge.py').is_file()
+    assert (dest / 'utils' / '_segments' / 'merge.py').is_file()
+    assert (dest / 'utils' / '_temp' / 'helper.py').is_file()
 
 
 def _contract_with_dockerfile(contracts_module, tmp_path, dockerfile_text):

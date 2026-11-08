@@ -34,20 +34,12 @@ from typing import Iterable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPOSITORY_ROOT / "backend" / "runtime_images.json"
-# Untracked scratch directories that tests and local runs create under backend/. A clean CI
+IGNORED_SOURCE_DIRECTORIES = {".git", ".pytest_cache", ".venv", ".openapi-venv", "__pycache__"}
+# Untracked scratch directories that tests and local runs create at the top of backend/. A clean CI
 # checkout never has them, and a test may write or delete them while the closure is copied, so
-# copying them races with that writer. They are not image source.
-IGNORED_SOURCE_DIRECTORIES = {
-    ".git",
-    ".pytest_cache",
-    ".venv",
-    ".openapi-venv",
-    "__pycache__",
-    "_temp",
-    "_samples",
-    "_speech_profiles",
-    "_segments",
-}
+# copying them races with that writer. Only the top level is skipped: a nested directory with the
+# same name is real source (utils/_segments is a package).
+IGNORED_TOP_LEVEL_SCRATCH_DIRECTORIES = {"_temp", "_samples", "_speech_profiles", "_segments"}
 # First-party modules that raise at import time unless an environment variable is set.
 # An import smoke reaching one of these without the variable fails the deploy, so the
 # registry must declare a non-production placeholder in ``smoke_environment``.
@@ -379,10 +371,18 @@ def final_stage_layer_errors(contract: ImageContract) -> list[str]:
     return errors
 
 
-def _ignore_source_directory(_: str, names: list[str]) -> set[str]:
-    skipped = {name for name in names if name in IGNORED_SOURCE_DIRECTORIES}
-    names[:] = [name for name in names if name not in skipped]
-    return skipped
+def _source_directory_ignorer(source_root: Path):
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        at_root = Path(directory).resolve() == source_root.resolve()
+        skipped = {
+            name
+            for name in names
+            if name in IGNORED_SOURCE_DIRECTORIES or (at_root and name in IGNORED_TOP_LEVEL_SCRATCH_DIRECTORIES)
+        }
+        names[:] = [name for name in names if name not in skipped]
+        return skipped
+
+    return ignore
 
 
 def _runtime_destination(destination: str, workdir: PurePosixPath) -> Path:
@@ -397,7 +397,7 @@ def _runtime_destination(destination: str, workdir: PurePosixPath) -> Path:
 
 def _copy_source(source: Path, destination: Path) -> None:
     if source.is_dir():
-        shutil.copytree(source, destination, dirs_exist_ok=True, ignore=_ignore_source_directory)
+        shutil.copytree(source, destination, dirs_exist_ok=True, ignore=_source_directory_ignorer(source))
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
