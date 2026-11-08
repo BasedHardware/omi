@@ -438,6 +438,105 @@ JOB_KEY = ('batch_pipeline_prod_jobs', 'held')
 CAP_EXPIRY_FLAG = 'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED'
 
 
+def capped_multipart_rows(**result_extra):
+    seeded = rows(projection_release_attempts=MAX_RELEASE_ATTEMPTS, **result_extra)
+    seeded[JOB_KEY]['state'] = 'committed'
+    held = seeded[RESULT_KEY]['projection']
+    seeded[RESULT_KEY]['projection_parts'] = {
+        '0': {'state': 'ready', 'conversation_id': 'proven-prefix'},
+        '1': deepcopy(held),
+        '2': deepcopy(held),
+    }
+    return seeded
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('deadline', [None, 100.0])
+@pytest.mark.parametrize('privacy_location', ['summary', 'held_part', 'ready_part', 'refusal'])
+@pytest.mark.parametrize('privacy_reason', ['conversation_deleted', 'privacy_withdrawn'])
+def test_restorable_at_cap_multipart_privacy_is_read_only(
+    monkeypatch, enabled, deadline, privacy_location, privacy_reason
+):
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, str(enabled).lower())
+    seeded = capped_multipart_rows()
+    entry = seeded[RESULT_KEY]
+    if deadline is not None:
+        entry['held_deadline_at'] = deadline
+    if privacy_location == 'refusal':
+        entry['projection_privacy_refusal'] = True
+    else:
+        receipt = (
+            entry['projection']
+            if privacy_location == 'summary'
+            else entry['projection_parts']['2' if privacy_location == 'held_part' else '0']
+        )
+        receipt['privacy_reason'] = privacy_reason
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 500.0) is False
+    assert not release.expired
+    assert not client.transactions[-1].updates
+    assert client.rows == before
+
+
+def test_restorable_at_cap_multipart_without_privacy_expires_once(monkeypatch):
+    from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, 'true')
+    seeded = capped_multipart_rows()
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 500.0) is False
+    deadline = 500.0 + HELD_DEAD_LETTER_SECONDS
+    stamped = {**seeded[RESULT_KEY], 'held_deadline_at': deadline}
+    assert not release.expired
+    assert client.rows == {**seeded, RESULT_KEY: stamped}
+    assert len(client.transactions[-1].updates) == 1
+    assert release.release('held', deadline) is False
+    assert release.expired
+    expired = {
+        **stamped,
+        'held_expired_reason': 'held_expired',
+        'held_expired_at': deadline,
+        'held_expired_release_attempts': MAX_RELEASE_ATTEMPTS,
+        'projection_release_attempts': 0,
+    }
+    assert client.rows == {**seeded, RESULT_KEY: expired}
+    assert len(client.transactions[-1].updates) == 1
+    for now in (deadline, deadline + 1):
+        release = ProjectionReleaseStore(store)
+        assert release.release('held', now) is False
+        assert not release.expired
+        assert not client.transactions[-1].updates
+        assert client.rows == {**seeded, RESULT_KEY: expired}
+
+
+@pytest.mark.parametrize('privacy_location', ['summary', 'held_part'])
+def test_nightly_redrive_cannot_release_privacy_marked_multipart(monkeypatch, privacy_location):
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, 'true')
+    seeded = capped_multipart_rows(
+        held_expired_reason='held_expired', held_expired_at=200.0, held_expired_release_attempts=MAX_RELEASE_ATTEMPTS
+    )
+    entry = seeded[RESULT_KEY]
+    entry['projection_release_attempts'] = 0
+    receipt = entry['projection'] if privacy_location == 'summary' else entry['projection_parts']['2']
+    receipt['privacy_reason'] = 'conversation_deleted'
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    release = ProjectionReleaseStore(store)
+    assert release.release('held', 500.0, dead_before=201.0) is False
+    assert not release.expired
+    assert not client.transactions[-1].updates
+    assert client.rows == before
+
+
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 @pytest.mark.parametrize(
     'raw,enabled', [(None, False), ('false', False), ('off', False), ('bad', False), (' TRUE ', True)]

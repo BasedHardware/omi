@@ -196,6 +196,14 @@ class ProjectionReleaseStore:
                 return False
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
+            # Multipart summaries can remain ambiguous holds after a privacy
+            # refusal. Fence every receipt before either expiry path or release.
+            if projection_restorable_cap_expiry_enabled() and (
+                entry.get('projection_privacy_refusal')
+                or receipt.get('privacy_reason')
+                or any(part.get('privacy_reason') for part in (entry.get('projection_parts') or {}).values())
+            ):
+                return False
             held_receipt = next(
                 (
                     part

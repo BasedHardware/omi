@@ -290,6 +290,8 @@ Default-off `BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED` also route
 restorable holds at or above that cap through the identical eligibility fences
 and deadline/expiry CAS. It requires `BATCH_HELD_DEAD_LETTER_ENABLED`; the
 stamping or expiry pass never releases the row. Off retains the capped hold.
+With this switch on, a privacy refusal or any nonempty `privacy_reason` on the
+summary or any part refuses release and expiry without writes.
 With this switch on, every ordinary release transaction rechecks the expiry
 stamp and refuses marked rows without writes, including the other leg of the
 same scan. Only nightly redrive with `dead_before` strictly after the marker
