@@ -291,3 +291,100 @@ def test_registry_safe_parsers_reject_python_constructor_tags(tmp_path, monkeypa
     path.write_text("!!python/object/apply:builtins.str ['unsafe']")
     with pytest.raises(yaml.constructor.ConstructorError):
         cli.load_registry(path)
+
+
+@pytest.mark.parametrize(
+    'old,new,active,inactive,gated',
+    [
+        (0, 5, False, False, True),
+        (5, 25, False, False, True),
+        (25, 5, True, False, False),
+        (25, 100, False, True, False),
+        (25, 25, False, False, False),
+        (25, 25, True, False, True),
+    ],
+)
+def test_cli_raise_matrix_and_rollback_without_any_prod_preflight_read(monkeypatch, old, new, active, inactive, gated):
+    current = {'active': not active, 'rollout_percentage': old}
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': current}))
+    writer = Mock()
+    monkeypatch.setattr(cli, '_write', writer)
+    # Every preflight read fails; rollback paths must never reach even the prover.
+    check = Mock(side_effect=SystemExit(4))
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    args = ['set', 'k', '--rollout', str(new), '--reason', 'ramp', '--yes']
+    if active:
+        args.append('--active')
+    if inactive:
+        args.append('--inactive')
+    if gated:
+        with pytest.raises(SystemExit) as error:
+            cli.main(args)
+        assert error.value.code == 4
+        writer.assert_not_called()
+    else:
+        assert cli.main(args) == 0
+        check.assert_not_called()
+        writer.assert_called_once()
+
+
+def test_cli_override_is_in_existing_audit_reason(monkeypatch):
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': {'active': True, 'rollout_percentage': 5}}))
+    monkeypatch.setattr(cli.live_preflight, 'require', Mock())
+    writer = Mock()
+    monkeypatch.setattr(cli, '_write', writer)
+    reason = 'Approved deliberate exception'
+    assert cli.main(['set', 'k', '--rollout', '25', '--reason', 'ramp', '--yes', '--accept-not-live', reason]) == 0
+    assert writer.call_args.args[-1] == 'ramp accept_not_live:' + reason
+    assert cli.main(['set', 'k', '--rollout', '25', '--reason', 'ramp', '--yes', '--accept-not-live', 'short']) == 2
+    assert writer.call_count == 1
+
+
+def test_delete_never_runs_preflight(monkeypatch):
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': {'active': True, 'rollout_percentage': 100}}))
+    check = Mock(side_effect=AssertionError('prod read'))
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    monkeypatch.setattr(cli, '_write', Mock())
+    assert cli.main(['delete', 'k', '--reason', 'rollback', '--yes']) == 0
+    check.assert_not_called()
+
+
+def test_posthog_import_apply_cannot_bypass_raise_preflight(monkeypatch):
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {}))
+    monkeypatch.setattr(
+        cli,
+        'posthog_rows',
+        lambda: {'k': {'key': 'k', 'active': True, 'filters': {'groups': [{'rollout_percentage': 25}]}}},
+    )
+    check = Mock(side_effect=SystemExit(3))
+    writer = Mock()
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    monkeypatch.setattr(cli, '_write', writer)
+    assert cli.main(['import-posthog']) == 0
+    check.assert_not_called()
+    with pytest.raises(SystemExit) as error:
+        cli.main(['import-posthog', '--apply'])
+    assert error.value.code == 3
+    writer.assert_not_called()
+
+
+def test_percentage_raise_on_inactive_rule_is_still_gated(monkeypatch):
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': {'active': False, 'rollout_percentage': 0}}))
+    check = Mock(side_effect=SystemExit(4))
+    writer = Mock()
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    monkeypatch.setattr(cli, '_write', writer)
+    with pytest.raises(SystemExit):
+        cli.main(['set', 'k', '--rollout', '25', '--reason', 'ramp', '--yes'])
+    writer.assert_not_called()
+    assert cli.main(['set', 'k', '--rollout', '25', '--inactive', '--reason', 'kill', '--yes']) == 0
+    assert check.call_count == 1

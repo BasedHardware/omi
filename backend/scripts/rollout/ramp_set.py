@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
 from scripts.rollout.ramp_controller import DRAINING_PRECONDITIONS, QUALITY_FLOOR  # noqa: E402
 from utils.rollout.runtime_percent import write_ramp  # noqa: E402
+from scripts.rollout import live_preflight  # noqa: E402
 
 EXPECTED_TIER = {'prod': 'prod-operator', 'staging': 'dev-operator'}
 DEFAULT_TARGET = {'prod': ('based-hardware', '(default)'), 'staging': ('based-hardware-dev', 'staging')}
@@ -71,6 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Permit writing a quality-floor percent (' + ', '.join(sorted(QUALITY_FLOOR)) + ') below its floor',
     )
+    parser.add_argument('--accept-not-live')
     parser.add_argument('--apply', action='store_true', help='Perform the write (default is a dry run)')
     return parser
 
@@ -140,6 +142,16 @@ def main(argv: Sequence[str] | None = None, *, client_factory: Callable[..., Any
     if os.getenv('GCP_AGENT_TIER') != EXPECTED_TIER[args.env]:
         print('select the matching GCP operator tier before applying', file=sys.stderr)
         return 2
+    raises = live_preflight.raised_percents(entry, change)
+    try:
+        live_preflight.override_reason('', args.accept_not_live)
+        reason = live_preflight.override_reason(reason, args.accept_not_live if raises else None)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    if args.env == 'prod':
+        for name, percent in raises.items():
+            live_preflight.require(name, percent, args.accept_not_live)
     try:
         new_revision = write_ramp(
             args.env,

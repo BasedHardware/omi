@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 import re
+from unittest.mock import Mock
 
 import pytest
 
@@ -379,6 +380,7 @@ class Rig:
 
     def effects(self):
         return rc.Effects(
+            live_preflight=lambda name, percent: (True, 'pass', {}),
             read_document=self.document,
             read_history=self.history,
             write=self.write,
@@ -823,3 +825,108 @@ def test_loop_pages_when_terminated_and_restores_the_handler(tmp_path, monkeypat
     assert code == 128 + signal.SIGTERM
     assert 'stopped (signal_SIGTERM)' in notes[-1]
     assert signal.getsignal(signal.SIGTERM) is before
+
+
+@pytest.mark.parametrize('target,gated', [(25, True), (5, False), (0, False)])
+def test_ramp_set_raise_only_preflight(monkeypatch, target, gated):
+    db = StrictFirestore()
+    entry = {**store.empty_ramp_env(), 'locked_by': 'lead', 'percents': {'batch-pipeline': 10}}
+    document = {'schema_version': 1, 'revision': 1, 'envs': {'prod': entry}}
+    db.rows[('rollout_cohorts', '_ramp')] = document
+    monkeypatch.setattr(store, 'read_ramp', lambda **kw: document)
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    check = Mock(side_effect=SystemExit(4))
+    monkeypatch.setattr(ramp_set.live_preflight, 'require', check)
+    args = [
+        '--env',
+        'prod',
+        '--percent',
+        f'batch-pipeline={target}',
+        '--expected-revision',
+        '1',
+        '--actor',
+        'lead',
+        '--reason',
+        'gate_pass',
+        '--apply',
+    ]
+    if gated:
+        with pytest.raises(SystemExit) as error:
+            ramp_set.main(args, client_factory=lambda **kw: db)
+        assert error.value.code == 4
+        assert db.rows[('rollout_cohorts', '_ramp')]['revision'] == 1
+    else:
+        assert ramp_set.main(args, client_factory=lambda **kw: db) == 0
+        check.assert_not_called()
+        assert db.rows[('rollout_cohorts', '_ramp')]['envs']['prod']['percents']['batch-pipeline'] == target
+
+
+def test_ramp_override_history_reason_and_existing_reader_schema(monkeypatch):
+    db = StrictFirestore()
+    document = {'schema_version': 1, 'revision': 1, 'envs': {}}
+    db.rows[('rollout_cohorts', '_ramp')] = document
+    monkeypatch.setattr(store, 'read_ramp', lambda **kw: document)
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    check = Mock()
+    monkeypatch.setattr(ramp_set.live_preflight, 'require', check)
+    reason = 'Approved deliberate exception'
+    assert (
+        ramp_set.main(
+            [
+                '--env',
+                'prod',
+                '--percent',
+                'batch-pipeline=5',
+                '--expected-revision',
+                '1',
+                '--actor',
+                'lead',
+                '--reason',
+                'gate_pass',
+                '--apply',
+                '--accept-not-live',
+                reason,
+            ],
+            client_factory=lambda **kw: db,
+        )
+        == 0
+    )
+    check.assert_called_once_with('batch-pipeline', 5, reason)
+    assert db.rows[('rollout_cohorts', '_ramp', 'history', '0000000002')]['reason'] == (
+        'gate_pass accept_not_live:' + reason
+    )
+    assert store.normalize_ramp_document(db.rows[('rollout_cohorts', '_ramp')])['envs']['prod']['reason'] == 'gate_pass'
+
+
+def test_controller_refuses_live_preflight_and_bypasses_it_on_rollback(monkeypatch):
+    rig = Rig(env='prod')
+    rig.lead({'percents': {'batch-pipeline': 5, 'first-summary': 100}}, 'gate_pass')
+    effects = rig.effects()
+    check = Mock(return_value=(False, 'not_live', {'key': 'batch-pipeline'}))
+    effects.live_preflight = check
+    rig.now += 86400
+    result = rc.tick('prod', effects, require_parity=False)
+    assert not result.wrote
+    assert any(d.detail == 'preflight:not_live' for d in result.decisions)
+    check.assert_called()
+    check.reset_mock(side_effect=True)
+    check.side_effect = AssertionError('prod read during rollback')
+    effects.accept_not_live = 'Approved deliberate exception'
+    effects.gate = lambda *a: rc.GateVerdict('FAIL', 'privacy', rig.now, 3600, 5, {})
+    result = rc.tick('prod', effects, require_parity=False)
+    assert result.wrote
+    check.assert_not_called()
+    assert rig.history([result.revision])[0]['reason'] == 'privacy'
+
+
+def test_controller_override_written_to_history():
+    rig = Rig(env='prod')
+    rig.lead({'percents': {'batch-pipeline': 5, 'first-summary': 100}}, 'gate_pass')
+    effects = rig.effects()
+    effects.live_preflight = lambda *a: (False, 'unread', {'what': 'gcloud', 'reason': 'command_failed'})
+    effects.accept_not_live = 'Approved deliberate exception'
+    rig.now += 86400
+    result = rc.tick('prod', effects, require_parity=False)
+    assert result.wrote
+    row = rig.history([result.revision])[0]
+    assert row['reason'] == 'gate_pass accept_not_live:Approved deliberate exception'
