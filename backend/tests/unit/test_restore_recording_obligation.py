@@ -1,5 +1,6 @@
-"""Explicit restore repairs sealed recording debt through canonical registration."""
+"""Explicit restore registers recording debt before committing visibility metadata."""
 
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -15,6 +16,7 @@ from database.batch_pipeline_store import FirestoreStore
 from routers import conversations as conversations_router
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import live
+from utils.batch_pipeline.record_seal_repair import seal_refusal
 from utils.conversations import lifecycle
 
 UID, CID = 'synthetic', 'capture'
@@ -72,37 +74,135 @@ def test_restored_sealed_capture_registers_exactly_once_even_after_terminal_fenc
     }
 
 
-@pytest.mark.parametrize('change', [{'discarded': True}, {'deleted': True}, {'record_lane_owner': 'legacy'}])
-def test_second_discard_deletion_or_owner_change_before_registration_creates_no_job(restore_store, monkeypatch, change):
-    original = conversations_db.restore_conversation_from_discarded
-
-    def restore_then_change(*args, **kwargs):
-        result = original(*args, **kwargs)
-        assert restore_store.rows[ROW_PATH]['discarded'] is False
-        ref = restore_store.collection('users').document(UID).collection('conversations').document(CID)
-        restore_store.transaction().update(ref, change)
-        return result
-
-    monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', restore_then_change)
-    with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='retry restore'):
-        lifecycle.restore_discarded(UID, CID)
-    assert JOB_PATH not in restore_store.rows
-
-
 @pytest.mark.parametrize('privacy_scope', ['user', 'row'])
-def test_privacy_refusal_surfaces_retry_and_can_be_retried_after_metadata_commits(restore_store, privacy_scope):
+def test_privacy_refusal_leaves_metadata_unchanged_and_retry_registers_once(restore_store, privacy_scope):
     row = restore_store.rows[('users', UID) if privacy_scope == 'user' else ROW_PATH]
     row['private_cloud_sync_enabled'] = False
+    before = deepcopy(restore_store.rows[ROW_PATH])
     with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='retry restore') as blocked:
         lifecycle.restore_discarded(UID, CID)
     if privacy_scope == 'user':
         assert isinstance(blocked.value.__cause__, batch_pipeline_privacy.BatchPrivacyBlocked)
-    assert restore_store.rows[ROW_PATH]['discarded'] is False
-    assert restore_store.rows[ROW_PATH]['sync_relevance_user_kept'] is True
+    assert restore_store.rows[ROW_PATH] == before
     assert JOB_PATH not in restore_store.rows
     row['private_cloud_sync_enabled'] = True
     assert lifecycle.restore_discarded(UID, CID) is True
-    assert restore_store.rows[JOB_PATH]['state'] == 'record_pending'
+    obligation = deepcopy(restore_store.rows[JOB_PATH])
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[JOB_PATH] == obligation
+    assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in restore_store.rows) == 1
+
+
+def test_metadata_failure_leaves_one_parked_obligation_and_retry_reuses_it(restore_store, monkeypatch):
+    before = deepcopy(restore_store.rows[ROW_PATH])
+    original = conversations_db.restore_conversation_from_discarded
+    metadata_write = Mock(side_effect=RuntimeError('synthetic metadata failure'))
+    monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', metadata_write)
+    for _ in range(2):
+        with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='retry restore'):
+            lifecycle.restore_discarded(UID, CID)
+        assert restore_store.rows[ROW_PATH] == before
+        assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in restore_store.rows) == 1
+        assert seal_refusal(restore_store.rows[JOB_PATH], before, repair_closed=True) == 'privacy_refused'
+    obligation = deepcopy(restore_store.rows[JOB_PATH])
+    monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', original)
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[JOB_PATH] == obligation
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+
+
+def test_registration_receives_restored_shape_while_durable_row_is_discarded(restore_store, monkeypatch):
+    original = lifecycle.register_recording
+    seen = []
+
+    def register(uid, snapshot, **kwargs):
+        assert restore_store.rows[ROW_PATH]['discarded'] is True
+        assert snapshot['discarded'] is False
+        assert snapshot['sync_relevance_user_kept'] is True
+        seen.append(snapshot)
+        return original(uid, snapshot, **kwargs)
+
+    monkeypatch.setattr(lifecycle, 'register_recording', register)
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert len(seen) == 1
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+
+
+def test_legacy_restore_has_no_recording_obligation(restore_store):
+    restore_store.rows[ROW_PATH]['record_lane_owner'] = 'legacy'
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+    assert JOB_PATH not in restore_store.rows
+
+
+def test_open_audio_restore_registers_exactly_once(restore_store):
+    restore_store.rows[ROW_PATH]['record_audio_closed'] = False
+    assert lifecycle.restore_discarded(UID, CID) is True
+    obligation = deepcopy(restore_store.rows[JOB_PATH])
+    assert obligation['state'] == 'record_pending'
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[JOB_PATH] == obligation
+    assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in restore_store.rows) == 1
+
+
+def test_proven_empty_photo_only_restore_has_no_obligation(restore_store):
+    restore_store.rows[ROW_PATH].update(
+        server_batch_audio_received=False, has_content=False, has_photos=True, photos=[{'id': 'photo'}]
+    )
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+    assert JOB_PATH not in restore_store.rows
+
+
+@pytest.mark.parametrize(
+    'unproven',
+    [
+        {'record_audio_closed': False},
+        {'server_batch_audio_received': True},
+        {'server_batch_audio_received': None},
+        {'record_upload_failed': True},
+        {'record_upload_sessions': {'producer': 'active'}},
+    ],
+)
+def test_unproven_empty_restore_is_refused_before_metadata(restore_store, unproven):
+    restore_store.rows[ROW_PATH].update({'server_batch_audio_received': False, 'has_content': False, **unproven})
+    before = deepcopy(restore_store.rows[ROW_PATH])
+    with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable):
+        lifecycle.restore_discarded(UID, CID)
+    assert restore_store.rows[ROW_PATH] == before
+    assert JOB_PATH not in restore_store.rows
+
+
+@pytest.mark.parametrize('missing', [False, True])
+def test_tombstone_or_missing_restore_stays_refused(restore_store, missing):
+    if missing:
+        del restore_store.rows[ROW_PATH]
+    else:
+        restore_store.rows[ROW_PATH]['deleted'] = True
+    before = deepcopy(restore_store.rows)
+    assert lifecycle.restore_discarded(UID, CID) is False
+    assert restore_store.rows == before
+
+
+def test_restore_then_discard_refuses_further_registration(restore_store):
+    assert lifecycle.restore_discarded(UID, CID) is True
+    obligation = deepcopy(restore_store.rows[JOB_PATH])
+    restore_store.rows[ROW_PATH]['discarded'] = True
+    assert live.register_recording(UID, restore_store.rows[ROW_PATH]) is False
+    assert restore_store.rows[JOB_PATH] == obligation
+    assert seal_refusal(obligation, restore_store.rows[ROW_PATH], repair_closed=True) == 'privacy_refused'
+
+
+def test_registration_refusal_does_not_attempt_restore_metadata(restore_store, monkeypatch):
+    metadata = Mock()
+    monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', metadata)
+    monkeypatch.setattr(lifecycle, 'register_recording', lambda *args, **kwargs: False)
+    before = deepcopy(restore_store.rows[ROW_PATH])
+    with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable):
+        lifecycle.restore_discarded(UID, CID)
+    metadata.assert_not_called()
+    assert restore_store.rows[ROW_PATH] == before
+    assert JOB_PATH not in restore_store.rows
 
 
 def test_reprocess_retry_of_user_kept_row_runs_restore_registration_again(restore_store, monkeypatch):
@@ -120,7 +220,9 @@ def test_reprocess_retry_of_user_kept_row_runs_restore_registration_again(restor
     assert restore_store.rows[JOB_PATH]['state'] == 'record_pending'
 
 
-def test_reprocess_surfaces_registration_refusal_as_retryable_http(monkeypatch):
+def test_reprocess_surfaces_registration_refusal_as_retryable_http(restore_store, monkeypatch):
+    restore_store.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+    before = deepcopy(restore_store.rows[ROW_PATH])
     monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda *_: {'discarded': True})
     monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _: SimpleNamespace(language='en'))
     monkeypatch.setattr(attention_db, 'generation', lambda _: 'generation')
@@ -131,7 +233,7 @@ def test_reprocess_surfaces_registration_refusal_as_retryable_http(monkeypatch):
     monkeypatch.setattr(
         conversations_router,
         'execute_reprocess',
-        Mock(side_effect=lifecycle.RestoredRecordingRegistrationUnavailable('retry restore')),
+        lambda *args, **kwargs: lifecycle.restore_discarded(UID, CID),
     )
     with pytest.raises(HTTPException) as refused:
         conversations_router.reprocess_conversation(CID, uid=UID)
@@ -139,3 +241,5 @@ def test_reprocess_surfaces_registration_refusal_as_retryable_http(monkeypatch):
     assert refused.value.detail['code'] == 'recording_restore_retry_required'
     assert refused.value.headers == {'Retry-After': '1'}
     finish.assert_called_once_with(UID, 'operation', 'failed')
+    assert restore_store.rows[ROW_PATH] == before
+    assert JOB_PATH not in restore_store.rows

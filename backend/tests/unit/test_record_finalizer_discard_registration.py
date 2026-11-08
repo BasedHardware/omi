@@ -13,6 +13,7 @@ from utils.conversations import finalizer
 from utils.conversations import demand_processing
 from utils.conversations.processing_trigger import ProcessingTrigger
 from tests.unit.test_conversation_smart_merge_finalizer import harness, _Conversation, _JOB, _finalize
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 @pytest.mark.asyncio
@@ -115,18 +116,25 @@ async def test_discarded_server_batch_fast_path_terminalizes_once_without_regist
     async def inline(_executor, function, *args, **kwargs):
         return function(*args, **kwargs)
 
-    job = dict(_JOB)
+    client = StrictFirestore()
+    job_path = (jobs_db.FINALIZATION_JOBS_COLLECTION, 'job')
+    client.rows[job_path] = {**_JOB, 'fanout_status': 'pending'}
+    job = client.rows[job_path]
+    monkeypatch.setattr(jobs_db, 'get_firestore_client', lambda: client)
+    original_run = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.lifecycle_service.complete_finalization_fanout:
+            return function(*args, **kwargs)
+        return await original_run(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
 
     def claim(*args, **kwargs):
         if job['status'] == 'completed':
             return {'status': 'completed'}
         return {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0}
 
-    def complete(*args, **kwargs):
-        job['status'] = 'completed'
-        return True
-
-    completed = MagicMock(side_effect=complete)
     terminal = MagicMock()
     client_terminal = MagicMock()
     retry = AsyncMock()
@@ -138,7 +146,6 @@ async def test_discarded_server_batch_fast_path_terminalizes_once_without_regist
     monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
     monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
     monkeypatch.setattr(jobs_db, 'get_finalization_job', lambda _: job)
-    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
     monkeypatch.setattr(finalization_router, 'record_capture_finalization_terminal', terminal)
     monkeypatch.setattr(finalization_router, 'record_conversation_finalization_client_terminal', client_terminal)
     monkeypatch.setattr(finalization_router, '_retry_or_dead_letter', retry)
@@ -151,7 +158,9 @@ async def test_discarded_server_batch_fast_path_terminalizes_once_without_regist
     assert first.status_code == replay.status_code == 200
     assert json.loads(first.body) == {'status': 'done'}
     assert json.loads(replay.body) == {'status': 'acked', 'job_status': 'completed'}
-    completed.assert_called_once_with('job', 1, 1)
+    assert client.rows[job_path]['status'] == 'completed'
+    assert client.rows[job_path]['fanout_status'] == 'completed'
+    assert client.rows[job_path]['terminal_outcome'] == 'success'
     terminal.assert_called_once_with('success', None)
     client_terminal.assert_called_once_with('success', job)
     retry.assert_not_called()
@@ -164,6 +173,28 @@ async def test_discarded_server_batch_fast_path_terminalizes_once_without_regist
     assert [record.getMessage() for record in caplog.records if 'outcome=discarded' in record.getMessage()] == [
         'event=server_batch_finalization outcome=discarded'
     ]
+
+
+@pytest.mark.asyncio
+async def test_discarded_fast_path_retries_when_fanout_completion_is_refused(harness, monkeypatch):
+    calls, row = harness
+    row.update(record_lane_owner='batch_live_v1', server_batch_only=True, discarded=True)
+    conversation = _Conversation()
+    conversation.discarded = True
+    conversation.transcript_segments = []
+    conversation.photos = []
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.lifecycle_service.complete_finalization_fanout:
+            return False
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with pytest.raises(finalizer.ConversationFinalizationError, match='fanout_completion_conflict'):
+        await _finalize()
+    assert finalizer.register_recording not in calls
 
 
 @pytest.mark.asyncio

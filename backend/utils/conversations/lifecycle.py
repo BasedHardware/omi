@@ -86,7 +86,7 @@ class LifecycleTransitionError(ValueError):
 
 
 class RestoredRecordingRegistrationUnavailable(RuntimeError):
-    """Restore metadata committed, but its recording obligation needs a retry."""
+    """Restore could not safely complete its recording obligation and metadata."""
 
 
 class FinalizationDispatchUnavailable(RuntimeError):
@@ -633,31 +633,42 @@ def discard_by_relevance(
 
 
 def restore_discarded(uid: str, conversation_id: str) -> bool:
-    """An explicit user intent may restore visibility without changing status."""
-    restored = conversations_db.restore_conversation_from_discarded(uid, conversation_id, return_snapshot=True)
-    if not restored:
-        return False
-    if restored.get('record_lane_owner') != 'batch_live_v1' or not restored.get('record_audio_closed'):
-        return True
+    """Register recording debt before an explicit restore makes the row visible."""
 
-    # The metadata snapshot only decides whether to attempt registration. Read
-    # the current row inside the registration transaction: a second discard,
-    # deletion or ownership change must conflict with or refuse the obligation.
     def register(tx):
         current = tx.get('conversations', f'{uid}/{conversation_id}')
-        if not current.get('record_audio_closed'):
-            return False
-        return register_recording(uid, {**current, 'id': conversation_id}, transaction=tx)
+        if not current or conversations_db.is_soft_deleted(current):
+            return None
+        if current.get('record_lane_owner') != 'batch_live_v1':
+            return True
+        # A closed, proven-empty server capture has no audio obligation. Open
+        # archives still register: the batch drain owns their upload barrier.
+        if (
+            server_batch.owned(current)
+            and current.get('record_audio_closed') is True
+            and current.get('server_batch_audio_received') is False
+            and not current.get('record_upload_failed')
+            and not current.get('record_upload_sessions')
+            and not server_batch.has_audio(current)
+        ):
+            return True
+        restored = {**current, 'id': conversation_id, 'discarded': False, 'sync_relevance_user_kept': True}
+        return register_recording(uid, restored, transaction=tx)
 
     try:
         registered = FirestoreStore(f'batch_pipeline_{current_stage()}').run(register)
     except BatchPrivacyBlocked as error:
-        raise RestoredRecordingRegistrationUnavailable(
-            'restored recording registration refused; retry restore'
-        ) from error
+        raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore') from error
+    if registered is None:
+        return False
     if not registered:
-        raise RestoredRecordingRegistrationUnavailable('restored recording registration refused; retry restore')
-    return True
+        raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore')
+    # A crash here leaves at most one idempotent obligation parked behind the
+    # discarded row. Seal/partial workers refuse it until metadata commits.
+    try:
+        return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    except Exception as error:
+        raise RestoredRecordingRegistrationUnavailable('restore metadata unavailable; retry restore') from error
 
 
 def open_recording_session(

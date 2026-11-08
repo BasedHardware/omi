@@ -281,6 +281,14 @@ async def finalize_persisted_conversation(
         and not getattr(conversation, 'photos', None)
     ):
         if conversation_data.get('discarded'):
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.complete_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            ):
+                raise ConversationFinalizationError('fanout_completion_conflict')
             logger.info('event=server_batch_finalization outcome=discarded')
             return ConversationFinalizationDisposition.discarded
         if not server_batch_has_audio(conversation_data):
