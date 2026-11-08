@@ -33,6 +33,21 @@ def test_pusher_byte_limit_manifest_requires_progress_capable_integer(environmen
 EXPECTED_DECLARED_VALUES = {'dev': '512', 'prod': '0'}
 
 
+def _find_declared(node, key):
+    """Every literal value declared for key anywhere in a parsed manifest document."""
+    found = []
+    if isinstance(node, dict):
+        for name, value in node.items():
+            if name == key and isinstance(value, dict) and 'value' in value:
+                found.append(str(value['value']))
+            else:
+                found.extend(_find_declared(value, key))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_find_declared(item, key))
+    return found
+
+
 def test_all_deployment_declarations_remain_off_and_classified():
     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     for environment in ('dev', 'prod'):
@@ -42,6 +57,14 @@ def test_all_deployment_declarations_remain_off_and_classified():
             (ROOT / f'backend/charts/pusher/{environment}_omi_pusher_values.yaml').read_text(), Loader=yaml.CSafeLoader
         )
         assert next(entry for entry in chart['env'] if entry['name'] == KEY)['value'] == expected
+    # The shared default stays off and only the dev overlay overrides it; prod/staging never do.
+    base = yaml.load((ROOT / 'backend/deploy/runtime_env/_base.yaml').read_text(), Loader=yaml.CSafeLoader)
+    assert _find_declared(base, KEY) == ['0']
+    for overlay in ('prod', 'staging'):
+        text = (ROOT / f'backend/deploy/runtime_env/{overlay}.overlay.yaml').read_text()
+        assert KEY not in text
+    dev_overlay = (ROOT / 'backend/deploy/runtime_env/dev.overlay.yaml').read_text()
+    assert dev_overlay.count(KEY) == 1
     policy = json.loads((ROOT / 'config/deployment-setting-classification.json').read_text())
     assert KEY in policy['kinds']['config']
     flags = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=yaml.CSafeLoader)
