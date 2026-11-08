@@ -155,7 +155,10 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
-        'conversations_db': SimpleNamespace(get_conversation=lambda *args: {'sync_merged_from': ['donor']}),
+        'conversations_db': SimpleNamespace(
+            get_conversation_raw_snapshot=lambda *args: {'sync_merged_from': ['donor']}
+        ),
+        'object_lake': SimpleNamespace(LakeFetchError=type('LakeFetchError', (Exception,), {})),
         'os': SimpleNamespace(getenv=lambda *args: 'canonical'),
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,
