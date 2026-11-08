@@ -3065,6 +3065,48 @@ visibility. `EPISODE_OUTPUT_LANGUAGE_PIN=off` restores preference-then-capture
 resolution for conversation notes and episodes; valid capture tags also survive
 when no transcript segments were supplied.
 
+### Home processing ownership (default on)
+
+`HOME_PROCESSING_OWNERSHIP_ENABLED` and `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED`
+both default true, including notes for closed members of a still-live episode.
+Set either to false as an independent kill switch. `HOME_PROCESSING_OWNERSHIP_UIDS`
+optionally restricts either switch to named accounts; empty admits all eligible accounts. Live Home/pending suppression requires an admitted `X-Omi-App-Channel` and
+`X-Omi-Home-Ownership: 1`. Live conversation-list suppression additionally requires
+the current episode ID in valid client-held `X-Omi-Home-Episode-Ids` pairs. Missing
+or mismatched echoes (including snapshot-fetch failure) keep recordings visible.
+Filtered/date-scoped Home reads retain their recordings;
+version checks are bypassed for live-dependent lists. `X-Omi-Home-Suppressed-Ids`
+continues to name only acknowledged held snapshots. Pending-work fills past
+suppressed pages, removes fully represented jobs, and adds `recording_count`
+(default one) for distinct recordings across the listed jobs, including chunk
+jobs sharing a recording ID. Partially overlapping jobs count only newly
+represented recordings; identity-free jobs remain separate. Non-presentation
+writer-lease probes do not apply suppression.
+
+Redis `create_sync_job` stores supplied `recording_ids` and nullable
+`target_conversation_id` before results, with its existing TTL. A session-only
+upload may still have no target at admission; no target is inferred. A recording
+wholly inside the live window without membership is hidden and emits the unlabeled
+`omi_episode_home_attach_gap_total` read-observation counter and an info log with
+`event=episode_attach_gap` and conversation/episode IDs. Repeated polls count again.
+
+When the notes switch is true, automatic live-member notes wait without consuming
+finalization retry budget. Batch registration and boundary closure precede the
+wait. Recording detail with `X-Omi-Recording-Detail: 1` queues its durable enrichment obligation before publishing
+a 4,200-second per-recording escalation lease (maximum hold plus one quiet window);
+expired intent restores the wait. Empty-transcript process entry bypasses this notes
+gate, and scheduling deferrals propagate through donor completion unchanged.
+Optional dependency failures preserve
+the detail read and fail eager for processing. Explicit Process Now carries
+`backlog_choice` intent. The [runbook](runbooks/home-processing-ownership.md)
+owns default-on verification, Phase 2 integration checks and rollback.
+
+Live list omissions require exact client-held episode/member pairs, including
+for current live membership and time-overlap ownership. Newly attached or
+unacknowledged members remain visible until fetched. All acknowledged omissions
+are named in `X-Omi-Home-Suppressed-Ids` for local source restoration. The early
+finalizer notes gate also bypasses empty transcripts, including photo-only rows.
+
 ### Home transcription presentation
 
 `HOME_TRANSCRIPTION_PRESENTATION_GATE` defaults on; `off` / `false` / `0` / `no`
