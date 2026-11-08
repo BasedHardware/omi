@@ -371,7 +371,9 @@ def test_fill_stops_at_a_hole_inside_the_wal_and_resumes_on_a_later_upload(world
 
 def wal_file(tmp_path, capture, pcm):
     path = tmp_path / f'audio_omi_pcm16_16000_{capture}.bin'
-    path.write_bytes(b''.join(len(pcm[i : i + 320]).to_bytes(4, 'little') + pcm[i : i + 320] for i in range(0, len(pcm), 320)))
+    path.write_bytes(
+        b''.join(len(pcm[i : i + 320]).to_bytes(4, 'little') + pcm[i : i + 320] for i in range(0, len(pcm), 320))
+    )
     return str(path)
 
 
