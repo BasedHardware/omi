@@ -19,7 +19,8 @@ readers cannot silently reject a newly written name.
 The gate refuses at the first missing proof:
 
 - `key_unread`: no runtime reading site.
-- `not_live`: a runtime's serving commit predates the required commit, or no
+- `not_live`: a runtime's serving commit lacks any required code/registry commit (including
+  introductions on parallel branches), or no
   single 100% Cloud Run revision / no GKE pod can be established.
 - `commit_unbound`: a serving image cannot be bound to a local Git commit.
 - `scrape_unknown runtime=<name>`: the runtime has no job in the expected-targets

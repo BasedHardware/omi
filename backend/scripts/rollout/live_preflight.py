@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import http.client
 import json
 import math
 import re
@@ -195,7 +196,7 @@ class Prover:
         )
         try:
             return self.fetch(request, timeout=self.timeout())
-        except (OSError, ValueError):
+        except (OSError, ValueError, http.client.HTTPException):
             raise Unread('image' if registry else 'prometheus', 'transport_failed') from None
 
     def commit(self, value: str | None) -> str | None:
@@ -358,6 +359,7 @@ class Prover:
             )
             if reader:
                 commits.append(reader)
+        commits = list(dict.fromkeys(commits))
         if not commits:
             raise Unread('introducing_commit', 'commit_missing')
         # On one named main lineage, the descendant is newer even if commit
@@ -392,7 +394,11 @@ class Prover:
                             ),
                         },
                     )
-                if not self.ancestor(required, commit):
+                # Reader and registry introductions can be on parallel merged
+                # branches. Every source commit must be present in the serving
+                # image; selecting one by timestamp would leave the other unproved.
+                missing = next((source for source in commits if not self.ancestor(source, commit)), None)
+                if missing is not None:
                     return (
                         False,
                         'not_live',
@@ -400,7 +406,7 @@ class Prover:
                             'key': key,
                             'runtime': runtime['platform'] + '/' + runtime['name'],
                             'serving': commit[:7],
-                            'requires': required[:7],
+                            'requires': missing[:7],
                         },
                     )
                 serving.append(commit)
@@ -493,6 +499,8 @@ def preflight(
 
 def report(result: tuple[bool, str, dict]) -> int:
     ok, token, detail = result
+    if token == 'override':
+        detail = {'key': detail['key'], 'reason': detail['reason'], **detail}
     if token == 'unread':
         print(f"RAMP_PREFLIGHT UNREAD {detail['what']} reason={detail['reason']}")
     else:

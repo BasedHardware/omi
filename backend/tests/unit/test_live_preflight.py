@@ -1,6 +1,7 @@
 """Hermetic operator evidence: real Git ancestry, canned cloud/GMP, no credentials."""
 
 import copy
+import http.client
 import io
 import json
 import os
@@ -187,7 +188,12 @@ class LivePreflightTest(unittest.TestCase):
         self.assertEqual(self.check()[1:], ('scrape_unknown', {'runtime': 'backend'}))
         result = self.check(accept_not_live='Deliberate operator exception')
         self.assertEqual(result[1], 'override')
-        self.assertEqual(lp.report(result), 0)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(lp.report(result), 0)
+        self.assertTrue(
+            output.getvalue().startswith('RAMP_PREFLIGHT OVERRIDE key=feature reason=Deliberate operator exception')
+        )
 
     def test_unread_transport_and_override_reason_preserved(self):
         def fail(*a, **kw):
@@ -206,6 +212,14 @@ class LivePreflightTest(unittest.TestCase):
             lp.override_reason('gate_pass', 'Deliberate operator exception'),
             'gate_pass accept_not_live:Deliberate operator exception',
         )
+
+    def test_truncated_http_response_is_unread(self):
+        def truncated(*args, **kwargs):
+            raise http.client.IncompleteRead(b'fixture', 10)
+
+        with patch.object(self, 'fetch', truncated):
+            result = self.check()
+        self.assertEqual(result, (False, 'unread', {'what': 'prometheus', 'reason': 'transport_failed'}))
 
     def test_digest_tree_binding_and_unlabelled_digest(self):
         self.update(
@@ -278,6 +292,37 @@ class LivePreflightTest(unittest.TestCase):
         result = self.check()
         self.assertEqual(result[1], 'not_live')
         self.assertEqual(result[2]['requires'], self.b[:7])
+
+    def test_parallel_reader_and_registry_commits_must_both_be_live(self):
+        self.git('checkout', '-q', '-b', 'parallel-base', self.a)
+        self.write('config/feature-flags.yaml', json.dumps({'flags': [{'key': 'other'}]}, separators=(',', ':')))
+        base = self.commit('base without reader or registry row')
+        self.git('checkout', '-q', '-b', 'reader-source')
+        self.write('backend/utils/reader.py', 'flag = "feature"\n')
+        reader = self.commit('introduce reader on one branch')
+        self.git('checkout', '-q', '-b', 'registry-source', base)
+        self.write('config/feature-flags.yaml', json.dumps({'flags': [{'key': 'feature'}]}, separators=(',', ':')))
+        registry = self.commit('introduce registry on parallel branch')
+        self.git(
+            '-c',
+            'user.name=Fixture',
+            '-c',
+            'user.email=fixture@example.invalid',
+            'merge',
+            '--no-ff',
+            '-q',
+            '-m',
+            'join reader and registry',
+            'reader-source',
+        )
+        self.b = self.git('rev-parse', 'HEAD')
+        self.git('update-ref', 'refs/remotes/origin/main', self.b)
+        self.serving = reader
+        result = self.check()
+        self.assertEqual(result[1], 'not_live')
+        self.assertEqual(result[2]['requires'], registry[:7])
+        self.serving = self.b
+        self.assertTrue(self.check()[0])
 
     def test_runtime_roster_fixture(self):
         inventory = json.loads((FIXTURES / 'roster.json').read_text())
