@@ -333,8 +333,10 @@ def _check_put_authority(space_id, entity_id, blob, *, created, deadline):
         _assert_owner_write_allowed(space_id, entity_id)
         if space_keys.get_space_keys(space_id) is None:
             raise space_keys.SpaceKeyDestroyed('Space key disappeared during upload')
+        # Expiry alone is not a deletion fence: another writer may already
+        # reference this name. Retain the blob and discovery intent on expiry.
         _remaining_put_seconds(deadline)
-    except (space_keys.SpaceKeyDestroyed, LakeWriteFenced, LakeWriteDeadlineExceeded):
+    except (space_keys.SpaceKeyDestroyed, LakeWriteFenced):
         # Only this newly created candidate is ours to remove. A create-only
         # retry may have reused a referenced object; the purge owns that object.
         # The candidate cannot acquire a live reference after the durable

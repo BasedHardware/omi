@@ -103,7 +103,9 @@ def test_put_exceeding_deadline_cannot_return_pointer(storage, monkeypatch, repl
     with pytest.raises(lake.LakeWriteDeadlineExceeded, match='deadline exceeded'):
         put()
     monkeypatch.setattr(LocalBlob, 'reload' if replay else 'upload_from_string', original)
-    assert bool(list(bucket.list_blobs())) is replay
+    # Deadline expiry is not a deletion fence. Another writer may already have
+    # referenced the create-only name, even when this attempt created it.
+    assert len(list(bucket.list_blobs())) == 1
     if replay:
         assert bucket.blob(ref.key).exists()  # A reused referenced generation is never self-deleted.
     assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
@@ -148,7 +150,31 @@ def test_deadline_checked_after_post_put_authority(storage, monkeypatch):
     monkeypatch.setattr(LocalBlob, 'upload_from_string', uploaded)
     with pytest.raises(lake.LakeWriteDeadlineExceeded):
         put()
-    assert not list(bucket.list_blobs())
+    assert len(list(bucket.list_blobs())) == 1
+
+
+def test_expired_creator_preserves_concurrently_published_pointer(storage, monkeypatch):
+    bucket, store = storage
+    clock = Mock(monotonic=Mock(return_value=10.0))
+    monkeypatch.setattr(lake, 'time', clock)
+    upload = LocalBlob.upload_from_string
+    published = []
+
+    def publish_before_expiry(blob, *args, **kwargs):
+        upload(blob, *args, **kwargs)
+        # Another successful writer reuses the content-addressed name before
+        # the creating writer notices that its own budget has expired.
+        with monkeypatch.context() as context:
+            context.setattr(LocalBlob, 'upload_from_string', upload)
+            published.append(put())
+        clock.monotonic.return_value += lake.config.put_deadline_seconds()
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', publish_before_expiry)
+    with pytest.raises(lake.LakeWriteDeadlineExceeded):
+        put()
+    assert len(list(bucket.list_blobs())) == 1
+    assert lake.get_space_object(published[0]).startswith(b'private transcript')
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
 
 
 @pytest.mark.parametrize('operation', ['get', 'create'])
