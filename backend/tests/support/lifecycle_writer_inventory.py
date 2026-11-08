@@ -1090,6 +1090,21 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Transport acknowledgements use the same reviewed inventory as conversation mutations.
+    'database/cells/mutations.py': [
+        (
+            'apply_space_mutation',
+            'status',
+            "'ok'",
+            ('client_mutation_id', 'entity', 'entity_id', 'replayed', 'rev', 'seq', 'status'),
+        ),
+        (
+            'apply_space_mutation.conflict',
+            'status',
+            "'conflict'",
+            ('client_mutation_id', 'code', 'entity', 'entity_id', 'row', 'status'),
+        ),
+    ],
     'database/conversation_mutations.py': [
         (
             'apply_conversation_sync_mutation',
