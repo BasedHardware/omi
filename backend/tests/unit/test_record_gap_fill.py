@@ -1,9 +1,12 @@
 """Closed-record gap fill: gates, clip, create-only custody, pusher race, marker, logs."""
 
+import asyncio
 from datetime import datetime, timezone
 import io
 import json
 import logging
+import os
+import time
 from types import SimpleNamespace
 import wave
 
@@ -16,7 +19,7 @@ from database.audio_chunk_metadata import audio_chunk_entry
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils import encryption
-from utils.batch_pipeline import live, live_upload, record_gap_fill
+from utils.batch_pipeline import live, live_upload, record_gap_fill, record_retained_ack
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.source_audio import MAGIC, decode_source, materialize
@@ -673,7 +676,7 @@ async def test_jobs_missing_upload_runs_the_fill_and_keeps_the_same_503(monkeypa
 
     async def run(**kw):
         calls.append(kw)
-        return 'written'
+        return 'written', False
 
     monkeypatch.setattr(record_gap_fill, 'run_gap_fill', run)
     response = await live_upload.registered_record_response(
@@ -710,7 +713,7 @@ async def test_serving_entry_runs_both_phases(world, monkeypatch):
         wal_content_id='c',
         store=world.store,
     )
-    assert outcome == 'written'
+    assert outcome == ('written', False)
     assert list(fills(world)) == [f'chunks/{UID}/{CID}/105.000000.bin']
 
 
@@ -733,7 +736,7 @@ async def test_serving_entry_skips_a_missing_conversation(world, monkeypatch):
     outcome = await record_gap_fill.run_gap_fill(
         uid=UID, conversation_id=CID, paths=['synthetic-wal.bin'], wal_content_id='c', store=world.store
     )
-    assert outcome == 'skipped_gate'
+    assert outcome == ('skipped_gate', False)
     assert not world.markers
 
 
@@ -765,3 +768,317 @@ def test_marker_client_is_bounded(monkeypatch):
     first = sync_record_wait_cache._marker_client()
     assert sync_record_wait_cache._marker_client() is first
     assert made == [0.5]
+
+
+# --- Admission-race fence: the fill holds the drain's lease ------------------
+
+
+def job(world):
+    return world.store.rows['jobs', world.segment]
+
+
+def test_fill_takes_the_drain_lease_and_releases_it_on_the_claim_clock(world):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(105.0, ramp(5))]
+    held = []
+    assert fill(world, on_written=lambda: held.append(job(world)['available_at'])) == 'written'
+    assert held == [NOW + record_gap_fill.FILL_LEASE_SECONDS]
+    assert job(world)['available_at'] == NOW
+
+
+def test_a_live_lease_means_admission_is_in_flight_and_nothing_is_written(world):
+    job(world)['available_at'] = NOW + 1
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world) == 'skipped_busy'
+    assert world.bucket.objects == {} and world.markers == set()
+    assert job(world)['available_at'] == NOW + 1
+
+
+def test_drain_skips_the_record_while_the_fill_holds_its_lease(world, monkeypatch):
+    admitted = []
+
+    async def admit(store, pending):
+        admitted.append(pending['segment_id'])
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    job(world)['available_at'] = 0
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(105.0, ramp(5))]
+    mid = []
+
+    def drain():
+        asyncio.run(live.drain_recordings(world.store))
+        mid.append(list(admitted))
+
+    assert fill(world, now=time.time(), on_written=drain) == 'written'
+    assert mid == [[]]
+    asyncio.run(live.drain_recordings(world.store))
+    assert admitted == [world.segment]
+
+
+@pytest.mark.parametrize(
+    'move',
+    [
+        lambda row: {**row, 'state': 'admitted'},
+        lambda row: {**row, 'available_at': row['available_at'] + 1},
+    ],
+)
+def test_a_job_moved_mid_fill_is_counted_raced_and_never_acked(world, monkeypatch, move):
+    monkeypatch.setenv('RECORD_RETAINED_ACK', 'on')
+    monkeypatch.setenv('RECORD_RETAINED_ACK_PERCENT', '100')
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    before = record_gap_fill.GAP_FILL_TOTAL.labels(outcome='raced')._value.get()
+
+    moved = []
+
+    def mover():
+        moved.append(move(job(world)))
+        world.store.rows['jobs', world.segment] = dict(moved[0])
+
+    assert fill(world, on_written=mover) == 'raced'
+    assert record_gap_fill.GAP_FILL_TOTAL.labels(outcome='raced')._value.get() == before + 1
+    # Whoever moved the job keeps it; the fill does not release their lease.
+    assert job(world) == moved[0]
+
+
+def test_a_privacy_block_at_the_recheck_is_raced(world, monkeypatch):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(105.0, ramp(5))]
+    real, calls = world.store.run, []
+
+    def run(body):
+        calls.append(body)
+        if len(calls) == 2:
+            raise BatchPrivacyBlocked('synthetic block')
+        return real(body)
+
+    monkeypatch.setattr(world.store, 'run', run)
+    assert fill(world) == 'raced'
+
+
+# --- Option A: covered 200 once a byte-exact durable copy is held -------------
+
+
+@pytest.fixture
+def ack(world, monkeypatch):
+    monkeypatch.setenv('RECORD_RETAINED_ACK', 'on')
+    monkeypatch.setenv('RECORD_RETAINED_ACK_PERCENT', '100')
+    reads = []
+
+    def read(client, ref, uid, cid, allowed, key, **kwargs):
+        stored = world.bucket.objects[ref['path']]
+        # The real reader pins the listed generation and fails closed if it moved.
+        if ref['generation'] != stored['generation']:
+            raise ValueError('generation moved')
+        reads.append(ref['path'])
+        return decode_source(stored['data'], {**ref, 'metadata': stored['metadata']}, key)
+
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', lambda *a, **kw: world.bucket.listing())
+    monkeypatch.setattr(record_retained_ack, 'read_reference', read)
+    return SimpleNamespace(reads=reads)
+
+
+def acks(outcome):
+    return record_retained_ack.RETAINED_ACK_TOTAL.labels(outcome=outcome)._value.get()
+
+
+def test_ack_after_a_full_fill(world, ack, caplog):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    before = acks('acked')
+    with caplog.at_level(logging.INFO, logger=record_retained_ack.__name__):
+        assert fill(world) == 'acked'
+    assert acks('acked') == before + 1
+    assert sorted(ack.reads) == [f'chunks/{UID}/{CID}/100.000.bin', f'chunks/{UID}/{CID}/105.000000.bin']
+    validate_record_tail(admitted_units(world)[1], closed_row()['finished_at'])
+    messages = [r.getMessage() for r in caplog.records if 'sync_record_retained_ack' in r.getMessage()]
+    assert messages == [
+        'event=sync_record_retained_ack outcome=acked record=%s' % live.record_identity(UID, CID)[0][:16]
+    ]
+    assert UID not in caplog.text and CID not in caplog.text and 'synthetic-content' not in caplog.text
+
+
+def test_a_retry_of_an_acked_wal_gets_the_same_answer(world, ack):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world) == 'acked'
+    stored = dict(world.bucket.objects)
+    assert fill(world) == 'acked'
+    assert world.bucket.objects == stored
+
+
+@pytest.mark.parametrize('env', [{'RECORD_RETAINED_ACK': 'off'}, {'RECORD_RETAINED_ACK_PERCENT': '0'}])
+def test_ack_switch_off_or_zero_keeps_the_fill_outcome(world, ack, monkeypatch, env):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world) == 'written'
+    assert ack.reads == []
+
+
+def test_one_differing_sample_is_never_acked(world, ack):
+    held = bytearray(ramp(5))
+    held[2 * RATE : 2 * RATE + 2] = (12345).to_bytes(2, 'little', signed=True)
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', bytes(held))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    before = acks('skipped_bytes_differ')
+    assert fill(world) == 'written'
+    assert acks('skipped_bytes_differ') == before + 1
+
+
+def test_a_wal_hole_the_fill_stopped_at_is_never_acked(world, ack):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    whole = ramp(10)
+    world.wal['units'] = [audio_unit(100.0, whole[: 7 * RATE * 2]), audio_unit(108.0, whole[8 * RATE * 2 :])]
+    before = acks('skipped_uncovered')
+    assert fill(world) == 'written'
+    assert acks('skipped_uncovered') == before + 1
+
+
+def test_a_collision_or_gate_refusal_is_never_proven(world, ack, monkeypatch):
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world, row=closed_row(status='in_progress')) == 'skipped_gate'
+    assert 'skipped_collision' not in record_gap_fill.ACKABLE and 'raced' not in record_gap_fill.ACKABLE
+    assert ack.reads == []
+
+
+def test_a_privacy_block_at_the_ack_recheck_is_never_acked(world, ack, monkeypatch):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    real, calls = world.store.run, []
+
+    def run(body):
+        calls.append(body)
+        if len(calls) == 3:
+            raise BatchPrivacyBlocked('synthetic block')
+        return real(body)
+
+    monkeypatch.setattr(world.store, 'run', run)
+    before = acks('skipped_privacy')
+    assert fill(world) == 'written'
+    assert acks('skipped_privacy') == before + 1
+
+
+def test_a_replaced_object_fails_the_pinned_read_closed(world, ack, monkeypatch):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+
+    def stale(*a, **kw):
+        listed = world.bucket.listing()
+        world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+        return listed
+
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', stale)
+    before = acks('failed')
+    assert fill(world) == 'written'
+    assert acks('failed') == before + 1
+
+
+def test_enhanced_fill_objects_count_as_lossless(world, ack):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    world.wal['units'] = [audio_unit(100.0, ramp(10))]
+    assert fill(world, protection_level='enhanced') == 'acked'
+    assert any(path.endswith('.enc') for path in fills(world))
+
+
+def test_multi_batch_walk_acks_each_batch_and_admission_passes(world, ack):
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    whole = ramp(10)
+    # Batch 1 is already held byte for byte; the phone may release it.
+    world.wal['units'] = [audio_unit(100.0, whole[: 5 * RATE * 2])]
+    assert fill(world, wal_content_id='batch-1') == 'acked'
+    assert fills(world) == {}
+    # Batch 2 is the missing span: filled, then acked.
+    world.wal['units'] = [audio_unit(105.0, whole[5 * RATE * 2 :])]
+    assert fill(world, wal_content_id='batch-2') == 'acked'
+    _, units = admitted_units(world)
+    validate_record_tail(units, closed_row()['finished_at'])
+    assert materialized(world, units[0])[: 5 * RATE * 2] == whole[: 5 * RATE * 2]
+
+
+def test_real_decoder_wal_is_proven_against_the_fill(world, ack, tmp_path, monkeypatch):
+    monkeypatch.setattr(record_gap_fill, '_source_units', REAL_SOURCE_UNITS)
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
+    whole = ramp(10)
+    paths = [wal_file(tmp_path, 105, whole[5 * RATE * 2 :])]
+    assert fill(world, paths=paths) == 'acked'
+    # The fill consumed the uploaded files; the proof used the one decode.
+    assert not any(os.path.exists(path) for path in paths)
+
+
+def held_listing(*entries):
+    return [{'path': path, 'timestamp': start, 'generation': 1, **extra} for path, start, extra in entries]
+
+
+@pytest.mark.parametrize(
+    'name,extra',
+    [
+        ('100.000.opus', {}),
+        ('100.000.opus.enc', {}),
+        ('100.000.batch.bin', {}),
+        ('100.000.bin', {'is_batch': True}),
+        ('100.000.bin', {'raw_offset_samples': 0}),
+    ],
+)
+def test_lossy_or_packed_sources_never_count(world, monkeypatch, name, extra):
+    path = f'chunks/{UID}/{CID}/{name}'
+    assert not record_retained_ack.lossless_source({'path': path, **extra})
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', lambda *a, **kw: held_listing((path, 100.0, extra)))
+    monkeypatch.setattr(record_retained_ack, 'read_reference', lambda *a, **kw: pytest.fail('a lossy source was read'))
+    wal = [audio_unit(100.0, ramp(5))]
+    outcome = record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0)
+    assert outcome == 'skipped_lossy_source'
+
+
+@pytest.mark.parametrize(
+    'units,started,expected',
+    [
+        ([audio_unit(100.0, ramp(12))], 100.0, 'skipped_outside_record'),
+        ([audio_unit(98.0, ramp(3))], 100.0, 'skipped_outside_record'),
+        ([audio_unit(100.0, ramp(5))], None, 'skipped_outside_record'),
+        ([], 100.0, 'skipped_uncovered'),
+    ],
+)
+def test_wal_outside_the_record_window_is_refused_before_any_read(monkeypatch, units, started, expected):
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', lambda *a, **kw: pytest.fail('listed'))
+    assert record_retained_ack.prove(UID, CID, units, object(), finish=110.0, started=started) == expected
+
+
+async def test_acked_upload_answers_the_covered_200(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_GAP_FILL', 'on')
+    monkeypatch.setenv('RECORD_GAP_FILL_PERCENT', '100')
+    store = MemoryStore()
+    content, _ = live_upload.record_identity(UID, CID)
+    store.rows['intakes', 'bp_' + content] = {'segment_ids': []}
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
+    monkeypatch.setattr(live_upload, 'remember_record_wait', lambda *a: pytest.fail('an acked upload waits'))
+
+    async def run(**kw):
+        return 'written', True
+
+    monkeypatch.setattr(record_gap_fill, 'run_gap_fill', run)
+    response = await live_upload.registered_record_response(
+        uid=UID,
+        conversation_id=CID,
+        content_id='synthetic-content',
+        paths=['synthetic-wal.bin'],
+        source='omi',
+        client_device_id='synthetic-device',
+        loaded_conversation=closed_row(),
+        policy=BatchUnitPolicy(batch_enabled=True, live_admission_enabled=True, live_record_enabled=True),
+    )
+    assert response.status_code == 200
+    body = json.loads(response.body)
+    assert body['new_memories'] == [] and body['updated_memories'] == []
+
+
+def test_objects_outside_the_archive_buckets_never_count(monkeypatch):
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'synthetic-derived')
+    listing = held_listing((f'chunks/{UID}/{CID}/100.000.bin', 100.0, {'bucket': 'synthetic-batch-staging'}))
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', lambda *a, **kw: listing)
+    monkeypatch.setattr(record_retained_ack, 'read_reference', lambda *a, **kw: pytest.fail('staging read'))
+    wal = [audio_unit(100.0, ramp(5))]
+    assert record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0) == 'skipped_uncovered'

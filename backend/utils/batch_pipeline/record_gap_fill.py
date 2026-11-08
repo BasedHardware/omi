@@ -17,6 +17,9 @@ Custody rules:
   retained audio and retained audio stays authoritative for every span it has.
 - Writes are create-only at keys no other writer produces
   (``gap_fill_chunk_path``); nothing is ever overwritten or deleted.
+- The fill holds the record_pending job's drain lease while it writes, so
+  drain admission cannot list retained audio mid-fill; a post-write recheck
+  under the same lease reports ``raced`` if admission moved the job anyway.
 - Logs and metrics carry only hashed keys and closed vocabularies.
 """
 
@@ -36,11 +39,14 @@ from config import audio_archive
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.record_gap_fill import (
     CLOSED_MIN_SECONDS,
+    FILL_LEASE_SECONDS,
     FINISH_SLACK_SECONDS,
+    LEASE_MARGIN_SECONDS,
     MARKER_SECONDS,
     MAX_FILL_SECONDS,
     PIECE_SECONDS,
     gap_fill_enabled,
+    retained_ack_enabled,
 )
 from database import users as users_db
 from database.conversations import document_data_with_revision
@@ -49,6 +55,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_record_wait_cache import claim_gap_fill_marker
 from utils import encryption
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline import record_retained_ack
 from utils.batch_pipeline.live import retained_record_units
 from utils.observability.reasons import ReasonFamily, RecordGapFillOutcome, reason_label
 from utils.executors import db_executor, run_blocking, storage_executor
@@ -74,9 +81,14 @@ OUTCOMES = frozenset(
         'skipped_no_audio',
         'skipped_not_contiguous',
         'skipped_collision',
+        'skipped_busy',
+        'raced',
         'failed',
     }
 )
+# Fill outcomes after which every gate passed, the lease settled cleanly and
+# every create this request made succeeded; only these may be acked.
+ACKABLE = frozenset({'written', 'skipped_no_gap', 'skipped_no_audio', 'skipped_marker'})
 GAP_FILL_TOTAL = Counter(
     'omi_record_gap_fill_total',
     'Closed-record gap fills from the owner WAL by outcome (dark unless RECORD_GAP_FILL is on)',
@@ -187,7 +199,13 @@ def _source_units(paths):
         yield from decode_units([path])
 
 
-def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, protection_level, metadata, bucket):
+def _decoded(paths):
+    return list(_source_units(paths))
+
+
+def _write_window(
+    uid, conversation_id, source, lower, upper, anchor, tolerance, protection_level, metadata, bucket, deadline=None
+):
     """Write WAL PCM inside [lower, upper) create-only, contiguous from ``anchor``.
 
     Returns (written, collisions, seconds, gapped); a create collision ends
@@ -201,7 +219,7 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
     budget = MAX_FILL_SECONDS * RATE
     expected = anchor
     gapped = False
-    for unit in _source_units(paths):
+    for unit in source:
         if budget <= 0:
             break
         pcm = _pcm(unit.wav)
@@ -217,6 +235,10 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
             break
         cursor = first
         while cursor < last:
+            if deadline is not None and time.monotonic() >= deadline:
+                # The drain lease is about to lapse: stop on a piece boundary
+                # (still contiguous); a later upload continues from here.
+                return written, collisions, (MAX_FILL_SECONDS * RATE - budget) / RATE, gapped
             count = min(last - cursor, PIECE_SECONDS * RATE)
             timestamp = round(unit.capture_at + cursor / RATE, 6)
             path = create_gap_fill_chunk(
@@ -250,54 +272,95 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
 def _gates(uid, conversation_id, row, record, segment, wal, store, now):
     """Row, job, privacy and marker gates; Firestore/Redis only, no audio read.
 
-    Returns a refusal outcome, or None to proceed to the storage phase.
+    Returns (refusal, lease): refusal None proceeds to the storage phase, and
+    a non-None lease must be settled by the caller whatever happens next.
     """
     try:
         require_record_audio_barrier(row)
     except ValueError:
-        return 'skipped_gate'
+        return 'skipped_gate', None
     if (
         row.get('record_audio_partial')
         or row.get('deleted')
         or row.get('discarded')
         or not row.get('private_cloud_sync_enabled')
     ):
-        return 'skipped_gate'
+        return 'skipped_gate', None
     finish = _epoch(row.get('finished_at'))
     if finish is None:
-        return 'skipped_gate'
+        return 'skipped_gate', None
     # Settled: the capture finished, and no row write (close, upload session
     # release, finalization) happened, at least CLOSED_MIN_SECONDS ago.
     settled = max(finish, _epoch(row.get('updated_at')) or finish)
     if now - settled < CLOSED_MIN_SECONDS:
-        return 'skipped_recent'
+        return 'skipped_recent', None
 
-    def read(tx):
+    def claim(tx):
         # Privacy first: nothing of this record is read past a block.
         tx.check_privacy(uid, (conversation_id,))
-        return tx.get('jobs', segment)
+        pending = tx.get('jobs', segment)
+        # Only a registered record_pending obligation is drained into admission.
+        # A record that canonical registration refused (for example server-batch
+        # only with no server audio) or never registered gains nothing from audio.
+        if (
+            (pending or {}).get('state') != 'record_pending'
+            or pending.get('record_content_id') != record
+            or pending.get('owner_id') != uid
+            or pending.get('conversation_id') != conversation_id
+        ):
+            return 'skipped_no_pending', None
+        # A live lease is a drain admission (or another fill) in flight.
+        if pending.get('available_at', 0) > now:
+            return 'skipped_busy', None
+        # Take the drain's own lease: ``due`` and ``claim`` skip the row until
+        # it lapses or is released, so no admission lists retained audio mid-fill.
+        lease = now + FILL_LEASE_SECONDS
+        tx.put('jobs', segment, {**pending, 'available_at': lease})
+        return None, lease
 
     try:
-        pending = store.run(read)
+        outcome, lease = store.run(claim)
     except BatchPrivacyBlocked:
-        return 'skipped_gate'
-    # Only a registered record_pending obligation is drained into admission.
-    # A record that canonical registration refused (for example server-batch
-    # only with no server audio) or never registered gains nothing from audio.
-    if (
-        (pending or {}).get('state') != 'record_pending'
-        or pending.get('record_content_id') != record
-        or pending.get('owner_id') != uid
-        or pending.get('conversation_id') != conversation_id
-    ):
-        return 'skipped_no_pending'
+        return 'skipped_gate', None
+    if outcome is not None:
+        return outcome, None
     if not claim_gap_fill_marker(record, wal, MARKER_SECONDS):
-        return 'skipped_marker'
-    return None
+        return 'skipped_marker', lease
+    return None, lease
 
 
-def _write(uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level):
-    """Storage phase: admission's retained walk, then the clipped create-only write."""
+def _settle(uid, conversation_id, segment, store, lease) -> bool:
+    """Post-write recheck and lease release in one transaction.
+
+    True only if privacy still allows the record and the job is still
+    record_pending under this fill's lease, so no admission ran mid-fill. The
+    lease is then released (the row is due at once); otherwise it is left to
+    whoever moved it.
+    """
+
+    def settle(tx):
+        tx.check_privacy(uid, (conversation_id,))
+        latest = tx.get('jobs', segment)
+        if (latest or {}).get('state') != 'record_pending' or latest.get('available_at') != lease:
+            return False
+        # Back to the claim's own clock: due at once, never later than before.
+        tx.put('jobs', segment, {**latest, 'available_at': lease - FILL_LEASE_SECONDS})
+        return True
+
+    try:
+        return bool(store.run(settle))
+    except BatchPrivacyBlocked:
+        return False
+
+
+def _write(
+    uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level, deadline=None, units=None
+):
+    """Storage phase: admission's retained walk, then the clipped create-only write.
+
+    ``units`` is the upload already decoded for option A; otherwise the WAL
+    files are decoded lazily (decoding consumes them).
+    """
     finish = _epoch(row.get('finished_at'))
     assert finish is not None
     client = storage_client if storage_client is not None else create_storage_client()
@@ -326,7 +389,7 @@ def _write(uid, conversation_id, row, paths, record, wal, storage_client, bucket
     written, collisions, seconds, gapped = _write_window(
         uid,
         conversation_id,
-        paths,
+        _source_units(paths) if units is None else units,
         lower,
         finish + FINISH_SLACK_SECONDS,
         anchor,
@@ -334,11 +397,14 @@ def _write(uid, conversation_id, row, paths, record, wal, storage_client, bucket
         protection_level,
         metadata,
         bucket,
+        deadline,
     )
+    if collisions:
+        # Any create collision ends the fill (pieces before it stay written):
+        # never 'written', so never acked.
+        return 'skipped_collision', seconds
     if written:
         return 'written', seconds
-    if collisions:
-        return 'skipped_collision', seconds
     return ('skipped_not_contiguous' if gapped else 'skipped_no_audio'), seconds
 
 
@@ -368,29 +434,83 @@ def _fresh_row(store, uid, conversation_id):
     return document_data_with_revision(ref.get())
 
 
-async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) -> str | None:
+def _ack(uid, conversation_id, row, paths, units, record, store, storage_client) -> bool:
+    """Option A proof after a clean fill; privacy is re-checked after the read."""
+    outcome = 'failed'
+    try:
+        client = storage_client if storage_client is not None else create_storage_client()
+        outcome = record_retained_ack.prove(
+            uid,
+            conversation_id,
+            _decoded(paths) if units is None else units,
+            client,
+            finish=_epoch(row.get('finished_at')),
+            started=_epoch(row.get('started_at')),
+        )
+        if outcome == 'acked':
+            store.run(lambda tx: tx.check_privacy(uid, (conversation_id,)))
+    except BatchPrivacyBlocked:
+        outcome = 'skipped_privacy'
+    except Exception:
+        outcome = 'failed'
+    return record_retained_ack.report(outcome, record) == 'acked'
+
+
+async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) -> tuple[str | None, bool]:
     """Serving entry: gates on the database pool, audio work on the storage pool.
 
-    Returns the outcome, or None while the switch is off. Never raises: the
-    caller's 503 is the same whatever happens here.
+    Returns (fill outcome, acked); (None, False) while the switch is off.
+    Never raises. ``acked`` is True only when option A proved a byte-exact
+    durable copy of every WAL sample after a clean fill; the caller then
+    answers the covered 200, otherwise the same 503 as before.
     """
     if not gap_fill_enabled(uid):
-        return None
+        return None, False
     record, segment, wal = _keys(uid, conversation_id, wal_content_id)
-    seconds = 0.0
+    seconds, lease, row, units = 0.0, None, None, None
+    ack = retained_ack_enabled(uid)
     try:
         row = await run_blocking(db_executor, _fresh_row, store, uid, conversation_id)
         outcome = 'skipped_gate' if not row else None
-        outcome = outcome or await run_blocking(
-            db_executor, _gates, uid, conversation_id, row, record, segment, wal, store, time.time()
-        )
         if outcome is None:
+            outcome, lease = await run_blocking(
+                db_executor, _gates, uid, conversation_id, row, record, segment, wal, store, time.time()
+            )
+        if outcome is None:
+            deadline = time.monotonic() + FILL_LEASE_SECONDS - LEASE_MARGIN_SECONDS
+            if ack:
+                # The proof needs every WAL sample, and decoding consumes the files.
+                units = await run_blocking(storage_executor, _decoded, paths)
             outcome, seconds = await run_blocking(
-                storage_executor, _write, uid, conversation_id, row, paths, record, wal, None, None, None
+                storage_executor,
+                _write,
+                uid,
+                conversation_id,
+                row,
+                paths,
+                record,
+                wal,
+                None,
+                None,
+                None,
+                deadline,
+                units,
             )
     except Exception:
         outcome = 'failed'
-    return _report(outcome, record, seconds)
+    finally:
+        if lease is not None:
+            try:
+                settled = await run_blocking(db_executor, _settle, uid, conversation_id, segment, store, lease)
+            except Exception:
+                settled = False
+            if not settled and outcome != 'failed':
+                outcome = 'raced'
+    _report(outcome, record, seconds)
+    acked = False
+    if outcome in ACKABLE and ack:
+        acked = await run_blocking(storage_executor, _ack, uid, conversation_id, row, paths, units, record, store, None)
+    return outcome, acked
 
 
 def fill_closed_record_gap(
@@ -405,18 +525,43 @@ def fill_closed_record_gap(
     storage_client=None,
     bucket=None,
     protection_level: str | None = None,
+    on_written=None,
 ) -> str | None:
-    """Synchronous composition of the same two phases, with injectable storage."""
+    """Synchronous composition of the same phases, with injectable storage.
+
+    Returns the fill outcome; with option A on, 'acked' replaces an ackable
+    outcome whose proof passed. ``on_written`` (tests) runs after the write
+    and before the post-write recheck.
+    """
     if not gap_fill_enabled(uid):
         return None
     record, segment, wal = _keys(uid, conversation_id, wal_content_id)
-    seconds = 0.0
+    seconds, lease, units = 0.0, None, None
+    ack = retained_ack_enabled(uid)
     try:
-        outcome = _gates(uid, conversation_id, row, record, segment, wal, store, time.time() if now is None else now)
+        outcome, lease = _gates(
+            uid, conversation_id, row, record, segment, wal, store, time.time() if now is None else now
+        )
         if outcome is None:
+            deadline = time.monotonic() + FILL_LEASE_SECONDS - LEASE_MARGIN_SECONDS
+            units = _decoded(paths) if ack else None
             outcome, seconds = _write(
-                uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level
+                uid, conversation_id, row, paths, record, wal, storage_client, bucket, protection_level, deadline, units
             )
+            if on_written is not None:
+                on_written()
     except Exception:
         outcome = 'failed'
-    return _report(outcome, record, seconds)
+    finally:
+        if lease is not None:
+            try:
+                settled = _settle(uid, conversation_id, segment, store, lease)
+            except Exception:
+                settled = False
+            if not settled and outcome != 'failed':
+                outcome = 'raced'
+    _report(outcome, record, seconds)
+    if outcome in ACKABLE and ack:
+        if _ack(uid, conversation_id, row, paths, units, record, store, storage_client):
+            return 'acked'
+    return outcome
