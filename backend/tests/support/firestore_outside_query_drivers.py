@@ -554,3 +554,8 @@ _driver(
     'utils.other.object_lake.delete_space_upload_candidates',
     base={'space_id': UID},
 )
+_driver(
+    'utils.other.object_lake.assert_space_uploads_quiescent',
+    base={'space_id': UID},
+    neutrals={'now': (None, 'clock injection only; the query shape is a fixed key range')},
+)

@@ -602,7 +602,7 @@ def test_invalid_admission_time_blocks_key_destruction(world, bad_time):
 def test_quiescence_discovery_failure_blocks_final_purge(world, monkeypatch):
     _, store = world
     marker(store)
-    monkeypatch.setattr(lake, '_space_upload_candidates', Mock(side_effect=RuntimeError('Firestore down')))
+    monkeypatch.setattr(lake, '_space_candidate_key_range', Mock(side_effect=RuntimeError('Firestore down')))
     forbidden = Mock(side_effect=AssertionError('purged before quiescence'))
     monkeypatch.setattr(lake, 'delete_space_prefix', forbidden)
     with pytest.raises(lake.LakeFetchError, match='quiescence unavailable'):

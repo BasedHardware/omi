@@ -362,13 +362,9 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str) -> None:
     settle(client.transaction())
 
 
-def _space_upload_candidates(space_id: str, client):
+def _space_candidate_key_range(space_id: str) -> tuple[str, str]:
     prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
-    collection = client.collection('lake_upload_candidates')
-    query = collection.where(filter=FieldFilter('key', '>=', prefix)).where(
-        filter=FieldFilter('key', '<', prefix[:-1] + '0')
-    )
-    return collection, query
+    return prefix, prefix[:-1] + '0'
 
 
 def assert_space_uploads_quiescent(space_id: str, *, now: datetime | None = None, firestore_client=None) -> None:
@@ -381,7 +377,9 @@ def assert_space_uploads_quiescent(space_id: str, *, now: datetime | None = None
     now = now if now is not None else datetime.now(timezone.utc)
     try:
         client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
-        _, query = _space_upload_candidates(space_id, client)
+        lo, hi = _space_candidate_key_range(space_id)
+        collection = client.collection('lake_upload_candidates')
+        query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
         for snapshot in query.stream():
             row = snapshot.to_dict() or {}
             pending = row.get('in_flight')
@@ -573,7 +571,9 @@ def delete_space_upload_candidates(space_id: str, *, firestore_client=None) -> i
     """
     try:
         client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
-        collection, query = _space_upload_candidates(space_id, client)
+        lo, hi = _space_candidate_key_range(space_id)
+        collection = client.collection('lake_upload_candidates')
+        query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
         count = 0
         for row in query.stream():
             collection.document(row.id).delete()
