@@ -5,6 +5,8 @@ import {
   PARITY_DAY,
   parityDelta,
   listenUsdPerAudioHour,
+  SONIOX_LINE,
+  sonioxSpendByDay,
   spendDailyQuery,
   spendDays,
   variableCostPerPayingUserMonth,
@@ -59,6 +61,7 @@ describe("spendDays", () => {
         variable_usd: "10.5",
         listen_usd: null,
         all_in_usd: "100",
+        soniox_usd: null,
         rows: "4",
       },
       {
@@ -66,6 +69,7 @@ describe("spendDays", () => {
         variable_usd: null,
         listen_usd: "2",
         all_in_usd: "3549.21",
+        soniox_usd: "1.25",
         rows: 6,
       },
     ]);
@@ -74,12 +78,44 @@ describe("spendDays", () => {
     expect(days[0].listenUsd).toBe(2);
     expect(days[1].listenUsd).toBeNull();
     expect(days[1].variableUsd).toBe(10.5);
+    expect(days[0].sonioxUsd).toBe(1.25);
+    expect(days[1].sonioxUsd).toBeNull();
+  });
+});
+
+describe("sonioxSpendByDay", () => {
+  it("maps only days with a stt_soniox row, never a missing day to $0", () => {
+    const day = (d: string, sonioxUsd: number | null) => ({
+      day: d,
+      variableUsd: null,
+      listenUsd: null,
+      allInUsd: null,
+      sonioxUsd,
+      rows: 1,
+    });
+    expect(
+      sonioxSpendByDay([day("2026-11-04", 3.5), day("2026-11-05", null)])
+    ).toEqual({ "2026-11-04": 3.5 });
+    expect(sonioxSpendByDay([])).toEqual({});
+  });
+
+  it("the query reads the Soniox line alone, on the variable basis", () => {
+    const sql = spendDailyQuery("2026-11-04", 7);
+    expect(sql).toContain(`line = '${SONIOX_LINE}'`);
+    expect(sql).toContain("AS soniox_usd");
   });
 });
 
 describe("parityDelta", () => {
   const day = (allInUsd: number | null) => [
-    { day: PARITY_DAY, variableUsd: null, listenUsd: null, allInUsd, rows: 1 },
+    {
+      day: PARITY_DAY,
+      variableUsd: null,
+      listenUsd: null,
+      allInUsd,
+      sonioxUsd: null,
+      rows: 1,
+    },
   ];
 
   it("passes at the contract value to the cent", () => {
@@ -114,6 +150,7 @@ describe("variableCostPerPayingUserMonth", () => {
     variableUsd,
     listenUsd: null,
     allInUsd: null,
+    sonioxUsd: null,
     rows: 1,
   });
 

@@ -1,6 +1,12 @@
 import { BigQueryDate } from "@google-cloud/bigquery";
 import { getGcpBillingClient } from "@/lib/services/gcp-billing";
 import { bigQueryFailure, WallSourceError } from "./wall-source-error";
+import {
+  spendDailyQuery,
+  spendDays,
+  type SpendDay,
+  type SpendDayRow,
+} from "./wall-spend";
 
 /** Every `omi_finops` table the admin reads. The reader identity
  * (`GCP_BILLING_SA_JSON`, omi-admin-billing-ro) holds table-level dataViewer
@@ -574,6 +580,34 @@ export async function fetchVendorBalanceHistory(
     throw failure;
   }
   return parseVendorBalance(rows[0]?.history || "{}");
+}
+
+/** Settled daily spend (`omi_finops.spend_daily`) over `days` days ending on
+ * `today`. A table that is not created yet reads as no rows, so the Soniox
+ * line shows "no data yet" instead of failing the leg; other errors throw. */
+export async function fetchSpendDays(
+  today: string,
+  days = HEALTH_HISTORY_DAYS
+): Promise<SpendDay[]> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: SpendDayRow[];
+  try {
+    [rows] = await bq.query({
+      query: spendDailyQuery(today, days),
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch (error) {
+    const failure = bigQueryFailure(
+      error,
+      ["omi_finops.spend_daily"],
+      "Settled spend ledger unavailable (spend_daily unreadable)"
+    );
+    if (isVendorBalanceDark(failure)) return [];
+    throw failure;
+  }
+  return spendDays(rows);
 }
 
 export function parseVendorBalance(json: string): VendorBalanceHistory {

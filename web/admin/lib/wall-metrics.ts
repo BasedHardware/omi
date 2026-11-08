@@ -29,6 +29,7 @@ import {
   fetchInfraHistory,
   fetchModulateModelled,
   fetchPlanCostHistory,
+  fetchSpendDays,
   fetchStripeFeeHistory,
   fetchVendorBalanceHistory,
   FinopsHistory,
@@ -38,6 +39,7 @@ import {
   StripeFeeHistory,
   VendorBalanceHistory,
 } from "./wall-finops";
+import { type SpendDay, sonioxSpendByDay } from "./wall-spend";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
@@ -178,6 +180,8 @@ export interface WallSources {
   }>;
   /** Mercury non-GCP infra run rate; throws while that table is dark. */
   infra?: (today: string) => Promise<InfraHistory>;
+  /** Settled spend ledger (`spend_daily`); feeds the measured Soniox line. */
+  spend?: (today: string) => Promise<SpendDay[]>;
   stripe: () => Promise<{
     usd: number;
     byPlan?: Record<string, number>;
@@ -212,6 +216,7 @@ export const defaultWallSources: WallSources = {
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
   infra: fetchInfraHistory,
+  spend: fetchSpendDays,
   stripe: async () => {
     const { getOptionalStripeRead } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
@@ -774,6 +779,7 @@ export async function computeWall(
           const vendorBalanceSource = sources.vendorBalance;
           const modulateSource = sources.modulate;
           const infraSource = sources.infra;
+          const spendSource = sources.spend;
           const [
             billResult,
             planCostResult,
@@ -781,6 +787,7 @@ export async function computeWall(
             vendorBalanceResult,
             modulateResult,
             infraResult,
+            spendResult,
           ] = await Promise.allSettled([
             Promise.resolve().then(() => sources.billing()),
             planCostSource
@@ -798,8 +805,17 @@ export async function computeWall(
             infraSource
               ? Promise.resolve().then(() => infraSource(isoDay(now)))
               : Promise.resolve(null),
+            spendSource
+              ? Promise.resolve().then(() => spendSource(isoDay(now)))
+              : Promise.resolve(null),
           ]);
           if (billResult.status === "rejected") throw billResult.reason;
+          // Measured Soniox per day from spend_daily (rows win over the balance
+          // series). A failed read leaves no spend rows; the fallback ladder runs.
+          const sonioxSpend =
+            spendResult.status === "fulfilled" && spendResult.value
+              ? sonioxSpendByDay(spendResult.value)
+              : null;
           const bill = billResult.value;
           const planCost =
             planCostResult.status === "fulfilled" ? planCostResult.value : null;
@@ -895,7 +911,7 @@ export async function computeWall(
             bal.ready &&
             last.date >= bal.firstDay &&
             last.date <= bal.lastDay;
-          const sonioxText =
+          const balanceSonioxText =
             bal && vendorBalance
               ? covered
                 ? last.sttFlag === "baseline_reset"
@@ -939,9 +955,18 @@ export async function computeWall(
                     vendorBalance
                       ? vendorBalance.dark ??
                         `${vendorBalance.snapshots}/2 balance snapshots`
-                      : "no balance series"
+                      : "no data yet (no spend_daily stt_soniox row, no balance series)"
                   }`
                 );
+          // spend_daily wins whenever it has the day's stt_soniox row; the balance
+          // and usage ladder above stays the labelled fallback.
+          const spendSoniox = sonioxSpend?.[last.date];
+          const sonioxText =
+            spendSoniox != null
+              ? `Soniox measured $${spendSoniox.toFixed(
+                  2
+                )}/day (settled spend ledger, spend_daily stt_soniox)`
+              : balanceSonioxText;
           // Deepgram combines independently: its measured usage or its own
           // Mercury cash, never hidden by a Soniox measurement.
           const deepgramText = last.sttDeepgramUsd
