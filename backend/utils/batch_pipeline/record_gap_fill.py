@@ -469,6 +469,7 @@ async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) ->
     record, segment, wal = _keys(uid, conversation_id, wal_content_id)
     seconds, lease, row, units = 0.0, None, None, None
     ack = retained_ack_enabled(uid)
+    outcome: str | None = 'failed'
     try:
         row = await run_blocking(db_executor, _fresh_row, store, uid, conversation_id)
         outcome = 'skipped_gate' if not row else None
@@ -506,6 +507,7 @@ async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) ->
                 settled = False
             if not settled and outcome != 'failed':
                 outcome = 'raced'
+    outcome = outcome or 'failed'
     _report(outcome, record, seconds)
     acked = False
     if outcome in ACKABLE and ack:
@@ -538,6 +540,7 @@ def fill_closed_record_gap(
     record, segment, wal = _keys(uid, conversation_id, wal_content_id)
     seconds, lease, units = 0.0, None, None
     ack = retained_ack_enabled(uid)
+    outcome: str | None = 'failed'
     try:
         outcome, lease = _gates(
             uid, conversation_id, row, record, segment, wal, store, time.time() if now is None else now
@@ -560,6 +563,7 @@ def fill_closed_record_gap(
                 settled = False
             if not settled and outcome != 'failed':
                 outcome = 'raced'
+    outcome = outcome or 'failed'
     _report(outcome, record, seconds)
     if outcome in ACKABLE and ack:
         if _ack(uid, conversation_id, row, paths, units, record, store, storage_client):
