@@ -566,13 +566,6 @@ _driver(
 )
 
 _driver(
-    'utils.other.object_lake.entity_upload_candidates_exist',
-    base={'space_id': UID, 'entity_id': 'conversation-1'},
-    profile='maintenance-lake-conversation-erasure',
-    serving=False,
-)
-
-_driver(
     'utils.other.object_lake.delete_entity_upload_candidates',
     base={'space_id': UID, 'entity_id': 'conversation-1'},
     profile='maintenance-lake-conversation-erasure',

@@ -51,12 +51,6 @@ def destroy_owner_lake_keys(uid: str, *, now: datetime | None = None) -> dict:
 def purge_conversation_lake_objects(uid: str, conversation_id: str, source_ids=()) -> int:
     """Purge the conversation and merge donors before deleting their documents."""
     entity_ids = [entity_id for entity_id in dict.fromkeys([conversation_id, *source_ids]) if entity_id]
-    # With no current bucket, only recorded former-bucket candidates need work;
-    # skip the fence write entirely when none exist (the usual unconfigured case).
-    if not config.bucket() and not any(
-        object_lake.entity_upload_candidates_exist(uid, entity_id) for entity_id in entity_ids
-    ):
-        return 0
     # Fence every donor before the first listing, including callers that do not
     # record the public route's intent. Preserve existing tombstone bindings.
     for entity_id in entity_ids:

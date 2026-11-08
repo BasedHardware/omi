@@ -198,8 +198,6 @@ def test_lake_dark_deletion_still_purges_candidate_bindings(monkeypatch):
         lambda uid, cid, **kw: events.append(('candidates', uid, cid)) or 0,
     )
     monkeypatch.setattr(object_lake, 'delete_space_entity', forbidden)
-    # Recorded former-bucket candidates exist, so the dark path still purges them.
-    monkeypatch.setattr(object_lake, 'entity_upload_candidates_exist', lambda uid, cid: True)
     conversation_frame_evidence.delete_conversation_and_frame_evidence(
         'u', 'c', delete_conversation=lambda *args: events.append('delete')
     )

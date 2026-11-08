@@ -902,10 +902,11 @@ def test_account_expired_attempt_redeletes_former_bucket_immediately_before_eras
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
 
 
-def test_unconfigured_lake_without_candidates_skips_conversation_fence(world, monkeypatch):
-    # The usual unconfigured deployment adds one limited read per data class,
-    # never a tombstone write, to every conversation delete.
+def test_unconfigured_lake_still_fences_conversation_before_returning(world, monkeypatch):
+    # A bucketless revision cannot prove no bucket-enabled writer is between
+    # admission and candidate recording, so it always writes the durable fence.
     _, store = world
     monkeypatch.delenv('BUCKET_OBJECT_LAKE')
     assert lake_wipe.purge_conversation_lake_objects('owner', 'c', source_ids=('d',)) == 0
-    assert not any('deleted_conversations' in path for path in store.rows)
+    fenced = {path[-1] for path in store.rows if 'deleted_conversations' in path}
+    assert fenced == {'c', 'd'}
