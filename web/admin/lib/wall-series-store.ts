@@ -168,8 +168,24 @@ function storeOver(backend: Backend): SeriesStore {
 
 const COLLECTION = "admin_stats_payload_cache";
 // Same `{payload, freshAt}` shape as lib/payload-cache.ts docs.
-const decode = (data: { payload?: string } | undefined) =>
-  data?.payload ? JSON.parse(data.payload) : null;
+/** A stored leg payload that does not parse (truncated or corrupt write) is
+ * treated as absent, so the leg refills from its sources instead of throwing
+ * out of the series route. */
+export function decodeStoredPayload(data: { payload?: string } | undefined) {
+  if (!data?.payload) return null;
+  try {
+    return JSON.parse(data.payload);
+  } catch {
+    console.warn(
+      JSON.stringify({
+        event: "wall_series_store_decode",
+        outcome: "discarded",
+      })
+    );
+    return null;
+  }
+}
+const decode = decodeStoredPayload;
 const encode = (value: unknown) => ({
   payload: JSON.stringify(value),
   freshAt: Date.now(),
