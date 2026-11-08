@@ -447,7 +447,6 @@ and an explicit empty literal renders as `''`.
 | `STT_VOCAB_MODE_SHADOW_PERCENT` | Shadow vocabulary source-read sample percentage; default 1 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | dazheng |
 | `SUMMARY_DEBT_REPAIR_ENABLED` | Code default false; production off (held with the 2026-10-20 deferral) on scheduled backend-sync; bounded completed server-minimum repair; requires first-summary gate | backend | env | closed | — | — | {value: 'false', category: rollout} | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` | Bounded fresh-transaction retries for sync assignment contention | backend | env | closed | declared | false | true | — | pending | undecided | 2026-11-04 | dazheng |
-| `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | with_legacy | off | 2026-11-07 | dazheng |
 | `SYNC_BACKFILL_ORDER` | Default oldest; newest selects descending pending capture time and earlier direct-task eligibility for the selected UID cohort | backend | env | closed | — | — | newest | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_BACKFILL_ORDER_PERCENT` | Stable SHA-256 UID cohort for newest ordering; default 100 only when order is newest | backend | env | closed | — | — | 0 (cloud_run/backend-sync-backfill); 100 (cloud_run/backend-sync) | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` | Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
@@ -731,6 +730,7 @@ and an explicit empty literal renders as `''`.
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `PROJECTION_DRAIN_CLAIM_AWARE` | Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` | Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
 | `PROJECTION_DRAIN_PRIVACY_BACKOFF` | Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PROJECTION_PRIVACY_REFUSAL_RESUME` | Default on; retry a projection after its hinted privacy refusal no longer applies, using fenced replay for stored refusals | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
@@ -1440,6 +1440,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
 - `PLAYBACK_MANIFEST_RECOVERY_ENABLED` — Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation (fail: closed)
 - `PROJECTION_DRAIN_CLAIM_AWARE` — Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests (fail: open)
+- `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` — Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds (fail: open)
 - `PROJECTION_DRAIN_PRIVACY_BACKOFF` — Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change (fail: open)
 - `PROJECTION_PRIVACY_REFUSAL_RESUME` — Default on; retry a projection after its hinted privacy refusal no longer applies, using fenced replay for stored refusals (fail: open)
 - `PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED` — Default on; refresh the live pusher audio_files projection from exact uploaded-object metadata between full prefix rebuilds; 0 restores per-flush listing (fail: open)
@@ -1607,6 +1608,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `SYNC_BACKFILL_INFLIGHT_LIMIT` | 2026-11-08 | Counted seed slot replaced by PROJECTION_DRAIN_LIVE_TARGET_BACKOFF. Only reader fed unused try_acquire_backfill_slot; C6 retired the v1 caller and v2 does not acquire Redis admission slots. Registry already specified removal with C6. Legacy token-fenced release and daily-cap controls remain. |
 | `SYNC_LINEAGE_S1_REQUIRED` | 2026-10-20 | David 2026-10-20, DEC-SYN-005 graduate |
 | `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-SYN-007 graduate |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | 2026-10-20 | David 2026-10-20, DEC-SYN-008 graduate |
