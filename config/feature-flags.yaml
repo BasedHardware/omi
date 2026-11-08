@@ -729,7 +729,7 @@ flags:
   - {"key":"CELL_DIRECTORY_WIPE_ENABLED","aliases":[],"kind":"env","lifecycle":"config_switch","surfaces":["backend"],"summary":"Default off; destructive cell and directory account wipe requires separate opt-in","fail":"closed","owner":"auditfix","created":"2026-11-07","terminal":"keep","decision":"keep","notes":"Routing off skips the entire step, including heartbeat. Routing on with this switch off refuses the required wipe step. Enabled wipes require an explicit cell route and durable enrollment (or retained wipe tombstone on retry). Enable only after synthetic wipe coverage is green and before W5 cell admission; no prod activation in B2."}
 ignore:
   - {"key": "RECORD_TOKEN_LEASE_SECONDS", "kind": "env", "reason": "Lease timing parameter, default 3600 seconds; bounded to 1800-7200; mode owns rollback"}
-  - {"key": "RECORD_TOKEN_LEASE_DEPLOYED_AT", "kind": "env", "reason": "Shared deployment epoch for stock-token seed; missing epoch preserves the legacy producer fence"}
+  - {"key": "RECORD_TOKEN_LEASE_DEPLOYED_AT", "kind": "env", "reason": "Shared serve-enable epoch for bounded stock-token seed; missing epoch preserves the legacy producer fence"}
   - {"key":"K_REVISION","reason":"Cloud Run revision identity for process-local discovery phase, not a behavior flag"}
   - {"key":"DD_TRACE_ENABLED","reason":"Datadog telemetry instrumentation switch, not a product behavior flag"}
   - {"key":"DD_LOGS_ENABLED","reason":"Datadog telemetry log routing switch, not a product behavior flag"}
