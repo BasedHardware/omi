@@ -35,6 +35,7 @@ LITERAL = re.compile(r"['\"]([a-z][a-z0-9_]{3,40})['\"]")
 STATE_CONTEXT = re.compile(r"\b(?:\w+_)?(?:status|state|phase|disposition|outcome|reason)\b", re.I)
 EXIT = re.compile(r"\b(?:exit\w*|terminal\w*|dead.letter\w*|re-?entr\w*|clear\w*|recover\w*)\b", re.I)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+NON_CODE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`[^`]*`|#.*")
 FIELD_VALUE = re.compile(r"(?P<field>[a-zA-Z_]\w*)['\"]?\]?\s*(?::|(?<![=!<>])=(?!=))\s*$")
 FIELD_LOOKUP = re.compile(
     r"(?:\.(?:get|pop|setdefault)\(|[\w)\]]\[|\b(?:Counter|Gauge|Histogram|Summary|Info|Enum)\()\s*$"
@@ -96,9 +97,12 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
     for path, lines in diff_hunks(diff):
         for sign, line in lines:
             if sign in ("+", "-") and code(line):
+                non_code = [match.span() for match in NON_CODE.finditer(line)]
                 for pattern in (ASSIGNMENT, GETENV):
                     for match in pattern.finditer(line):
-                        if not EXCLUDED.search(match["knob"]):
+                        if not EXCLUDED.search(match["knob"]) and not any(
+                            start <= match.start() < end for start, end in non_code
+                        ):
                             key = (path, match["knob"], match["value"].replace("_", ""))
                             numeric.setdefault(key, set()).add(sign)
         # Count distance in the new file, excluding removed lines entirely.

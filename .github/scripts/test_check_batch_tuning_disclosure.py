@@ -81,6 +81,17 @@ class DisclosureTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(self.detect(line), (set(), set()))
 
+    def test_numeric_tokens_inside_strings_and_inline_comments_are_not_assignments(self) -> None:
+        for line in (
+            '+log("effective_page_rows=%d max_rows_per_second=20", rows)',
+            "+log('capacity max_count=8')",
+            '+log("env os.getenv(\'IO_CONCURRENCY\', \'8\')")',
+            "+other = 1  # MAX_DRAINS = 8",
+            "+prose with `MAX_DRAINS=8` in the middle",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.detect(line), (set(), set()))
+
     def test_before_after_same_section_name_and_boundaries(self) -> None:
         for body in (
             "before 4 after 8", "MAX_DRAINS before 4", "MAX_DRAINS after 8",
