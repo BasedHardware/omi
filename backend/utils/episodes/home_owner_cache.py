@@ -26,6 +26,17 @@ LOOKUPS = Counter(
 )
 
 
+_client = None
+
+
+def _redis():
+    """Bounded client (0.1 s connect and read): a stall fails open to Firestore, never hangs the Home request."""
+    global _client
+    if _client is None:
+        _client = redis_db.create_bounded_redis_client(0.1)
+    return _client
+
+
 def _redis_error(error: Exception) -> None:
     record_fallback(component='firestore_read', from_mode='redis', to_mode='none', reason='other', outcome='recovered')
     logger.warning('event=home_live_owner_cache outcome=firestore exception_type=%s', type(error).__name__)
@@ -40,7 +51,7 @@ def read(uid: str, fetch: Callable[[], dict | None], *, enabled: bool = True) ->
         return fresh()
     key = f'episodes:home_live_owner:v1:{uid}'
     try:
-        raw = redis_db.r.get(key)
+        raw = _redis().get(key)
         if raw is not None:
             cached = json.loads(raw)
             deadline = cached['valid_until']
@@ -75,7 +86,7 @@ def read(uid: str, fetch: Callable[[], dict | None], *, enabled: bool = True) ->
                 if isinstance(value, datetime):
                     metadata[name] = value.isoformat()
         if time.time() < deadline:
-            redis_db.r.set(key, json.dumps({'valid_until': deadline, 'owner': metadata}), ex=TTL_SECONDS, nx=True)
+            _redis().set(key, json.dumps({'valid_until': deadline, 'owner': metadata}), ex=TTL_SECONDS, nx=True)
     except Exception as error:
         _redis_error(error)
     return owner

@@ -44,7 +44,7 @@ def runtime(monkeypatch):
     clock = [1000.0]
     redis = Redis(clock)
     monkeypatch.setattr(cache.time, 'time', lambda: clock[0])
-    monkeypatch.setattr(cache.redis_db, 'r', redis)
+    monkeypatch.setattr(cache, '_redis', lambda: redis)
     monkeypatch.delenv('HOME_LIVE_OWNER_CACHE_ENABLED', raising=False)
     monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_UIDS', raising=False)
     monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
@@ -287,3 +287,40 @@ def test_measured_synthetic_five_second_poll_miss_rate(runtime):
         home_processing.live_owner_for_home(UID)
     assert runtime.fetch.call_count == 2880
     assert runtime.redis.writes == 2880
+
+
+def test_redis_stall_falls_through_to_firestore_with_the_fresh_result(runtime, monkeypatch):
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: 'e:a',
+        },
+        query_params={},
+    )
+    rows = [{'id': 'a', 'status': 'processing', 'episode_id': 'e'}]
+    monkeypatch.setenv('HOME_LIVE_OWNER_CACHE_ENABLED', 'false')
+    fresh_rows = home_membership.project_list(UID, rows, request, None, filtered=False)
+    monkeypatch.setenv('HOME_LIVE_OWNER_CACHE_ENABLED', 'true')
+
+    def stalled(*args, **kwargs):
+        raise TimeoutError('redis stalled')
+
+    monkeypatch.setattr(runtime.redis, 'get', stalled)
+    monkeypatch.setattr(runtime.redis, 'set', stalled)
+    before = runtime.fetch.call_count
+    assert home_membership.project_list(UID, rows, request, None, filtered=False) == fresh_rows
+    assert runtime.fetch.call_count > before
+
+
+def test_owner_cache_uses_one_bounded_redis_client(monkeypatch):
+    calls = []
+    sentinel = object()
+    monkeypatch.setattr(cache, '_client', None)
+    monkeypatch.setattr(
+        cache.redis_db, 'create_bounded_redis_client', lambda timeout: calls.append(timeout) or sentinel
+    )
+    assert cache._redis() is sentinel
+    assert cache._redis() is sentinel
+    assert calls == [0.1]
