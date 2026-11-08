@@ -7,6 +7,18 @@
 
 #include "../omi/src/safe_mode.c"
 
+/* Persistence/codec are exercised separately against the real telemetry code. */
+void omi_boot_telemetry_start(uint32_t reset_reason, bool fatal, bool safe, uint32_t reason)
+{
+    (void) reset_reason;
+    (void) fatal;
+    (void) safe;
+    (void) reason;
+}
+
+void omi_boot_telemetry_upload_pending(void) {}
+void omi_boot_telemetry_poll(void) {}
+
 static uint32_t reset;
 static int64_t now;
 static unsigned writes;
@@ -20,6 +32,15 @@ static int load_error;
 static bool init_hang;
 static bool load_hang;
 static jmp_buf watchdog_reset;
+static bool telemetry_hang;
+static unsigned telemetry_opens;
+void omi_boot_telemetry_open(void)
+{
+    assert(retained.dfu_pending == DFU_IDLE);
+    ++telemetry_opens;
+    if (telemetry_hang)
+        longjmp(watchdog_reset, 1);
+}
 static bool reset_after_trial;
 static struct retained_boot before_ram_clear;
 int settings_subsys_init(void)
@@ -124,6 +145,8 @@ static void clean(void)
     init_hang = false;
     load_hang = false;
     reset_after_trial = false;
+    telemetry_hang = false;
+    telemetry_opens = 0;
 }
 static void good(void)
 {
@@ -240,7 +263,7 @@ static void test_resolve_retries(void)
 
 static void test_resolve_hangs(void)
 {
-    for (unsigned hang_init = 0; hang_init < 2; ++hang_init) {
+    for (volatile unsigned hang_init = 0; hang_init < 2; ++hang_init) {
         interrupted_dfu();
         init_hang = hang_init;
         load_hang = !hang_init;
@@ -482,6 +505,53 @@ int main(void)
     assert(chunk(1, 2) == MGMT_CB_OK);
     pending(MGMT_CB_OK);
     assert(retained.count == 1 && writes == 0 && !retained.dfu_pending);
+
+    clean();
+    boot(0, true);
+    assert(safe_mode_total_boots() == 1);
+    assert(!safe_mode_settings_set("boot_telemetry", 0, NULL, NULL));
+    assert(safe_mode_restore_total_boots(0) == 1);
+    good();
+    boot(0, true);
+    assert(retained.total_boots == 2 && retained.count == 1);
+    record_fatal();
+    boot(0, true);
+    assert(previous_fatal && retained.telemetry_fatal && retained.total_boots == 3);
+    good();
+    boot(0, true);
+    assert(previous_fatal && retained.total_boots == 4 && retained.count == 1);
+    assert(safe_mode_restore_total_boots(19) == 20);
+    boot(0, true);
+    assert(retained.total_boots == 21);
+    retained.total_boots = UINT32_MAX;
+    retained_seal();
+    boot(0, true);
+    assert(retained.total_boots == UINT32_MAX);
+
+    clean();
+    for (int i = 0; i <= CONFIG_OMI_SAFE_MODE_BOOT_LIMIT; ++i)
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, false);
+    assert(active);
+    assert(safe_mode_restore_total_boots(100) == 104);
+    assert(safe_mode_restore_total_boots(100) == 104);
+    telemetry_hang = true;
+    if (!setjmp(watchdog_reset)) {
+        safe_mode_persist();
+        assert(false);
+    }
+    /* Emulate reset discarding a held mutex; retained access guard survives. */
+    k_mutex_unlock(&bootstate_lock);
+    assert(retained.telemetry_blocked && retained_valid() && telemetry_opens == 1);
+    telemetry_hang = false;
+    boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    assert(active && telemetry_opens == 1 && disk.state == STATE_SAFE);
+    retained.telemetry_blocked = 4;
+    retained_seal();
+    assert(!retained_valid());
+    new_trial();
+    retained.telemetry_fatal = 2;
+    retained_seal();
+    assert(!retained_valid());
 
     puts("safe-mode: reset/uptime, persistence, CRC/ranges, image targeting and bounded DFU retry/hang tests passed");
 }
