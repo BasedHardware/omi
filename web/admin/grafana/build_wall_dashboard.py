@@ -74,7 +74,9 @@ GEOMETRY = {"Growth": (0, 5), "Activation": (5, 5), "Retention": (10, 5), "Reven
 STAT_H = 3
 STRIP_H = 1
 WALL_H = 27
-FUNNEL_H = 9
+# Two rows taller than the first draft: the Grafana page footer ("Powered by
+# Grafana") sits over the bottom of the funnel row, so its panels need the room.
+FUNNEL_H = 11
 # One value size and label size on every stat; sized so the widest value
 # ("10,287", "$72.4K") fits a three-value column at 1440 px.
 STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
