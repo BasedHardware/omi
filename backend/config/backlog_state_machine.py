@@ -14,9 +14,10 @@ semantics. Turning a switch off restores the exact pre-change transition.
   CAPTURE_COVERAGE_MODE serve cohort.
 - ``SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED`` (class 2): a running sync lease
   expiry keeps counting ``dispatch_attempt`` instead of resetting it to zero.
-- ``BATCH_HELD_REDRIVE_BUDGET_ENABLED`` (classes 3 and 6): a held/dead-letter
-  requeue grants a fresh attempt budget, counts the re-drive, and automatic
-  re-drive stops after ``MAX_HELD_REDRIVES``.
+- ``BATCH_HELD_REDRIVE_BUDGET_ENABLED`` (class 3, default OFF): a
+  held/dead-letter requeue resets ``attempt`` to 0 (history in
+  ``held_redrive_last_attempt``), so one re-drive gets a real attempt. Moving
+  held rows back into processing with a fresh budget is a custody change.
 - ``BATCH_HELD_REDRIVE_COUNTER_ENABLED`` (class 6 counter, default ON): count
   held re-drives (``held_redrives``) and projection re-arms
   (``held_expired_rearms``) and report units whose budget is spent. Counting

@@ -66,7 +66,7 @@ def transitions(name):
 EXPECTED_DEFAULTS = {
     sm.RETRY_CAP_SWITCH: False,
     sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
-    sm.HELD_REDRIVE_BUDGET_SWITCH: True,
+    sm.HELD_REDRIVE_BUDGET_SWITCH: False,
     sm.HELD_REDRIVE_COUNTER_SWITCH: True,
     sm.HELD_REDRIVE_STOP_SWITCH: False,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: True,
@@ -375,7 +375,7 @@ def control_for(client):
     client.rows['batch_pipeline_prod_control', scheduler_control_key(bad(client)['owner_key'])] = {'p0_active': True}
 
 
-@pytest.mark.parametrize('switch', [None, 'false'])
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
 def test_requeue_grants_a_fresh_attempt_budget(setup, monkeypatch, switch):
     if switch is not None:
         monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, switch)
@@ -385,18 +385,21 @@ def test_requeue_grants_a_fresh_attempt_budget(setup, monkeypatch, switch):
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
     job = bad(client)
     assert job['state'] == 'ready' and job['audio_uri'] == 'gs://synthetic/audio'
-    if switch is None:
+    if switch == 'true':
         # A re-drive gets a real attempt: the first failure no longer re-quarantines.
         assert job['attempt'] == 0
         assert job['held_redrives'] == 1 and job['held_redrive_last_attempt'] == 5
     else:
-        # The budget reset is off; the class 6 counter (default on) still counts.
+        # Budget reset off (default): attempt stays; the class 6 counter still counts.
         assert job['attempt'] == 5 and job['held_redrives'] == 1
         assert 'held_redrive_last_attempt' not in job
 
 
-def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch):
+@pytest.mark.parametrize('budget,after', [('true', 'retry'), (None, 'quarantined'), ('false', 'quarantined')])
+def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch, budget, after):
     monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # reaching quarantine needs class 1 on
+    if budget is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
     store = MemoryStore()
     queue = Scheduler(store)
@@ -409,14 +412,15 @@ def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch
     assert job['state'] == 'quarantined' and job['attempt'] == 2
     assert store.run(lambda tx: Scheduler.requeue_quarantined_in_transaction(tx, tx.get('jobs', 'poison'), 5000))
     lease = queue.pull(5000)[0]
-    assert lease.attempt == 1
+    assert lease.attempt == (1 if budget == 'true' else 3)
     queue.recover(5121)
-    # Before: attempt stayed at the cap and this first expiry re-quarantined.
-    assert store.rows['jobs', 'poison']['state'] == 'retry'
+    # Budget off: attempt stayed at the cap and this first expiry re-quarantines.
+    assert store.rows['jobs', 'poison']['state'] == after
 
 
 def test_automatic_redrive_stops_after_max_and_operator_can_still_requeue(setup, monkeypatch):
     monkeypatch.setenv(STOP_SWITCH, 'true')  # class 6 terminal stop (default off)
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')  # class 3 reset, asserted below
     client, store, _, _, _, _ = setup
     control_for(client)
     recovery = RecoveryStore(store)
