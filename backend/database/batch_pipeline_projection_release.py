@@ -38,8 +38,8 @@ from config.backlog_state_machine import (
     ASSIGNMENT_HOLD_ESCALATION_REASON,
     MAX_PROJECTION_REARMS,
     assignment_hold_escalation_enabled,
-    held_redrive_budget_enabled,
     held_redrive_counter_enabled,
+    held_redrive_stop_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,7 +200,7 @@ class ProjectionReleaseStore:
                 # exhausted regains the legacy one-time re-arm when budgeting is off.
                 expired
                 and entry.get('held_rearm_exhausted_at') is not None
-                and not held_redrive_budget_enabled()
+                and not held_redrive_stop_enabled()
                 and type(attempts) is int
                 and attempts >= MAX_RELEASE_ATTEMPTS
             )
@@ -299,7 +299,7 @@ class ProjectionReleaseStore:
                         rearm_exhausted = False
                         if attempts >= MAX_RELEASE_ATTEMPTS:
                             rearms = projection_rearms(entry)
-                            if held_redrive_budget_enabled() and rearms >= MAX_PROJECTION_REARMS:
+                            if held_redrive_stop_enabled() and rearms >= MAX_PROJECTION_REARMS:
                                 # Terminal stop: the receipt stays retained as
                                 # held_expired but its release budget stays spent.
                                 expiry['held_rearm_exhausted_at'] = now

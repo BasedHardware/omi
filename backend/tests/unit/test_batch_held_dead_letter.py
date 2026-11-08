@@ -207,18 +207,24 @@ def model_store(monkeypatch, n=35):
         queue.fail(sid, lease.token, 1, quarantine=True)
         store.rows['jobs', sid]['held_deadline_at'] = 2
 
-    def page(state, after_id, limit):
+    def page(state, after_id, limit, reason=None):
         return [
             (sid, deepcopy(job))
             for (table, sid), job in sorted(store.rows.items())
-            if table == 'jobs' and job['state'] == state and (after_id is None or sid > after_id)
+            if table == 'jobs'
+            and job['state'] == state
+            and (reason is None or job.get('dead_letter_reason') == reason)
+            and (after_id is None or sid > after_id)
         ][:limit]
 
     monkeypatch.setattr(
         sweep, 'held_candidates', lambda c, ns, limit, after_id=None: page('quarantined', after_id, limit)
     )
     monkeypatch.setattr(
-        sweep, 'dead_held_candidates', lambda c, ns, limit, after_id=None: page('dead', after_id, limit)
+        sweep,
+        'dead_held_candidates',
+        # Mirrors the real equality filter on dead_letter_reason (default held_expired).
+        lambda c, ns, limit, after_id=None, reason='held_expired': page('dead', after_id, limit, reason),
     )
     # Model synthetic authorized content; strict Firestore tests above exercise the real fence.
     monkeypatch.setattr(RecoveryStore, 'checked', lambda self, tx, sid: (tx.get('jobs', sid), None))

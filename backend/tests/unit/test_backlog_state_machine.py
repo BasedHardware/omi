@@ -37,11 +37,12 @@ SWITCHES = (
     sm.SYNC_ATTEMPT_CARRY_SWITCH,
     sm.HELD_REDRIVE_BUDGET_SWITCH,
     sm.HELD_REDRIVE_COUNTER_SWITCH,
+    sm.HELD_REDRIVE_STOP_SWITCH,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH,
 )
-# The class 6 terminal stop's switch (shared with class 3 until they split).
-STOP_SWITCH = sm.HELD_REDRIVE_BUDGET_SWITCH
+# The class 6 terminal stop's own switch (split from class 3's budget reset).
+STOP_SWITCH = sm.HELD_REDRIVE_STOP_SWITCH
 
 
 @pytest.fixture(autouse=True)
@@ -67,6 +68,7 @@ EXPECTED_DEFAULTS = {
     sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
     sm.HELD_REDRIVE_BUDGET_SWITCH: True,
     sm.HELD_REDRIVE_COUNTER_SWITCH: True,
+    sm.HELD_REDRIVE_STOP_SWITCH: False,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: True,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: True,
 }
@@ -75,6 +77,7 @@ READERS = {
     sm.SYNC_ATTEMPT_CARRY_SWITCH: sm.sync_attempt_carry_enabled,
     sm.HELD_REDRIVE_BUDGET_SWITCH: sm.held_redrive_budget_enabled,
     sm.HELD_REDRIVE_COUNTER_SWITCH: sm.held_redrive_counter_enabled,
+    sm.HELD_REDRIVE_STOP_SWITCH: sm.held_redrive_stop_enabled,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: sm.record_barrier_dead_letter_enabled,
     sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: sm.assignment_hold_escalation_enabled,
 }
@@ -413,6 +416,7 @@ def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch
 
 
 def test_automatic_redrive_stops_after_max_and_operator_can_still_requeue(setup, monkeypatch):
+    monkeypatch.setenv(STOP_SWITCH, 'true')  # class 6 terminal stop (default off)
     client, store, _, _, _, _ = setup
     control_for(client)
     recovery = RecoveryStore(store)
@@ -441,7 +445,8 @@ def test_automatic_redrive_stops_after_max_and_operator_can_still_requeue(setup,
     assert bad(client)['state'] == 'ready' and bad(client)['attempt'] == 0
 
 
-def test_malformed_redrive_counter_counts_as_spent(setup):
+def test_malformed_redrive_counter_counts_as_spent(setup, monkeypatch):
+    monkeypatch.setenv(STOP_SWITCH, 'true')  # class 6 terminal stop (default off)
     client, store, _, _, _, _ = setup
     control_for(client)
     held_dead(bad(client))
@@ -449,8 +454,10 @@ def test_malformed_redrive_counter_counts_as_spent(setup):
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) == 'exhausted'
 
 
-def test_held_budget_switch_off_keeps_legacy_unbounded_nightly_redrive(setup, monkeypatch):
-    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'false')
+@pytest.mark.parametrize('stop', ['false', None])
+def test_terminal_stop_off_keeps_legacy_unbounded_nightly_redrive(setup, monkeypatch, stop):
+    if stop is not None:
+        monkeypatch.setenv(STOP_SWITCH, stop)
     client, store, _, _, _, _ = setup
     control_for(client)
     held_dead(bad(client))
@@ -458,8 +465,9 @@ def test_held_budget_switch_off_keeps_legacy_unbounded_nightly_redrive(setup, mo
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
 
 
+@pytest.mark.parametrize('stop', ['true', 'false', None])
 @pytest.mark.parametrize('reason', ['held_expired', sm.HELD_EXHAUSTED_REASON])
-def test_client_poll_never_redrives_a_retained_held_dead_letter(monkeypatch, reason):
+def test_client_poll_never_redrives_a_retained_held_dead_letter(monkeypatch, reason, stop):
     """Review wave 1 (finding 1): the real status-poll path, not RecoveryStore.
 
     durable_status() redrove every dead merge-pending unit on each phone poll,
@@ -469,6 +477,8 @@ def test_client_poll_never_redrives_a_retained_held_dead_letter(monkeypatch, rea
     from tests.unit.test_batch_pipeline_intake import proposal, submit
     from utils.batch_pipeline.intake import durable_status
 
+    if stop is not None:
+        monkeypatch.setenv(STOP_SWITCH, stop)
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
@@ -487,6 +497,10 @@ def test_client_poll_never_redrives_a_retained_held_dead_letter(monkeypatch, rea
     )
     durable_status(store, 'synthetic-owner', 'bp_first')
     job = store.rows['jobs', 'segment']
+    if stop != 'true':
+        # Terminal stop off (default): the legacy poll redrive is unchanged.
+        assert job['state'] == 'ready'
+        return
     assert job['state'] == 'dead' and job['attempt'] == 5
     assert queue.pull(9999999999) == []
     # Explicit operator recovery still works.
@@ -517,13 +531,14 @@ def test_switch_off_nightly_pass_requeues_an_exhausted_unit(setup, monkeypatch):
     """
     from utils.batch_pipeline import held_dead_letter as sweep
 
+    monkeypatch.setenv(STOP_SWITCH, 'true')
     client, store, _, _, _, _ = setup
     control_for(client)
     held_dead(bad(client), expired_at=20)
     bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) == 'exhausted'
     assert bad(client)['dead_letter_reason'] == sm.HELD_EXHAUSTED_REASON
-    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'false')
+    monkeypatch.setenv(STOP_SWITCH, 'false')
 
     def candidates(_client, _namespace, limit=32, *, after_id=None, reason='held_expired'):
         return [
@@ -543,6 +558,7 @@ def test_switch_off_nightly_pass_requeues_an_exhausted_unit(setup, monkeypatch):
 
 
 def test_switch_on_nightly_pass_never_requeues_an_exhausted_unit(setup, monkeypatch):
+    monkeypatch.setenv(STOP_SWITCH, 'true')  # class 6 terminal stop (default off)
     client, store, _, _, _, _ = setup
     control_for(client)
     held_dead(bad(client), expired_at=20)
@@ -652,10 +668,11 @@ def test_projection_rearm_counts_and_stops_after_max(projection, monkeypatch, st
         assert entry['projection_state'] == 'quarantine_held'
 
 
-def test_rearm_exhausted_receipt_releases_after_budget_switch_off_and_target_restored(projection, monkeypatch):
+def test_rearm_exhausted_receipt_releases_after_stop_switch_off_and_target_restored(projection, monkeypatch):
     """Review wave 1 (finding 3): on -> exhausted -> off -> restored must release."""
     from database.batch_pipeline_projection_release import MAX_RELEASE_ATTEMPTS, ProjectionReleaseStore
 
+    monkeypatch.setenv(STOP_SWITCH, 'true')
     rows, store_for = projection
     result = ('batch_pipeline_prod_results', 'held')
     conversation = ('users', 'synthetic-owner', 'conversations', 'rec-target')
@@ -669,7 +686,7 @@ def test_rearm_exhausted_receipt_releases_after_budget_switch_off_and_target_res
     )
     release = ProjectionReleaseStore(store)
     assert release.release('held', 2.0) is False and release.rearm_exhausted
-    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'false')
+    monkeypatch.setenv(STOP_SWITCH, 'false')
     client.rows[conversation]['discarded'] = False
     assert ProjectionReleaseStore(store).release('held', 3.0) is True
     entry = client.rows[result]
@@ -677,7 +694,8 @@ def test_rearm_exhausted_receipt_releases_after_budget_switch_off_and_target_res
     assert entry.get('held_rearm_exhausted_at') is None
 
 
-def test_rearm_exhausted_receipt_stays_spent_while_budget_switch_on(projection):
+def test_rearm_exhausted_receipt_stays_spent_while_stop_switch_on(projection, monkeypatch):
+    monkeypatch.setenv(STOP_SWITCH, 'true')  # class 6 terminal stop (default off)
     from database.batch_pipeline_projection_release import MAX_RELEASE_ATTEMPTS, ProjectionReleaseStore
 
     rows, store_for = projection

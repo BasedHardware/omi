@@ -37,6 +37,7 @@ from config.backlog_state_machine import (
     RETAINED_DEAD_REASONS,
     held_redrive_budget_enabled,
     held_redrive_counter_enabled,
+    held_redrive_stop_enabled,
 )
 
 QUANTUM_SECONDS = 30.0
@@ -1014,7 +1015,7 @@ class Scheduler:
         moves; audio, results, intents and attempt history are untouched.
         """
         if (
-            not held_redrive_budget_enabled()
+            not held_redrive_stop_enabled()
             or job.get('state') != 'dead'
             or job.get('dead_letter_reason') != 'held_expired'
             or held_redrives(job) < MAX_HELD_REDRIVES
@@ -1029,7 +1030,7 @@ class Scheduler:
     def redrive_in_transaction(tx: Transaction, job: dict, now: float, *, automatic: bool = False) -> bool:
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
-        if automatic and held_redrive_budget_enabled() and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
+        if automatic and held_redrive_stop_enabled() and job.get('dead_letter_reason') in RETAINED_DEAD_REASONS:
             # A retained held dead letter moves only through the counted nightly
             # re-drive or an explicit operator redrive; a status poll would
             # bypass held_redrives and the attempt reset.

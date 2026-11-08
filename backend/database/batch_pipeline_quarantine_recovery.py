@@ -18,7 +18,7 @@ from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, held_redrives, owner_key
-from config.backlog_state_machine import HELD_EXHAUSTED_REASON, MAX_HELD_REDRIVES, held_redrive_budget_enabled
+from config.backlog_state_machine import HELD_EXHAUSTED_REASON, MAX_HELD_REDRIVES, held_redrive_stop_enabled
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -142,7 +142,7 @@ class RecoveryStore:
                 # Rollback: with the re-drive budget switch off, the nightly pass
                 # again accepts units this feature parked as held_exhausted.
                 nightly_reasons = (
-                    {'held_expired'} if held_redrive_budget_enabled() else {'held_expired', HELD_EXHAUSTED_REASON}
+                    {'held_expired'} if held_redrive_stop_enabled() else {'held_expired', HELD_EXHAUSTED_REASON}
                 )
                 if (
                     job.get('state') != 'dead'
@@ -157,7 +157,7 @@ class RecoveryStore:
                 # (dead_before=None) may still requeue an exhausted unit.
                 if Scheduler.exhaust_held_in_transaction(tx, job, now):
                     return 'exhausted'
-                if held_redrive_budget_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES:
+                if held_redrive_stop_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES:
                     return False
             return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
 

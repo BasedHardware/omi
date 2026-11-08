@@ -11,8 +11,8 @@ import time
 from config.backlog_state_machine import (
     HELD_EXHAUSTED_REASON,
     MAX_HELD_REDRIVES,
-    held_redrive_budget_enabled,
     held_redrive_counter_enabled,
+    held_redrive_stop_enabled,
 )
 from utils.batch_pipeline.scheduler import held_redrives
 from config.batch_pipeline import batch_held_dead_letter_enabled
@@ -114,7 +114,7 @@ class HeldDeadLetter:
             updated.update(
                 redrive_day=day, redrive_done=len(dead) < PAGE_SIZE, dead_after=dead[-1][0] if dead else None
             )
-        if not held_redrive_budget_enabled():
+        if not held_redrive_stop_enabled():
             # Rollback of the re-drive stop: page units parked as held_exhausted
             # on their own durable cursor and requeue them through the same CAS.
             exhausted = dead_held_candidates(

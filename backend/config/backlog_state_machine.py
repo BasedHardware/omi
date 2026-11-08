@@ -21,6 +21,11 @@ semantics. Turning a switch off restores the exact pre-change transition.
   held re-drives (``held_redrives``) and projection re-arms
   (``held_expired_rearms``) and report units whose budget is spent. Counting
   and the alert only; no state change.
+- ``BATCH_HELD_REDRIVE_TERMINAL_STOP_ENABLED`` (class 6 terminal stop, default
+  OFF): automatic re-drive stops after ``MAX_HELD_REDRIVES`` (retained
+  ``held_exhausted``), status polls stop redriving retained held dead letters,
+  and projection expiry stops re-arming after ``MAX_PROJECTION_REARMS``. Off
+  restores the unbounded loop, including for units already marked exhausted.
 - ``RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED`` (class 4): an aged
   record_pending row whose conversation exists but never completed is
   re-driven weekly with a counter, then parked as a retained dead letter.
@@ -37,6 +42,7 @@ RETRY_CAP_SWITCH = 'CAPTURE_RETRY_CAP_ENFORCED'
 SYNC_ATTEMPT_CARRY_SWITCH = 'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED'
 HELD_REDRIVE_BUDGET_SWITCH = 'BATCH_HELD_REDRIVE_BUDGET_ENABLED'
 HELD_REDRIVE_COUNTER_SWITCH = 'BATCH_HELD_REDRIVE_COUNTER_ENABLED'
+HELD_REDRIVE_STOP_SWITCH = 'BATCH_HELD_REDRIVE_TERMINAL_STOP_ENABLED'
 RECORD_BARRIER_DEAD_LETTER_SWITCH = 'RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED'
 ASSIGNMENT_HOLD_ESCALATION_SWITCH = 'BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED'
 
@@ -94,3 +100,7 @@ def assignment_hold_escalation_enabled() -> bool:
 
 def held_redrive_counter_enabled() -> bool:
     return kill_switch(HELD_REDRIVE_COUNTER_SWITCH)
+
+
+def held_redrive_stop_enabled() -> bool:
+    return kill_switch(HELD_REDRIVE_STOP_SWITCH)
