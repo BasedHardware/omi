@@ -76,16 +76,25 @@ providers:
     run('docker','restart',NAME)
 
 
+BOARDS = ('omi-tv-v2', 'omi-tv-funnel')  # the wall, and the funnel board in its own rotation
+
+
+def present_boards():
+    """The boards checked in under dashboards/. The funnel board arrives with its own PR."""
+    return [uid for uid in BOARDS if (ADMIN/f'grafana/dashboards/{uid}.json').exists()]
+
+
 def reload():
-    """Copy the current board into the existing local container (file provider rescans)."""
+    """Copy the current boards into the existing local container (file provider rescans)."""
     with tempfile.TemporaryDirectory(prefix='omi-tv-v3-') as directory:
-        board = json.loads((ADMIN/'grafana/dashboards/omi-tv-v2.json').read_text())
-        for panel in board['panels']:
-            for target in panel.get('targets',[]):
-                target['url'] = target['url'].replace('http://127.0.0.1:8899','http://host.lima.internal:3107')
-        path = Path(directory)/'board.json'
-        path.write_text(json.dumps(board))
-        run('docker','cp',str(path),f'{NAME}:/var/lib/grafana/boards/omi-tv-v2.json')
+        for uid in present_boards():
+            board = json.loads((ADMIN/f'grafana/dashboards/{uid}.json').read_text())
+            for panel in board['panels']:
+                for target in panel.get('targets',[]):
+                    target['url'] = target['url'].replace('http://127.0.0.1:8899','http://host.lima.internal:3107')
+            path = Path(directory)/f'{uid}.json'
+            path.write_text(json.dumps(board))
+            run('docker','cp',str(path),f'{NAME}:/var/lib/grafana/boards/{uid}.json')
 
 
 def screens(out: Path | None = None, wait_seconds: int = 240):
@@ -104,20 +113,21 @@ def screens(out: Path | None = None, wait_seconds: int = 240):
     wait_ms = wait_seconds * 1000
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        for width,height in [(1920,1080),(1440,900)]:
+        for uid, (width,height) in [(u, wh) for u in present_boards() for wh in [(1920,1080),(1440,900)]]:
             page = browser.new_page(viewport={'width':width,'height':height},device_scale_factor=1)
-            page.goto('http://127.0.0.1:3207/d/omi-tv-v2/omi-tv-v2?orgId=1&kiosk',wait_until='networkidle',timeout=120000)
+            page.goto(f'http://127.0.0.1:3207/d/{uid}/{uid}?orgId=1&kiosk',wait_until='networkidle',timeout=120000)
             partial = []
-            try:
-                page.get_by_text('Data & coverage',exact=True).wait_for(timeout=wait_ms)
-            except PlaywrightTimeoutError:
-                partial.append('no "Data & coverage" heading')
+            if uid == 'omi-tv-v2':  # the wall's Data & coverage heading; the funnel board has none
+                try:
+                    page.get_by_text('Data & coverage',exact=True).wait_for(timeout=wait_ms)
+                except PlaywrightTimeoutError:
+                    partial.append('no "Data & coverage" heading')
             try:
                 page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=wait_ms)
             except PlaywrightTimeoutError:
                 partial.append('still loading')
             if partial:
-                print(f'partial board at {width}px: {"; ".join(partial)}')
+                print(f'partial {uid} at {width}px: {"; ".join(partial)}')
             page.evaluate('document.fonts.ready')
             page.wait_for_timeout(2000)
             truncated = page.locator('[data-testid="data-testid header-container"] h2').evaluate_all(
@@ -133,7 +143,8 @@ def screens(out: Path | None = None, wait_seconds: int = 240):
                                      ".map(e => (e.closest('[data-viz-panel-key]')?.innerText || 'page').split('\\n')[0])")
             if width == 1920 and overflow:
                 raise RuntimeError(f'Content overflows at 1920×1080: {overflow}')
-            page.screenshot(path=str(out/f"omi-tv-v3-{width}{'-partial' if partial else ''}.png"))
+            prefix = 'omi-tv-v3' if uid == 'omi-tv-v2' else uid
+            page.screenshot(path=str(out/f"{prefix}-{width}{'-partial' if partial else ''}.png"))
             page.close()
         browser.close()
 
