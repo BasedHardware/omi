@@ -56,7 +56,7 @@ void main() {
       fetchRecording: (_) => recording.future,
     )..selectedDate = conversation.createdAt;
     detail.setCachedConversation(conversation);
-    final people = PeopleProvider(loadPeople: () async => PeopleListResponse(people: []));
+    final people = PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []));
     final outcome = SpeakerTagOutcomeController(
         fetchPerson: (_) async =>
             ApiSuccess(Person(id: 'p', name: 'P', createdAt: DateTime(2026), updatedAt: DateTime(2026))),
