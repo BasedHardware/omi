@@ -56,6 +56,47 @@ HEARTBEAT_TIMEOUT_SECONDS = 8
 ADMISSION_LEASES_PER_CALL = 4
 ADMISSION_CALL_TIMEOUT_SECONDS = 10
 
+# Deferred publication-drain convergence. A publication drain that loses to
+# Firestore contention used to be swallowed at the catch site: convergence
+# waited on an incidental later drain (a sibling's next publication or the
+# leader-gated maintenance ready page), so an owner whose last results raced
+# a hot document could sit merged-but-unprojected for a full sweep while the
+# only trace was an ``event=batch_merge outcome=retry`` error line. The pump
+# now re-offers the owner itself on a bounded lane: exponential backoff from
+# DRAIN_RETRY_BASE_SECONDS capped at DRAIN_RETRY_MAX_SECONDS, at most
+# DRAIN_RETRY_MAX_ATTEMPTS armed re-drains per owner per publication episode,
+# and the durable maintenance sweep as the backstop behind the lane.
+DRAIN_RETRY_BASE_SECONDS = 0.5
+DRAIN_RETRY_MAX_SECONDS = 8.0
+DRAIN_RETRY_MAX_ATTEMPTS = 6
+# A drain that ends at the 100-commit bound with the owner's log possibly
+# still pending re-offers immediately (no backoff): the bound exists to keep
+# one drain call short, not to declare the owner converged. The continuation
+# is capped so an endlessly-fed owner cannot pin the lane; maintenance
+# converges whatever a capped continuation leaves.
+DRAIN_BACKLOG_CONTINUATION_ATTEMPTS = 4
+# Armed owners are a bounded map: a storm must not grow pump state without
+# bound. Eviction is oldest-armed-first; an evicted owner keeps its durable
+# result_ready rows and the maintenance ready page still converges it.
+DRAIN_RETRY_LEDGER_CAP = 512
+
+
+def deferred_drain_delay(attempt: int) -> float:
+    """Backoff before the owner's ``attempt``-th armed re-drain (1-based).
+
+    The first re-offer waits one base step, then doubles, bounded at the max:
+    a contention wave is seconds-wide, so the schedule spends its first two
+    steps inside the wave and never exceeds the sweep cadence that backstops
+    it.
+    """
+    if attempt <= 1:
+        return DRAIN_RETRY_BASE_SECONDS
+    if attempt > DRAIN_RETRY_MAX_ATTEMPTS:
+        # Clamp before raising 2 ** (attempt - 1): a huge attempt count is
+        # caller data, and the schedule's shape past the cap is just the cap.
+        return DRAIN_RETRY_MAX_SECONDS
+    return min(DRAIN_RETRY_MAX_SECONDS, DRAIN_RETRY_BASE_SECONDS * (2 ** (attempt - 1)))
+
 
 async def _drain_task(task):
     """Repeated caller cancellation cannot orphan a non-preemptible IO leaf."""
@@ -129,6 +170,16 @@ class Pump:
         self.flights = flights
         self._gpu = asyncio.Lock()
         self._maintenance = asyncio.Lock()
+        # Deferred publication-drain convergence: owners whose ordered drain
+        # lost to contention, awaiting a bounded re-offer (constants above).
+        # The lane task exists only while the ledger is non-empty.
+        self._deferred_drains: OrderedDict[str, dict] = OrderedDict()
+        self._deferred_lane: asyncio.Task | None = None
+        self._deferred_wake = asyncio.Event()
+        self._deferred_stopped = False
+        self._deferred_evictions = 0
+        # Injectable monotone clock so suites can step the backoff schedule.
+        self._monotonic = time.monotonic
         self.shadow = shadow
         self._normal_flights = 0
         self.timings = timings or StageTimings()
@@ -155,6 +206,7 @@ class Pump:
             outcomes = await asyncio.gather(*lanes, return_exceptions=True)
             relaying.cancel()
             await asyncio.gather(maintaining, relaying, return_exceptions=True)
+            await self.flush_deferred_drains()
         errors = [v for v in outcomes if isinstance(v, BaseException)]
         for error in errors:
             if isinstance(error, FatalGpuError):
@@ -884,8 +936,18 @@ class Pump:
         try:
             await self.drain_owner(owner_id)
         except Exception as error:
-            # The transition is durable; maintenance and serving drain later.
-            logger.error('event=batch_merge outcome=retry exception_type=%s', type(error).__name__)
+            # The transition is durable. Convergence is no longer left to an
+            # incidental later drain: this pump re-offers the owner on the
+            # bounded deferred lane, and the maintenance ready page stays the
+            # durable backstop behind it. Only a lane already at its attempt
+            # cap falls back to the historical error line.
+            if self._defer_drain(owner_id):
+                logger.info(
+                    'event=batch_merge_drain outcome=deferred exception_type=%s',
+                    type(error).__name__,
+                )
+            else:
+                logger.error('event=batch_merge outcome=retry exception_type=%s', type(error).__name__)
 
     async def _publish_flight(self, leases: list[LeasedWork], result_map: dict, lost: set[str]) -> None:
         """Publish one flight's results.
@@ -919,6 +981,161 @@ class Pump:
 
         await asyncio.gather(*(publish_owner(owner_id, owned) for owner_id, owned in by_owner.items()))
 
+    def _defer_drain(self, owner_id: str, *, continuation: bool = False, attempts: int | None = None) -> bool:
+        """Arm one owner's deferred re-drain. True when armed, False at the cap.
+
+        ``attempts`` counts armed re-drains this owner's episode already spent;
+        ``None`` carries the ledger's count forward, so successive losses
+        converge on one budget instead of resetting it at every catch site. A continuation (a drain that hit
+        the 100-commit bound with work possibly pending) re-offers at once and
+        spends a smaller budget.
+        """
+        if attempts is None:
+            armed = self._deferred_drains.get(owner_id)
+            attempts = armed['attempts'] if armed else 0
+        cap = DRAIN_BACKLOG_CONTINUATION_ATTEMPTS if continuation else DRAIN_RETRY_MAX_ATTEMPTS
+        next_attempt = attempts + 1
+        if next_attempt > cap:
+            self._deferred_drains.pop(owner_id, None)
+            return False
+        delay = 0.0 if continuation else deferred_drain_delay(next_attempt)
+        self._deferred_drains.pop(owner_id, None)
+        self._deferred_drains[owner_id] = {
+            'attempts': next_attempt,
+            'due_at': self._monotonic() + delay,
+            'continuation': continuation,
+        }
+        while len(self._deferred_drains) > DRAIN_RETRY_LEDGER_CAP:
+            self._deferred_drains.popitem(last=False)
+            self._deferred_evictions += 1
+        self._deferred_wake.set()
+        self._ensure_deferred_lane()
+        return True
+
+    def _ensure_deferred_lane(self) -> None:
+        if self._deferred_stopped:
+            return
+        if self._deferred_lane is None or self._deferred_lane.done():
+            self._deferred_lane = asyncio.create_task(self._deferred_drain_lane())
+
+    async def _drain_deferred_due(self) -> int:
+        """Re-drain every armed owner whose backoff has elapsed; returns the count.
+
+        The entry STAYS armed while its drain runs: a drain that ends at the
+        100-commit bound re-offers the remainder itself through the same
+        carried budget (popping first would reset that budget every round and
+        let an endlessly-fed owner pin the lane), and a drain lost to
+        contention re-arms through it too. The owner leaves the ledger only on
+        a real convergence — the drain returned and did not re-offer — or when
+        the attempt cap refuses a further re-offer. A sibling convergence just
+        empties the slot; the loser moves on.
+        """
+        now = self._monotonic()
+        due = [owner_id for owner_id, armed in self._deferred_drains.items() if armed['due_at'] <= now]
+        drained = 0
+        for owner_id in due:
+            entry = self._deferred_drains.get(owner_id)
+            if entry is None:
+                continue
+            attempt_no = entry['attempts']  # the armed re-drain this round consumes
+            try:
+                await self.drain_owner(owner_id)
+            except asyncio.CancelledError:
+                armed = self._deferred_drains.get(owner_id)
+                if armed is not None:
+                    armed['due_at'] = self._monotonic()  # retrigger as soon as the lane can
+                raise
+            except Exception as error:
+                armed = self._deferred_drains.get(owner_id)
+                if armed is not None and self._defer_drain(
+                    owner_id, attempts=armed['attempts'], continuation=armed['continuation']
+                ):
+                    logger.info(
+                        'event=batch_merge_drain outcome=deferred exception_type=%s attempt=%d',
+                        type(error).__name__,
+                        attempt_no,
+                    )
+                else:
+                    logger.error(
+                        'event=batch_merge outcome=retry exception_type=%s attempt=%d',
+                        type(error).__name__,
+                        attempt_no,
+                    )
+                continue
+            fresh = self._deferred_drains.get(owner_id)
+            if fresh is entry:
+                # drain_owner neither re-offered nor re-armed: the owner's log
+                # is empty and the episode is over.
+                self._deferred_drains.pop(owner_id, None)
+                drained += 1
+                logger.info('event=batch_merge_drain outcome=converged attempt=%d', entry['attempts'])
+            elif fresh is None:
+                # A healthy drain ends the episode inside drain_owner itself;
+                # the lane only credits the convergence here.
+                drained += 1
+                logger.info('event=batch_merge_drain outcome=converged attempt=%d', entry['attempts'])
+        return drained
+
+    async def _deferred_drain_lane(self) -> None:
+        """Wake at the earliest armed due time; exit only when the ledger empties."""
+        try:
+            while self._deferred_drains and not self._deferred_stopped:
+                if not await self._drain_deferred_due():
+                    if not self._deferred_drains:
+                        continue  # the sweep drained or refused the last armed owner
+                    wake = asyncio.ensure_future(self._deferred_wake.wait())
+                    try:
+                        next_due = min(armed['due_at'] for armed in self._deferred_drains.values())
+                        await asyncio.wait_for(asyncio.shield(wake), timeout=max(0.0, next_due - self._monotonic()))
+                    except asyncio.TimeoutError:
+                        pass
+                    finally:
+                        wake.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await wake
+        finally:
+            self._deferred_lane = None
+            if self._deferred_drains and not self._deferred_stopped:
+                try:
+                    # A lane cancelled by loop teardown must not resurrect
+                    # itself: durability (the maintenance sweep) owns the rest.
+                    self._ensure_deferred_lane()
+                except RuntimeError:
+                    pass
+
+    async def flush_deferred_drains(self) -> None:
+        """One last bounded re-offer for every armed owner when the pump stops.
+
+        ``drain_owner`` state is durable: a flush loss leaves the owner to the
+        maintenance sweep after restart, so a failing owner is logged and the
+        flush continues; nothing here raises into shutdown.
+        """
+        self._deferred_stopped = True
+        lane, self._deferred_lane = self._deferred_lane, None
+        if lane is not None and not lane.done():
+            lane.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await lane
+        # Entries STAY armed while their flush drain runs, exactly like the
+        # lane's due sweep: a drain that ends at the 100-commit bound keeps
+        # re-offering through its own continuation budget (bounded, so an
+        # endlessly-fed owner cannot pin shutdown), and a healthy drain ends
+        # its episode inside drain_owner. A drain that raises is terminal for
+        # the flush: the owner is dropped with the historical error line and
+        # the durable maintenance sweep converges it after restart.
+        while self._deferred_drains:
+            owner_id, entry = next(iter(self._deferred_drains.items()))
+            try:
+                await self.drain_owner(owner_id)
+            except Exception as error:
+                self._deferred_drains.pop(owner_id, None)
+                logger.error(
+                    'event=batch_merge outcome=retry exception_type=%s attempt=%d',
+                    type(error).__name__,
+                    entry['attempts'],
+                )
+        self._deferred_drains.clear()
+
     async def sample_metrics(self) -> None:
         """One complete queue-age sample; failures keep the last values and freshness."""
         if self.metrics:
@@ -934,6 +1151,16 @@ class Pump:
                     'ordered_merge', db_executor, self.merge.commit_next, owner_id, time.time()
                 )
                 if entry is None:
+                    # A healthy drain proves the owner's log is empty: any
+                    # armed deferred episode is over, armed budget spent or
+                    # not. The maintenance sweep needs no second probe.
+                    self._deferred_drains.pop(owner_id, None)
                     return
                 if self.on_committed:
                     await self._run_blocking('projection', sync_executor, self.on_committed, entry)
+            # The 100-commit bound keeps one drain call short; reaching it with
+            # the owner's log possibly still pending is not convergence. The
+            # remaining log re-offers immediately on the deferred lane (no
+            # backoff: the bound, not contention, ended this drain), up to
+            # DRAIN_BACKLOG_CONTINUATION_ATTEMPTS, then maintenance sweeps it.
+            self._defer_drain(owner_id, continuation=True)

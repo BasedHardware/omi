@@ -43,6 +43,8 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import logging
+
 import pytest
 from google.api_core.exceptions import Aborted
 
@@ -2015,15 +2017,45 @@ async def test_drain_owner_loss_propagates_to_the_publication_caller(monkeypatch
         await pump.drain_owner('o1')
 
 
-async def test_drain_after_publication_swallows_and_logs_the_merge_retry(monkeypatch, caplog):
+async def test_drain_after_publication_defers_and_arms_the_owner_lane(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
     continuation_env(monkeypatch, True)
     merge = ScriptMerge()
     merge.commit_script['o1'] = [FirestoreContentionExhausted('hot')]
     pump = make_pump(merge=merge)
     await pump._drain_after_publication('o1')
-    records = [r for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
-    assert len(records) == 1
-    assert 'exception_type=FirestoreContentionExhausted' in records[0].getMessage()
+    assert pump._deferred_drains['o1']['attempts'] == 1
+    deferred = [r.getMessage() for r in caplog.records if 'outcome=deferred' in r.getMessage()]
+    assert len(deferred) == 1
+    assert 'exception_type=FirestoreContentionExhausted' in deferred[0]
+    retry = [r.getMessage() for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
+    assert retry == []
+    await pump.flush_deferred_drains()
+
+
+async def test_drain_after_publication_falls_back_to_the_retry_line_at_the_cap(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    continuation_env(monkeypatch, True)
+    merge = ScriptMerge()
+
+    def always_hot(owner_id, now):
+        raise FirestoreContentionExhausted('hot')
+
+    merge.commit_next = always_hot
+    pump = make_pump(merge=merge)
+    now = 5000.0
+    pump._monotonic = lambda: now
+    for _ in range(64):
+        now += 30.0
+        await pump._drain_after_publication('o1')
+        if not pump._deferred_drains:
+            break
+        await pump._drain_deferred_due()
+    assert pump._deferred_drains == {}
+    retry = [r.getMessage() for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
+    assert len(retry) == 1
+    assert 'exception_type=FirestoreContentionExhausted' in retry[0]
+    await pump.flush_deferred_drains()
 
 
 async def test_drain_after_publication_logs_nothing_on_a_healthy_drain(monkeypatch, caplog):
@@ -2033,7 +2065,7 @@ async def test_drain_after_publication_logs_nothing_on_a_healthy_drain(monkeypat
     assert [r for r in caplog.records if 'event=batch_merge' in r.getMessage()] == []
 
 
-async def test_drain_owner_bound_is_100_entries(monkeypatch):
+async def test_drain_owner_bound_is_100_entries_and_re_offers_the_rest(monkeypatch):
     continuation_env(monkeypatch, True)
     merge = ScriptMerge()
     calls = {'n': 0}
@@ -2047,6 +2079,14 @@ async def test_drain_owner_bound_is_100_entries(monkeypatch):
     pump = make_pump(merge=merge)
     await pump.drain_owner('o1')
     assert len(merge.drained) == 100
+    armed = pump._deferred_drains['o1']
+    assert armed['attempts'] == 1 and armed['continuation'] is True
+    assert armed['due_at'] - pump._monotonic() < 0.001
+    await pump.flush_deferred_drains()
+    # The flush's continuation rounds converge the remaining log up to the
+    # continuation cap (DRAIN_BACKLOG_CONTINUATION_ATTEMPTS) and then stop.
+    assert len(merge.drained) == 100 + 4 * 100
+    assert pump._deferred_drains == {}
 
 
 # --------------------------------------------------------------------------

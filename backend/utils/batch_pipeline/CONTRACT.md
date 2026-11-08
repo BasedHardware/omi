@@ -126,6 +126,20 @@ privacy and retention (D) — see [README.md](README.md). Trip registry and
 backtests: infra. Ramp steps and rollbacks: the lead, applied by the approved
 operator lane. Recovery redrive of `failed_held`: the redrive owner named in each ramp packet.
 
+## Publication-drain convergence
+
+A publication drain that loses to Firestore contention arms the owner on the
+pump's bounded deferred lane (exponential backoff 0.5s→8s, capped attempts,
+bounded ledger) and the pump itself converges the owner — it no longer waits
+for an incidental later drain while the only trace is an
+`event=batch_merge outcome=retry` ERROR line. The lane never widens
+publication ordering: re-drains ride the same per-owner serial lock. A drain
+that ends at the 100-commit bound re-offers the remainder immediately under a
+smaller continuation budget. `run()` stops the lane and flushes every armed
+owner once at teardown; a flush loss is durable and left to the maintenance
+ready page. Contract details and budget constants:
+[batch-merge-deferred-drain-convergence](../../docs/batch-merge-deferred-drain-convergence.md).
+
 ## Not promised
 
 - Real-time or first-summary deadlines (watch only through 50%).

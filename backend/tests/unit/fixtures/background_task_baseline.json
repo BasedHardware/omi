@@ -398,6 +398,13 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/pump.py",
+      "function": "Pump._ensure_deferred_lane",
+      "kind": "asyncio.create_task",
+      "count": 1,
+      "why": "The deferred publication-drain lane: bounded re-offers for owners whose ordered merge lost to Firestore contention. The lane holds no lease, no lock across awaits beyond the per-owner serial lock, and no audio; every armed owner's state is durable result_ready rows, so SIGKILL of the pod loses only latency \u2014 the leader-gated maintenance ready page converges the same owners after restart (run() flushes them once on graceful SIGTERM). Contracts: docs/batch-merge-deferred-drain-convergence.md; proofs: test_batch_merge_deferred_drain_convergence.py (cancellation re-arm, flush-at-stop, budget caps)."
     }
   ]
 }

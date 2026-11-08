@@ -8,9 +8,11 @@ any future budget reshape:
 - ``Pump._publish``: one segment's exhausted transition marks it lost, logs
   ``event=batch_completion outcome=retry``, returns False, and never
   suppresses a sibling's accepted transition.
-- ``Pump._drain_after_publication``: an exhausted ordered drain logs
-  ``event=batch_merge outcome=retry`` and leaves the durable state to
-  maintenance.
+- ``Pump._drain_after_publication``: an exhausted ordered drain arms the
+  owner's bounded deferred drain lane (INFO ``event=batch_merge_drain
+  outcome=deferred``), converges without waiting for an incidental later
+  drain, and falls back to the historical ``event=batch_merge outcome=retry``
+  error line only when the attempt cap refuses to re-arm.
 - Maintenance steps and the recover sweep keep their per-step / per-item
   continuation contracts under the real raise site.
 - Non-contention errors stay fail-noisy everywhere.
@@ -20,6 +22,7 @@ Failure-Class: FC-contention-chain-spends-its-budget-inside-one-abort-wave
 
 import asyncio
 import copy
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -370,10 +373,43 @@ async def test_concurrent_flight_skips_the_drain_for_an_all_lost_owner():
 # --------------------------------------------------------------------------
 
 
-async def test_exhausted_ordered_drain_logs_batch_merge_retry_without_raising():
+async def test_exhausted_ordered_drain_arms_the_deferred_lane_without_raising(caplog):
+    caplog.set_level(logging.INFO)
     pump = make_pump()
     pump.merge.commit_script['owner-1'] = [FirestoreContentionExhausted(EXHAUSTED)]
     await pump._drain_after_publication('owner-1')  # must not raise
+    armed = pump._deferred_drains['owner-1']
+    assert armed['attempts'] == 1
+    assert pump._deferred_lane is not None
+    deferred = [r.getMessage() for r in caplog.records if 'outcome=deferred' in r.getMessage()]
+    assert deferred == ['event=batch_merge_drain outcome=deferred exception_type=FirestoreContentionExhausted']
+    await pump.flush_deferred_drains()
+    assert pump._deferred_drains == {}
+
+
+async def test_deferred_lane_gives_up_at_the_attempt_cap_and_falls_back_to_the_error_line(caplog):
+    caplog.set_level(logging.INFO)
+    pump = make_pump()
+
+    def always_hot(owner_id, now):
+        raise FirestoreContentionExhausted(EXHAUSTED)
+
+    pump.merge.commit_next = always_hot
+    now = 1000.0
+    pump._monotonic = lambda: now
+    for _ in range(64):
+        now += 30.0
+        await pump._drain_after_publication('owner-1')
+        if not pump._deferred_drains:
+            break
+        await pump._drain_deferred_due()
+    assert pump._deferred_drains == {}
+    deferred = [r.getMessage() for r in caplog.records if 'outcome=deferred' in r.getMessage()]
+    assert len(deferred) == pump_module.DRAIN_RETRY_MAX_ATTEMPTS
+    retry = [r.getMessage() for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
+    assert len(retry) == 1
+    assert 'exception_type=FirestoreContentionExhausted' in retry[0]
+    await pump.flush_deferred_drains()
 
 
 async def test_drain_owner_raises_when_the_merge_exhausts():
