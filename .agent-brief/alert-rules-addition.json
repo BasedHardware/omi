@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(omi_record_token_late_append_total[5m])) > 0 or vector(0)",
+          "expr": "sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
