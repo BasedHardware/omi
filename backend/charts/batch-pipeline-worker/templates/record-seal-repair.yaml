@@ -1,4 +1,5 @@
 {{- if and .Values.enabled .Values.recordSealRepair.enabled (eq .Values.stage "prod") }}
+{{- include "batch-pipeline-worker.recordTokenLeaseGuard" . }}
 {{- if ne .Release.Namespace "prod-omi-backend" }}
 {{- fail "record seal repair requires prod-omi-backend" }}
 {{- end }}
@@ -59,6 +60,10 @@ spec:
                 - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
                 - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
                 - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
+                - {name: RECORD_TOKEN_LEASE_MODE, value: {{ .Values.recordTokenLease.mode | quote }}}
+                - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: {{ .Values.recordTokenLease.servePercent | quote }}}
+                - {name: RECORD_TOKEN_LEASE_SECONDS, value: {{ .Values.recordTokenLease.seconds | quote }}}
+                - {name: RECORD_TOKEN_LEASE_DEPLOYED_AT, value: {{ .Values.recordTokenLease.deployedAt | quote }}}
                 - {name: RECORD_SEAL_REPAIR_MODE, value: {{ .Values.recordSealRepair.mode | quote }}}
                 - {name: RECORD_SEAL_REPAIR_WORKERS, value: {{ .Values.recordSealRepair.workers | quote }}}
                 - {name: RECORD_SEAL_REPAIR_ROW_SECONDS, value: {{ .Values.recordSealRepair.rowSeconds | quote }}}

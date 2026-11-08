@@ -1,4 +1,4 @@
-"""Read-only pod inventory proof for abandoned recording producers; no TTL."""
+"""Read-only pod/abandon proof plus opt-in server-observed token leases."""
 
 from datetime import datetime
 import hashlib
@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 import time
 from config.record_audio import PRODUCER_START_MARGIN_SECONDS
+from config import record_seal_rules as lease
 
 NAMESPACE = 'prod-omi-backend'
 
@@ -71,7 +72,7 @@ def parse_pusher_pod_proof(payload, captured_at):
     }
 
 
-def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
+def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, row=None, job=None, lease_shadow=False):
     if not isinstance(tokens, dict):
         return False
     proof_valid = proof is not None and (
@@ -81,6 +82,8 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
     )
     if proof is not None and not proof_valid and not tokens:
         return False  # Cluster repair also uses the empty map to validate inventory freshness.
+    use_lease = lease.token_lease_serving(uid) or (lease_shadow and lease.token_lease_mode() != 'off')
+    now = time.time()
     for value in tokens.values():
         if value is True:
             if not producers_stopped or (proof is not None and not proof_valid):
@@ -96,6 +99,14 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
             or not 0 < started
         ):
             return False
+        if use_lease:
+            clocks = lease.token_lease_clocks(value, row=row, job=job)
+            if clocks:
+                if lease.token_lease_lapsed(value, now, row=row, job=job):
+                    continue
+                # A custody uploader can outlive its pusher. Fresh server
+                # signals re-fence even an abandoned/gone producer identity.
+                return False
         if 'abandoned_at' in value:
             abandoned = value['abandoned_at']
             if (
@@ -119,3 +130,21 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
         if current_start is None or current_start <= started + PRODUCER_START_MARGIN_SECONDS:
             return False
     return True
+
+
+def leases_would_release(tokens, proof, *, uid=None, row=None, job=None, producers_stopped=False):
+    """Content-free shadow diagnostic; never grants write authority."""
+    return bool(
+        tokens
+        and lease.token_lease_mode() != 'off'
+        and producer_tokens_dead(
+            tokens,
+            proof,
+            uid=uid,
+            row=row,
+            job=job,
+            producers_stopped=producers_stopped,
+            lease_shadow=True,
+        )
+        and any(lease.token_lease_lapsed(value, time.time(), row=row, job=job) for value in tokens.values())
+    )

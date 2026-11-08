@@ -969,3 +969,47 @@ async def test_unsupported_partial_uses_durable_modulate_outbox_after_rollback(s
     assert context['stt_language'] == language and context['stt_language_evidence'] == 'declared'
     assert len(audio.chunks) == 1 and audio.pcm[audio.chunks[0]['path']]
     assert not any(path[0] in {'batch_pipeline_dev_queues', 'batch_pipeline_dev_control'} for path in source[1].rows)
+
+
+@pytest.mark.parametrize(
+    'mode,expected', [('off', 'upload_pending'), ('shadow', 'upload_pending'), ('serve', 'partial_finished')]
+)
+def test_lease_dead_partial_exit_and_hourly_coordinator(source, monkeypatch, mode, expected):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    source[1].rows[ROW]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    source[2]['pods']['live'] = 1  # Scoped inventory proves this original pusher is still live.
+    assert finish(source) == expected
+    row = source[1].rows[ROW]
+    assert not row.get('record_audio_closed')
+    if expected == 'partial_finished':
+        assert not row['record_upload_sessions']
+        assert pending(source)['partial_coordinator']
+        assert pending(source)['available_at'] == NOW
+        assert row['record_audio_partial']['reason'] == 'tail_lagging'
+
+
+def test_renewal_before_partial_transaction_keeps_live_uploader_fenced(source, monkeypatch):
+    from database.record_audio import renew_record_token_lease
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    source[1].rows[ROW]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=source[1])
+    assert finish(source) == 'upload_pending'

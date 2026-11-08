@@ -116,6 +116,9 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - {name: RECORD_TOKEN_LEASE_MODE, value: "off"}
+  - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: "0"}
+  - {name: RECORD_TOKEN_LEASE_SECONDS, value: "3600"}
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
   # Dev-only canary (lead2 2afa3e, 2026-11-08): 512 MiB byte-budgeted custody admission.

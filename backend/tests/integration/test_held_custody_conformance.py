@@ -278,3 +278,24 @@ def test_pl105_pl363_refusal_cannot_settle_a_foreign_or_started_epoch(store_back
     else:
         assert not getattr(protocol, method)('held', token, T0 + 3, **kwargs)
     assert read(h) == before
+
+
+def test_lease_token_shape_does_not_release_held_custody(store_backend, monkeypatch):
+    h = store_backend
+    owner, binding, _ = seed(h)
+    ref = h.customer.client.collection('users').document(owner).collection('conversations').document('visible')
+    tokens = {
+        's': {
+            'pod': 'synthetic-pusher',
+            'process_started_at': T0 - 86400,
+            'last_signal_at': T0 - 7200,
+            'lease_expires_at': T0 - 3600,
+            'signal_source': 'frames',
+        }
+    }
+    ref.update({'record_upload_sessions': tokens})
+    monkeypatch.setattr(intake, 'time', SimpleNamespace(time=lambda: T0 + 20))
+    patch(h, {'status': 'partial', 'result': PARTIAL['result']}, 'content', f'{owner}/{binding.content_id}')
+    assert intake.durable_status(h.store, owner, binding.job_id)['status'] != 'completed'
+    assert ref.get().to_dict()['record_upload_sessions'] == tokens
+    assert read(h)['audio_uri'] == AUDIO

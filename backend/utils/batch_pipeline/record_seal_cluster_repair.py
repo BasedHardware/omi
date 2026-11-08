@@ -27,6 +27,8 @@ from config import refactor_modes
 from config import record_seal_repair as config
 from config import record_partial as partial_config
 from config.record_audio import record_identity
+from config import record_seal_rules as lease
+from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
@@ -135,6 +137,18 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     proof = inventory()
     require_fresh_proof(proof)  # Required for every attempted seal or rearm.
     if partial:
+        if (
+            reason_out is not None
+            and lease.token_lease_mode() == 'shadow'
+            and leases_would_release(
+                row.get('record_upload_sessions'),
+                proof,
+                uid=uid,
+                row=row,
+                job=job,
+            )
+        ):
+            reason_out['lease_reason'] = 'lease_would_expire'
         if reason_out is not None:
             reason = job.get('partial_reason')
             reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
@@ -171,6 +185,8 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if len(entries) != 1:
         return 'unknown'
     disposition = entries[0].get('disposition')
+    if reason_out is not None and entries[0].get('lease_reason') == 'lease_would_expire':
+        reason_out['lease_reason'] = 'lease_would_expire'
     if (
         not row.get('record_audio_closed')
         and partial_config.enabled()
@@ -591,6 +607,7 @@ def coordinate(
                 gap = 'negative_or_unknown'
                 blocker = None
                 trimmed = 0
+                lease_reason = None
                 partial_reason = 'tail_lost_or_unproven'
                 if finished:
                     try:
@@ -598,6 +615,8 @@ def coordinate(
                         candidate = result.get('trimmed_divergent_overlaps', 0)
                         trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
+                        if result.get('lease_reason') == 'lease_would_expire':
+                            lease_reason = 'lease_would_expire'
                         candidate = result.get('blocker')
                         blocker = candidate if candidate in BLOCKERS else None
                         candidate = result.get('proof_reason')
@@ -640,6 +659,7 @@ def coordinate(
                             **({'blocker': blocker} if blocker else {}),
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
+                            **({'lease_reason': lease_reason} if lease_reason else {}),
                             **({'partial_reason': partial_reason} if disposition == 'partial_finished' else {}),
                             **({'seal_age_seconds': age if sealed else 0} if age is not None else {}),
                             **({'proof_reason': reason} if disposition == 'proof_refused' else {}),

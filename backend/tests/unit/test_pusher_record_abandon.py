@@ -345,3 +345,34 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
                 task.cancel()
         await asyncio.gather(*tasks, *owners, return_exceptions=True)
         await asyncio.wait_for(asyncio.gather(*(tracker.wait() for tracker in trackers)), 5)
+
+
+async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    epoch = [10000.0]
+    monotonic = [10000.0]
+    monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
+    monkeypatch.setattr(barriers.time, 'monotonic', lambda: monotonic[0])
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    token = barrier.upload_sessions['record']
+    revision = records.rows[PATH]['record_upload_revision']
+    before = len(records.transactions)
+    await barrier.renew_recording('record')
+    assert len(records.transactions) == before
+    epoch[0] += 1800
+    monotonic[0] += 1800
+    await barrier.renew_recording('record')
+    assert records.rows[PATH]['record_upload_sessions'][token]['last_signal_at'] == epoch[0]
+    assert records.rows[PATH]['record_upload_revision'] == revision
+    epoch[0] += 3601
+    monotonic[0] += 3601
+    await barrier.renew_recording('record')
+    assert records.rows[PATH]['record_upload_revision'] == revision + 1
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    before = len(records.transactions)
+    epoch[0] += 7200
+    monotonic[0] += 7200
+    await barrier.renew_recording('record')
+    assert len(records.transactions) == before
+    await barrier.finish_recording('record')

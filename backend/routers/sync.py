@@ -57,6 +57,8 @@ from models.sync_job_status import (
 )
 from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
+from database import record_audio as record_audio_db
+from config import record_seal_rules as record_lease
 from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
@@ -302,6 +304,22 @@ router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(
 router.include_router(coverage_router)
 
 
+async def _renew_custody_lease(uid, conversation_id):
+    if record_lease.token_lease_mode() == 'off':
+        return
+    try:
+        await run_blocking(
+            db_executor,
+            record_audio_db.renew_record_token_lease,
+            uid,
+            conversation_id,
+            source='custody_append',
+        )
+    except Exception as error:
+        logger.warning('event=record_token_lease_renewal outcome=unavailable exception_type=%s', type(error).__name__)
+        raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
+
+
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
 async def create_sync_capture_manifest(
     payload: SyncCaptureManifestRequest,
@@ -326,6 +344,7 @@ async def create_sync_capture_manifest(
     )
     if not trusted:
         raise HTTPException(status_code=403, detail='Fresh capture provenance could not be verified')
+    await _renew_custody_lease(uid, payload.conversation_id)
     claims = [item.model_dump() for item in payload.files]
     try:
         claimed = await run_blocking(
@@ -650,6 +669,8 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    if isinstance(conversation_id, str) and conversation_id:
+        await _renew_custody_lease(uid, conversation_id)
     if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
         # The same conversation-level custody wait answered moments ago: repeat
         # it before saving, archiving or decoding these bytes (audio retained).

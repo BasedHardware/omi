@@ -9,14 +9,25 @@ import tempfile
 
 from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER, bound_caller
 
+from database import record_token_lease_metrics as lease_metrics
+
 logger = logging.getLogger(__name__)
-COLLECTORS = (FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER)
+COLLECTORS = (
+    FIRESTORE_BILLED_READS,
+    FIRESTORE_BILLED_READS_BY_CALLER,
+    lease_metrics.EXPIRED_WOULD,
+    lease_metrics.EXPIRED_SEALED,
+    lease_metrics.LATE_APPEND,
+)
 # Sample names and label keys of the served counters, pinned from their
 # declarations in database/firestore_document_probe.py. prometheus_client
 # exposes them only via private attributes (_name/_labelnames), which backend
 # typecheck forbids; the drift pin in test_record_seal_cluster_repair.py
 # fails if the probe renames either side.
 COUNTER_SAMPLES = {
+    'omi_record_token_lease_expired_would_total': (lease_metrics.EXPIRED_WOULD, ()),
+    'omi_record_token_lease_expired_sealed_total': (lease_metrics.EXPIRED_SEALED, ()),
+    'omi_record_token_late_append_total': (lease_metrics.LATE_APPEND, ()),
     'omi_firestore_billed_reads_total': (
         FIRESTORE_BILLED_READS,
         ('collection', 'kind', 'tier'),
@@ -136,6 +147,7 @@ def collect_child_probe(process):
         for name, labels, value in rows:
             if 'caller' in labels:
                 labels = {**labels, 'caller': bound_caller(labels['caller'])}
-            counters[name][0].labels(**labels).inc(value)
+            counter = counters[name][0]
+            (counter.labels(**labels) if labels else counter).inc(value)
     except Exception:
         _unavailable()

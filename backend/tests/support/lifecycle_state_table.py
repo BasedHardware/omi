@@ -393,9 +393,49 @@ STATES = (
             'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
             'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
             'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
-            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
+            'the existing process/pod-death repair proof remains its exit. Off-mode live tokens never expire by age; the leased per-token view is separate. '
             'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
             'general live-producer dwell visibility remains required',
+        ),
+        row(
+            'record_token',
+            'capturing',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+            ),
+            exit=Exit('lease', 'utils/batch_pipeline/record_producer_proof.py:producer_tokens_dead'),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
+            note='Exact-token finish clear; abandon attestation; or computed lease lapse. Off preserves original producer proof.',
+        ),
+        row(
+            'record_token',
+            'lease_lapsed',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+            ),
+            exit=Exit(
+                'sweeper',
+                'utils/batch_pipeline/record_seal_repair.py:apply_seals',
+                (
+                    Writer('utils/batch_pipeline/record_seal_repair.py', 'apply_seals.commit'),
+                    Writer('database/record_partial.py', 'finish_partial.commit'),
+                    Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                ),
+            ),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Computed from nested lease clocks; never persisted as expiry state',
+            note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
+            'clears token map and re-arms hourly inventory; late append re-activates via renew_record_token_lease '
+            'and bumps record_upload_revision. Never deletes audio.',
         ),
         row(
             'record_audio',

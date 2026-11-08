@@ -7,6 +7,7 @@ from google.cloud import firestore
 
 from config import record_seal_rules
 from database._client import get_firestore_client, run_transactional
+from database import record_token_lease_metrics as lease_metrics
 
 
 class RecordUploadCapacityExceeded(ValueError):
@@ -58,7 +59,7 @@ def set_record_upload_pending(
 ):
     """Track a session's buffered/in-flight audio before accepting its first frame.
 
-    No expiry: a dead producer cannot prove that its tail reached storage.
+    Lease expiry removes only producer liveness, never the retained-tail proof.
     Clear only this producer's token after its successful drain.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -77,7 +78,16 @@ def set_record_upload_pending(
                 return True
             if len(sessions) >= 128:
                 raise RecordUploadCapacityExceeded('record upload session budget exceeded')
-            sessions[session] = producer or True
+            value = producer or True
+            if record_seal_rules.token_lease_mode() != 'off' and isinstance(value, dict):
+                now = time.time()
+                value = {
+                    **value,
+                    'last_signal_at': now,
+                    'lease_expires_at': now + record_seal_rules.token_lease_seconds(),
+                    'signal_source': 'frames',
+                }
+            sessions[session] = value
             tx.update(
                 ref,
                 {
@@ -148,3 +158,66 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
         return True
 
     return run_transactional(client, commit, transient=True)
+
+
+def renew_record_token_lease(uid, conversation_id, *, source, session=None, firestore_client=None):
+    """Fence before admitting bytes. Off does no IO, even with inert lease fields.
+
+    Custody appends renew every identified open producer for the conversation;
+    frame batches renew only the socket's exact token. Never invent an identity
+    for bare True tokens or recreate a closed/deleted conversation.
+    """
+    if record_seal_rules.token_lease_mode() == 'off':
+        return False
+    if source not in {'frames', 'custody_append'}:
+        raise ValueError('unrecognized record lease signal')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def commit(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if not row or row.get('deleted') or row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
+            return False, False, []
+        now = time.time()
+        sessions = dict(row.get('record_upload_sessions') or {})
+        gaps = []
+        late = bool(row.get('record_audio_closed') or row.get('record_audio_partial'))
+        reactivated = bool(row.get('record_audio_partial'))
+        changed = False
+        for key, token in sessions.items():
+            if session is not None and key != session:
+                continue
+            if not isinstance(token, dict):
+                continue
+            clocks = record_seal_rules.token_lease_clocks(token, row=row)
+            lapsed = record_seal_rules.token_lease_lapsed(token, now, row=row)
+            reactivated |= lapsed
+            late |= lapsed
+            if clocks:
+                gaps.append(max(0, now - clocks[0]))
+            # Clock rollback must never shorten an already committed fence.
+            signal = max(now, clocks[0] if clocks else now)
+            sessions[key] = {
+                **token,
+                'last_signal_at': signal,
+                'lease_expires_at': max(signal + record_seal_rules.token_lease_seconds(), clocks[1] if clocks else 0),
+                'signal_source': source,
+            }
+            sessions[key].pop('abandoned_at', None)
+            changed = True
+        if changed or reactivated:
+            patch = {'record_upload_sessions': sessions}
+            if reactivated:
+                patch['record_upload_revision'] = int(row.get('record_upload_revision') or 0) + 1
+            tx.update(ref, patch)
+        return changed, late, gaps
+
+    changed, late, gaps = run_transactional(client, commit, transient=True)
+    if changed:
+        lease_metrics.RENEWALS.labels(source=source).inc()
+        for gap in gaps:
+            lease_metrics.SIGNAL_GAP.observe(gap)
+    if late:
+        lease_metrics.LATE_APPEND.inc()
+    return changed

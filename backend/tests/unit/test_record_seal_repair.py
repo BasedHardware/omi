@@ -366,3 +366,75 @@ def test_listed_source_precondition_failure_never_seals(source, monkeypatch, cha
     )
     blob.reload.assert_not_called()
     decode.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'mode,disposition', [('off', 'upload_pending'), ('shadow', 'upload_pending'), ('serve', 'eligible')]
+)
+def test_lease_dead_plan_and_shadow_dispositions(source, monkeypatch, mode, disposition):
+    store, client, _ = source
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    client.rows[PATH]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    result = plan(source)
+    assert result['entries'][0]['disposition'] == disposition
+    assert result['entries'][0].get('lease_reason') == ('lease_would_expire' if mode == 'shadow' else None)
+    outcome = repair.apply_seals(store, result, result['plan_sha256'])
+    assert outcome == ({'sealed': 1} if mode == 'serve' else {'upload_pending': 1})
+    assert bool(client.rows[PATH].get('record_audio_closed')) is (mode == 'serve')
+
+
+def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, monkeypatch):
+    from database.record_audio import renew_record_token_lease
+
+    store, client, _ = source
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    client.rows[PATH]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    result = plan(source)
+    assert result['entries'][0]['disposition'] == 'eligible'
+    renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=client)
+    assert client.rows[PATH]['record_upload_revision'] == 1
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'state_changed': 1}
+    assert client.rows[PATH]['record_upload_sessions']
+    # A fresh plan is producer-pending, even with the previous full tail proof.
+    assert plan(source)['entries'][0]['disposition'] == 'upload_pending'
+
+
+def test_lease_kill_switch_after_plan_and_tail_refusal(source, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    source[1].rows[PATH]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    result = plan(source)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    assert repair.apply_seals(source[0], result, result['plan_sha256']) == {'upload_pending': 1}
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    source[1].rows[PATH]['finished_at'] = datetime.fromtimestamp(150, timezone.utc)
+    assert plan(source)['entries'][0]['disposition'] == 'proof_refused'

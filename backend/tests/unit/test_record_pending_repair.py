@@ -576,3 +576,32 @@ def test_jobs_switch_off_during_proof_prevents_aged_partial_rearm(partial_source
     )
     assert partial_source[1].rows == before
     assert row['record_audio_partial'] and not row['record_audio_closed']
+
+
+@pytest.mark.parametrize(
+    'mode,expected', [('off', 'upload_pending'), ('shadow', 'upload_pending'), ('serve', 'sealed')]
+)
+def test_lease_expired_pending_runs_existing_full_proof_exit(source, proof, monkeypatch, mode, expected):
+    assert settle(source, proof) == 'sealed_registered'
+    row = source[1].rows[PATH]
+    from utils.batch_pipeline import record_producer_proof
+
+    now = 10000
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: now)
+    row.update(
+        record_audio_closed=False,
+        record_upload_sessions={
+            's': {
+                'pod': 'live',
+                'process_started_at': 100,
+                'last_signal_at': now - 7200,
+                'lease_expires_at': now - 3600,
+                'signal_source': 'frames',
+            }
+        },
+    )
+    value = {'namespace': 'prod-omi-backend', 'captured_at': now, 'resource_version': '1', 'pods': {'live': 1}}
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    assert settle(source, lambda: value) == expected
+    assert bool(row['record_upload_sessions']) is (mode != 'serve')

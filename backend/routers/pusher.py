@@ -1803,6 +1803,7 @@ async def _run_websocket_util_trigger(
                     if current_conversation_id:
                         with observe_work('record_begin'):
                             await record_barrier.begin_recording(current_conversation_id)
+                            await record_barrier.renew_recording(current_conversation_id)
                     if private_cloud_chunk_start_time is None:
                         # Use timestamp from first buffer of this 5-second chunk
                         private_cloud_chunk_start_time = buffer_start_timestamp

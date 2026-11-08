@@ -187,6 +187,16 @@ After a partial trim, the next overlap is checked against the full previous
 object span, retaining the earlier accepted bytes within that span. A wholly
 covered object does not replace this comparison history.
 
+`RECORD_TOKEN_LEASE_MODE=off|shadow|serve` defaults off; shadow records leases
+without changing seal decisions. Serve honors `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT`
+(default 0) with salt `record-token-lease`. Only observed custody appends and
+frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` inside
+the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
+Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` release epoch, clamped
+to their last durable signal. Lease lapse never substitutes for retained-tail
+proof. Late appends renew and bump upload revision; raw audio stays retained.
+See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).
+
 Only the independent repair job opts into retrying `record_upload_failed` rows.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full
 proof of retained audio and dead producers, repair clears the failure flag and

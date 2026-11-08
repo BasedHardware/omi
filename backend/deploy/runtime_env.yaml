@@ -61,6 +61,11 @@ environments:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          RECORD_TOKEN_LEASE_SECONDS:
+            value: '3600'
+            category: reliability
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
@@ -397,6 +402,11 @@ environments:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          RECORD_TOKEN_LEASE_SECONDS:
+            value: '3600'
+            category: reliability
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -865,6 +875,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -1162,6 +1177,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -1477,6 +1497,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -1763,6 +1788,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -2303,6 +2333,11 @@ environments:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          RECORD_TOKEN_LEASE_SECONDS:
+            value: '3600'
+            category: reliability
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
@@ -2747,6 +2782,11 @@ environments:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          RECORD_TOKEN_LEASE_SECONDS:
+            value: '3600'
+            category: reliability
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3239,6 +3279,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -3667,6 +3712,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -4115,6 +4165,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -4514,6 +4569,11 @@ environments:
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_TOKEN_LEASE_MODE: {value: 'off', category: rollout}
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+            RECORD_TOKEN_LEASE_SECONDS:
+              value: '3600'
+              category: reliability
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'

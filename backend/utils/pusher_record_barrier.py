@@ -15,6 +15,8 @@ from typing import Callable, ParamSpec, TypeVar
 from prometheus_client import Counter, Gauge
 
 from database import record_audio as record_audio_db
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
 from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking, track_executor_future
 from utils.observability.fallback import record_fallback
 
@@ -219,6 +221,7 @@ class PusherRecordBarrier:
         self.close_failures: dict[str, int] = {}
         self.close_retry_at: dict[str, float] = {}
         self.keep_close_pending = False
+        self.lease_renewed_at: dict[str, float] = {}
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
@@ -315,6 +318,9 @@ class PusherRecordBarrier:
                 True,
                 producer=producer_identity(),
             ):
+                if lease.token_lease_mode() != 'off':
+                    self.lease_renewed_at[conversation_id] = time.monotonic()
+                    lease_metrics.ACTIVE.inc()
                 return
             self.upload_sessions.pop(conversation_id, None)
             registry.forget(self.uid, conversation_id, token)
@@ -325,6 +331,31 @@ class PusherRecordBarrier:
             # Metadata outages must not interrupt the audio custody lane.
             _record_failure('begin')
             await self.fail_recording(conversation_id)
+
+    async def renew_recording(self, conversation_id: str) -> None:
+        """Only frame-bearing batches renew; no idle socket timer/client-state."""
+        if lease.token_lease_mode() == 'off' or conversation_id not in self.upload_sessions:
+            return
+        now = time.monotonic()
+        if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
+            return
+        # Persist before the next batch is buffered. Errors retain client/raw
+        # custody rather than admitting bytes under an unknown expiry fence.
+        await run_blocking(
+            record_barrier_executor,
+            record_audio_db.renew_record_token_lease,
+            self.uid,
+            conversation_id,
+            source='frames',
+            session=self.upload_sessions[conversation_id],
+        )
+        if conversation_id not in self.lease_renewed_at:
+            lease_metrics.ACTIVE.inc()
+        self.lease_renewed_at[conversation_id] = now
+
+    def _forget_lease(self, conversation_id):
+        if self.lease_renewed_at.pop(conversation_id, None) is not None:
+            lease_metrics.ACTIVE.dec()
 
     async def finish_recording(self, conversation_id: str) -> bool:
         """Return whether settled (or the legacy bounded retry budget exhausted).
@@ -363,6 +394,7 @@ class PusherRecordBarrier:
                 registry.forget(self.uid, conversation_id, token)
                 if self.upload_sessions.get(conversation_id) == token:
                     self.upload_sessions.pop(conversation_id, None)
+                    self._forget_lease(conversation_id)
                 else:
                     logger.info('event=record_tokens_recleared count=1')
         except _CloseAdmissionRefused:
@@ -428,6 +460,7 @@ class PusherRecordBarrier:
             self.pending_clears.discard((cid, token))
             if self.upload_sessions.get(cid) == token:
                 self.upload_sessions.pop(cid, None)
+                self._forget_lease(cid)
 
     def _close_admission_refused(self, conversation_id: str) -> bool:
         # The drain loop already yields between scans. A positive, jittered

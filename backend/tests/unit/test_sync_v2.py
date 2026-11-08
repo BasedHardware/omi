@@ -3964,6 +3964,53 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
+    @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+    async def test_custody_manifest_lease_fences_before_claim(self, sync_endpoint_module, monkeypatch, mode):
+        from types import SimpleNamespace
+
+        _, _, module = sync_endpoint_module
+        events = []
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+        module.resolve_client_device = lambda **kw: SimpleNamespace(client_device_id='synthetic-device')
+        module._capture_matches_server_conversation = lambda *a: True
+        module.claim_conversation_manifest = lambda *a: events.append('claim') or True
+        module.issue_capture_manifest = lambda *a: 'synthetic-manifest'
+        module.record_product_event = lambda *a, **kw: None
+        module.record_audio_db = SimpleNamespace(renew_record_token_lease=lambda *a, **kw: events.append('renew'))
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        payload = SimpleNamespace(
+            conversation_id='record',
+            files=[SimpleNamespace(name='synthetic.bin', model_dump=lambda: {'name': 'synthetic.bin'})],
+        )
+        result = await module.create_sync_capture_manifest(payload, uid='synthetic')
+        assert result.manifest == 'synthetic-manifest'
+        assert events == (['claim'] if mode == 'off' else ['renew', 'claim'])
+
+    async def test_custody_lease_outage_preserves_retry_before_claim(self, sync_endpoint_module, monkeypatch):
+        from fastapi import HTTPException
+        from types import SimpleNamespace
+
+        _, _, module = sync_endpoint_module
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+        module.resolve_client_device = lambda **kw: SimpleNamespace(client_device_id='synthetic-device')
+        module._capture_matches_server_conversation = lambda *a: True
+        module.claim_conversation_manifest = MagicMock()
+        module.record_audio_db = SimpleNamespace(renew_record_token_lease=MagicMock(side_effect=OSError('synthetic')))
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        payload = SimpleNamespace(conversation_id='record', files=[SimpleNamespace(name='synthetic.bin')])
+        with pytest.raises(HTTPException) as error:
+            await module.create_sync_capture_manifest(payload, uid='synthetic')
+        assert error.value.status_code == 503
+        module.claim_conversation_manifest.assert_not_called()
+
     @pytest.fixture
     def sync_endpoint_module(self):
         """Keep real router import/setup outside the endpoint execution budget."""

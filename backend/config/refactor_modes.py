@@ -54,6 +54,9 @@ WAVE2_COHORT_SALT = 'capture-speaker-notes:wave2'
 
 # Typed bindings make the generic cohort reader visible to registry validation.
 CONVERSATION_TERMINAL_FAMILY_MODE_ENV = 'CONVERSATION_TERMINAL_FAMILY_MODE'
+RECORD_TOKEN_LEASE_MODE_ENV = 'RECORD_TOKEN_LEASE_MODE'
+RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'
+RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S'
 CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
 CAPTURE_COVERAGE_SERVE_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_PERCENT'
 CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S'
@@ -64,6 +67,7 @@ ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
 STT_VOCAB_SERVE_PERCENT_ENV = 'STT_VOCAB_MODE_SERVE_PERCENT'
 STT_VOCAB_SERVE_UID_SHA256S_ENV = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
 _COHORT_ENVS = {
+    RECORD_TOKEN_LEASE_MODE_ENV: (RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV, RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV),
     'CALLS_RECAP_MODE': (CALLS_RECAP_SERVE_PERCENT_ENV, CALLS_RECAP_SERVE_UID_SHA256S_ENV),
     'ACTION_ITEMS_V2_MODE': (ACTION_ITEMS_V2_SERVE_PERCENT_ENV, ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV),
     'STT_VOCAB_MODE': (STT_VOCAB_SERVE_PERCENT_ENV, STT_VOCAB_SERVE_UID_SHA256S_ENV),
@@ -88,6 +92,8 @@ def _warn_once(name: str, raw: str) -> None:
 
 
 def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None) -> Mode:
+    if name == RECORD_TOKEN_LEASE_MODE_ENV:
+        default = 'off'
     raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
@@ -136,7 +142,11 @@ def serving_for(
     current = mode(name, default, environ=env)
     if current == 'off':
         return False
-    if current == 'serve':
+    if name == RECORD_TOKEN_LEASE_MODE_ENV:
+        # Lease shadow is observation only; serve always honors its own cohort.
+        if current != 'serve':
+            return False
+    elif current == 'serve':
         return True
     if not uid:
         return False
@@ -152,7 +162,11 @@ def serving_for(
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         _warn_once(percent_env, 'invalid')
         percent = 0.0
-    salt = WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
+    salt = (
+        'record-token-lease'
+        if name == RECORD_TOKEN_LEASE_MODE_ENV
+        else WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
+    )
     return percent > 0 and cohort_bucket(uid, salt) < percent
 
 

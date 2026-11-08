@@ -197,3 +197,57 @@ async def test_full_tail_proven_dead_repair_clears_only_after_proof(lifecycle_si
             break
         sim.age(61)
     assert sim.row().get('record_projection_revision')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exit_name', ['seal', 'partial_finish', 'reactivated'])
+async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, exit_name):
+    """Real Firestore transactions: computed expiry never fabricates tail proof."""
+    from database.record_partial import finish_partial
+    from utils.batch_pipeline import record_seal_repair
+
+    sim = lifecycle_sim
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    sim.seed()
+    assert sim.register()
+    now = datetime.now(timezone.utc).timestamp()
+    token = {
+        'pod': 'synthetic-lease-pusher',
+        'process_started_at': now - 86400,
+        'last_signal_at': now - 7200,
+        'lease_expires_at': now - 3600,
+        'signal_source': 'frames',
+    }
+    sim.ref.update({'record_upload_sessions': {'lease': token}})
+    assert record_producer_proof.producer_tokens_dead(
+        {'lease': token}, sim.proof(live_producer=True), uid=sim.uid, row=sim.row(), job=sim.job()
+    )
+    if exit_name == 'reactivated':
+        revision = sim.row()['record_upload_revision']
+        record_audio.renew_record_token_lease(
+            sim.uid, sim.cid, source='custody_append', firestore_client=sim.stack.firestore
+        )
+        assert sim.row()['record_upload_revision'] == revision + 1
+        sim.sweep(live_producer=True)
+        assert sim.row()['record_upload_sessions']
+        assert not sim.row()['record_audio_closed']
+    elif exit_name == 'partial_finish':
+        # An old finished_at with retained bytes ending earlier must not seal.
+        sim.ref.update({'finished_at': datetime.fromtimestamp(now - 1801, timezone.utc)})
+        result = finish_partial(
+            sim.store, sim.ref.path, reason='tail_lagging', proof=sim.proof(live_producer=True), now=now
+        )
+        assert result == 'partial_finished'
+        assert not sim.row()['record_upload_sessions']
+        assert sim.row()['record_audio_partial']
+        assert not sim.row()['record_audio_closed']
+        assert sim.job()['partial_coordinator']
+    else:
+        plan = record_seal_repair.plan_seals(
+            sim.store, [sim.job_ref.id], sim.storage, sim.artifacts, producer_proof=sim.proof(live_producer=True)
+        )
+        assert plan['entries'][0]['disposition'] == 'eligible'
+        assert record_seal_repair.apply_seals(sim.store, plan, plan['plan_sha256']) == {'sealed': 1}
+        assert not sim.row()['record_upload_sessions']
+        assert sim.row()['record_audio_closed']
