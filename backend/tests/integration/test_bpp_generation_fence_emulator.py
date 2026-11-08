@@ -228,7 +228,7 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
             )
             denial = 'recording_privacy_changed'
         elif writer == 'account_marker_create':
-            w.users.set_user_deletion_feedback(w.uid, 'synthetic', None)
+            w.users.mark_user_deletion_wipe_intent(w.uid)
             denial = 'account_deleted'
         elif writer == 'account_marker_complete':
             ref = w.client.document(f'account_deletions/{w.uid}')

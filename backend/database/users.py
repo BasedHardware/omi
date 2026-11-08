@@ -390,16 +390,15 @@ def clear_byok_active(uid: str):
 @cache_writer('deletion_marker_cache')
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
-    # Use merge=True so a retried delete request does not erase a durable wipe marker
-    # (pending/failed/retrying/deleting_auth) already written to the same document.
-    account_deletion_document(uid).set(
+    # Update-only so this never creates the marker: a feedback-only doc has no wipe_status,
+    # which the access fence denies with no restore path. A missing marker raises NotFound.
+    account_deletion_document(uid).update(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        },
-        merge=True,
+        }
     )
 
 
