@@ -74,9 +74,6 @@ GEOMETRY = {"Growth": (0, 5), "Activation": (5, 5), "Retention": (10, 5), "Reven
 STAT_H = 3
 STRIP_H = 1
 WALL_H = 27
-# Two rows taller than the first draft: the Grafana page footer ("Powered by
-# Grafana") sits over the bottom of the funnel row, so its panels need the room.
-FUNNEL_H = 11
 # One value size and label size on every stat; sized so the widest value
 # ("10,287", "$72.4K") fits a three-value column at 1440 px.
 STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
@@ -562,7 +559,7 @@ def curve_options(panel):
 
 
 def funnel_row():
-    """Below the TV's fixed wall: a full-width row reached by scrolling."""
+    """The funnel board: a full-width row that fills the 1920×1080 kiosk, in its own rotation."""
     proxy = ("Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as "
              "organic, and pairing is itself an early success, so the gap between the two is overstated. ")
     series_colors = [color("Device", MAGENTA), color("Organic", NEUTRAL)]
@@ -608,22 +605,33 @@ def build_wall_board():
             panels.append({**panel, "gridPos": {"x": x, "y": y, "w": w, "h": h}})
             y += h
         assert y == WALL_H, (name, y)  # every column fills the TV exactly, no scroll
-    x = 0
+    return _board("omi-tv-v2", "Omi TV · v3", panels,
+                  "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health.")
+
+
+def build_funnel_board():
+    """Funnel and cohorts in their own rotation: three charts that fill the kiosk, no scroll."""
+    panels, x = [], 0
     for w, panel in funnel_row():
-        panels.append({**panel, "gridPos": {"x": x, "y": WALL_H, "w": w, "h": FUNNEL_H}})
+        panels.append({**panel, "gridPos": {"x": x, "y": 0, "w": w, "h": WALL_H}})
         x += w
     assert x == 24
+    return _board("omi-tv-funnel", "Omi TV · funnel", panels,
+                  "Device vs organic funnel, weekly activation and platform split. Its own rotation board: it fills the 1920×1080 kiosk.")
+
+
+def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
-    return {"uid": "omi-tv-v2", "title": "Omi TV · v3", "schemaVersion": 39, "version": 1, "timezone": "utc",
+    return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
             "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
-            "annotations": {"list": []}, "panels": panels, "links": [],
-            "description": "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health."}
+            "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 
 
 def write_wall_board():
-    (HERE / "dashboards/omi-tv-v2.json").write_text(json.dumps(build_wall_board(), indent=2) + "\n")
+    for uid, board in (("omi-tv-v2", build_wall_board()), ("omi-tv-funnel", build_funnel_board())):
+        (HERE / f"dashboards/{uid}.json").write_text(json.dumps(board, indent=2) + "\n")
 
 
 if __name__ == "__main__":
