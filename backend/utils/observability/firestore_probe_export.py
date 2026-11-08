@@ -10,6 +10,7 @@ import tempfile
 from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER, bound_caller
 
 from database import record_token_lease_metrics as lease_metrics
+from config.record_seal_rules import token_lease_mode
 
 logger = logging.getLogger(__name__)
 COLLECTORS = (
@@ -60,12 +61,15 @@ def register_probe_collectors(registry):
 def terminal_totals():
     # Only totals and the producer's bounded labels; no created timestamps,
     # document IDs, query operands, or a second SDK patch.
+    # Unlabelled lease counters expose zero samples at import time. Keep the
+    # old terminal wire/log output exact when dark, even after a mode rollback.
+    collectors = COLLECTORS[:2] if token_lease_mode() == 'off' else COLLECTORS
     return [
         [sample.name, sample.labels, sample.value]
-        for collector in COLLECTORS
+        for collector in collectors
         for family in collector.collect()
         for sample in family.samples
-        if sample.name.endswith('_total')
+        if sample.name.endswith('_total') and (collector in COLLECTORS[:2] or sample.value > 0)
     ]
 
 

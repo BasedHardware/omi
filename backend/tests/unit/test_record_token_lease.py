@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 import json
 from unittest.mock import Mock
 
+from prometheus_client import Counter
 import pytest
 
 from config import record_seal_rules as lease, refactor_modes
 from config.policy.batch import cohort_bucket
 from database import record_audio
+from utils.observability import firestore_probe_export
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 
@@ -262,3 +264,16 @@ def test_partial_clear_reactivates_exact_server_token_but_complete_seal_never_re
         'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
     )
     assert enabled.rows == before
+
+
+def test_off_terminal_metrics_keep_old_wire_output_even_after_rollback(monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    before = firestore_probe_export.terminal_totals()
+    counter = Counter('omi_record_token_lease_expired_would_total', 'Synthetic lease expiry', registry=None)
+    counter.inc()
+    monkeypatch.setattr(firestore_probe_export, 'COLLECTORS', (*firestore_probe_export.COLLECTORS[:2], counter))
+    assert firestore_probe_export.terminal_totals() == before
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    assert any(
+        row[0] == 'omi_record_token_lease_expired_would_total' for row in firestore_probe_export.terminal_totals()
+    )

@@ -106,6 +106,10 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - {name: RECORD_TOKEN_LEASE_MODE, value: "off"}
+  - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: "0"}
+  - {name: RECORD_TOKEN_LEASE_SECONDS, value: "3600"}
+  - {name: RECORD_TOKEN_LEASE_DEPLOYED_AT, value: "0"}
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

@@ -9,6 +9,7 @@ env:
   - {name: RECORD_TOKEN_LEASE_MODE, value: "off"}
   - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: "0"}
   - {name: RECORD_TOKEN_LEASE_SECONDS, value: "3600"}
+  - {name: RECORD_TOKEN_LEASE_DEPLOYED_AT, value: "0"}
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: "false"
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
