@@ -68,8 +68,10 @@ transaction, never inside a retryable callback.
 ## Known open items (not changed here)
 
 - Projection re-arm gap: a restorable assignment hold with
-  `projection_release_attempts >= 3` bypasses expiry
-  (`backend/database/batch_pipeline_projection_release.py:290` on main, the
-  `if attempts >= MAX_RELEASE_ATTEMPTS: return False` after a restorable
-  target; line 361 on `lane/backlog-state-machine`). Pre-existing on main; this
-  branch does not touch that file.
+  `projection_release_attempts >= 3` bypasses expiry (the `if attempts >=
+  MAX_RELEASE_ATTEMPTS: return False` after a restorable target in
+  `backend/database/batch_pipeline_projection_release.py`). Pre-existing on
+  main. Main now has a fix behind the dark switch
+  `BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED` (default off,
+  `de0d4d34f627`); until it is on, the gap stands. This branch does not touch
+  that file.
