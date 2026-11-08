@@ -5,7 +5,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 """
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
-from config.policy import ProjectionPolicy
+from config.policy import ProjectionPolicy, kill_switch
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
@@ -458,7 +458,7 @@ class Projector:
 
     def owe_followups(self, segment_ids) -> None:
         with self.handoff:
-            self.chain_followups.extend(segment_ids)
+            self.chain_followups = list(dict.fromkeys(self.chain_followups + list(segment_ids)))
 
     @property
     def owes_followups(self) -> bool:
@@ -798,18 +798,20 @@ class Projector:
             RELEASE_TICK_SECONDS,
             GHOST_SKIP_CLASSES,
             GHOST_AGE_BUCKETS,
-            release_scan_pass,
+            release_scan_pass_settled,
         )
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
-        counts, self.release_after = release_scan_pass(
+        counts, self.release_after, settled = release_scan_pass_settled(
             self.store,
             limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
             after_id=self.release_after,
             now=self.clock(),
             deadline=time.monotonic() + RELEASE_TICK_SECONDS if enabled else None,
         )
+        if settled and kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED'):
+            self.owe_followups(settled)
         if counts.get('examined'):
             logger.info(
                 'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d ghost_settled=%d classified=%d skipped_by_class=%s age_buckets=%s',

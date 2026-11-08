@@ -330,6 +330,7 @@ SCHEMA_GROUPS = {
     'api_keys': {
         'output': DEFAULT_OUTPUT_DIR / 'api_keys_wire.g.dart',
         'schemas': (
+            'ConnectorAccess',
             'DevApiKey',
             'DevApiKeyCreated',
             'McpApiKey',

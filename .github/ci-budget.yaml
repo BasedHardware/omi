@@ -2166,12 +2166,13 @@
         "role_images",
         "runtime_image_contracts",
         "sdk-cpp",
+        "sdk-dart",
         "sdk-rust",
         "web-checks",
         "windows-preflight-portability"
       ],
       "owner": "CI maintainers",
-      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2230,6 +2231,24 @@
       "owner": "CI maintainers",
       "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
       "reusable": "./.github/workflows/sdk-cpp.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/sdk-dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "sdk-dart",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 nightly call of sdk-dart.yml against the pinned main SHA; sdk-dart.yml/dart keeps its own ubuntu-latest runner and 15-minute cap, adding one daily invocation of a ~5-minute Flutter test job",
+      "reusable": "./.github/workflows/sdk-dart.yml",
       "runner": "reusable",
       "runner_counts": {
         "reusable": 1
@@ -3077,6 +3096,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sdk-dart.yml/dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "dart",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19 new path-scoped job: two PRs touched sdks/device/dart since 2026-07-30; 5 minutes covers cached Flutter 3.44.5 setup, pub get and the package tests",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -6082,6 +6119,38 @@
           "paths": [
             "sdks/device/cpp/**",
             ".github/workflows/sdk-cpp.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "sdk-dart.yml": {
+      "name": "Dart Device SDK",
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19: path-scoped like sdk-cpp.yml; no workflow or manifest lane ran the Dart device SDK tests, and the Hygiene runner has no Flutter toolchain",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
           ]
         },
         "workflow_call": {

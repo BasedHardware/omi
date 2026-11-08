@@ -6,8 +6,11 @@ import zlib
 from unittest.mock import patch
 
 import pytest
+from google.api_core.exceptions import AlreadyExists
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalStorageClient, LocalBlob
 
@@ -46,7 +49,9 @@ def test_roundtrip_and_unconditional_encryption(storage, monkeypatch):
     assert ref.bucket == bucket.name and ref.dek_version == 1 and ref.data_class == 'transcript'
     payload = bucket.blob(ref.key).download_as_bytes()
     assert ref.bytes == len(payload)
-    assert payload[:9] == b'OLK1\x01\x00\x00\x00\x01'
+    assert payload[:9] == b'OLK1\x02\x00\x00\x00\x01'
+    assert lake._HEADER_V2.size == 61
+    assert ref.bytes == 61 + len(zlib.compress(plaintext, level=6)) + 16
     assert plaintext[:20] not in payload and zlib.compress(plaintext)[:12] not in payload
     assert lake.get_space_object(ref) == plaintext
     assert lake.LakeObjectRef.from_pointer_dict(ref.to_pointer_dict()) == ref
@@ -55,6 +60,155 @@ def test_roundtrip_and_unconditional_encryption(storage, monkeypatch):
 
 def test_empty_plaintext(storage):
     assert lake.get_space_object(put(b'')) == b''
+
+
+def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
+    bucket, store = storage
+    upload = LocalBlob.upload_from_string
+
+    def checked_upload(blob, *args, **kwargs):
+        candidate_id = hashlib.sha256(f'{bucket.name}/{blob.name}'.encode()).hexdigest()
+        row = store.rows[('lake_upload_candidates', candidate_id)]
+        assert set(row) == {'bucket', 'key', 'created_at'}
+        assert row['bucket'] == bucket.name and row['key'] == blob.name
+        assert row['created_at'].tzinfo is not None
+        return upload(blob, *args, **kwargs)
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', checked_upload)
+    first = put()
+    candidates = {path: row.copy() for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'}
+    assert put() == first
+    assert {path: row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'} == candidates
+
+
+@pytest.mark.parametrize('operation', ['get', 'create'])
+def test_candidate_record_failure_prevents_upload(storage, monkeypatch, operation):
+    bucket, _ = storage
+    original = getattr(StrictFirestoreDocument, operation)
+
+    def fail_candidate(document, *args, **kwargs):
+        if document.path[0] == 'lake_upload_candidates':
+            raise RuntimeError('synthetic candidate store failure')
+        return original(document, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, operation, fail_candidate)
+    with pytest.raises(lake.LakeFetchError, match='upload unavailable'):
+        put()
+    assert not list(bucket.list_blobs(prefix='v1/spaces/'))
+
+
+def test_concurrent_candidate_create_is_idempotent(storage, monkeypatch):
+    _, store = storage
+    original = StrictFirestoreDocument.create
+
+    def concurrent_create(document, data):
+        original(document, data)
+        if document.path[0] == 'lake_upload_candidates':
+            raise AlreadyExists('concurrent intent already committed')
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'create', concurrent_create)
+    ref = put()
+    assert lake.get_space_object(ref)
+    assert len([path for path in store.rows if path[0] == 'lake_upload_candidates']) == 1
+
+
+def test_ambiguous_upload_retains_durable_candidate(storage, monkeypatch):
+    bucket, store = storage
+    upload = LocalBlob.upload_from_string
+
+    def lost_response(blob, *args, **kwargs):
+        upload(blob, *args, **kwargs)
+        raise RuntimeError('response lost after upload')
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', lost_response)
+    with pytest.raises(lake.LakeFetchError):
+        put()
+    blobs = list(bucket.list_blobs(prefix='v1/spaces/'))
+    assert len(blobs) == 1
+    assert any(
+        row.get('key') == blobs[0].name for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'
+    )
+
+
+@pytest.mark.parametrize('field', ['bucket', 'key', 'created_at'])
+def test_invalid_existing_candidate_refuses_upload(storage, monkeypatch, field):
+    bucket, store = storage
+    lake._record_upload_candidate(bucket.name, 'v1/spaces/s/transcript/c/' + hashlib.sha256(b'new').hexdigest())
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    row[field] = None
+    with pytest.raises(lake.LakeObjectConflict, match='candidate is invalid'):
+        put(b'new')
+    assert not list(bucket.list_blobs(prefix='v1/spaces/'))
+
+
+def legacy_object(bucket, plaintext=b'legacy transcript'):
+    digest = hashlib.sha256(plaintext).hexdigest()
+    key = f'v1/spaces/s/transcript/c/{digest}'
+    nonce = b'0' * 12
+    dek = space_keys.unwrap_space_dek('s', 1)
+    payload = lake._HEADER.pack(b'OLK1', 1, 1, nonce) + lake.AESGCM(dek).encrypt(
+        nonce, zlib.compress(plaintext), key.encode()
+    )
+    blob = bucket.blob(key)
+    blob.metadata = {'plaintext_sha256': digest, 'space_id': 's', 'data_class': 'transcript', 'dek_version': '1'}
+    blob.upload_from_string(payload, if_generation_match=0)
+    return lake.LakeObjectRef(bucket.name, key, digest, len(payload), 'transcript', 1)
+
+
+def test_legacy_v1_roundtrip_and_retry_preserves_envelope(storage):
+    bucket, store = storage
+    space_keys.get_or_create_space_key('s', firestore_client=store)
+    ref = legacy_object(bucket)
+    original = bucket.blob(ref.key).download_as_bytes()
+    assert lake.get_space_object(ref) == b'legacy transcript'
+    assert put(b'legacy transcript') == ref
+    assert bucket.blob(ref.key).download_as_bytes() == original
+
+
+def test_object_deks_are_independent(storage):
+    bucket, _ = storage
+    one, two = put(b'first object'), put(b'second object')
+    first = bucket.blob(one.key).download_as_bytes()
+    second = bucket.blob(two.key).download_as_bytes()
+    _, _, _, nonce, wrap_one = lake._HEADER_V2.unpack_from(first)
+    wrap_two = lake._HEADER_V2.unpack_from(second)[4]
+    assert len(wrap_one) == len(wrap_two) == 40
+    assert wrap_one != wrap_two
+    kek = space_keys.unwrap_space_dek('s', 1)
+    dek_one, dek_two = aes_key_unwrap(kek, wrap_one), aes_key_unwrap(kek, wrap_two)
+    assert len(dek_one) == len(dek_two) == 32 and dek_one != dek_two
+    with pytest.raises(InvalidTag):
+        lake.AESGCM(dek_two).decrypt(nonce, first[61:], one.key.encode())
+
+
+def test_repeated_nonce_is_safe_with_independent_object_deks(storage, monkeypatch):
+    bucket, store = storage
+    # Provision the parent before fixing only the object nonce, not DEK randomness.
+    space_keys.get_or_create_space_key('s', firestore_client=store)
+    random_bytes = lake.os.urandom
+    monkeypatch.setattr(lake.os, 'urandom', lambda size: b'n' * 12 if size == 12 else random_bytes(size))
+    one, two = put(b'first object'), put(b'second object')
+    first = bucket.blob(one.key).download_as_bytes()
+    second = bucket.blob(two.key).download_as_bytes()
+    assert lake._HEADER_V2.unpack_from(first)[3] == lake._HEADER_V2.unpack_from(second)[3] == b'n' * 12
+    assert first[21:61] != second[21:61] and first[61:] != second[61:]
+    assert lake.get_space_object(one) == b'first object'
+    assert lake.get_space_object(two) == b'second object'
+
+
+def test_object_wraps_add_no_kms_decrypts(storage):
+    _, store = storage
+    kms = space_keys.FakeKMS()
+    with patch.object(space_keys, '_kms', return_value=kms), patch.object(kms, 'decrypt', wraps=kms.decrypt) as decrypt:
+        one, two = put(b'first object'), put(b'second object')
+        assert lake.get_space_object(one) == b'first object'
+        assert lake.get_space_object(two) == b'second object'
+        assert decrypt.call_count == 1
+        space_keys.rotate_space_key('s', firestore_client=store)
+        three = put(b'after rotation')
+        assert lake.get_space_object(three) == b'after rotation'
+        assert lake.get_space_object(one) == b'first object'
+        assert decrypt.call_count == 2
 
 
 def test_create_only_retry_and_retry_after_rotation(storage):
@@ -117,7 +271,22 @@ def test_absent_is_distinct_from_empty(storage):
         lake.get_space_object(ref)
 
 
-@pytest.mark.parametrize('change', ['ciphertext', 'header', 'truncated', 'digest', 'aad', 'size', 'version'])
+@pytest.mark.parametrize(
+    'change',
+    [
+        'ciphertext',
+        'header',
+        'truncated',
+        'digest',
+        'aad',
+        'size',
+        'version',
+        'env',
+        'v2_floor',
+        'wrap_bit',
+        'wrap_swap',
+    ],
+)
 def test_corruption_fails_closed(storage, change):
     bucket, _ = storage
     ref = put()
@@ -129,6 +298,17 @@ def test_corruption_fails_closed(storage, change):
         blob.upload_from_string(b'BAD!' + payload[4:])
     elif change == 'truncated':
         blob.upload_from_string(payload[:8])
+    elif change == 'env':
+        blob.upload_from_string(payload[:4] + b'\x03' + payload[5:])
+    elif change == 'v2_floor':
+        blob.upload_from_string(payload[:61])
+        ref = replace(ref, bytes=61)
+    elif change == 'wrap_bit':
+        blob.upload_from_string(payload[:21] + bytes([payload[21] ^ 1]) + payload[22:])
+    elif change == 'wrap_swap':
+        other = put(b'another object')
+        wrapped = bucket.blob(other.key).download_as_bytes()[21:61]
+        blob.upload_from_string(payload[:21] + wrapped + payload[61:])
     elif change == 'digest':
         ref = replace(ref, sha256='0' * 64)
     elif change == 'size':
@@ -217,12 +397,15 @@ def test_verify_shallow_and_deep(storage):
 
 
 def test_destroyed_and_unavailable_keys_propagate(storage):
-    _, store = storage
+    bucket, store = storage
     ref = put()
+    legacy = legacy_object(bucket)
     lake.get_space_object(ref)  # Warm the unwrap cache before destroy.
+    lake.get_space_object(legacy)
     space_keys.destroy_space_keys('s', firestore_client=store)
-    with pytest.raises(space_keys.SpaceKeyDestroyed):
-        lake.get_space_object(ref)
+    for pointer in (legacy, ref):
+        with pytest.raises(space_keys.SpaceKeyDestroyed):
+            lake.get_space_object(pointer)
     with patch.object(space_keys, 'unwrap_space_dek', side_effect=space_keys.SpaceKeyUnavailable('retry')):
         with pytest.raises(space_keys.SpaceKeyUnavailable):
             lake.get_space_object(ref)
