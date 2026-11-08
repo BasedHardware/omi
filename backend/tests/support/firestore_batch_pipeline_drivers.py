@@ -441,9 +441,19 @@ def entries():
                 'database.batch_pipeline_projection_release.held_page_ids',
                 'database.batch_pipeline_projection_release.assignment_held_page_ids',
             ),
+            reason='thin 2-tuple wrapper over release_page_settled; no queries of its own',
+            expect_observed=False,
+            body_digest='15ce4bf78a33ea401c5eeb56e895c088a75ffc45471d268784f7f174e6474f30',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_page_settled',
+            covered_by=(
+                'database.batch_pipeline_projection_release.held_page_ids',
+                'database.batch_pipeline_projection_release.assignment_held_page_ids',
+            ),
             reason='bounded release scan delegates queries to both page builders; resets are document transactions',
             expect_observed=False,
-            body_digest='127aab03c6504e09efa8323e3e3d92e0aa5f19db0f79926e5ae2a3374cc0979c',
+            body_digest='d863e83874910f88595eb18925f58f8129e1665d7b14dbde81179c443a75c632',
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_scan_pass',
@@ -451,8 +461,18 @@ def entries():
                 'database.batch_pipeline_projection_release.held_page_ids',
                 'database.batch_pipeline_projection_release.assignment_held_page_ids',
             ),
-            reason='two durable cursors share release_page; cursor reads and writes are document operations',
+            reason='thin 2-tuple wrapper over release_scan_pass_settled; no queries of its own',
             expect_observed=False,
-            body_digest='ac3609b6a36420b2fcfef038db3689af74aa7d77f66d5746b6121f87b84f787c',
+            body_digest='92308c42482933a9adde1ca3fc20dff803d3c7c3be88d134d608e532061a1d22',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_scan_pass_settled',
+            covered_by=(
+                'database.batch_pipeline_projection_release.held_page_ids',
+                'database.batch_pipeline_projection_release.assignment_held_page_ids',
+            ),
+            reason='two durable cursors share release_page_settled; cursor reads and writes are document operations',
+            expect_observed=False,
+            body_digest='0b064975a7115e66ee082bdf546b2b9bcfc75cbdf14bf08e67ccb595027c4de2',
         ),
     )

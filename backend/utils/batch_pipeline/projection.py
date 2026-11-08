@@ -798,18 +798,17 @@ class Projector:
             RELEASE_TICK_SECONDS,
             GHOST_SKIP_CLASSES,
             GHOST_AGE_BUCKETS,
-            release_scan_pass,
+            release_scan_pass_settled,
         )
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
-        counts, self.release_after, settled = release_scan_pass(
+        counts, self.release_after, settled = release_scan_pass_settled(
             self.store,
             limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
             after_id=self.release_after,
             now=self.clock(),
             deadline=time.monotonic() + RELEASE_TICK_SECONDS if enabled else None,
-            include_settled=True,
         )
         if settled and kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED'):
             self.owe_followups(settled)

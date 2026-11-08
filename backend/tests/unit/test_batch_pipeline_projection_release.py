@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 
 from database.batch_pipeline_projection import ProjectionStore
-from database.batch_pipeline_projection_release import ProjectionReleaseStore, release_page
+from database.batch_pipeline_projection_release import ProjectionReleaseStore, release_page, release_page_settled
 from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding
@@ -575,7 +575,7 @@ def test_scan_caps_ghost_repairs_across_both_legs_and_counts_age_buckets(monkeyp
     # Even if a stale assignment page returns ghosts, it shares the pass cap.
     monkeypatch.setattr(release, 'held_page_ids', lambda *a: ids[:12])
     monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ids[12:])
-    counts, _, settled = release.release_scan_pass(store, limit=24, after_id=None, now=GHOST_NOW, include_settled=True)
+    counts, _, settled = release.release_scan_pass_settled(store, limit=24, after_id=None, now=GHOST_NOW)
     assert settled == (ids[:16] if enabled else [])
     assert counts['error'] == 0 and counts['examined'] == counts['ghost_classified'] == 24
     assert counts['ghost_settled'] == (16 if enabled else 0)
@@ -659,12 +659,12 @@ def test_release_page_returns_only_successfully_settled_ids(monkeypatch, enabled
     monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
     _, store = store_for(ghost_rows())
     monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['missing', 'held'])
-    counts, after, settled = release_page(store, limit=3, after_id=None, now=GHOST_NOW, include_settled=True)
+    counts, after, settled = release_page_settled(store, limit=3, after_id=None, now=GHOST_NOW)
     assert settled == (['held'] if enabled else [])
     assert counts['ghost_settled'] == len(settled)
     assert after is None
     # A stale page on the next scan must not wake an already settled row.
-    assert release_page(store, limit=3, after_id=None, now=GHOST_NOW, include_settled=True)[2] == []
+    assert release_page_settled(store, limit=3, after_id=None, now=GHOST_NOW)[2] == []
 
 
 def test_release_page_fetch_failure_returns_no_settled_ids(monkeypatch):
@@ -672,7 +672,7 @@ def test_release_page_fetch_failure_returns_no_settled_ids(monkeypatch):
 
     monkeypatch.setattr(release, 'held_page_ids', Mock(side_effect=RuntimeError('fetch failed')))
     _, store = store_for(ghost_rows())
-    counts, after, settled = release_page(store, limit=3, after_id='resume', include_settled=True)
+    counts, after, settled = release_page_settled(store, limit=3, after_id='resume')
     assert counts['examined'] == 0 and after == 'resume' and settled == []
 
 

@@ -376,7 +376,7 @@ def save_release_cursor(store, after_id: str | None, now: float, *, key=RELEASE_
         )
 
 
-def release_page(
+def release_page_settled(
     store,
     *,
     limit: int,
@@ -385,9 +385,8 @@ def release_page(
     deadline: float | None = None,
     assignment_held: bool = False,
     ghost_budget: int = GHOST_SETTLE_MAX_PER_PASS,
-    include_settled: bool = False,
 ):
-    """Return (counts, next_after), optionally followed by settled segment ids."""
+    """Return (counts, next_after, settled segment ids)."""
     moment = now if now is not None else time.time()
     counts = release_counts()
     settled = []
@@ -404,7 +403,7 @@ def release_page(
             'event=batch_projection action=release_held action=fetch outcome=retry exception_type=%s',
             type(error).__name__,
         )
-        return (counts, after_id, settled) if include_settled else (counts, after_id)
+        return counts, after_id, settled
     for segment_id in page:
         counts['examined'] += 1
         try:
@@ -434,12 +433,15 @@ def release_page(
             break
     processed = counts['examined']
     next_after = page[processed - 1] if processed and (processed < len(page) or len(page) >= limit) else None
-    return (counts, next_after, settled) if include_settled else (counts, next_after)
+    return counts, next_after, settled
 
 
-def release_scan_pass(
-    store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None, include_settled: bool = False
-):
+def release_page(*args, **kwargs):
+    counts, next_after, _ = release_page_settled(*args, **kwargs)
+    return counts, next_after
+
+
+def release_scan_pass_settled(store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None):
     """Two durable discovery cursors share the existing row and time budgets."""
     start = after_id if after_id is not None else load_release_cursor(store)['after_id']
     limit = max(1, min(limit, RELEASE_PAGE))
@@ -461,7 +463,7 @@ def release_scan_pass(
         if index == 0 and enabled and deadline is not None:
             page_deadline = time.monotonic() + max(0, deadline - time.monotonic()) / 2
         cursor = assignment.get('after_id') if is_assignment else start
-        page_counts, after, page_settled = release_page(
+        page_counts, after, page_settled = release_page_settled(
             store,
             limit=page_limit,
             after_id=cursor,
@@ -469,7 +471,6 @@ def release_scan_pass(
             deadline=page_deadline,
             assignment_held=is_assignment,
             ghost_budget=GHOST_SETTLE_MAX_PER_PASS - counts['ghost_settled'],
-            include_settled=True,
         )
         settled.extend(page_settled)
         for key, value in page_counts.items():
@@ -488,7 +489,12 @@ def release_scan_pass(
             key=ASSIGNMENT_RELEASE_CURSOR_KEY,
             next_first=not assignment_first,
         )
-    return (counts, next_after, settled) if include_settled else (counts, next_after)
+    return counts, next_after, settled
+
+
+def release_scan_pass(*args, **kwargs):
+    counts, next_after, _ = release_scan_pass_settled(*args, **kwargs)
+    return counts, next_after
 
 
 def finite_timestamp(value: Any) -> TypeGuard[int | float]:
