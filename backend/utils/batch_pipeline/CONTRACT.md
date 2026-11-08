@@ -111,6 +111,14 @@ or explicit user deletion; storage pressure cannot evict them.
 state and ledger shape and pins each answer in `tests/fixtures/custody_status_shapes.json`,
 which the phone replays through its terminal policy (`app/test/unit/custody_status_shapes_test.dart`).
 
+Owner drains with zero progress waiting on `live_target_not_persisted` retry
+after 30, 60, 120, 240, then at most 300 seconds per owner, counted by
+`omi_batch_projection_live_target_backoffs_total`; progress or any other stop
+resets the bounded process-local attempt state. Only
+`PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` disables this backoff (restoring
+`head_error`); privacy/deleted dispositions, other writer waits, productive FIFO
+continuations and the durable 24-hour hold bound remain unchanged.
+
 ## Trips: which invariant each enforces
 
 Registry: omi-workspace `infra/rollout/trips.toml` (rollback authority only with a
@@ -286,6 +294,16 @@ state, result/transcript, receipt/parts, audio, job and watermark. At
 `MAX_RELEASE_ATTEMPTS=3` or above, that same one-time CAS saves the count as
 `held_expired_release_attempts` and resets `projection_release_attempts=0`.
 Already marked rows are never repeatedly reset.
+Default-off `BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED` also routes
+restorable holds at or above that cap through the identical eligibility fences
+and deadline/expiry CAS. It requires `BATCH_HELD_DEAD_LETTER_ENABLED`; the
+stamping or expiry pass never releases the row. Off retains the capped hold.
+With this switch on, a privacy refusal or any nonempty `privacy_reason` on the
+summary or any part refuses release and expiry without writes.
+With this switch on, every ordinary release transaction rechecks the expiry
+stamp and refuses marked rows without writes, including the other leg of the
+same scan. Only nightly redrive with `dead_before` strictly after the marker
+may release an eligible row. A falsy `None` tombstone is not an expiry stamp.
 
 The same release helper is the sanctioned projection expiry/re-drive CAS;
 `H:ProjectionHeldDeadLetter.tick` invokes it for previous-day marked rows.
@@ -304,12 +322,15 @@ part owes ordinary discovery, not held expiry. In the existing
 fails, recheck the hint, ready receipt, all parts, absence of a privacy refusal,
 segment/binding/owner identity, committed job with recovery state other than
 `held`, and finite `committed_at` at least 24 hours old. With
-`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, write
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, recheck the normal release
+`_target_restorable` fence inside the transaction; an absent or unrestorable
+target yields `target_not_restorable` with no writes. Only then write
 `projection_state=ready` and `ghost_settled_cohort=<label>` in a **single
 transaction.update**. The hint matches `hold_for_quarantine`'s ready-sibling write.
 Receipts, parts, jobs, audio, attempt counters and watermarks stay intact. The
 existing discovery/completion/publication/acknowledgement path rechecks its own
 fences. This is never `held_expired`; nightly expiry does not settle ghosts.
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED` (default true) hands settled ids to the existing bounded follow-up tail; false restores discovery-only scheduling, with completion privacy fences unchanged.
 
 | Result field | Rule |
 | --- | --- |
@@ -350,7 +371,7 @@ aggregate-only `ghost_settled`, `classified`, `skipped_by_class` and `age_bucket
 Classified counts held-gate failures (including stale hints) not handled by
 assignment deadline backfill/expiry; those use waiting/expired instead. Each
 classified row gets exactly one skip class or a committed repair. Skip classes distinguish hint changes,
-non-ready receipts, quarantined parts, privacy, identity, held/non-committed jobs,
+non-ready receipts, quarantined parts, `target_not_restorable`, privacy, identity, held/non-committed jobs,
 invalid/young age, count-only, cap and nightly expiry. Age buckets for classified
 rows are disjoint: 1d to <7d, 7d to <30d, and 30d+. Younger/invalid ages have no
 bucket. Retry attempts never inflate counters. No row IDs or user data enter
@@ -554,3 +575,43 @@ operator lane. Recovery redrive of `failed_held`: the redrive owner named in eac
 - Automatic redrive of vendor-cause `failed_held` (operator redrive today).
 - Exactly one vendor for language ID (Modulate today; self-LID #23460 is required from 50%).
 - Live preview quality: retire-cohort preview is a preference shift ([ADR 0003](../../docs/adr/0003-retire-flag-is-preview-preference.md)).
+
+
+### Dark projection hold observability (2026-11-08)
+
+`BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED` defaults OFF. Explicit `true` adds
+one INFO `event=batch_projection outcome=quarantine_persisted hold_reason=...`
+after a successful quarantine disposition commit, including partial multipart
+persists, and after a committed sibling acknowledgment transitions the summary
+state to `quarantined` or its projection hint to `quarantine_held`. Rewriting an
+already-held summary is silent, using the transaction's prior summary and hint.
+The closed reasons are `ambiguous_generation`, `conflict`, `poison_head`,
+`payload_contract`, and `sibling`. Transaction retries and receipt replays emit
+no additional success line; no identifiers or content enter the new line.
+Persisted dispositions and existing logs are unchanged.
+
+`BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED` independently defaults OFF. Explicit
+`true` adds `omi_batch_timeliness_all_time_units{leg=...}` for
+`quarantine_held_rows`, `assignment_held`, and `projection`. These are exact stock
+counts across all epochs and ages, including units younger than the SLA. They
+reuse the existing Firestore COUNT aggregation path: three unbounded count
+aggregations per successful refresh by the leader, no document scan and no
+queries on scrape. The companion requires `batch_timeliness_leader` on and this
+replica's lease; with election off, or on a follower, no companion COUNT runs.
+The timeliness alarm, cadence, election, freshness and existing epoch-scoped
+gauge remain unchanged. This companion is diagnostic; there is no alert or
+production metric-inventory requirement for it.
+Companion counts run only after the legacy sample has succeeded and the epoch
+gauges have published, so a slow or failed COUNT cannot delay or stale them.
+Each failed count logs its bounded leg and exception type, omits that series,
+and leaves other legs available. A refresh removes previously exported
+failed-leg values; it never substitutes zero. A legacy sample failure keeps its
+existing error behavior and runs no companion counts.
+
+Both controls are registered in `config/policy/kill_switches.py`,
+`config/feature-flags.yaml`, and `config/flag_budget.json`. They require `true`
+in every parser mode; unset/false emits no new logs or series and performs no
+extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
+No enablement is included: the lead owns a separate canary and expansion
+proposal after review. Rollback: set each switch to `false`; logs stop and the
+companion series disappears on collection. No data migration or cleanup.

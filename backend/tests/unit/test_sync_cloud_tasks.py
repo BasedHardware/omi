@@ -1415,7 +1415,6 @@ def _load_sync_router_for_fast_path():
     sys.modules['database.sync_ledger'].release_sync_content_claim_after_job_retired = MagicMock()
     sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
     sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-    sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
     sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
     sys.modules['database.sync_backfill_sequencer'].enabled = MagicMock(return_value=False)
     sys.modules['database'].sync_backfill_sequencer = sys.modules['database.sync_backfill_sequencer']
@@ -2836,7 +2835,6 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
 
     module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
     module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
-    module.try_acquire_backfill_slot = MagicMock(side_effect=ConnectionError('retired slot unavailable'))
     module.start_background_task = MagicMock()
     module.classify_sync_lane = MagicMock(
         return_value=types.SimpleNamespace(
@@ -2854,7 +2852,6 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
 
         assert response.status_code == 202
         module.is_daily_audio_ceiling_exceeded.assert_not_called()
-        module.try_acquire_backfill_slot.assert_not_called()
         mock_sync_jobs.create_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
@@ -3401,7 +3398,6 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
     module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
     module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
-    module.try_acquire_backfill_slot = MagicMock(side_effect=AssertionError('old admission slot used'))
     module.classify_sync_lane = MagicMock(
         return_value=types.SimpleNamespace(
             lane=module.SyncLane.BACKFILL,
@@ -3421,7 +3417,6 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
         module.sync_backfill_sequencer.register_job.assert_called_once()
         module.uid_sequencer.kick.assert_called_once_with('test-uid')
         module.enqueue_sync_job.assert_not_called()
-        module.try_acquire_backfill_slot.assert_not_called()
         assert module.create_sync_job.call_args.kwargs['dispatch_mode'] == 'sequenced'
     finally:
         sys.modules.pop('routers.sync', None)

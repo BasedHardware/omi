@@ -796,13 +796,21 @@ def is_terminal_empty(job: dict[str, Any]) -> bool:
 
 @read_origin('job:batch_pipeline_store:timeliness_sample')
 def timeliness_sample(
-    client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
+    client: Any,
+    namespace: str,
+    epoch: float,
+    now: float,
+    sla: float,
+    *,
+    terminal_empty_processed: bool = False,
 ) -> dict[str, Any]:
     """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
     new cohort, and backlog counts before ``epoch``. With ``batch_timeliness_leader`` on, each backlog
     count is capped at 10,000 index entries: values at the cap are lower bounds. The assignment-held
     backlog alert treats saturation as actionable stock, independently of its one-hour growth condition.
     Lever 0 restores the exact, unbounded historical counts. Post-epoch counts stay exact.
+
+    All-time companion counts are not computed here; see ``timeliness_all_time_counts``.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
     leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
@@ -919,7 +927,7 @@ def timeliness_sample(
         quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
-    return {
+    sample: dict[str, Any] = {
         # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
         # limit(1) reads stay exact even when the stock is larger than a scan page.
         'drain_oldest': first(projection, 'committed_at'),
@@ -951,6 +959,34 @@ def timeliness_sample(
             'projection': projection_truncated,
         },
     }
+    return sample
+
+
+def timeliness_all_time_counts(client: Any, namespace: str) -> dict[str, int]:
+    """Exact all-time counts for the companion legs, with no epoch filter and no document walk.
+
+    Diagnostic only. Run by the metrics caller after the epoch gauges publish, never on scrape and
+    never inside ``timeliness_sample``. Each leg fails alone: a failed COUNT logs and is omitted, so
+    the caller clears that series rather than exporting a fake zero.
+    """
+    jobs = client.collection(f'{namespace}_jobs')
+    results = client.collection(f'{namespace}_results')
+    legs = {
+        'quarantine_held_rows': results.where('projection_state', '==', 'quarantine_held'),
+        'assignment_held': jobs.where('state', '==', 'committed').where('recovery_state', '==', 'held'),
+        'projection': results.where('projection_state', 'in', list(PROJECTION_DISCOVERY_STATES)),
+    }
+    counts: dict[str, int] = {}
+    for leg, query in legs.items():
+        try:
+            counts[leg] = int(query.count().get()[0][0].value)
+        except Exception as error:
+            logger.warning(
+                'event=batch_timeliness_all_time_sample outcome=unavailable leg=%s exception_type=%s',
+                leg,
+                type(error).__name__,
+            )
+    return counts
 
 
 def reseed_hinted_activation(client: Any, namespace: str, key: str, priority: int) -> bool:

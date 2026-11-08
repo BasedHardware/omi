@@ -30,6 +30,7 @@ from config.batch_pipeline import (
     HELD_DEAD_LETTER_SECONDS,
     projection_ghost_settle_enabled,
     projection_ghost_settle_cohort,
+    projection_restorable_cap_expiry_enabled,
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
 
@@ -45,6 +46,7 @@ GHOST_SKIP_CLASSES = (
     'hint_changed',
     'receipt_not_ready',
     'part_quarantined',
+    'target_not_restorable',
     'privacy',
     'binding',
     'job_held',
@@ -72,8 +74,15 @@ def release_counts() -> dict[str, int]:
     }
 
 
+def ghost_age_bucket(entry, now: float) -> str | None:
+    """Committed-age bucket for ghost telemetry; shared by every ghost return path."""
+    committed_at = entry.get('committed_at')
+    age = now - committed_at if finite_timestamp(now) and finite_timestamp(committed_at) else -1
+    return '30d_plus' if age >= 30 * 86400 else '7d' if age >= 7 * 86400 else '1d' if age >= 86400 else None
+
+
 def ghost_class(entry, job, binding, segment_id: str, now: float) -> str:
-    """Classify only transaction-fresh documents; never reads or writes storage."""
+    """Classify transaction-fresh hints; eligibility still requires the target fence before settling."""
     if entry.get('projection_state') != 'quarantine_held':
         return 'hint_changed'
     if (entry.get('projection') or {}).get('state') != 'ready':
@@ -185,8 +194,28 @@ class ProjectionReleaseStore:
         def commit(transaction):
             job = self.store.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
+            # Re-read the stamp inside each transaction: the other scan leg
+            # may already have expired this row and reset its attempt count.
+            if (
+                dead_before is None
+                and entry.get('held_expired_at') is not None
+                and projection_restorable_cap_expiry_enabled()
+            ):
+                return False
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
+            # Multipart summaries can remain ambiguous holds after a privacy
+            # refusal. Fence every receipt before either expiry path or release.
+            if projection_restorable_cap_expiry_enabled() and (
+                entry.get('projection_privacy_refusal')
+                or receipt.get('privacy_reason')
+                or any(part.get('privacy_reason') for part in (entry.get('projection_parts') or {}).values())
+            ):
+                # Report the refusal with the same ghost classification and age
+                # bucket as the gate-failure branch below, so privacy refusals
+                # keep counting in ghost_classified and ghost_skipped_*. The tuple
+                # is read-only: released, expired and ghost_settled stay false.
+                return (ghost_class(entry, job, binding, segment_id, now), ghost_age_bucket(entry, now))
             held_receipt = next(
                 (
                     part
@@ -226,11 +255,7 @@ class ProjectionReleaseStore:
                 # Sibling to the real-held gate: a completed receipt with a
                 # legacy held hint owes discovery, not expiry or reassignment.
                 classification = ghost_class(entry, job, binding, segment_id, now)
-                committed_at = entry.get('committed_at')
-                age = now - committed_at if finite_timestamp(now) and finite_timestamp(committed_at) else -1
-                bucket = (
-                    '30d_plus' if age >= 30 * 86400 else '7d' if age >= 7 * 86400 else '1d' if age >= 86400 else None
-                )
+                bucket = ghost_age_bucket(entry, now)
                 if classification == 'eligible':
                     if dead_before is not None:
                         classification = 'expiry_scan'
@@ -238,6 +263,8 @@ class ProjectionReleaseStore:
                         classification = 'count_only'
                     elif not self.ghost_budget:
                         classification = 'cap'
+                    elif not self._target_restorable(transaction, binding):
+                        classification = 'target_not_restorable'
                     else:
                         cohort, invalid_cohort = projection_ghost_settle_cohort()
                         transaction.update(
@@ -285,6 +312,10 @@ class ProjectionReleaseStore:
                     return 'expired'
                 return False
             if attempts >= MAX_RELEASE_ATTEMPTS:
+                if projection_restorable_cap_expiry_enabled():
+                    # Use the same deadline/one-time CAS as unrestorable holds;
+                    # any release must wait for a later pass after the reset.
+                    return self._expire_assignment(transaction, segment_id, entry, now, expired, attempts)
                 return False
             reset: dict[str, Any] = {
                 'projection_state': 'pending',
@@ -404,7 +435,7 @@ def save_release_cursor(store, after_id: str | None, now: float, *, key=RELEASE_
         )
 
 
-def release_page(
+def release_page_settled(
     store,
     *,
     limit: int,
@@ -414,9 +445,10 @@ def release_page(
     assignment_held: bool = False,
     ghost_budget: int = GHOST_SETTLE_MAX_PER_PASS,
 ):
-    """One bounded page of held rows; returns (counts, next_after)."""
+    """Return (counts, next_after, settled segment ids)."""
     moment = now if now is not None else time.time()
     counts = release_counts()
+    settled = []
     limit = max(1, min(limit, RELEASE_PAGE))
     try:
         page = (
@@ -430,7 +462,7 @@ def release_page(
             'event=batch_projection action=release_held action=fetch outcome=retry exception_type=%s',
             type(error).__name__,
         )
-        return counts, after_id
+        return counts, after_id, settled
     for segment_id in page:
         counts['examined'] += 1
         try:
@@ -443,6 +475,8 @@ def release_page(
                     else 'expired' if release_store.expired else 'released' if released else 'waiting'
                 )
             ] += 1
+            if release_store.ghost_settled:
+                settled.append(segment_id)
             if release_store.ghost_settled or release_store.ghost_skip:
                 counts['ghost_classified'] += 1
             if release_store.ghost_skip:
@@ -458,10 +492,15 @@ def release_page(
             break
     processed = counts['examined']
     next_after = page[processed - 1] if processed and (processed < len(page) or len(page) >= limit) else None
+    return counts, next_after, settled
+
+
+def release_page(*args, **kwargs):
+    counts, next_after, _ = release_page_settled(*args, **kwargs)
     return counts, next_after
 
 
-def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None):
+def release_scan_pass_settled(store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None):
     """Two durable discovery cursors share the existing row and time budgets."""
     start = after_id if after_id is not None else load_release_cursor(store)['after_id']
     limit = max(1, min(limit, RELEASE_PAGE))
@@ -470,6 +509,7 @@ def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, de
     assignment_first = assignment.get('next_first', False) is True
     legs = [True, False] if assignment_first else [False, True] if enabled else [False]
     counts = release_counts()
+    settled = []
     next_after = start
     for index, is_assignment in enumerate(legs):
         first_limit = max(1, limit // 2)
@@ -482,7 +522,7 @@ def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, de
         if index == 0 and enabled and deadline is not None:
             page_deadline = time.monotonic() + max(0, deadline - time.monotonic()) / 2
         cursor = assignment.get('after_id') if is_assignment else start
-        page_counts, after = release_page(
+        page_counts, after, page_settled = release_page_settled(
             store,
             limit=page_limit,
             after_id=cursor,
@@ -491,6 +531,7 @@ def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, de
             assignment_held=is_assignment,
             ghost_budget=GHOST_SETTLE_MAX_PER_PASS - counts['ghost_settled'],
         )
+        settled.extend(page_settled)
         for key, value in page_counts.items():
             counts[key] += value
         if is_assignment:
@@ -507,6 +548,11 @@ def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, de
             key=ASSIGNMENT_RELEASE_CURSOR_KEY,
             next_first=not assignment_first,
         )
+    return counts, next_after, settled
+
+
+def release_scan_pass(*args, **kwargs):
+    counts, next_after, _ = release_scan_pass_settled(*args, **kwargs)
     return counts, next_after
 
 
