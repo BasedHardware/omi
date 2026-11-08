@@ -9226,6 +9226,38 @@
         "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
+      "ConnectorAccess": {
+        "properties": {
+          "client_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Client Ids",
+            "type": "array"
+          },
+          "default_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Scopes",
+            "type": "array"
+          },
+          "required_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_ids",
+          "required_scopes",
+          "default_scopes"
+        ],
+        "title": "ConnectorAccess",
+        "type": "object"
+      },
       "ConnectorSynthesisRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21724,6 +21756,9 @@
             ],
             "title": "App Id"
           },
+          "connector_access": {
+            "$ref": "#/components/schemas/ConnectorAccess"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -21827,6 +21862,14 @@
       },
       "McpOauthGrantsResponse": {
         "properties": {
+          "connector_access": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ConnectorAccess"
+            },
+            "default": {},
+            "title": "Connector Access",
+            "type": "object"
+          },
           "grants": {
             "default": [],
             "items": {
@@ -66418,6 +66461,35 @@
           }
         ],
         "summary": "Create Key",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/keys/scopes": {
+      "get": {
+        "operationId": "get_mcp_key_scope_contract",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Key Scope Contract",
         "tags": [
           "mcp"
         ]

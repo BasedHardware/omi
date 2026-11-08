@@ -1693,6 +1693,32 @@ public enum OmiAPI {
   }
 
 
+  public struct ConnectorAccess: Codable {
+    public let clientIds: [String]
+    public let defaultScopes: [String]
+    public let requiredScopes: [String]
+
+    private enum CodingKeys: String, CodingKey {
+      case clientIds = "client_ids"
+      case defaultScopes = "default_scopes"
+      case requiredScopes = "required_scopes"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      clientIds = try c.decode([String].self, forKey: .clientIds)
+      defaultScopes = try c.decode([String].self, forKey: .defaultScopes)
+      requiredScopes = try c.decode([String].self, forKey: .requiredScopes)
+    }
+
+    public init(clientIds: [String], defaultScopes: [String], requiredScopes: [String]) {
+      self.clientIds = clientIds
+      self.defaultScopes = defaultScopes
+      self.requiredScopes = requiredScopes
+    }
+  }
+
+
   public enum ContextMatchSignal: String, Codable, CaseIterable {
     case app
     case person
@@ -3773,6 +3799,78 @@ public enum OmiAPI {
       }
       let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
       self = LedgerWriteReason(rawValue: unqualified) ?? ._unknown
+    }
+  }
+
+
+  public struct McpApiKeyCreated: Codable {
+    public let appId: String?
+    public let connectorAccess: ConnectorAccess?
+    public let createdAt: String
+    public let id: String
+    public let key: String
+    public let keyPrefix: String
+    public let lastUsedAt: String?
+    public let name: String
+    public let scopes: [String]?
+
+    private enum CodingKeys: String, CodingKey {
+      case appId = "app_id"
+      case connectorAccess = "connector_access"
+      case createdAt = "created_at"
+      case id
+      case key
+      case keyPrefix = "key_prefix"
+      case lastUsedAt = "last_used_at"
+      case name
+      case scopes
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      appId = try c.decodeIfPresent(String.self, forKey: .appId)
+      connectorAccess = try c.decodeIfPresent(ConnectorAccess.self, forKey: .connectorAccess)
+      createdAt = try c.decode(String.self, forKey: .createdAt)
+      id = try c.decode(String.self, forKey: .id)
+      key = try c.decode(String.self, forKey: .key)
+      keyPrefix = try c.decode(String.self, forKey: .keyPrefix)
+      lastUsedAt = try c.decodeIfPresent(String.self, forKey: .lastUsedAt)
+      name = try c.decode(String.self, forKey: .name)
+      scopes = try c.decodeIfPresent([String].self, forKey: .scopes)
+    }
+
+    public init(appId: String? = nil, connectorAccess: ConnectorAccess? = nil, createdAt: String, id: String, key: String, keyPrefix: String, lastUsedAt: String? = nil, name: String, scopes: [String]? = nil) {
+      self.appId = appId
+      self.connectorAccess = connectorAccess
+      self.createdAt = createdAt
+      self.id = id
+      self.key = key
+      self.keyPrefix = keyPrefix
+      self.lastUsedAt = lastUsedAt
+      self.name = name
+      self.scopes = scopes
+    }
+  }
+
+
+  public struct McpOauthGrantsResponse: Codable {
+    public let connectorAccess: [String: ConnectorAccess]?
+    public let grants: [[String: OmiAnyCodable]]?
+
+    private enum CodingKeys: String, CodingKey {
+      case connectorAccess = "connector_access"
+      case grants
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      connectorAccess = try c.decodeIfPresent([String: ConnectorAccess].self, forKey: .connectorAccess)
+      grants = try c.decodeIfPresent([[String: OmiAnyCodable]].self, forKey: .grants)
+    }
+
+    public init(connectorAccess: [String: ConnectorAccess]? = nil, grants: [[String: OmiAnyCodable]]? = nil) {
+      self.connectorAccess = connectorAccess
+      self.grants = grants
     }
   }
 
@@ -14459,7 +14557,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func createKeyV1McpKeysPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func createKeyV1McpKeysPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> McpApiKeyCreated {
     let _path = "/v1/mcp/keys"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14478,7 +14576,27 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(McpApiKeyCreated.self, from: data)
+  }
+
+  public static func getMcpKeyScopeContract(client: OmiApiClient) async throws -> ConnectorAccess {
+    let _path = "/v1/mcp/keys/scopes"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ConnectorAccess.self, from: data)
   }
 
   public static func deleteKeyV1McpKeysKeyIdDelete(client: OmiApiClient, keyId: String) async throws -> Void {
@@ -14647,7 +14765,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getOauthGrantsV1McpOauthGrantsGet(client: OmiApiClient) async throws -> OmiAnyCodable {
+  public static func getOauthGrantsV1McpOauthGrantsGet(client: OmiApiClient) async throws -> McpOauthGrantsResponse {
     let _path = "/v1/mcp/oauth/grants"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14664,7 +14782,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(McpOauthGrantsResponse.self, from: data)
   }
 
   public static func revokeOauthGrantV1McpOauthGrantsGrantIdDelete(client: OmiApiClient, grantId: String) async throws -> Void {
@@ -21340,5 +21458,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 544 Swift client methods generated.
+  // Total: 545 Swift client methods generated.
 }
