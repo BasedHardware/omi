@@ -3206,7 +3206,7 @@ def discard_by_relevance(
     )
 
 
-def restore_conversation_from_discarded(uid: str, conversation_id: str):
+def restore_conversation_from_discarded(uid: str, conversation_id: str, *, return_snapshot: bool = False):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -3244,13 +3244,13 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         stamp_terminal_decision(restored, path='user_restore')
         updates['relevance_decision'] = restored['relevance_decision']
         transaction.update(conversation_ref, updates)
-        return True
+        return restored
 
     restored = run_transactional(db, _restore)
     if restored:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
-    return restored
+    return restored if return_snapshot else bool(restored)
 
 
 # *********************************

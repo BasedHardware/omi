@@ -838,6 +838,13 @@ def reprocess_conversation(
             user_kept=user_kept,
             derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
         )
+    except lifecycle_service.RestoredRecordingRegistrationUnavailable as error:
+        attention_db.finish(uid, operation, 'failed')
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'recording_restore_retry_required', 'message': 'Recording restore needs a retry'},
+            headers={'Retry-After': '1'},
+        ) from error
     except Exception:
         attention_db.finish(uid, operation, 'failed')
         raise
@@ -902,7 +909,7 @@ def execute_reprocess(
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
     # the user's choice (``restore_discarded``) so no later reassessment hides it
     # again, including when the selected app supplies the summary.
-    if was_discarded and not processed_conversation.discarded:
+    if (was_discarded or user_kept) and not processed_conversation.discarded:
         restored = lifecycle_service.restore_discarded(uid, conversation_id)
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'

@@ -21,6 +21,10 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping, Optional
 
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline.live import register_recording
+from utils.sync.stage import current_stage
 from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
 from utils.conversations import merge_conversations_job
@@ -79,6 +83,10 @@ _STATUS_TRANSITIONS = {
 
 class LifecycleTransitionError(ValueError):
     """Raised when an intent would reopen or otherwise violate a terminal lifecycle."""
+
+
+class RestoredRecordingRegistrationUnavailable(RuntimeError):
+    """Restore metadata committed, but its recording obligation needs a retry."""
 
 
 class FinalizationDispatchUnavailable(RuntimeError):
@@ -626,7 +634,30 @@ def discard_by_relevance(
 
 def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
-    return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    restored = conversations_db.restore_conversation_from_discarded(uid, conversation_id, return_snapshot=True)
+    if not restored:
+        return False
+    if restored.get('record_lane_owner') != 'batch_live_v1' or not restored.get('record_audio_closed'):
+        return True
+
+    # The metadata snapshot only decides whether to attempt registration. Read
+    # the current row inside the registration transaction: a second discard,
+    # deletion or ownership change must conflict with or refuse the obligation.
+    def register(tx):
+        current = tx.get('conversations', f'{uid}/{conversation_id}')
+        if not current.get('record_audio_closed'):
+            return False
+        return register_recording(uid, {**current, 'id': conversation_id}, transaction=tx)
+
+    try:
+        registered = FirestoreStore(f'batch_pipeline_{current_stage()}').run(register)
+    except BatchPrivacyBlocked as error:
+        raise RestoredRecordingRegistrationUnavailable(
+            'restored recording registration refused; retry restore'
+        ) from error
+    if not registered:
+        raise RestoredRecordingRegistrationUnavailable('restored recording registration refused; retry restore')
+    return True
 
 
 def open_recording_session(
