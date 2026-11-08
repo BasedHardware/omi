@@ -74,6 +74,13 @@ def release_counts() -> dict[str, int]:
     }
 
 
+def ghost_age_bucket(entry, now: float) -> str | None:
+    """Committed-age bucket for ghost telemetry; shared by every ghost return path."""
+    committed_at = entry.get('committed_at')
+    age = now - committed_at if finite_timestamp(now) and finite_timestamp(committed_at) else -1
+    return '30d_plus' if age >= 30 * 86400 else '7d' if age >= 7 * 86400 else '1d' if age >= 86400 else None
+
+
 def ghost_class(entry, job, binding, segment_id: str, now: float) -> str:
     """Classify transaction-fresh hints; eligibility still requires the target fence before settling."""
     if entry.get('projection_state') != 'quarantine_held':
@@ -204,7 +211,11 @@ class ProjectionReleaseStore:
                 or receipt.get('privacy_reason')
                 or any(part.get('privacy_reason') for part in (entry.get('projection_parts') or {}).values())
             ):
-                return False
+                # Report the refusal with the same ghost classification and age
+                # bucket as the gate-failure branch below, so privacy refusals
+                # keep counting in ghost_classified and ghost_skipped_*. The tuple
+                # is read-only: released, expired and ghost_settled stay false.
+                return (ghost_class(entry, job, binding, segment_id, now), ghost_age_bucket(entry, now))
             held_receipt = next(
                 (
                     part
@@ -244,11 +255,7 @@ class ProjectionReleaseStore:
                 # Sibling to the real-held gate: a completed receipt with a
                 # legacy held hint owes discovery, not expiry or reassignment.
                 classification = ghost_class(entry, job, binding, segment_id, now)
-                committed_at = entry.get('committed_at')
-                age = now - committed_at if finite_timestamp(now) and finite_timestamp(committed_at) else -1
-                bucket = (
-                    '30d_plus' if age >= 30 * 86400 else '7d' if age >= 7 * 86400 else '1d' if age >= 86400 else None
-                )
+                bucket = ghost_age_bucket(entry, now)
                 if classification == 'eligible':
                     if dead_before is not None:
                         classification = 'expiry_scan'

@@ -487,6 +487,35 @@ def test_restorable_at_cap_multipart_privacy_is_read_only(
     assert client.rows == before
 
 
+@pytest.mark.parametrize('privacy_location', ['summary', 'refusal'])
+def test_flag_on_privacy_refusal_counts_ghost_class_in_scan(monkeypatch, privacy_location):
+    from copy import deepcopy
+    from database import batch_pipeline_projection_release as release
+
+    monkeypatch.setenv(CAP_EXPIRY_FLAG, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    seeded = ghost_rows()
+    if privacy_location == 'refusal':
+        seeded[RESULT_KEY]['projection_privacy_refusal'] = True
+    else:
+        seeded[RESULT_KEY]['projection']['privacy_reason'] = 'conversation_deleted'
+    before = deepcopy(seeded)
+    client, store = store_for(seeded)
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['held'])
+    monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: [])
+    counts, _, settled = release.release_scan_pass_settled(store, limit=1, after_id=None, now=GHOST_NOW)
+    # Refused rows stay read-only, but they are still classified and counted.
+    assert settled == []
+    assert counts['examined'] == counts['ghost_classified'] == 1
+    assert counts['ghost_skipped_privacy'] == 1
+    assert counts['released'] == counts['expired'] == counts['ghost_settled'] == 0
+    # The scan advances its own cursor rows; the held data must not change.
+    held_collections = {'batch_pipeline_prod_results', 'batch_pipeline_prod_jobs'}
+    assert {k: v for k, v in client.rows.items() if k[0] in held_collections} == {
+        k: v for k, v in before.items() if k[0] in held_collections
+    }
+
+
 def test_restorable_at_cap_multipart_without_privacy_expires_once(monkeypatch):
     from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
 
