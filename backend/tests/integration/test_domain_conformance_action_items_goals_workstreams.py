@@ -867,7 +867,7 @@ def test_event_limit_precedes_payload_validation(domain_backend, domain):
     assert [event.event_id for event in read(100)] == [good.event_id]
 
 
-@pytest.mark.parametrize('sequence', ['2', '9' * 40, 1e25])
+@pytest.mark.parametrize('sequence', ['2', '9' * 40, 1e18, 1e25])
 def test_event_sequences_preserve_valid_coercions_without_bigint_overflow(domain_backend, sequence):
     h = domain_backend
     sid, goal, ws = workflow(h, 'event-coercion')
@@ -882,10 +882,11 @@ def test_event_sequences_preserve_valid_coercions_without_bigint_overflow(domain
         h.seed(sid, entity, parent + '/large', {**good.model_dump(), 'event_id': 'large', 'sequence': sequence})
     # Goal order_by includes strings; the model accepts integer strings beyond bigint.
     events = goals.list_progress_events(goal.id, limit=1)
-    assert [(e.event_id, e.sequence) for e in events] == [('large', int(sequence))]
-    # Numeric inequality excludes strings, but accepts an integral double beyond bigint.
+    expected_goal = [] if isinstance(sequence, float) and sequence > 2**63 - 1 else [('large', int(sequence))]
+    assert [(e.event_id, e.sequence) for e in events] == expected_goal
+    # Numeric inequality excludes strings; the model rejects doubles beyond bigint.
     expected = [(good_ws.event_id, good_ws.sequence)]
-    if not isinstance(sequence, str):
+    if isinstance(sequence, float) and sequence <= 2**63 - 1:
         expected.append(('large', int(sequence)))
     assert [(e.event_id, e.sequence) for e in streams.list_events(ws.workstream_id)] == expected
     assert [e.event_id for e in streams.list_events(ws.workstream_id, limit=1)] == [good_ws.event_id]
