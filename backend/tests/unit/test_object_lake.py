@@ -31,7 +31,9 @@ def storage(tmp_path, monkeypatch):
     monkeypatch.setattr(
         space_keys, 'space_key_firestore_client', lambda client=None: store if client is None else client
     )
-    bucket = LocalStorageClient(tmp_path).bucket('lake-test')
+    storage_client = LocalStorageClient(tmp_path)
+    monkeypatch.setattr(lake, 'create_storage_client', lambda: storage_client)
+    bucket = storage_client.bucket('lake-test')
     with patch.object(lake, '_lake_bucket', return_value=bucket):
         yield bucket, store
     space_keys.clear_space_key_cache()
@@ -642,6 +644,8 @@ def test_conversation_fence_refuses_put_before_storage_or_keys(storage, monkeypa
 def test_late_upload_self_deletes_after_conversation_purge_final_listing(storage, monkeypatch):
     from utils.other import lake_wipe
 
+    monkeypatch.setattr(lake_wipe, 'schedule_conversation_lake_repurge', Mock())
+
     bucket, store = storage
     original = LocalBlob.upload_from_string
     events = []
@@ -684,7 +688,7 @@ def test_create_only_retry_does_not_delete_reused_referenced_object(storage, mon
         put()
     monkeypatch.setattr(LocalBlob, 'reload', original)
     assert bucket.blob(ref.key).exists()
-    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
     # The deleting orchestrator, rather than the retry, owns referenced content.
     assert lake.delete_space_entity('s', 'c') == 1
 

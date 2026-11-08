@@ -65,17 +65,15 @@ def delete_conversation_and_frame_evidence(
     )
     storage_ids = list(dict.fromkeys(photo_storage_ids + request_storage_ids))
     frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
-    conversation = None
-    if lake_wipe.config.bucket():
-        # Deletion inventory must survive a previous attempt that removed the
-        # pointer's blob but failed before metadata cleanup.
-        try:
-            conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
-        except Exception:
-            raise object_lake.LakeFetchError('Lake conversation inventory unavailable') from None
-        source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
-        lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
-    if default_deleter is not None and conversation is not None:
+    # Deletion inventory must survive a previous attempt that removed the
+    # pointer's blob but failed before metadata cleanup.
+    try:
+        conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
+    except Exception:
+        raise object_lake.LakeFetchError('Lake conversation inventory unavailable') from None
+    source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
+    lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
+    if default_deleter is not None:
         default_deleter(uid, conversation_id, conversation_row=conversation)
     else:
         deleter(uid, conversation_id)

@@ -125,9 +125,9 @@ def test_local_write_settings_remain_available(monkeypatch, stage):
     assert object_lake.write_admitted('owner')
 
 
-def test_quiescence_bound_covers_maximum_put_budget_and_ten_minute_margin(monkeypatch):
+def test_quiescence_bound_is_a_fixed_day_independent_of_put_budget(monkeypatch):
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '60')
-    assert object_lake.put_quiescence_seconds() >= object_lake.put_deadline_seconds() + 600
+    assert object_lake.put_quiescence_seconds() == 24 * 60 * 60
     bound = object_lake.put_quiescence_seconds()
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '1')
     assert object_lake.put_quiescence_seconds() == bound
@@ -137,4 +137,4 @@ def test_zero_drain_keeps_positive_put_budget_and_fixed_quiescence(monkeypatch):
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '0')
     assert object_lake.wipe_drain_seconds() == 0
     assert object_lake.put_deadline_seconds() == 5
-    assert object_lake.put_quiescence_seconds() == 630
+    assert object_lake.put_quiescence_seconds() == 86400

@@ -34,6 +34,10 @@ def test_conversation_frame_read_requires_owner_conversation_and_photo(monkeypat
 
 
 def test_conversation_frame_deletion_outboxes_before_metadata_and_retries_failed_pixels(monkeypatch):
+    from utils.other import lake_wipe
+
+    monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', lambda *args: None)
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
     events = []
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
@@ -84,9 +88,15 @@ def test_conversation_frame_deletion_outboxes_before_metadata_and_retries_failed
 
 
 def test_conversation_frame_deletion_defaults_to_sync_sources_deleter(monkeypatch):
+    from utils.other import lake_wipe
+
+    monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', lambda *args: None)
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
     events = []
     merge_mod = ModuleType("utils.conversations.merge_conversations")
-    merge_mod.delete_conversation_with_sync_sources = lambda uid, cid: events.append(("sync-sources", uid, cid))
+    merge_mod.delete_conversation_with_sync_sources = lambda uid, cid, **kwargs: events.append(
+        ("sync-sources", uid, cid)
+    )
     monkeypatch.setitem(sys.modules, "utils.conversations.merge_conversations", merge_mod)
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
@@ -151,7 +161,9 @@ def test_lake_purge_precedes_doc_delete_and_includes_deduped_donors(monkeypatch)
     )
     monkeypatch.setattr(object_lake, 'delete_space_entity', lambda uid, cid: events.append(('lake', uid, cid)) or 1)
     monkeypatch.setattr(
-        object_lake, 'delete_entity_upload_candidates', lambda uid, cid: events.append(('candidates', uid, cid)) or 1
+        object_lake,
+        'delete_entity_upload_candidates',
+        lambda uid, cid, **kw: events.append(('candidates', uid, cid)) or 1,
     )
     conversation_frame_evidence.delete_conversation_and_frame_evidence(
         'u', 'c', delete_conversation=lambda *args: events.append('delete')
@@ -169,7 +181,7 @@ def test_lake_purge_precedes_doc_delete_and_includes_deduped_donors(monkeypatch)
     ]
 
 
-def test_lake_dark_deletion_does_no_lake_or_conversation_inventory_io(monkeypatch):
+def test_lake_dark_deletion_still_purges_candidate_bindings(monkeypatch):
     from utils.other import object_lake
 
     events = []
@@ -179,12 +191,17 @@ def test_lake_dark_deletion_does_no_lake_or_conversation_inventory_io(monkeypatc
     def forbidden(*args):
         raise AssertionError('lake-dark delete performed IO')
 
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', forbidden)
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
+    monkeypatch.setattr(
+        object_lake,
+        'delete_entity_upload_candidates',
+        lambda uid, cid, **kw: events.append(('candidates', uid, cid)) or 0,
+    )
     monkeypatch.setattr(object_lake, 'delete_space_entity', forbidden)
     conversation_frame_evidence.delete_conversation_and_frame_evidence(
         'u', 'c', delete_conversation=lambda *args: events.append('delete')
     )
-    assert events == ['outbox', 'delete', 'requests']
+    assert events == ['outbox', ('candidates', 'u', 'c'), 'delete', 'requests']
 
 
 def test_lake_failure_prevents_doc_delete(monkeypatch):

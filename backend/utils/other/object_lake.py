@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable
 import hashlib
 import os
 import re
@@ -289,7 +289,7 @@ def _upload_candidate(bucket: str, key: str):
     _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True)
     # Only a returned put settles. A raised storage error or process loss can
     # leave the remote outcome ambiguous, so the attempt stays in flight until
-    # the quiescence bound ages it out.
+    # a re-purge after the 24-hour request assumption permits erasure.
 
 
 def _record_upload_candidate(bucket: str, key: str) -> str:
@@ -348,6 +348,13 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_f
     _, _, space_id, _, entity_id, _ = key.split('/')
     tombstone = client.collection('users').document(space_id).collection('deleted_conversations').document(entity_id)
 
+    # Storage IO stays outside the transaction. A tombstone that appears later
+    # leaves a settled row for the deleting orchestrator rather than erasing it
+    # without a recorded-bucket absence check.
+    purged = delete_if_fenced and tombstone.get().exists
+    if purged:
+        _delete_candidate_object({'bucket': bucket, 'key': key})
+
     @firestore.transactional
     def settle(transaction):
         snapshot = candidate.get(transaction=transaction)
@@ -355,7 +362,7 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_f
             return  # Never recreate discovery after the wipe's final erasure.
         pending = dict((snapshot.to_dict() or {}).get('in_flight', {}))
         pending.pop(attempt, None)
-        if delete_if_fenced and not pending and tombstone.get(transaction=transaction).exists:
+        if purged and not pending and tombstone.get(transaction=transaction).exists:
             transaction.delete(candidate)
         else:
             transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
@@ -372,8 +379,9 @@ def assert_space_uploads_quiescent(space_id: str, *, now: datetime | None = None
     """Fail closed until every pre-fence request is settled or safely aged out.
 
     Call only behind the durable owner fence, before final prefix verification.
-    The bound uses the maximum permitted put budget plus ten minutes, so a
-    configuration change cannot shorten the lifetime of an admitted request.
+    Unsettled requests wait 24 hours under the explicit assumption that no
+    storage request can commit a day after admission. Final erasure must still
+    re-delete and verify each recorded bucket binding.
     """
     now = now if now is not None else datetime.now(timezone.utc)
     try:
@@ -391,7 +399,7 @@ def assert_space_uploads_quiescent(space_id: str, *, now: datetime | None = None
         raise LakeFetchError('Lake upload quiescence unavailable') from None
 
 
-def _candidate_is_quiescent(row: dict, now: datetime) -> bool:
+def _candidate_pending(row: dict) -> dict:
     pending = row.get('in_flight')
     if pending is None:
         pending = {'legacy': row.get('created_at')}
@@ -403,22 +411,63 @@ def _candidate_is_quiescent(row: dict, now: datetime) -> bool:
         and row.get('settled') is not True
     ):
         raise LakeFetchError('Lake upload candidate state invalid')
-    quiescent = True
     for admitted_at in pending.values():
         if not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None:
             raise LakeFetchError('Lake upload admission time unavailable')
-        if (now - admitted_at).total_seconds() <= config.put_quiescence_seconds():
-            quiescent = False
-    return quiescent
+    return pending
+
+
+def _candidate_newest_admission(row: dict) -> datetime:
+    pending = _candidate_pending(row)
+    admitted = row.get('admitted_at', row.get('created_at'))
+    if not isinstance(admitted, datetime) or admitted.tzinfo is None:
+        raise LakeFetchError('Lake upload admission time unavailable')
+    return max([admitted, *pending.values()])
+
+
+def _candidate_is_quiescent(row: dict, now: datetime) -> bool:
+    return (
+        not _candidate_pending(row)
+        or (now - _candidate_newest_admission(row)).total_seconds() > config.put_quiescence_seconds()
+    )
+
+
+def _delete_candidate_object(row: dict) -> None:
+    """Purge the recorded binding even after bucket config changes or is removed."""
+    bucket_name, key = row.get('bucket'), row.get('key')
+    try:
+        bucket_name = _segment(bucket_name)
+        if not isinstance(key, str) or len(key.split('/')) != 6:
+            raise ValueError('Invalid candidate key')
+        for segment in key.split('/'):
+            _segment(segment)
+        bucket = _lake_bucket() if bucket_name == config.bucket() else create_storage_client().bucket(bucket_name)
+        blob = bucket.blob(key)
+        try:
+            blob.delete()
+        except NotFound:
+            pass
+        if blob.exists():
+            raise LakePurgeIncomplete('Lake candidate object remains after deletion')
+    except ObjectLakeError:
+        raise
+    except Exception:
+        raise LakeFetchError('Lake candidate recorded-bucket purge unavailable') from None
 
 
 def delete_entity_upload_candidates(
-    space_id: str, entity_id: str, *, now: datetime | None = None, firestore_client=None
+    space_id: str,
+    entity_id: str,
+    *,
+    now: datetime | None = None,
+    firestore_client=None,
+    erase_expired: bool = False,
+    schedule_repurge: Callable[[datetime], None] | None = None,
 ) -> int:
-    """After verified entity purge, erase settled/aged intents behind its fence.
+    """Purge recorded objects; retain unsettled discovery for a delayed re-purge.
 
-    Young live attempts retain discovery until their fenced writer cleans up and
-    settles. Worker loss leaves discovery for account wipe or C3's janitor.
+    Normal conversation deletion only erases settled rows, regardless of age.
+    The delayed handler may erase expired attempts after repeating storage IO.
     """
     now = now if now is not None else datetime.now(timezone.utc)
     try:
@@ -430,11 +479,14 @@ def delete_entity_upload_candidates(
         collection = client.collection('lake_upload_candidates')
 
         @firestore.transactional
-        def erase(transaction, candidate):
+        def erase(transaction, candidate, purged_row):
             if not tombstone.get(transaction=transaction).exists:
                 raise LakeWriteFenced('Candidate purge requires conversation deletion fence')
             snapshot = candidate.get(transaction=transaction)
-            if snapshot.exists and _candidate_is_quiescent(snapshot.to_dict() or {}, now):
+            row = snapshot.to_dict() or {}
+            # Admission is fenced, but settlement can race storage IO. Retry any
+            # changed state rather than erase discovery we have not checked.
+            if snapshot.exists and row == purged_row:
                 transaction.delete(candidate)
                 return 1
             return 0
@@ -444,8 +496,19 @@ def delete_entity_upload_candidates(
             lo = f'{base}{data_class}/{_segment(entity_id)}/'
             hi = lo[:-1] + '0'
             query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
-            for row in query.stream():
-                count += erase(client.transaction(), collection.document(row.id))
+            for snapshot in query.stream():
+                if not tombstone.get().exists:
+                    raise LakeWriteFenced('Candidate purge requires conversation deletion fence')
+                row = snapshot.to_dict() or {}
+                pending = _candidate_pending(row)
+                _delete_candidate_object(row)
+                if pending and not (erase_expired and _candidate_is_quiescent(row, now)):
+                    if schedule_repurge is not None:
+                        schedule_repurge(
+                            _candidate_newest_admission(row) + timedelta(seconds=config.put_quiescence_seconds())
+                        )
+                    continue
+                count += erase(client.transaction(), collection.document(snapshot.id), row)
         return count
     except ObjectLakeError:
         raise
@@ -494,7 +557,9 @@ def _check_put_authority(space_id, entity_id, blob, *, created, deadline, attemp
         # The candidate cannot acquire a live reference after the durable
         # account/conversation fence, and its pointer has not been returned.
         if not created:
-            _settle_upload_candidate(config.bucket(), blob.name, attempt, delete_if_fenced=True)
+            # Preserve the referenced object and its discovery until the
+            # deleting orchestrator purges it; a replay did not create it.
+            _settle_upload_candidate(config.bucket(), blob.name, attempt)
             raise
         try:
             blob.delete(if_generation_match=blob.generation)
@@ -612,21 +677,28 @@ def _purge_prefix(prefix: str) -> int:
         raise LakeFetchError('Lake prefix deletion unavailable') from None
 
 
-def delete_space_upload_candidates(space_id: str, *, firestore_client=None) -> int:
+def delete_space_upload_candidates(space_id: str, *, now: datetime | None = None, firestore_client=None) -> int:
     """Erase user-derived intents after the fenced owner prefix is verified absent.
 
     Key-range discovery also covers abandoned intents with no object or pointer.
     No bucket filter: a config change must not strand the owner's old intents.
     The release pin matches delete_space_prefix; widen both on a release bump.
     """
+    now = now if now is not None else datetime.now(timezone.utc)
     try:
         client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
         lo, hi = _space_candidate_key_range(space_id)
         collection = client.collection('lake_upload_candidates')
         query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
         count = 0
-        for row in query.stream():
-            collection.document(row.id).delete()
+        for snapshot in query.stream():
+            row = snapshot.to_dict() or {}
+            if not _candidate_is_quiescent(row, now):
+                raise LakeFetchError('Lake uploads still in flight; retry wipe later')
+            # Repeat per binding immediately before erasure, including old buckets
+            # and unsettled attempts released by the 24-hour assumption.
+            _delete_candidate_object(row)
+            collection.document(snapshot.id).delete()
             count += 1
         if next(iter(query.limit(1).stream()), None) is not None:
             raise LakeFetchError('Lake upload candidates remain after purge')

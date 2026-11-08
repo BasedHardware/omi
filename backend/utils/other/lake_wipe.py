@@ -1,5 +1,8 @@
 """Required lake erasure steps, outside database transactions and behind owner fences."""
 
+import hashlib
+import math
+import os
 import time
 from datetime import datetime, timezone
 
@@ -9,6 +12,7 @@ from config import object_lake as config
 from database import users as users_db
 from database.account_deletion_policy import account_deletion_blocks_access
 from utils.other import object_lake, space_keys
+from utils.cloud_tasks import enqueue_named_task
 
 
 def purge_owner_lake_content(uid: str) -> dict:
@@ -39,15 +43,13 @@ def destroy_owner_lake_keys(uid: str, *, now: datetime | None = None) -> dict:
     if config.bucket():
         object_lake.delete_space_prefix(uid)
     # An absent bucket must not strand existing owner-derived Firestore intents.
-    object_lake.delete_space_upload_candidates(uid)
+    object_lake.delete_space_upload_candidates(uid, now=now)
     count = space_keys.destroy_space_keys(uid)
     return {'status': 'destroyed', 'versions_destroyed': count}
 
 
 def purge_conversation_lake_objects(uid: str, conversation_id: str, source_ids=()) -> int:
     """Purge the conversation and merge donors before deleting their documents."""
-    if not config.bucket():
-        return 0
     entity_ids = [entity_id for entity_id in dict.fromkeys([conversation_id, *source_ids]) if entity_id]
     # Fence every donor before the first listing, including callers that do not
     # record the public route's intent. Preserve existing tombstone bindings.
@@ -55,9 +57,51 @@ def purge_conversation_lake_objects(uid: str, conversation_id: str, source_ids=(
         _fence_conversation_uploads(uid, entity_id)
     count = 0
     for entity_id in entity_ids:
-        count += object_lake.delete_space_entity(uid, entity_id)
-        object_lake.delete_entity_upload_candidates(uid, entity_id)
+        if config.bucket():
+            count += object_lake.delete_space_entity(uid, entity_id)
+        object_lake.delete_entity_upload_candidates(
+            uid, entity_id, schedule_repurge=lambda due: schedule_conversation_lake_repurge(uid, entity_id, due)
+        )
     return count
+
+
+def schedule_conversation_lake_repurge(uid: str, entity_id: str, due: datetime) -> None:
+    """Reuse the existing sync task queue/identity; no new infrastructure bindings."""
+    handler = os.getenv('SYNC_TASKS_HANDLER_URL', '').strip()
+    suffix = '/v2/sync-jobs/run'
+    if not handler.endswith(suffix):
+        raise object_lake.LakeFetchError('Lake re-purge requires the configured sync task handler')
+    # Strictly older than 24 hours, including fractional admission timestamps.
+    schedule_at = max(math.floor(due.timestamp()) + 1, math.floor(time.time()) + 1)
+    digest = hashlib.sha256(f'{uid}/{entity_id}/{schedule_at}'.encode()).hexdigest()
+    try:
+        enqueue_named_task(
+            os.getenv('SYNC_TASKS_QUEUE', ''),
+            handler.removesuffix(suffix) + '/internal/lake/conversation-repurge',
+            f'lake-repurge-{digest}',
+            {'space_id': uid, 'entity_id': entity_id},
+            audience=os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or handler,
+            schedule_at=schedule_at,
+        )
+    except Exception:
+        raise object_lake.LakeFetchError('Lake delayed re-purge scheduling unavailable') from None
+
+
+def repurge_conversation_lake_objects(uid: str, entity_id: str, *, now: datetime | None = None) -> int:
+    """Delayed retry: re-delete recorded buckets before expiring lost attempts."""
+
+    # Early deliveries must retry, not acknowledge a task whose work is pending.
+    def still_pending(_due: datetime) -> None:
+        raise object_lake.LakeFetchError('Lake uploads still in flight; retry re-purge later')
+
+    # Require the durable deletion fence even on duplicate/early task deliveries.
+    return object_lake.delete_entity_upload_candidates(
+        uid,
+        entity_id,
+        now=now,
+        erase_expired=True,
+        schedule_repurge=still_pending,
+    )
 
 
 def _fence_conversation_uploads(uid: str, conversation_id: str) -> None:

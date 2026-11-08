@@ -225,9 +225,10 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
 def _real_lake_delete(monkeypatch, tmp_path):
     from services import conversation_frame_evidence
     from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
-    from utils.other import object_lake, space_keys
+    from utils.other import object_lake, space_keys, lake_wipe
     from utils.other.local_storage import LocalStorageClient
 
+    monkeypatch.setattr(lake_wipe, 'schedule_conversation_lake_repurge', MagicMock())
     store = StrictFirestore()
     bucket = LocalStorageClient(tmp_path).bucket('synthetic-lake')
     for key, value in {
@@ -312,3 +313,45 @@ def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monke
         assert statuses == [204]
         assert not doc.get().exists and not list(bucket.list_blobs())
         deleted.assert_called_once()
+
+
+@pytest.mark.parametrize('outcome', ['success', 'failure', 'unauthorized'])
+def test_delayed_lake_repurge_route_is_oidc_protected_and_retryable(monkeypatch, outcome):
+    from utils.other import lake_wipe, object_lake
+
+    app = FastAPI()
+    app.include_router(conversations.router)
+    purge = MagicMock()
+    monkeypatch.setattr(lake_wipe, 'repurge_conversation_lake_objects', purge)
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
+    monkeypatch.delenv('SYNC_TASKS_HANDLER_URL', raising=False)
+    if outcome != 'unauthorized':
+        app.dependency_overrides[conversations.verify_cloud_tasks_oidc] = lambda: 0
+    if outcome == 'failure':
+        purge.side_effect = object_lake.LakeFetchError('storage unavailable')
+    with TestClient(app) as client:
+        response = client.post('/internal/lake/conversation-repurge', json={'space_id': 's', 'entity_id': 'c'})
+    assert response.status_code == {'success': 204, 'failure': 503, 'unauthorized': 403}[outcome]
+    if outcome == 'unauthorized':
+        purge.assert_not_called()
+    else:
+        purge.assert_called_once_with('s', 'c')
+    assert '/internal/lake/conversation-repurge' not in app.openapi()['paths']
+
+
+def test_delayed_lake_repurge_rejects_invalid_payload(monkeypatch):
+    from utils.other import lake_wipe
+
+    app = FastAPI()
+    app.include_router(conversations.router)
+    app.dependency_overrides[conversations.verify_cloud_tasks_oidc] = lambda: 0
+    purge = MagicMock()
+    monkeypatch.setattr(lake_wipe, 'repurge_conversation_lake_objects', purge)
+    with TestClient(app) as client:
+        assert (
+            client.post(
+                '/internal/lake/conversation-repurge', json={'space_id': 's/other', 'entity_id': 'c'}
+            ).status_code
+            == 422
+        )
+    purge.assert_not_called()

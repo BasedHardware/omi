@@ -120,5 +120,9 @@ def put_deadline_seconds() -> float:
 
 
 def put_quiescence_seconds() -> float:
-    """Maximum put-success budget plus a fixed ten-minute request safety margin."""
-    return _MAX_WIPE_DRAIN_SECONDS / 2 + 600
+    """Assume no storage request can commit 24 hours after its admission.
+
+    SDK socket budgets are not total request deadlines. Expiry requires another
+    recorded-bucket delete and absence check before discovery may be erased.
+    """
+    return 24 * 60 * 60
