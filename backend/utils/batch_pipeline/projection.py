@@ -602,7 +602,7 @@ class Projector:
             except SyncAssignmentConflict as error:
                 if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
-                receipt = persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True, hold_reason='conflict')
                 if receipt.get('state') == 'quarantined':
                     log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
@@ -887,7 +887,7 @@ class Projector:
         try:
             policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
             session = self.store.session(segment_id, binding, self.clock(), policy=policy)
-            persist_disposition(session, quarantined=True)
+            persist_disposition(session, quarantined=True, hold_reason='poison_head')
             return True
         except Exception as error:
             logger.error(
@@ -1073,13 +1073,13 @@ class Projector:
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:
-                receipt = persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True, hold_reason='ambiguous_generation')
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
             except SyncAssignmentConflict as error:
                 if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
-                receipt = persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True, hold_reason='conflict')
                 if receipt.get('state') == 'quarantined':
                     log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
@@ -1114,7 +1114,7 @@ class Projector:
         assignment conflict: quarantine receipt, watermark advance, recovery
         owns the unit, audio retained."""
         session = session or self.store.session(item.segment_id, binding, self.clock(), policy=policy)
-        receipt = persist_disposition(session, quarantined=True)
+        receipt = persist_disposition(session, quarantined=True, hold_reason='payload_contract')
         logger.warning(
             'event=batch_projection action=assignment outcome=payload_contract_quarantined exception_type=%s%s',
             error_type(error),
