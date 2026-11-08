@@ -26,10 +26,29 @@ def _method_calls(function: ast.FunctionDef) -> list[str]:
     return names
 
 
+def _is_account_deletion_document_call(node: ast.expr) -> bool:
+    return (
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'account_deletion_document'
+    )
+
+
 def test_feedback_writer_uses_update_and_never_set():
     calls = _method_calls(_feedback_function())
     assert 'update' in calls
     assert 'set' not in calls, 'a set() here can create a marker with no wipe_status'
+
+
+def test_feedback_update_targets_the_marker_document():
+    # Method name alone is not enough: the update must go to the marker doc itself.
+    updates_marker = [
+        node
+        for node in ast.walk(_feedback_function())
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == 'update'
+        and _is_account_deletion_document_call(node.func.value)
+    ]
+    assert updates_marker, 'feedback must call .update() on account_deletion_document(uid)'
 
 
 def test_feedback_writer_has_no_merge_true_write():

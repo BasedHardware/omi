@@ -146,6 +146,9 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
         w.user.update({'private_cloud_sync_enabled': False})
     if writer in {'account_marker_complete', 'account_marker_late_cleanup'}:
         w.client.document(f'account_deletions/{w.uid}').set({'wipe_status': 'cancelled'})
+    if writer == 'account_marker_create':
+        # Feedback is update-only: it attaches to an existing marker and never creates one.
+        w.client.document(f'account_deletions/{w.uid}').set({'wipe_status': 'pending'})
     if writer in {'recording_delete', 'hard_delete', 'sync_merge', 'smart_merge'}:
         w.source.update({'deleted': True, 'sync_merged_into': 'target'})
         w.user.collection('conversations').document('target').set({'id': 'target', 'status': 'in_progress'})
