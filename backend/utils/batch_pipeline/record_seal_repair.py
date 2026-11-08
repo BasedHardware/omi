@@ -84,6 +84,9 @@ def seal_refusal(
 
 def observe_orphan_parked(job, row, refusal, *, seal_path):
     """Aggregate-only telemetry; no identities, dispositions or writes change."""
+    if row is None:
+        # A deleted conversation has no discarded state to observe; never raise here.
+        return
     if refusal == 'privacy_refused' and row.get('discarded') and job.get('registration_origin') == 'restore':
         try:
             logging.getLogger(__name__).info(

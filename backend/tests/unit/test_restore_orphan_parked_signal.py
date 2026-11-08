@@ -138,3 +138,22 @@ def test_transaction_callback_repetition_does_not_duplicate_signal(source, site,
 
     monkeypatch.setattr(module, 'run_transactional', repeated)
     check_pass(source, site, caplog, 1)
+
+
+def test_restore_origin_job_with_deleted_conversation_neither_raises_nor_signals(source, caplog):
+    store, client = source
+    client.rows.pop(ROW_PATH)
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=repair.__name__):
+        plan = nojob.plan_backfill(store, [PATH], None, None, server_flags=SERVER)
+        assert nojob.apply_backfill(store, plan, plan['plan_sha256']) == {'already_registered': 1}
+    assert plan['entries'][0]['disposition'] == 'already_registered'
+    assert not [record for record in caplog.records if 'outcome=orphan_parked' in record.getMessage()]
+    assert client.rows[JOB_PATH]['state'] == 'record_pending'
+
+
+def test_repair_observer_tolerates_missing_conversation_row(caplog):
+    job = {'registration_origin': 'restore', 'state': 'record_pending'}
+    with caplog.at_level(logging.INFO, logger=repair.__name__):
+        repair.observe_orphan_parked(job, None, 'privacy_refused', seal_path='repair')
+    assert not [record for record in caplog.records if 'outcome=orphan_parked' in record.getMessage()]

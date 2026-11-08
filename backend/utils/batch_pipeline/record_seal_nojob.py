@@ -115,15 +115,16 @@ def observe_existing_orphan(observation, producer_proof, *, repair_upload_failed
     """Inspect only the existing snapshot, after the transaction has finished."""
     if not observation:
         return
-    job, row = observation['job'], observation['row']
-    if job.get('registration_origin') != 'restore' or not row.get('discarded'):
-        return
     try:
+        # The conversation row may be missing (deleted). Guard inside the try so the
+        # telemetry-only check can neither raise nor change the already_registered result.
+        job, row = observation['job'], observation['row']
+        if row is None or job.get('registration_origin') != 'restore' or not row.get('discarded'):
+            return
         reason = seal_refusal(job, row, producer_proof=producer_proof, repair_upload_failed=repair_upload_failed)
+        observe_orphan_parked(job, row, reason, seal_path='nojob')
     except Exception:
-        # A telemetry-only check must not change the already_registered result.
         return
-    observe_orphan_parked(job, row, reason, seal_path='nojob')
 
 
 def registration(tx, uid, cid, row, server_flags):
