@@ -25,7 +25,7 @@ import zlib
 from collections.abc import Mapping
 from functools import partial, wraps
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Callable, Tuple
+from typing import List, Optional, Dict, Any, Callable, Literal, Tuple, overload
 from database import chat_edits
 from database.dream_dirty import after_write
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -3204,6 +3204,18 @@ def discard_by_relevance(
         )
         == 'discarded'
     )
+
+
+@overload
+def restore_conversation_from_discarded(
+    uid: str, conversation_id: str, *, return_snapshot: Literal[True]
+) -> Optional[dict]: ...
+
+
+@overload
+def restore_conversation_from_discarded(
+    uid: str, conversation_id: str, *, return_snapshot: Literal[False] = ...
+) -> bool: ...
 
 
 def restore_conversation_from_discarded(uid: str, conversation_id: str, *, return_snapshot: bool = False):
