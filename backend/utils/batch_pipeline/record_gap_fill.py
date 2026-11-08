@@ -23,6 +23,7 @@ Custody rules:
 - Logs and metrics carry only hashed keys and closed vocabularies.
 """
 
+import asyncio
 import hashlib
 import io
 import logging
@@ -509,6 +510,12 @@ async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) ->
                 deadline,
                 units,
             )
+    except asyncio.CancelledError:
+        # Cancelling the await cannot stop a storage thread still writing, so
+        # never release the lease under it: it lapses on its own, after the
+        # write deadline. The drain then admits on its normal pass.
+        lease = None
+        raise
     except Exception:
         outcome = 'failed'
     finally:

@@ -5,7 +5,10 @@ before it writes. In the claim transaction it sets the `record_pending` job's
 `available_at` to `now + FILL_LEASE_SECONDS` (600 s); `due` and the drain's
 `claim` skip the row until then, so no admission lists retained audio mid-fill.
 A live lease is reported `skipped_busy` and nothing is written. The write stops
-on a piece boundary `LEASE_MARGIN_SECONDS` before the lease ends. After the
+on a piece boundary `LEASE_MARGIN_SECONDS` before the lease ends, measured
+from before the gates, and each piece upload is bounded inside that margin. A
+cancelled request leaves the lease to lapse rather than releasing it under a
+storage thread that may still be writing. After the
 write, one transaction re-checks privacy and that the job is still
 `record_pending` under this exact lease, then releases it to the claim's clock.
 If either check fails the outcome is `raced` and the lease is left to whoever
@@ -24,9 +27,12 @@ object, inside `[started_at - 1 s, finished_at + 1 s]`. Privacy is re-checked
 after the read. Any other result keeps today's 503. No state is written, so a
 retry gets the same answer.
 
-Neither bucket has a lifecycle delete on `chunks/` (the private bucket's
-Coldline transition matches only `.batch.*`, which never counts); the batch
-staging bucket, which expires objects at 30 days, is never listed or counted.
+No lifecycle rule can delete a counted object. In the applied rules and in
+`deploy/storage-lifecycle/prod.json`, the private bucket's only `chunks/` rules
+are a Coldline transition for `.batch.*` and a delete of noncurrent `.opus.enc`
+versions; neither suffix is ever counted, and the delete never touches a live
+object. The derived bucket has no rules. The batch staging bucket, which
+expires objects at 30 days, is never listed or counted.
 
 Counters: `omi_record_gap_fill_total{outcome}` gains `skipped_busy` and `raced`;
 `omi_record_retained_ack_total{outcome}` is new. Both pass closed enums through

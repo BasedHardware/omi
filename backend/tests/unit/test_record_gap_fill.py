@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import os
+import threading
 import time
 from types import SimpleNamespace
 import wave
@@ -1105,3 +1106,38 @@ def test_each_piece_upload_is_bounded_inside_the_lease_margin(world):
     (call,) = world.bucket.calls
     margin = record_gap_fill.LEASE_MARGIN_SECONDS
     assert call['timeout'] + call['retry'].timeout < margin
+
+
+async def test_a_cancelled_upload_never_releases_the_lease_under_a_running_write(world, monkeypatch):
+    started, release = threading.Event(), threading.Event()
+
+    def slow_write(*args):
+        started.set()
+        release.wait(5)
+        return 'written', 1.0
+
+    monkeypatch.setattr(record_gap_fill, '_write', slow_write)
+    monkeypatch.setattr(record_gap_fill, '_fresh_row', lambda store, uid, cid: closed_row())
+    job(world)['available_at'] = 0
+    task = asyncio.ensure_future(
+        record_gap_fill.run_gap_fill(
+            uid=UID, conversation_id=CID, paths=['synthetic-wal.bin'], wal_content_id='c', store=world.store
+        )
+    )
+    while not started.is_set():
+        await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    # The storage thread is still writing: the drain must keep skipping the row.
+    assert job(world)['available_at'] > time.time()
+    release.set()
+
+
+def test_the_listed_span_rate_is_authoritative(monkeypatch):
+    path = f'chunks/{UID}/{CID}/100.000.bin'
+    listing = held_listing((path, 100.0, {'span': {'sample_rate': 8000}}))
+    monkeypatch.setattr(record_retained_ack, 'list_audio_chunks', lambda *a, **kw: listing)
+    monkeypatch.setattr(record_retained_ack, 'read_reference', lambda client, ref, *a, **kw: ramp(5))
+    wal = [audio_unit(100.0, ramp(5))]
+    assert record_retained_ack.prove(UID, CID, wal, object(), finish=110.0, started=100.0) == 'skipped_lossy_source'

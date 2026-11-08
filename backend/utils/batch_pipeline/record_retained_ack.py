@@ -96,6 +96,9 @@ def _held(uid, conversation_id, chunks, client, low, high):
             'bucket': chunk.get('bucket', private_cloud_sync_bucket),
             'generation': int(chunk['generation']),
         }
+        # The listing's span rate is authoritative, exactly as admission reads it.
+        if chunk.get('span'):
+            ref['sample_rate'] = int(chunk['span'].get('sample_rate', RATE))
         pcm = read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True, listed_source=chunk)
         if int(ref.get('sample_rate', RATE)) != RATE or not pcm or len(pcm) % 2:
             lossy.append(start)
