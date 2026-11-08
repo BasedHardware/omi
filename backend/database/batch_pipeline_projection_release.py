@@ -30,6 +30,7 @@ from config.batch_pipeline import (
     HELD_DEAD_LETTER_SECONDS,
     projection_ghost_settle_enabled,
     projection_ghost_settle_cohort,
+    projection_restorable_cap_expiry_enabled,
 )
 from utils.conversations.fragment_visibility import is_automatic_discard
 
@@ -71,6 +72,13 @@ def release_counts() -> dict[str, int]:
         **{f'ghost_skipped_{name}': 0 for name in GHOST_SKIP_CLASSES},
         **{f'ghost_age_{name}': 0 for name in GHOST_AGE_BUCKETS},
     }
+
+
+def ghost_age_bucket(entry, now: float) -> str | None:
+    """Committed-age bucket for ghost telemetry; shared by every ghost return path."""
+    committed_at = entry.get('committed_at')
+    age = now - committed_at if finite_timestamp(now) and finite_timestamp(committed_at) else -1
+    return '30d_plus' if age >= 30 * 86400 else '7d' if age >= 7 * 86400 else '1d' if age >= 86400 else None
 
 
 def ghost_class(entry, job, binding, segment_id: str, now: float) -> str:
@@ -186,8 +194,28 @@ class ProjectionReleaseStore:
         def commit(transaction):
             job = self.store.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
+            # Re-read the stamp inside each transaction: the other scan leg
+            # may already have expired this row and reset its attempt count.
+            if (
+                dead_before is None
+                and entry.get('held_expired_at') is not None
+                and projection_restorable_cap_expiry_enabled()
+            ):
+                return False
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
+            # Multipart summaries can remain ambiguous holds after a privacy
+            # refusal. Fence every receipt before either expiry path or release.
+            if projection_restorable_cap_expiry_enabled() and (
+                entry.get('projection_privacy_refusal')
+                or receipt.get('privacy_reason')
+                or any(part.get('privacy_reason') for part in (entry.get('projection_parts') or {}).values())
+            ):
+                # Report the refusal with the same ghost classification and age
+                # bucket as the gate-failure branch below, so privacy refusals
+                # keep counting in ghost_classified and ghost_skipped_*. The tuple
+                # is read-only: released, expired and ghost_settled stay false.
+                return (ghost_class(entry, job, binding, segment_id, now), ghost_age_bucket(entry, now))
             held_receipt = next(
                 (
                     part
@@ -227,11 +255,7 @@ class ProjectionReleaseStore:
                 # Sibling to the real-held gate: a completed receipt with a
                 # legacy held hint owes discovery, not expiry or reassignment.
                 classification = ghost_class(entry, job, binding, segment_id, now)
-                committed_at = entry.get('committed_at')
-                age = now - committed_at if finite_timestamp(now) and finite_timestamp(committed_at) else -1
-                bucket = (
-                    '30d_plus' if age >= 30 * 86400 else '7d' if age >= 7 * 86400 else '1d' if age >= 86400 else None
-                )
+                bucket = ghost_age_bucket(entry, now)
                 if classification == 'eligible':
                     if dead_before is not None:
                         classification = 'expiry_scan'
@@ -288,6 +312,10 @@ class ProjectionReleaseStore:
                     return 'expired'
                 return False
             if attempts >= MAX_RELEASE_ATTEMPTS:
+                if projection_restorable_cap_expiry_enabled():
+                    # Use the same deadline/one-time CAS as unrestorable holds;
+                    # any release must wait for a later pass after the reset.
+                    return self._expire_assignment(transaction, segment_id, entry, now, expired, attempts)
                 return False
             reset: dict[str, Any] = {
                 'projection_state': 'pending',

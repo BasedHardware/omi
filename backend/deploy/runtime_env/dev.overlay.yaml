@@ -107,6 +107,8 @@ overlay:
           value: '0'
     pusher:
       env:
+        # Dev-only canary (lead2 2afa3e): byte-budgeted custody admission. Prod stays '0'. Rollback: '0'.
+        PUSHER_STORAGE_PCM_BUDGET_MB: {value: '512', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,

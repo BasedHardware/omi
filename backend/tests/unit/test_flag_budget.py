@@ -206,6 +206,7 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',
         'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED',
         'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',
     }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
