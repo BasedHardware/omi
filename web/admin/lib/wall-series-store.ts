@@ -185,7 +185,18 @@ export function decodeStoredPayload(data: { payload?: string } | undefined) {
     return null;
   }
 }
-const decode = decodeStoredPayload;
+/** Lease docs fail closed: an unparseable lease throws, so `acquire` reports
+ * "unavailable" instead of treating corrupt lease state as free. Leg docs
+ * stay recoverable through decodeStoredPayload. */
+export function decodeStoredDoc(
+  key: string,
+  data: { payload?: string } | undefined
+) {
+  if (key.startsWith(`${STORE_PREFIX}:lease:`)) {
+    return data?.payload ? JSON.parse(data.payload) : null;
+  }
+  return decodeStoredPayload(data);
+}
 const encode = (value: unknown) => ({
   payload: JSON.stringify(value),
   freshAt: Date.now(),
@@ -195,7 +206,7 @@ export const firestoreSeriesStore: SeriesStore = storeOver({
   async get(key) {
     const { getDb } = await import("@/lib/firebase/admin");
     const snap = await getDb().collection(COLLECTION).doc(key).get();
-    return snap.exists ? decode(snap.data()) : null;
+    return snap.exists ? decodeStoredDoc(key, snap.data()) : null;
   },
   async transact(fn) {
     const { getDb } = await import("@/lib/firebase/admin");
@@ -205,7 +216,7 @@ export const firestoreSeriesStore: SeriesStore = storeOver({
       fn({
         get: async (key) => {
           const snap = await t.get(ref(key));
-          return snap.exists ? decode(snap.data()) : null;
+          return snap.exists ? decodeStoredDoc(key, snap.data()) : null;
         },
         set: (key, value) => void t.set(ref(key), encode(value)),
         delete: (key) => void t.delete(ref(key)),

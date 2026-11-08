@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { decodeStoredPayload } from "../wall-series-store";
+import {
+  decodeStoredDoc,
+  decodeStoredPayload,
+  leaseKey,
+} from "../wall-series-store";
 
 describe("decodeStoredPayload", () => {
   it("returns null for a missing document or an empty payload", () => {
@@ -21,6 +25,16 @@ describe("decodeStoredPayload", () => {
     ).not.toThrow();
     expect(decodeStoredPayload({ payload: '{"rows":[[1,2' })).toBeNull();
     expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("fails closed on a corrupt lease doc but keeps leg docs recoverable", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() =>
+      decodeStoredDoc(leaseKey("headline"), { payload: '{"token":"a' })
+    ).toThrow(SyntaxError);
+    expect(decodeStoredDoc(leaseKey("headline"), undefined)).toBeNull();
+    expect(decodeStoredDoc("leg-key", { payload: '{"rows":[' })).toBeNull();
     warn.mockRestore();
   });
 });
