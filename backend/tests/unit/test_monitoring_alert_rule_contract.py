@@ -781,7 +781,7 @@ def test_live_stt_evidence_loss_rules_are_volume_gated_settlement_proxies():
         warning = rules["omi-stt-evidence-loss"]
         critical = rules["omi-stt-evidence-loss-critical"]
         for rule, duration, threshold, severity in (
-            (warning, "15m", "0.01", "warning"),
+            (warning, "30m", "0.01", "warning"),
             (critical, "10m", "0.03", "critical"),
         ):
             assert rule["for"] == duration, f"{export_name}:{rule['uid']}"
@@ -1279,6 +1279,7 @@ def test_alert_rules_do_not_read_chain_only_series_without_documenting_the_depen
 # adding a new external metric to a rule requires naming it here.
 EXTERNAL_ALERT_METRICS = {
     "up": "Prometheus builtin target health",
+    "scrape_samples_scraped": "Prometheus builtin per-scrape sample count",
     # kube-state-metrics
     "kube_deployment_status_replicas": "kube-state-metrics",
     "kube_deployment_status_replicas_ready": "kube-state-metrics",

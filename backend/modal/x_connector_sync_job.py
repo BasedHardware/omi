@@ -13,6 +13,7 @@ import firebase_admin
 
 from database.firestore_read_origin import read_origin
 from utils.env_loader import firebase_admin_options
+from utils.observability.firestore_probe_export import terminal_probe_totals
 from utils.x_connector import is_oauth_configured, raise_if_x_sync_job_failed, run_x_sync_job
 
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +27,7 @@ def _init_firebase() -> None:
 
 
 @read_origin('job:x_connector_sync')
+@terminal_probe_totals('x-connector-sync-job')
 def main() -> None:
     _init_firebase()
     # Credential gate: without an X OAuth app configured every per-user token

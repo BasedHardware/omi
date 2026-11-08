@@ -22,6 +22,8 @@ returns ``EpisodeConflict`` and the caller decides whether to retry.
 
 from __future__ import annotations
 
+from database import transcript_pointer
+
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -39,7 +41,8 @@ from utils.conversations.recorded_time import conversation_span, sync_recorded_e
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
 from database import episode_receipts, episode_timeline
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.conversations import decode_transcript_segments_verified
 from utils.encryption import decrypt, encrypt
 
@@ -96,7 +99,9 @@ def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any
     return episode
 
 
-def get_episode(uid: str, episode_id: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
+def get_episode(
+    uid: str, episode_id: str, *, firestore_client: Any = None, follow_redirects: bool = True
+) -> Optional[dict[str, Any]]:
     client = _client(firestore_client)
     visited = set()
     while episode_id not in visited and len(visited) < 128:
@@ -108,6 +113,8 @@ def get_episode(uid: str, episode_id: str, *, firestore_client: Any = None) -> O
         redirect = raw.get('recorded_merged_into')
         if not redirect:
             return unseal(uid, raw)
+        if not follow_redirects:
+            return None
         episode_id = str(redirect)
     raise EpisodeConflict('recorded_redirect_cycle')
 
@@ -276,9 +283,13 @@ def retained_bounds(transaction, client, uid, raw, merged):
         if evidence and not all(isinstance(evidence.get(key), datetime) for key in ('recorded_start', 'recorded_end')):
             segments = evidence.get('transcript_segments')
             if segments is not None and not isinstance(segments, list):
-                evidence['transcript_segments'] = decode_transcript_segments_verified(
-                    uid, segments, bool(evidence.get('transcript_segments_compressed'))
-                )
+                try:
+                    evidence['transcript_segments'] = decode_transcript_segments_verified(
+                        uid, segments, bool(evidence.get('transcript_segments_compressed'))
+                    )
+                except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                    hidden.add(cid)
+                    continue
             # Legacy completion is a processing clock. Only decoded speech,
             # recording receipts or the persisted member clocks prove its end.
             # Preserve the recording authority's legacy pure-WAL receipt first.
@@ -732,6 +743,9 @@ def _member_recorded_after(raw: Mapping[str, Any], extra: Mapping[str, Any], spl
     return False
 
 
+SYNCED_F_MEMBER_LIMIT = 3
+
+
 @firestore.transactional
 def _close(
     transaction: Any,
@@ -745,6 +759,7 @@ def _close(
     expected_conversation_ids: Optional[Sequence[str]] = None,
     split_after: Optional[datetime] = None,
     retained_member_window: bool = False,
+    synced_f: bool = False,
 ) -> Optional[dict[str, Any]]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -766,6 +781,12 @@ def _close(
     if split_after is not None and _member_recorded_after(raw, extra, split_after):
         # A member that stays would keep this episode's window past the successor's start.
         raise EpisodeConflict('split_member_recorded_later')
+    if synced_f and (
+        not isinstance(raw.get('conversation_ids'), list)
+        or len(raw['conversation_ids']) > SYNCED_F_MEMBER_LIMIT
+        or raw.get('recovered_conversation_ids')
+    ):
+        raise EpisodeConflict('f_close_read_budget')
     merged = {**(unseal(uid, raw) or {}), **extra, **_closed_fields(reason, closed_at)}
     # Finalize arrival is bookkeeping. Recorded ownership ends at retained member evidence.
     # Only an admitted F split opts into the post-detach window; ordinary/flag-off closes
@@ -797,13 +818,26 @@ def _close(
     end = max(raw['started_at'], _bounded_activity(raw, end))
     if timeline_enabled:
         rows = episode_timeline.recorded_candidates(
-            uid, raw['started_at'], end, firestore_client=client, transaction=transaction
+            uid,
+            raw['started_at'],
+            end,
+            firestore_client=client,
+            transaction=transaction,
+            **({'candidate_limit': episode_timeline.F_JOIN_CANDIDATE_LIMIT} if synced_f else {}),
         )
         following = [r['started_at'] for r in rows if r['id'] != episode_id and r['started_at'] > raw['started_at']]
         if following:
             end = min(end, min(following))
         merged['recorded_end'] = end
-        fence = episode_timeline.check_window(transaction, client, uid, merged, rows=rows, fence_row=timeline_row)
+        fence = episode_timeline.check_window(
+            transaction,
+            client,
+            uid,
+            merged,
+            rows=rows,
+            fence_row=timeline_row,
+            **({'candidate_limit': episode_timeline.F_JOIN_CANDIDATE_LIMIT} if synced_f else {}),
+        )
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
     else:
@@ -829,6 +863,7 @@ def close_episode(
     split_after: Optional[datetime] = None,
     firestore_client: Any = None,
     retained_member_window: bool = False,
+    synced_f: bool = False,
 ) -> Optional[dict[str, Any]]:
     """Close a live episode once. Returns the closed state, or None when it was not live.
 
@@ -837,6 +872,9 @@ def close_episode(
     recorded past ``split_after``. The caller then decides again from a fresh read.
     """
     client = _client(firestore_client)
+    transaction_options: dict[str, Any] = (
+        {'attempts': 1, 'initial_transaction': client.transaction(max_attempts=1)} if synced_f else {}
+    )
     return run_transactional(
         client,
         _close,
@@ -850,6 +888,8 @@ def close_episode(
         expected_conversation_ids,
         split_after,
         retained_member_window,
+        synced_f,
+        **transaction_options,
     )
 
 

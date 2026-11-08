@@ -331,7 +331,7 @@ def test_refusal_counter_is_not_emitted_on_failed_commit(store, monkeypatch, rea
         callback(client.transaction())
         raise RuntimeError('synthetic commit failure')
 
-    monkeypatch.setattr(db, 'run_transactional', failed_commit)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', failed_commit)
     with pytest.raises(RuntimeError, match='synthetic commit failure'):
         persist({'status': requested, 'title': 'late'})
     assert metric._value.get() == before
@@ -348,7 +348,7 @@ def test_transaction_retry_resets_refusal_outcome(store, monkeypatch):
         client.rows[PATH] = {'status': 'processing'}
         return callback(client.transaction())
 
-    monkeypatch.setattr(db, 'run_transactional', retry)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', retry)
     assert persist({'status': 'completed', 'title': 'recovered'})
     assert metric._value.get() == before
     assert store.rows[PATH]['status'] == 'completed'

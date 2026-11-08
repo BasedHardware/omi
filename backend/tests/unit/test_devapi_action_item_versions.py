@@ -14,6 +14,7 @@ from google.cloud.firestore_v1.bulk_batch import BulkWriteBatch
 from google.cloud.firestore_v1.types import CommitResponse, BatchWriteResponse, WriteResult
 
 from database import _client, action_items, action_item_versions as versions
+from database.action_item_fence import fenced_action_item_commit
 from utils import external_list_reads as cache
 from tests.unit.test_external_list_cache import FakeRedis
 
@@ -67,9 +68,7 @@ def fill(request, body=b'[]'):
 @pytest.mark.parametrize(
     'operation', ['set', 'create', 'update', 'delete', 'transform', 'batch', 'transaction', 'bulk']
 )
-def test_all_sync_sdk_write_surfaces_fence_and_invalidate(redis, operation):
-    # Importing _client installed once, also for subsequently constructed SDK clients.
-    assert getattr(firestore.WriteBatch.commit, '_omi_action_item_fence', False)
+def test_explicit_commit_fence_invalidates_sync_writes(redis, operation):
     request, hit = lookup()
     assert hit is None
     fill(request)
@@ -85,31 +84,32 @@ def test_all_sync_sdk_write_surfaces_fence_and_invalidate(redis, operation):
 
     client = sdk_client(during=during)
     ref = client.document('users/owner/action_items/task')
-    if operation in ('set', 'create', 'update'):
-        getattr(ref, operation)({'completed': False})
-    elif operation == 'delete':
-        ref.delete()
-    elif operation == 'transform':
-        ref.update({'sort_order': firestore.Increment(1)})
-    else:
-        batch = (
-            client.transaction()
-            if operation == 'transaction'
-            else BulkWriteBatch(client) if operation == 'bulk' else client.batch()
-        )
-        batch.set(ref, {'completed': False})
-        if operation == 'transaction':
-            batch._id = b'synthetic-transaction'
-            batch._commit()
-        elif operation == 'bulk':
-            # BulkWriteBatch consumes the non-atomic BatchWrite response type.
-            original = client._firestore_api_internal.batch_write
-            client._firestore_api_internal.batch_write = lambda **kw: BatchWriteResponse(
-                write_results=original(**kw).write_results
-            )
-            batch.commit()
+    with fenced_action_item_commit('owner'):
+        if operation in ('set', 'create', 'update'):
+            getattr(ref, operation)({'completed': False})
+        elif operation == 'delete':
+            ref.delete()
+        elif operation == 'transform':
+            ref.update({'sort_order': firestore.Increment(1)})
         else:
-            batch.commit()
+            batch = (
+                client.transaction()
+                if operation == 'transaction'
+                else BulkWriteBatch(client) if operation == 'bulk' else client.batch()
+            )
+            batch.set(ref, {'completed': False})
+            if operation == 'transaction':
+                batch._id = b'synthetic-transaction'
+                batch._commit()
+            elif operation == 'bulk':
+                # BulkWriteBatch consumes the non-atomic BatchWrite response type.
+                original = client._firestore_api_internal.batch_write
+                client._firestore_api_internal.batch_write = lambda **kw: BatchWriteResponse(
+                    write_results=original(**kw).write_results
+                )
+                batch.commit()
+            else:
+                batch.commit()
     assert observations == [None]
     assert versions.version('owner') not in (None, before)
     assert versions.version('other') == other
@@ -129,11 +129,12 @@ async def test_async_sdk_batch_and_transaction(redis, transaction):
     client._firestore_api_internal = SimpleNamespace(commit=AsyncMock(side_effect=commit))
     batch = client.transaction() if transaction else client.batch()
     batch.set(client.document('users/owner/action_items/task'), {'completed': True})
-    if transaction:
-        batch._id = b'synthetic-transaction'
-        await batch._commit()
-    else:
-        await batch.commit()
+    with fenced_action_item_commit('owner'):
+        if transaction:
+            batch._id = b'synthetic-transaction'
+            await batch._commit()
+        else:
+            await batch.commit()
     assert versions.version('owner') not in (None, before)
 
 
@@ -144,7 +145,8 @@ def test_multiple_owners_and_non_task_writes(redis):
     batch.set(client.document('users/a/action_items/one'), {})
     batch.delete(client.document('users/b/action_items/two'))
     batch.set(client.document('users/c/conversations/three'), {})
-    batch.commit()
+    with fenced_action_item_commit('a'), fenced_action_item_commit('b'):
+        batch.commit()
     assert versions.version('a') != before['a']
     assert versions.version('b') != before['b']
     assert versions.version('c') == before['c']
@@ -164,7 +166,8 @@ def test_overlapping_writes_partial_failure_and_late_fill(redis):
     request, _ = lookup()
     fill(request)
     with pytest.raises(RuntimeError, match='ambiguous'):
-        sdk_client(fails=True).document('users/owner/action_items/a').delete()
+        with fenced_action_item_commit('owner'):
+            sdk_client(fails=True).document('users/owner/action_items/a').delete()
     assert lookup()[1] is None
 
 
@@ -195,7 +198,8 @@ def test_long_ttl_flag_and_write_when_reader_flag_off(redis, monkeypatch):
     monkeypatch.setenv('OMI_DEV_ACTION_ITEMS_VERSION_CACHE_ENABLED', 'false')
     assert lookup()[1] is None
     assert lookup()[0].state.external_list_cache_entry.ttl == 10
-    sdk_client().document('users/owner/action_items/a').set({})
+    with fenced_action_item_commit('owner'):
+        sdk_client().document('users/owner/action_items/a').set({})
     monkeypatch.delenv('OMI_DEV_ACTION_ITEMS_VERSION_CACHE_ENABLED')
     assert lookup()[1] is None
 
@@ -208,7 +212,8 @@ def test_unavailable_version_bypasses_without_retrying_origin(redis, monkeypatch
     request, hit = lookup()
     assert hit is None and getattr(request.state, 'external_list_cache_entry', None) is None
     # Optional Redis cannot change the durable SDK result.
-    sdk_client().document('users/owner/action_items/a').set({})
+    with fenced_action_item_commit('owner'):
+        sdk_client().document('users/owner/action_items/a').set({})
 
 
 def test_60_second_polls_survive_short_ttl_and_expire_at_15_minutes(redis, monkeypatch):
@@ -233,7 +238,8 @@ async def test_async_document_delete_uses_direct_commit_fence(redis):
         return CommitResponse()
 
     client._firestore_api_internal = SimpleNamespace(commit=AsyncMock(side_effect=commit))
-    await client.document('users/owner/action_items/task').delete()
+    with fenced_action_item_commit('owner'):
+        await client.document('users/owner/action_items/task').delete()
     assert versions.version('owner') not in (before, None)
 
 

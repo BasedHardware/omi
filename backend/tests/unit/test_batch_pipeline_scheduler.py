@@ -140,6 +140,20 @@ class MemoryStore:
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
 
+    # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.
+    def defer_privacy_blocked_record(self, segment_id, until, now):
+        with self.lock:
+            job = self.rows.get(('jobs', segment_id))
+            if (
+                not job
+                or job['state'] != 'record_pending'
+                or job['available_at'] > now
+                or not job.get('privacy_fenced')
+            ):
+                return False
+            job['available_at'] = float(until)
+            return True
+
     def longest_ready_pending(self, owner_key):
         jobs = [
             v

@@ -7765,5 +7765,118 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-kube-state-metrics-empty",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "kube-state-metrics serving empty scrapes (kube_* series blind)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(min(min_over_time(scrape_samples_scraped{job=\"kube-state-metrics\"}[15m])) < bool 1) and on() (max(max_over_time(up{job=\"kube-state-metrics\"}[15m])) == 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "kube-state-metrics returned 0 samples on at least one scrape in every 15m window for 30m (restart loop or outage), so kube_* series are gapped or absent",
+      "threshold": "min scrape_samples_scraped{job=\"kube-state-metrics\"} over 15m < 1 while the target was up in the window, sustained 30m (down/absent is omi-scrape-kube-state-metrics)",
+      "user_impact": "No direct user impact; the backend-listen HPA custom metric, capacity and replica alerts, and the margin meter read kube_* series and go blind.",
+      "scope": "kube-state-metrics in prod-omi-monitoring (kube-prometheus-stack subchart).",
+      "verification": "kubectl -n prod-omi-monitoring get pod -l app.kubernetes.io/name=kube-state-metrics (RESTARTS) and its events (liveness timeouts); up stays 1 during this failure.",
+      "safe_next_action": "Check the pod restart count and liveness events; if CPU-starved, raise its requests in prod_omi_monitoring_values.yaml and run the documented helm upgrade."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-kube-state-metrics-empty",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

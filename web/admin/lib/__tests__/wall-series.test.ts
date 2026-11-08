@@ -389,7 +389,22 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect([...weeks].map((w) => w.date).sort()).toEqual(
       weeks.map((w) => w.date)
     );
+    // A week whose prior week starts before full telemetry has no accounting
+    // (its "lost" count would be undercounted and the quick ratio inflated).
+    const priorStart = (w: (typeof weeks)[number]) =>
+      new Date(Date.parse(String(w.date)) - 13 * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+    const unaccounted = weeks.filter((w) => priorStart(w) < "2026-05-04");
+    expect(unaccounted.length).toBeGreaterThan(0);
+    for (const w of unaccounted) {
+      expect(w.quickRatio).toBeNull();
+      expect(w.churned).toBeNull();
+      expect(w.new).toBeNull();
+      expect(w.total).not.toBeNull();
+    }
     for (const w of weeks.slice(0, -6)) {
+      if (priorStart(w) < "2026-05-04") continue;
       expect(Number(w.new) + Number(w.resurrected) + Number(w.retained)).toBe(
         w.total
       );

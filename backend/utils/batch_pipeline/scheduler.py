@@ -28,7 +28,7 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
-from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
@@ -78,8 +78,8 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     queue['tail'] = job['segment_id']
     job['next'] = ''
     tx.put('queues', queue_key, queue)
-    activate(tx, control, job['priority'], job['available_at'])
     control_key = scheduler_control_key(job['owner_key'])
+    activate(tx, control, job['priority'], job['available_at'], control_key)
     # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
     # the shard identical; rewriting it only conflicts with every pull and admission on it.
     if not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key):
@@ -513,6 +513,7 @@ class Scheduler:
             if gpu.get('token'):
                 return None, 'reserved', observations
             control = read_control(tx, shard)
+            consume_frontier_hint(tx, control, int(priority), current_time())
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))

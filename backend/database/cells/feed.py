@@ -8,6 +8,7 @@ from typing import Any
 from database.cells._validation import validate_id
 from database.cells.errors import CellWriteError
 from database.jobstore.connection import Pool
+from database.cells.purge import lock_writable_space
 
 DEVICE_STALE_S = 90 * 24 * 3600.0
 FEED_RETENTION_S = 30 * 24 * 3600.0
@@ -124,6 +125,7 @@ class Feed:
         if last_seq < 0:
             raise ValueError('last_seq must be nonnegative')
         with self.pool.connection() as conn, conn.transaction():
+            lock_writable_space(conn, space_id)
             floor, epoch, head = _floor(conn, space_id, now)
             if last_seq > head:
                 raise CursorAhead(space_id, head, epoch)

@@ -371,6 +371,7 @@ def test_actual_f_detach_is_observed_after_retries_and_orphan_is_counted_and_log
     store, monkeypatch, caplog, recover_on_retry
 ):
     _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
     _attach(store, 'c2', minutes=12)
     original = episodes_db.commit_moment
     failed = []
@@ -428,6 +429,7 @@ def test_orphan_observation_has_two_read_bound_and_content_free_error_log(store,
 
 def test_post_close_exception_still_counts_a_detached_candidate_without_successor(store, monkeypatch, caplog):
     _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
     _attach(store, 'c2', minutes=12)
 
     def fail(*a, **kw):

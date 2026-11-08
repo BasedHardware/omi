@@ -9,12 +9,14 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes, episode_attach_memo, episode_batch_pending
+from database import episodes, episode_attach_memo, episode_batch_pending, transcript_pointer
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from config.episode_attach import content_gate_enabled, optimizations_enabled
 from utils.conversations.recorded_time import conversation_span
 
 PAGE_LIMIT = 128
+# Optional F decisions need a complete small window; hitting this limit keeps the control join.
+F_JOIN_CANDIDATE_LIMIT = 2
 FIELDS = (
     'started_at',
     'recorded_end',
@@ -30,7 +32,13 @@ FIELDS = (
 
 
 def recorded_candidates(
-    uid: str, started: datetime, finished: datetime, *, firestore_client: Any = None, transaction: Any = None
+    uid: str,
+    started: datetime,
+    finished: datetime,
+    *,
+    firestore_client: Any = None,
+    transaction: Any = None,
+    candidate_limit: int = PAGE_LIMIT,
 ) -> list[dict[str, Any]]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
     # Single-field range: uses Firestore's automatic started_at index.
@@ -42,12 +50,15 @@ def recorded_candidates(
             filter=FieldFilter('started_at', '>=', started - timedelta(seconds=MAX_EPISODE_SECONDS + CLOSE_GAP_SECONDS))
         )
         .where(filter=FieldFilter('started_at', '<=', finished + timedelta(seconds=CLOSE_GAP_SECONDS)))
-        .order_by('started_at')
+        .order_by(
+            'started_at',
+            direction=firestore.Query.DESCENDING if candidate_limit != PAGE_LIMIT else firestore.Query.ASCENDING,
+        )
         .select(FIELDS)
-        .limit(PAGE_LIMIT)
+        .limit(candidate_limit)
     )
     rows = [dict(doc.to_dict(), id=doc.id) for doc in query.stream(transaction=transaction)]
-    if len(rows) >= PAGE_LIMIT:
+    if len(rows) >= candidate_limit:
         raise episodes.EpisodeConflict('recorded_window_incomplete')
     return [row for row in rows if not row.get('recorded_merged_into')]
 
@@ -59,7 +70,7 @@ def recorded_end(episode):
     return episode.get('last_activity_at')
 
 
-def check_window(transaction, client, uid, episode, *, rows=None, fence_row=None):
+def check_window(transaction, client, uid, episode, *, rows=None, fence_row=None, candidate_limit=PAGE_LIMIT):
     """Serialize live writes with recorded attachment; reject overlapping windows."""
     if not optimizations_enabled():
         rows, fence_row = None, None
@@ -70,7 +81,9 @@ def check_window(transaction, client, uid, episode, *, rows=None, fence_row=None
     if fence_row is None:
         fence_row = fence.get(transaction=transaction).to_dict() or {}
     if rows is None:
-        rows = recorded_candidates(uid, lo, hi, firestore_client=client, transaction=transaction)
+        rows = recorded_candidates(
+            uid, lo, hi, firestore_client=client, transaction=transaction, candidate_limit=candidate_limit
+        )
     for row in rows:
         a, b = row.get('started_at'), recorded_end(row)
         if row['id'] != episode['id'] and isinstance(a, datetime) and isinstance(b, datetime):
@@ -345,7 +358,7 @@ def attach_recorded(
         episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])
         return {**result, '_recorded_windows': [result]}
 
-    return run_transactional(client, attach, transient=True)
+    return transcript_pointer.run_preloaded_transactional(client, attach, transient=True)
 
 
 def member_episodes(uid: str, conversation_id: str, *, firestore_client: Any = None) -> list[dict[str, Any]]:
