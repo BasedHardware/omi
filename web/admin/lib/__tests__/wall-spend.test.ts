@@ -101,8 +101,9 @@ describe("sonioxSpendByDay", () => {
 
   it("the query reads the Soniox line alone, on the variable basis", () => {
     const sql = spendDailyQuery("2026-11-04", 7);
-    expect(sql).toContain(`line = '${SONIOX_LINE}'`);
-    expect(sql).toContain("AS soniox_usd");
+    expect(sql).toContain(
+      `SUM(IF(basis_class = 'variable' AND line = '${SONIOX_LINE}', usd, NULL)) AS soniox_usd`
+    );
   });
 });
 

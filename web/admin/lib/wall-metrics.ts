@@ -969,7 +969,9 @@ export async function computeWall(
                         `${vendorBalance.snapshots}/2 balance snapshots`
                       : spendReadFailed
                       ? "spend_daily unreadable (see missing lines); fallback shown"
-                      : "no data yet (no spend_daily stt_soniox row, no balance series)"
+                      : sonioxSpend && Object.keys(sonioxSpend).length > 0
+                      ? `spend_daily has no stt_soniox row for ${last.date} (day gap); fallback shown`
+                      : "no data yet (empty spend_daily stt_soniox ledger, no balance series)"
                   }`
                 );
           // spend_daily wins whenever it has the day's stt_soniox row; the balance
