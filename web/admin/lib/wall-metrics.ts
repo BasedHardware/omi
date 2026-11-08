@@ -922,7 +922,10 @@ export async function computeWall(
                   )
                 : staleEstimate(
                     sttEstimate,
-                    `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${vendorBalance.snapshots}/2 balance snapshots`
+                    `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${
+                      vendorBalance.dark ??
+                      `${vendorBalance.snapshots}/2 balance snapshots`
+                    }`
                   )
               : !vendorBalance && sonioxUnavailable
               ? `Soniox measured line UNAVAILABLE (${sonioxUnavailable})`
@@ -934,7 +937,8 @@ export async function computeWall(
                   sttEstimate,
                   `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${
                     vendorBalance
-                      ? `${vendorBalance.snapshots}/2 balance snapshots`
+                      ? vendorBalance.dark ??
+                        `${vendorBalance.snapshots}/2 balance snapshots`
                       : "no balance series"
                   }`
                 );
