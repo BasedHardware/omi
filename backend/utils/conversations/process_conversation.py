@@ -2601,6 +2601,7 @@ def process_conversation(
     client_projection: ClientProcessing | None = None,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    restores_discarded: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
     capture_group_refresh_fence: tuple[str, int, str] | None = None,
@@ -2894,11 +2895,15 @@ def process_conversation(
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
     if user_kept and not conversation.discarded:
-        # Commit restore authority with visibility, before derived work can fail.
+        # Commit restore authority before derived work can fail. A discarded row being
+        # restored stays hidden here: visibility waits for the router's restore, which
+        # registers its recording obligation before it commits the metadata.
         payload['sync_relevance_user_kept'] = True
         if conversation.sync_relevance == 'review':
             conversation.sync_relevance = 'keep'
             payload['sync_relevance'] = 'keep'
+        if restores_discarded:
+            payload['discarded'] = True
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled

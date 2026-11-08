@@ -897,6 +897,7 @@ def execute_reprocess(
         conversation,
         trigger=ProcessingTrigger.USER_REPROCESS,
         user_kept=was_discarded or user_kept,
+        restores_discarded=was_discarded,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -907,11 +908,12 @@ def execute_reprocess(
         derived_effects_transcript_sha256=derived_effects_transcript_sha256,
     )
 
-    # Reprocessing a hidden conversation is an explicit recovery: persist it as
-    # the user's choice (``restore_discarded``) so no later reassessment hides it
-    # again, including when the selected app supplies the summary.
+    # Reprocessing a hidden conversation is an explicit recovery. Processing kept it
+    # hidden; restore registers its recording obligation, then commits visibility.
+    # A failure before this point leaves the row hidden with no visible state.
     if (was_discarded or user_kept) and not processed_conversation.discarded:
         restored = lifecycle_service.restore_discarded(uid, conversation_id)
+        processed_conversation.discarded = not restored
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
 

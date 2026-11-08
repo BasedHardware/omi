@@ -383,7 +383,7 @@ environments:
             value: g1
             category: config
           PUSHER_STORAGE_PCM_BUDGET_MB:
-            value: '0'
+            value: '512'
             category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
