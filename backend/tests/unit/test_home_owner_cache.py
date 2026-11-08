@@ -127,6 +127,47 @@ def test_invalid_cache_falls_back_to_authority(runtime, raw):
     runtime.fetch.assert_called_once()
 
 
+@pytest.mark.parametrize('source', ['cached', 'fetched'])
+@pytest.mark.parametrize(
+    'malformed',
+    [
+        pytest.param(42, id='non-dict-owner'),
+        pytest.param('', id='empty-owner'),
+        pytest.param({'id': 42, 'status': 'live', 'conversation_ids': ['a']}, id='non-string-id'),
+        pytest.param({'id': '', 'status': 'live', 'conversation_ids': ['a']}, id='empty-id'),
+        pytest.param({'id': 'e', 'status': 'closed', 'conversation_ids': ['a']}, id='non-live-status'),
+        pytest.param({'id': 'e', 'status': 'live', 'conversation_ids': 'a'}, id='string-members'),
+        pytest.param({'id': 'e', 'status': 'live', 'conversation_ids': {'a': True}}, id='dict-members'),
+        pytest.param({'id': 'e', 'status': 'live', 'conversation_ids': None}, id='null-members'),
+        pytest.param({'status': 'live', 'conversation_ids': ['a']}, id='missing-id'),
+        pytest.param({'id': 'e', 'conversation_ids': ['a']}, id='missing-status'),
+        pytest.param({'id': 'e', 'status': 'live'}, id='missing-members'),
+    ],
+)
+def test_malformed_owner_matches_fresh_path_without_hiding_rows(runtime, monkeypatch, source, malformed):
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: 'e:a',
+        },
+        query_params={},
+    )
+    rows = [{'id': 'a', 'status': 'processing', 'episode_id': 'e'}]
+    runtime.fetch.return_value = malformed if source == 'fetched' else None
+    monkeypatch.setenv('HOME_LIVE_OWNER_CACHE_ENABLED', 'false')
+    fresh_rows = home_membership.project_list(UID, rows, request, None, filtered=False)
+    monkeypatch.setenv('HOME_LIVE_OWNER_CACHE_ENABLED', 'true')
+    if source == 'cached':
+        runtime.redis.values[KEY] = (json.dumps({'owner': malformed, 'valid_until': 1030}), 1030)
+    cached_rows = home_membership.project_list(UID, rows, request, None, filtered=False)
+    assert cached_rows == fresh_rows == rows
+    # A second read also exercises metadata filled from a malformed fresh answer.
+    assert home_membership.project_list(UID, rows, request, None, filtered=False) == rows
+    assert runtime.fetch.call_count >= 2
+
+
 @pytest.mark.parametrize(
     'value,enabled',
     [(None, True), ('true', True), (' TRUE ', True), ('false', False), ('off', False), ('', False), ('typo', False)],

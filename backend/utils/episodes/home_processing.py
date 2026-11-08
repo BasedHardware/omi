@@ -8,7 +8,7 @@ from config.episodes import episodes_enabled_for
 from database import episodes, conversations
 from utils.conversations.recorded_time import conversation_span
 from utils.episodes import client_gate, metrics, home_owner_cache
-from utils.episodes.policy import utc
+from utils.episodes.policy import owned_member_ids, utc
 from utils.episodes.timeline import ownership_end
 from utils.observability.fallback import record_fallback
 
@@ -45,7 +45,7 @@ def owns_recording(owner: Mapping | None, row: Mapping) -> bool:
     # An existing different episode is authoritative, including a closed owner.
     if row.get('episode_id') and row['episode_id'] != owner.get('id'):
         return False
-    if row.get('id') in (owner.get('conversation_ids') or []):
+    if row.get('id') in owned_member_ids(owner):
         return True
     span = conversation_span(row)
     lo, hi = utc(owner.get('started_at')), ownership_end(dict(owner))
