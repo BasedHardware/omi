@@ -17,7 +17,13 @@ sources, bounded retry exhaustion, deferred-swap CAS failures, ambiguous upload
 responses and worker loss leave durable sweep discovery. Successful pointers
 retain their intents too: an intent is a candidate, never proof of an orphan.
 A fenced writer removes only a blob generation it just created; it retains the
-shared intent because another pre-fence writer may still be uploading that name.
+shared intent while another pre-fence writer is still uploading that name. Under
+a conversation tombstone, final same-key settlement deletes the row
+transactionally after late-generation cleanup. Explicit conversation deletion
+also removes settled and safely aged rows in the exact conversation key range
+after verified prefix purge. Young unsettled rows do not delay HTTP 204; worker
+loss leaves discovery and possibly a late blob for account wipe or C3's janitor.
+Failed late-generation cleanup retains discovery for retry.
 Reused referenced objects remain for the deleting orchestrator. Account wipe
 retains intents after its first drained object-prefix purge. Immediately before
 key destruction it checks every owner intent, including old bucket bindings.
@@ -31,8 +37,10 @@ prefix absence again, erase and verify intents, then destroy keys. A recent
 unsettled upload, final purge or intent erasure failure retains keys and blocks
 completion for retry; no sleeps are used to wait out this final gate.
 
-Every put has a monotonic success deadline derived as half the strictly positive
-wipe drain interval. Upload and create-only replay requests disable SDK retries
+Every put has a monotonic success deadline: half a positive wipe drain interval,
+or a fixed five-second put budget when drain is zero. Drain accepts 0..60 seconds;
+zero skips sleep while preserving prefix verification and the fixed 630-second
+quiescence bound. Upload and create-only replay requests disable SDK retries
 and split the remaining budget between connect/read timeouts. Expired puts never
 return a pointer and retain their blob and intent, since another writer may have
 referenced the same name. Only a deletion fence permits self-cleanup of a newly
@@ -47,7 +55,7 @@ C3 owns janitor candidate consumption as defense in depth. Its janitor must fenc
 all live and historical references before deleting an unreferenced object;
 referenced objects must remain intact. A missing object is safe to reconcile.
 Do not TTL unresolved intents or infer unreferenced status from age alone.
-This change records candidates only and does not run or provision a janitor.
+This change records and erases candidates at explicit deletion boundaries; it does not run or provision a janitor.
 
 Candidate admission transactionally reads the owner deletion marker, conversation
 tombstone and intent before creating a missing intent. Firestore retries conflicts

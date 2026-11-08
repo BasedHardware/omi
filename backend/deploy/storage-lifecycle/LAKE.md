@@ -52,7 +52,7 @@ C4 ships required, retry-safe account wipe steps in this order: cell/directory
 purge, **lake_prefix_purge**, Firestore user subtree, Typesense, memory registry,
 then **lake_key_destroy LAST**, before the completed marker. The prefix step
 requires a running wipe and rechecks the blocking deletion fence, drains writers
-for `OBJECT_LAKE_WIPE_DRAIN_SECONDS` (default 5, bounded 0..60), then deletes and
+for `OBJECT_LAKE_WIPE_DRAIN_SECONDS` (default 5, bounded 0..60; zero skips sleep), then deletes and
 verifies absence. A put that passed its initial fence before deletion rechecks
 authority after upload and self-deletes when fenced. Transport or verified-absence
 failures fail the wipe for retry; keys survive any earlier step failure.
@@ -76,6 +76,12 @@ upload, alongside the account marker and space key. A newly created late
 candidate removes only its own generation and refuses to return a pointer;
 a create-only retry never removes an existing referenced object. Verified-absence
 failure is a retryable `LakePurgeIncomplete` (a `LakeFetchError`) with HTTP 503.
+After verified prefix absence, deletion removes settled upload candidates and
+candidates older than the 630-second quiescence bound in each conversation's
+exact key range. Young unsettled candidates do not delay HTTP 204: their fenced
+writers remove the row transactionally when their last same-key attempt settles,
+after late-generation cleanup. Worker loss leaves discovery and possibly a late
+blob for account wipe or C3 janitor erasure; this PR does not implement a janitor.
 
 The developer delete endpoint calls the same orchestrator and therefore also
 purges lake content, adding a raw Firestore snapshot and a synchronous GCS purge
@@ -101,16 +107,24 @@ bindings, version history and explicit deletion available for existing pointers.
 
 Upload intent erasure: `lake_upload_candidates` keys contain owner/conversation
 identifiers and plaintext digests, so they are user-derived data. The required
-`lake_prefix_purge` step also deletes and verifies absence of every candidate
-under the owner's pinned release prefix, including abandoned intents and old
-bucket bindings, before Firestore deletion or key destruction. Its single-field
+final `lake_key_destroy` step checks every candidate for quiescence, then repeats
+verified prefix purge, deletes and verifies absence of every candidate under the
+owner's pinned release prefix (including abandoned intents and old bucket
+bindings), and destroys keys last. Young unsettled attempts block this final step
+until they settle or exceed the fixed 630-second quiescence bound. Its single-field
 `key` range uses the automatic collection index. A newly created upload fenced
 at its post-put check removes its own blob generation. The shared discovery
-intent stays for other pre-fence uploads and C3; account wipe erases it after
-its durable fence. Failed cleanup fails closed and retries.
+intent stays while other pre-fence uploads are active; the last fenced writer
+can erase it under the conversation tombstone, and account wipe erases any
+remaining intents at its final key step. Failed cleanup fails closed and retries.
 
 Candidate admission reads the owner and conversation fences in the same
 Firestore transaction that creates the candidate. A writer delayed until after
 the purge scan therefore cannot recreate an intent even if it dies before put.
 With the bucket unset, the prefix step still performs zero IO; the final key
 step erases any old candidate rows before tombstoning the keys, without GCS IO.
+
+Put-success budgets remain positive: a positive drain gives half its duration;
+zero drain uses a fixed five-second put budget. The maximum budget remains 30
+seconds, so changing drain configuration cannot shrink the 630-second quiescence
+bound (maximum budget plus a fixed ten-minute safety margin).
