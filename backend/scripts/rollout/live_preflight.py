@@ -113,12 +113,13 @@ def serving_revision(service: dict) -> str | None:
 
 
 def is_raise(current: dict | None, after: dict, *, inactive: bool = False) -> bool:
-    """Kills and decreases win even when combined with other switches."""
+    """Allowlist additions widen exposure at any percent; kills and decreases win."""
     before = current or {}
     old, new = float(before.get('rollout_percentage') or 0), float(after.get('rollout_percentage') or 0)
     if inactive or new < old:
         return False
-    return new > old or (after.get('active') is True and before.get('active') is not True)
+    added_uids = set(after.get('allow_uids') or ()) - set(before.get('allow_uids') or ())
+    return bool(added_uids) or new > old or (after.get('active') is True and before.get('active') is not True)
 
 
 def override_reason(reason: str, accept: str | None) -> str:
@@ -250,16 +251,29 @@ class Prover:
         self.image_commits[image] = sha
         return sha
 
+    @staticmethod
+    def cloud_run_format(containers: str) -> str:
+        # Project in gcloud itself: the subprocess must never return other env
+        # values, including inline secrets. Keep the nested API response shape.
+        return (
+            f'--format=json({containers}[0].image,metadata.labels,'
+            f'{containers}[0].env.filter("name=OMI_BACKEND_RELEASE_SHA"))'
+        )
+
     def runtime_commits(self, runtime: dict) -> list[tuple[str | None, str]]:
         name, platform = runtime.get('deployed_as', runtime['name']), runtime['platform']
         gcloud = ['gcloud', 'run']
-        options = ['--project', self.project, '--region', self.region, '--format=json']
+        options = ['--project', self.project, '--region', self.region]
         if platform == 'cloud-run':
-            service = self.json_command(gcloud + ['services', 'describe', name, *options])
+            service = self.json_command(
+                gcloud + ['services', 'describe', name, *options, '--format=json(status.traffic)']
+            )
             revision = serving_revision(service)
             if not revision:
                 return [(None, 'unknown')]
-            doc = self.json_command(gcloud + ['revisions', 'describe', revision, *options])
+            doc = self.json_command(
+                gcloud + ['revisions', 'describe', revision, *options, self.cloud_run_format('spec.containers')]
+            )
             container = doc['spec']['containers'][0]
             env_sha = next(
                 (e.get('value') for e in container.get('env', []) if e.get('name') == 'OMI_BACKEND_RELEASE_SHA'), None
@@ -270,9 +284,22 @@ class Prover:
             sha = self.image_commit(image)
             return [(sha or self.commit(doc.get('metadata', {}).get('labels', {}).get('commit-sha')), image)]
         if platform == 'cloud-run-job':
-            doc = self.json_command(gcloud + ['jobs', 'describe', name, *options])
-            image = doc['spec']['template']['spec']['template']['spec']['containers'][0]['image']
-            return [(self.image_commit(image), image)]
+            doc = self.json_command(
+                gcloud
+                + [
+                    'jobs',
+                    'describe',
+                    name,
+                    *options,
+                    self.cloud_run_format('spec.template.spec.template.spec.containers'),
+                ]
+            )
+            container = doc['spec']['template']['spec']['template']['spec']['containers'][0]
+            image = container['image']
+            env_sha = next(
+                (e.get('value') for e in container.get('env', []) if e.get('name') == 'OMI_BACKEND_RELEASE_SHA'), None
+            )
+            return [(self.commit(env_sha) if env_sha else self.image_commit(image), image)]
         if platform != 'gke':
             raise Unread(name, 'platform_unknown')
         pods = self.json_command(
@@ -327,6 +354,12 @@ class Prover:
     def check(self, key: str) -> tuple[bool, str, dict]:
         if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_-]*', key):
             raise Unread('key', 'key_invalid')
+        # The reader roster and introducing commits must come from fresh main,
+        # even when the caller selects another named ref for diagnosis.
+        try:
+            self.git('fetch', '--quiet', 'origin', 'main')
+        except Unread:
+            raise Unread('origin', 'fetch_failed') from None
         ramp = key in RAMP_NAMES
         # _ramp readers must all understand a new name (store rejects unknown
         # names). Bind both the runtime reader and that name's writer schema.
@@ -413,6 +446,9 @@ class Prover:
         jobs = self.source('backend/charts/monitoring/expected-targets.prod.yaml')['scrape_jobs']
         checked = set()
         for runtime in roster:
+            if runtime['platform'] == 'cloud-run-job':
+                print(f"RAMP_PREFLIGHT NOTE scrape_not_applicable runtime={runtime['name']}")
+                continue
             candidates = [
                 job['name']
                 for job in jobs

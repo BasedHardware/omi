@@ -388,3 +388,40 @@ def test_percentage_raise_on_inactive_rule_is_still_gated(monkeypatch):
     writer.assert_not_called()
     assert cli.main(['set', 'k', '--rollout', '25', '--inactive', '--reason', 'kill', '--yes']) == 0
     assert check.call_count == 1
+
+
+@pytest.mark.parametrize(
+    'active,pct,allow,options,gated',
+    [
+        (True, 0, [], ['--allow', 'new'], True),
+        (False, 0, [], ['--allow', 'new'], True),
+        (False, 0, ['existing'], ['--active'], True),
+        (True, 0, ['existing'], ['--allow', 'existing'], False),
+        (True, 0, ['existing'], ['--unallow', 'existing'], False),
+        (True, 0, ['existing'], ['--deny', 'new'], False),
+        (True, 25, [], ['--allow', 'new', '--rollout', '5'], False),
+        (True, 0, [], ['--allow', 'new', '--inactive'], False),
+        (True, 0, ['existing'], ['--allow', 'new', '--unallow', 'existing'], True),
+        (True, 0, [], ['--allow', 'new', '--unallow', 'new'], False),
+    ],
+)
+def test_allowlist_raise_and_rollback_matrix(monkeypatch, active, pct, allow, options, gated):
+    current = {'active': active, 'rollout_percentage': pct, 'allow_uids': allow}
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': current}))
+    writer = Mock()
+    monkeypatch.setattr(cli, '_write', writer)
+    check = Mock(side_effect=SystemExit(4))
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    args = ['set', 'k', '--reason', 'allowlist regression', '--yes', *options]
+    if gated:
+        with pytest.raises(SystemExit) as error:
+            cli.main(args)
+        assert error.value.code == 4
+        check.assert_called_once()
+        writer.assert_not_called()
+    else:
+        assert cli.main(args) == 0
+        check.assert_not_called()
+        writer.assert_called_once()
