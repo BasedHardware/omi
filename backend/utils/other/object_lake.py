@@ -407,12 +407,13 @@ def _candidate_is_quiescent(row: dict, now: datetime) -> bool:
         and row.get('settled') is not True
     ):
         raise LakeFetchError('Lake upload candidate state invalid')
+    quiescent = True
     for admitted_at in pending.values():
         if not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None:
             raise LakeFetchError('Lake upload admission time unavailable')
-    return all(
-        (now - admitted_at).total_seconds() > config.put_quiescence_seconds() for admitted_at in pending.values()
-    )
+        if (now - admitted_at).total_seconds() <= config.put_quiescence_seconds():
+            quiescent = False
+    return quiescent
 
 
 def delete_entity_upload_candidates(
