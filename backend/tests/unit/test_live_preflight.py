@@ -27,8 +27,6 @@ class LivePreflightTest(unittest.TestCase):
         for name in [*local, 'GIT_NAMESPACE']:
             self.git_env.pop(name, None)
         self.git('init', '-q')
-        self.git('config', 'user.name', 'Fixture')
-        self.git('config', 'user.email', 'fixture@example.invalid')
         self.write('backend/utils/reader.py', 'old = True\n')
         self.write(
             'backend/runtime_images.json',
@@ -79,7 +77,7 @@ class LivePreflightTest(unittest.TestCase):
 
     def commit(self, message):
         self.git('add', '.')
-        self.git('commit', '-qm', message)
+        self.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', message)
         return self.git('rev-parse', 'HEAD')
 
     def update(self, path, value):
