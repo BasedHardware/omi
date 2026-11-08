@@ -18,6 +18,7 @@ from config.merge_before_processing import enabled as merge_before_processing_en
 from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
+from config.server_batch import proven_empty as server_batch_proven_empty
 from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
@@ -238,14 +239,7 @@ def _record_registration_required(row: dict[str, Any]) -> bool:
     return (
         row.get('record_lane_owner') == 'batch_live_v1'
         and not row.get('discarded')
-        and not (
-            server_batch_owned(row)
-            and row.get('server_batch_audio_closed') is True
-            and row.get('server_batch_audio_received') is False
-            and not row.get('record_upload_failed')
-            and not row.get('record_upload_sessions')
-            and not server_batch_has_audio(row)
-        )
+        and not server_batch_proven_empty(row)
     )
 
 

@@ -655,16 +655,16 @@ def restore_discarded(uid: str, conversation_id: str) -> bool:
             return None
         if current.get('record_lane_owner') != 'batch_live_v1':
             return True
-        # A closed, proven-empty server capture has no audio obligation. Open
-        # archives still register: the batch drain owns their upload barrier.
-        if (
-            server_batch.owned(current)
-            and current.get('record_audio_closed') is True
-            and current.get('server_batch_audio_received') is False
-            and not current.get('record_upload_failed')
-            and not current.get('record_upload_sessions')
-            and not server_batch.has_audio(current)
-        ):
+        # The finalizer's proven-empty predicate, plus the capture's own audio-closed
+        # gate: an open archive still registers, because the batch drain owns its
+        # upload barrier.
+        if server_batch.proven_empty(current) and current.get('record_audio_closed') is True:
+            return True
+        # A projected row was already fulfilled. Its receipt expires after 45 days,
+        # and register_recording dedupes only against the job, so a new obligation
+        # here would transcribe the audio again. record_projection_revision is the
+        # projected marker (utils/conversations/phase.py).
+        if current.get('record_projection_revision'):
             return True
         current['id'] = conversation_id
         return register_recording(uid, current, transaction=tx, restoring=True)

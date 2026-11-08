@@ -1523,13 +1523,15 @@ def _complete_discarded_server_batch_fanout_txn(
         'finalization_revision'
     )
     if bound and current.get('status') == 'processing':
-        # A completed write carries its decision. The discard verdict is preserved.
-        terminal = {**current, 'status': 'completed'}
-        stamp_terminal_decision(terminal, path='lifecycle_terminal')
-        transaction.update(
-            conversation_ref,
-            {'status': 'completed', 'relevance_decision': terminal['relevance_decision']},
+        # The owner decides the terminal patch; a discard verdict is preserved.
+        claimed = conversations_db.claim_conversation_status_in_txn(
+            current,
+            expected_status='processing',
+            claimed_status='completed',
+            allow_discarded=True,
         )
+        if claimed is not None:
+            transaction.update(conversation_ref, claimed)
     transaction.update(
         job_ref,
         {

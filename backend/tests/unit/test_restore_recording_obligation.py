@@ -347,3 +347,32 @@ def test_discarded_zero_preview_parent_passes_restore_barrier_after_fanout_close
     restored = restore_store.rows[ROW_PATH]
     assert restored['discarded'] is False
     require_record_audio_barrier(restored)
+
+
+def test_restore_after_receipt_expiry_on_projected_row_creates_no_obligation(restore_store):
+    # The 45-day receipt has expired, so no job remains for register_recording to dedupe against.
+    restore_store.rows[ROW_PATH]['record_projection_revision'] = 3
+    assert JOB_PATH not in restore_store.rows
+
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert JOB_PATH not in restore_store.rows
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+
+
+def test_restore_with_open_server_archive_registers_once_despite_closed_generic_flag(restore_store):
+    # record_audio_closed is true on the row, but the server archive is still open.
+    row = restore_store.rows[ROW_PATH]
+    row.update(server_batch_audio_closed=False, server_batch_audio_received=False)
+
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[JOB_PATH]['state'] == 'record_pending'
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+
+
+def test_restore_with_closed_empty_server_archive_creates_no_obligation(restore_store):
+    row = restore_store.rows[ROW_PATH]
+    row.update(has_content=False, server_batch_audio_received=False)
+
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert JOB_PATH not in restore_store.rows
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
