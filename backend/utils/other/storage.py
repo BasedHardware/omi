@@ -1465,35 +1465,24 @@ def download_audio_chunks_and_merge(
         for ext in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
             entry = next((item for item in actual_chunks if item['path'] == chunk_path), {})
-            if strict_sources:
-                # A stamped path need not round-trip through the sample clock.
-                if entry and entry['timestamp'] != timestamp:
-                    entry = {}
-                entry = entry or next(
-                    (
-                        item
-                        for item in actual_chunks
-                        if item['timestamp'] == timestamp
-                        and not item.get('is_batch')
-                        and _get_extension_for_path(item['path']) == ext
-                    ),
-                    {},
-                )
-                if not entry:
-                    continue
-                pcm_data = _download_and_decode_blob(entry['path'])
-                if pcm_data is not None:
-                    return timestamp, pcm_data
+            if strict_sources and entry and entry['timestamp'] != timestamp:
+                entry = {}
+            # A stamped or gap-fill (.6f) path need not round-trip through the sample clock.
+            entry = entry or next(
+                (
+                    item
+                    for item in actual_chunks
+                    if item['timestamp'] == timestamp
+                    and not item.get('is_batch')
+                    and _get_extension_for_path(item['path']) == ext
+                ),
+                {},
+            )
+            if strict_sources and not entry:
                 continue
-            source = _get_storage_client().bucket(entry['bucket']) if entry.get('bucket') else bucket
-            if chunk_loader is not None:
-                pcm_data = chunk_loader(chunk_path)
-                if pcm_data is not None:
-                    return timestamp, pcm_data
-                continue
-            raw_pcm = download_and_decode_chunk_blob(source, chunk_path, uid, sample_rate)
-            if raw_pcm is not None:
-                return timestamp, raw_pcm
+            pcm_data = _download_and_decode_blob(entry.get('path', chunk_path))
+            if pcm_data is not None:
+                return timestamp, pcm_data
 
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
