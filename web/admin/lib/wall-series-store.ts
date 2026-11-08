@@ -185,15 +185,18 @@ export function decodeStoredPayload(data: { payload?: string } | undefined) {
     return null;
   }
 }
-/** Lease docs fail closed: an unparseable lease throws, so `acquire` reports
- * "unavailable" instead of treating corrupt lease state as free. Leg docs
- * stay recoverable through decodeStoredPayload. */
+/** Lease docs fail closed: an existing lease doc whose payload is missing,
+ * empty or unparseable throws, so `acquire` reports "unavailable" instead of
+ * treating corrupt lease state as free. Callers only decode existing docs.
+ * Leg docs stay recoverable through decodeStoredPayload. */
 export function decodeStoredDoc(
   key: string,
   data: { payload?: string } | undefined
 ) {
   if (key.startsWith(`${STORE_PREFIX}:lease:`)) {
-    return data?.payload ? JSON.parse(data.payload) : null;
+    if (!data?.payload)
+      throw new SyntaxError("wall-series lease doc has no payload");
+    return JSON.parse(data.payload);
   }
   return decodeStoredPayload(data);
 }

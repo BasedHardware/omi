@@ -33,7 +33,15 @@ describe("decodeStoredPayload", () => {
     expect(() =>
       decodeStoredDoc(leaseKey("headline"), { payload: '{"token":"a' })
     ).toThrow(SyntaxError);
-    expect(decodeStoredDoc(leaseKey("headline"), undefined)).toBeNull();
+    expect(() => decodeStoredDoc(leaseKey("headline"), {})).toThrow(
+      SyntaxError
+    );
+    expect(() =>
+      decodeStoredDoc(leaseKey("headline"), { payload: "" })
+    ).toThrow(SyntaxError);
+    expect(
+      decodeStoredDoc(leaseKey("headline"), { payload: '{"token":"a"}' })
+    ).toEqual({ token: "a" });
     expect(decodeStoredDoc("leg-key", { payload: '{"rows":[' })).toBeNull();
     warn.mockRestore();
   });
