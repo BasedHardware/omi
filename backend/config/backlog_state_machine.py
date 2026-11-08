@@ -31,7 +31,7 @@ semantics. Turning a switch off restores the exact pre-change transition.
   parking changes custody): an aged
   record_pending row whose conversation exists but never completed is
   re-driven weekly with a counter, then parked as a retained dead letter.
-- ``BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED`` (class 5): an unrestorable
+- ``BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED`` (class 5, default OFF): an unrestorable
   assignment hold gets a deadline and then a retained escalation marker.
 
 None of these transitions deletes audio, results, custody tokens or privacy

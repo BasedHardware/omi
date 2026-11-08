@@ -45,7 +45,7 @@ off.
 | `BATCH_HELD_REDRIVE_COUNTER_ENABLED` (default **ON**: counting and an alert only) | 6 (counter): re-drives were not counted | No `held_redrives` / `held_expired_rearms` increments and no spent-budget observation; existing counters are inert |
 | `BATCH_HELD_REDRIVE_TERMINAL_STOP_ENABLED` (default **OFF**: the stop changes state) | 6 (terminal stop): automatic re-drive never stopped | Unbounded nightly and poll re-drive and projection re-arm; the nightly pass also requeues units already marked `held_exhausted`, and a receipt marked `held_rearm_exhausted_at` regains the legacy re-arm |
 | `RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED` (default **OFF**: parking changes custody) | 4: unfinished conversations retried forever | Aged rows stay on the hourly barrier ladder; parked rows return to it at their next daily recheck |
-| `BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED` | Unrestorable assignment holds had no deadline | No new deadline stamps or escalations; existing markers are inert |
+| `BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED` (default **OFF**; marker and deadline only, automatic release is the pre-existing release-scan leg) | Unrestorable assignment holds had no deadline | No new deadline stamps or escalations; existing markers are inert |
 
 ### Retry cap enforcement (class 1, default OFF)
 

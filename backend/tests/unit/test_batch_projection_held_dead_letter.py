@@ -52,8 +52,11 @@ def test_old_rows_receive_a_full_window_and_malformed_deadlines_never_expire():
         assert not client.transactions[-1].updates
 
 
+@pytest.mark.parametrize('escalation', ['true', None])
 @pytest.mark.parametrize('blocked', ['privacy', 'operator', 'persisted', 'wrong-reason', 'wrong-owner'])
-def test_expiry_never_bypasses_original_eligibility(blocked):
+def test_expiry_never_bypasses_original_eligibility(blocked, escalation, monkeypatch):
+    if escalation is not None:
+        monkeypatch.setenv('BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED', escalation)
     seeded = rows(discarded=True, held_deadline_at=1)
     if blocked == 'privacy':
         seeded[RESULT]['projection_privacy_refusal'] = True
@@ -68,7 +71,7 @@ def test_expiry_never_bypasses_original_eligibility(blocked):
     client, store = store_for(seeded)
     assert not ProjectionReleaseStore(store).release('held', 100)
     expected = deepcopy(seeded)
-    if blocked == 'persisted':
+    if blocked == 'persisted' and escalation == 'true':
         # A persisted assignment hold never expires; its only write is the
         # backlog-state-machine deadline stamp, never held_expired.
         expected[RESULT]['assignment_hold_deadline_at'] = 100 + ASSIGNMENT_HOLD_DEADLINE_SECONDS

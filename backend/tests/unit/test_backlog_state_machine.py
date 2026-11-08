@@ -70,7 +70,7 @@ EXPECTED_DEFAULTS = {
     sm.HELD_REDRIVE_COUNTER_SWITCH: True,
     sm.HELD_REDRIVE_STOP_SWITCH: False,
     sm.RECORD_BARRIER_DEAD_LETTER_SWITCH: False,
-    sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: True,
+    sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH: False,
 }
 READERS = {
     sm.RETRY_CAP_SWITCH: sm.retry_cap_enforced,
@@ -922,6 +922,7 @@ def test_assignment_held_releases_automatically_only_when_target_restorable(proj
 
 def test_unrestorable_assignment_hold_escalates_after_its_deadline_and_keeps_its_obligation(projection, monkeypatch):
     """Review wave 1 (finding 5): every non-terminal state has an owner and a deadline."""
+    monkeypatch.setenv(sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH, 'true')  # class 5 (default off)
     import database.batch_pipeline_projection_release as release
 
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
@@ -974,10 +975,12 @@ def test_unrestorable_assignment_hold_escalates_after_its_deadline_and_keeps_its
     assert entry.get('assignment_hold_escalated_at') is None
 
 
-def test_assignment_hold_escalation_kill_switch_writes_nothing(projection, monkeypatch):
+@pytest.mark.parametrize('switch', ['false', None])
+def test_assignment_hold_escalation_kill_switch_writes_nothing(projection, monkeypatch, switch):
     import database.batch_pipeline_projection_release as release
 
-    monkeypatch.setenv(sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH, 'false')
+    if switch is not None:
+        monkeypatch.setenv(sm.ASSIGNMENT_HOLD_ESCALATION_SWITCH, switch)
     rows, store_for = projection
     client, store = store_for(rows(projection_state='persisted', discarded=True))
     client.rows[('batch_pipeline_prod_jobs', 'held')]['state'] = 'committed'

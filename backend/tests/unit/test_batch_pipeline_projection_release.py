@@ -257,10 +257,13 @@ def test_release_scan_cursor_failures_never_stop_the_scan(monkeypatch):
     assert _scanner(broken)(1)['examined'] == 1
 
 
+@pytest.mark.parametrize('escalation', ['true', None])
 @pytest.mark.parametrize('summary', ['quarantined', 'persisted'])
 @pytest.mark.parametrize('blocked', [None, 'target', 'attempts', 'privacy', 'operator'])
-def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summary, blocked):
+def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summary, blocked, escalation):
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    if escalation is not None:
+        monkeypatch.setenv('BATCH_ASSIGNMENT_HOLD_ESCALATION_ENABLED', escalation)
     held_part = {'state': 'quarantined', 'disposition': 'ambiguous_generation'}
     suffix = {'state': 'persisted', 'conversation_id': 'proven-suffix', 'audio_required': True}
     seeded = rows(
@@ -282,7 +285,7 @@ def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summar
     assert ProjectionReleaseStore(store).release('held', 500.0) is (blocked is None)
     if blocked:
         expected = deepcopy(seeded)
-        if blocked == 'target':
+        if blocked == 'target' and escalation == 'true':
             # An unrestorable assignment hold only gains its deadline stamp
             # (backlog state machine); its parts and proven suffix are untouched.
             expected[('batch_pipeline_prod_results', 'held')]['assignment_hold_deadline_at'] = (
