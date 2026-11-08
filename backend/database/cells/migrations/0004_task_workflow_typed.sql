@@ -49,11 +49,13 @@ ALTER TABLE cell_docs ADD COLUMN q_completed boolean GENERATED ALWAYS AS
     (cell_query_timestamp(doc->'created_at')) STORED,
     ADD COLUMN q_updated_at timestamptz GENERATED ALWAYS AS
     (cell_query_timestamp(doc->'updated_at')) STORED,
+    -- Key projections keep only JSON strings: a legacy numeric 123 must not
+    -- match the string '123', matching the simulator's typed equality.
     ADD COLUMN q_conversation_id text GENERATED ALWAYS AS
-    (doc->>'conversation_id') STORED,
+    (CASE WHEN jsonb_typeof(doc->'conversation_id')='string' THEN doc->>'conversation_id' END) STORED,
     ADD COLUMN q_idempotency_key text GENERATED ALWAYS AS
-    (doc->>'idempotency_key') STORED,
-    ADD COLUMN q_goal_id text GENERATED ALWAYS AS (doc->>'goal_id') STORED,
+    (CASE WHEN jsonb_typeof(doc->'idempotency_key')='string' THEN doc->>'idempotency_key' END) STORED,
+    ADD COLUMN q_goal_id text GENERATED ALWAYS AS (CASE WHEN jsonb_typeof(doc->'goal_id')='string' THEN doc->>'goal_id' END) STORED,
     ADD COLUMN q_status text GENERATED ALWAYS AS (doc->>'status') STORED,
     ADD COLUMN q_order jsonb GENERATED ALWAYS AS (doc->'order') STORED;
 

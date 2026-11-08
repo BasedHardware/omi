@@ -64,7 +64,7 @@ def test_expand_only_numbering_and_b2_dependency():
     assert len(re.findall(r'ALTER\s+TABLE\s+cell_docs', sql, re.IGNORECASE)) == 1
     assert len(re.findall(r'ADD\s+COLUMN', sql, re.IGNORECASE)) == 10
     assert 'ACCESS EXCLUSIVE' in sql
-    assert migrations[3].checksum == 'a4b59f64c52cb2d01626a4e083f4f52c9ba971d20617cab21b2d2e6a2caf42d2'
+    assert migrations[3].checksum == '67f15b5d745aed142657b0ac4778f8faa620bce202c3f7e988aeafff90013219'
     for migration in migrations[1:]:
         # Inspect statements, not the descriptive comments or string literals.
         statements = re.sub(r"--[^\n]*|'(?:''|[^'])*'", '', migration.sql)
@@ -586,3 +586,17 @@ def test_wrong_typed_generation_refuses_task_goal_links(pg, case, generation):
         account_generation=0,
     )
     assert result['failed'] == 2 and sorted(result['failure_task_ids']) == ['t-bad', 't-ok']
+
+
+def test_numeric_legacy_idempotency_key_does_not_match_string_request(pg):
+    sid = pg.space('legacy-numeric-idempotency')
+    now = datetime.now(timezone.utc)
+    pg.seed(
+        sid,
+        'action_items',
+        't-legacy',
+        {'description': 'Legacy', 'completed': False, 'idempotency_key': 123, 'created_at': now, 'updated_at': now},
+    )
+    created = pg.action_items(sid).create(ActionItemDraft(data={'description': 'New'}), idempotency_key='123')
+    assert created != 't-legacy'
+    assert pg.action_items(sid).create(ActionItemDraft(data={'description': 'Again'}), idempotency_key='123') == created
