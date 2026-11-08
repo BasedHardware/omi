@@ -85,6 +85,8 @@ def harness(monkeypatch):
             return {'status': 'claimed' if admitted else 'fenced', 'fanout_key': 'key'}
         if function is finalizer.lifecycle_service.complete_finalization_fanout:
             return True
+        if function is finalizer.lifecycle_service.complete_discarded_server_batch_fanout:
+            return True
         if function is finalizer.link_duplicate_captures:
             raise RuntimeError('reached derived work')
         raise AssertionError(f'unexpected blocking call: {function!r}')

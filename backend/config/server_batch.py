@@ -154,6 +154,18 @@ def has_audio(capture: Mapping) -> bool:
     )
 
 
+def proven_empty(capture: Mapping) -> bool:
+    """A closed, received-empty server archive owes no recording obligation."""
+    return (
+        owned(capture)
+        and capture.get('server_batch_audio_closed') is True
+        and capture.get('server_batch_audio_received') is False
+        and not capture.get('record_upload_failed')
+        and not capture.get('record_upload_sessions')
+        and not has_audio(capture)
+    )
+
+
 def language_compatible(capture: Mapping, language: str | None) -> bool:
     stored, requested = normalized_stt_language(capture.get('language')), normalized_stt_language(language)
     return not owned(capture) or stored == requested or (stored in AUTO_LANGUAGES and requested in AUTO_LANGUAGES)
