@@ -299,7 +299,7 @@ def test_same_key_admissions_use_server_times_and_settle_independently(state):
 
 
 def test_conversation_purge_erases_settled_and_aged_intents_with_real_ranges(state):
-    client, uid, bucket = state
+    client, uid, _ = state
     lake.put_space_object(uid, 'transcript', 'c', b'settled')
     key = f'v1/spaces/{uid}/transcript/c/abandoned'
     lake._record_upload_candidate('old-bucket', key)

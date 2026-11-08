@@ -615,8 +615,10 @@ def test_zero_drain_skips_sleep_but_still_purges(world, monkeypatch):
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '0')
     lake.put_space_object('owner', 'transcript', 'c', b'[]')
     marker(store)
+    sleep = Mock(side_effect=AssertionError('zero drain must skip sleep'))
+    monkeypatch.setattr(lake_wipe.time, 'sleep', sleep)
     assert lake_wipe.purge_owner_lake_content('owner')['objects_deleted'] == 1
-    lake_wipe.time.sleep.assert_not_called()
+    sleep.assert_not_called()
     assert not list(bucket.list_blobs())
 
 

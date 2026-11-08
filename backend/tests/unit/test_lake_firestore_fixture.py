@@ -12,11 +12,13 @@ from tests.unit.fixtures.lake_firestore import CandidateQuery, LakeFirestore
 
 @pytest.mark.parametrize('field,op', [('key', '=='), ('key', '>'), ('bucket', '>=')])
 def test_candidate_filter_rejects_unsupported_semantics(field, op):
-    query = LakeFirestore().collection('lake_upload_candidates')
+    store = LakeFirestore()
+    query = store.collection('lake_upload_candidates')
     with pytest.raises(NotImplementedError):
         query.where(filter=FieldFilter(field, op, 'a'))
+    store.rows[('lake_upload_candidates', 'candidate')] = {'key': 'b'}
     with pytest.raises(NotImplementedError):
-        CandidateQuery._matches('b', FieldFilter(field, op, 'a'))
+        list(CandidateQuery(store, ('lake_upload_candidates',), filters=(FieldFilter(field, op, 'a'),)).stream())
 
 
 def test_candidate_filter_rejects_unsupported_operator_with_optimization():
