@@ -230,6 +230,7 @@ class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
     deferred = 'deferred'
+    discarded = 'discarded'
 
 
 def _record_registration_required(row: dict[str, Any]) -> bool:
@@ -279,6 +280,9 @@ async def finalize_persisted_conversation(
         and not conversation.transcript_segments
         and not getattr(conversation, 'photos', None)
     ):
+        if conversation_data.get('discarded'):
+            logger.info('event=server_batch_finalization outcome=discarded')
+            return ConversationFinalizationDisposition.discarded
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
                 raise RuntimeError('server batch archive is not closed')

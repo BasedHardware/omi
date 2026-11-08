@@ -388,6 +388,7 @@ def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: st
             'finalization_revision': 1,
         }
     )
+    discarded_conversation = conversation_ref.get().to_dict()
     job_ref = client.collection(finalization_jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
     job = {
         'uid': uid,
@@ -470,6 +471,8 @@ def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: st
     _, segment_id = record_identity(uid, conversation_id)
     record_ref = client.collection(f'{store.namespace}_jobs').document(segment_id)
     assert not record_ref.get().exists, 'discarded pass registered an audio obligation'
+    assert not register_recording(uid, {**discarded_conversation, 'discarded': True}, store=store, server_flags={})
+    assert record_ref.get().exists is False
     restored = conversation_ref.get().to_dict()
     assert register_recording(uid, restored, store=store, server_flags={})
     assert record_ref.get().to_dict()['state'] == 'record_pending'

@@ -1,10 +1,16 @@
 """Intentional relevance discards retain the finalizer's existing terminal fence."""
 
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
+from routers import conversation_finalization as finalization_router
 from utils.conversations import finalizer
+from utils.conversations import demand_processing
 from utils.conversations.processing_trigger import ProcessingTrigger
 from tests.unit.test_conversation_smart_merge_finalizer import harness, _Conversation, _JOB, _finalize
 
@@ -75,12 +81,89 @@ async def test_processing_registration_uses_persisted_discard_result(
         else finalizer.ConversationFinalizationDisposition.completed
     )
     assert await _finalize() is expected
-    assert row['discarded'] is initial_discarded  # Initial read stays stale after persistence.
+    assert durable['discarded'] is processed_discarded  # Persistence, not the stale initial read, is authoritative.
     assert finalizer.lifecycle_service.claim_finalization_fanout in calls
     assert (finalizer.register_recording in calls) is not processed_discarded
     assert (finalizer.lifecycle_service.complete_finalization_fanout in calls) is not processed_discarded
     assert finalizer.link_duplicate_captures not in calls
     assert finalizer.RECORD_REGISTER_REFUSED._value.get() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('has_audio', [False, True])
+async def test_discarded_server_batch_fast_path_terminalizes_once_without_registration(
+    harness, monkeypatch, caplog, has_audio
+):
+    calls, row = harness
+    row.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        discarded=True,
+        has_content=has_audio,
+        server_batch_audio_start=0,
+        server_batch_audio_end=10,
+        server_batch_audio_closed=True,
+        audio_files=['retained-audio'],
+    )
+    retained = dict(row)
+    conversation = _Conversation()
+    conversation.discarded = True
+    conversation.transcript_segments = []
+    conversation.photos = []
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+
+    async def inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    job = dict(_JOB)
+
+    def claim(*args, **kwargs):
+        if job['status'] == 'completed':
+            return {'status': 'completed'}
+        return {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0}
+
+    def complete(*args, **kwargs):
+        job['status'] = 'completed'
+        return True
+
+    completed = MagicMock(side_effect=complete)
+    terminal = MagicMock()
+    client_terminal = MagicMock()
+    retry = AsyncMock()
+    monkeypatch.setattr(finalization_router, 'run_blocking', inline)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda _: 'lock')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(finalization_router, 'account_deletion_blocks_user_work', lambda _: False)
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda _: False)
+    monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
+    monkeypatch.setattr(jobs_db, 'get_finalization_job', lambda _: job)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
+    monkeypatch.setattr(finalization_router, 'record_capture_finalization_terminal', terminal)
+    monkeypatch.setattr(finalization_router, 'record_conversation_finalization_client_terminal', client_terminal)
+    monkeypatch.setattr(finalization_router, '_retry_or_dead_letter', retry)
+    request = SimpleNamespace(json=AsyncMock(return_value={'job_id': 'job', 'dispatch_generation': 1}))
+
+    with caplog.at_level('INFO', logger=finalizer.logger.name):
+        first = await finalization_router.run_listen_finalization_job(request, task_retry_count=0)
+        replay = await finalization_router.run_listen_finalization_job(request, task_retry_count=0)
+
+    assert first.status_code == replay.status_code == 200
+    assert json.loads(first.body) == {'status': 'done'}
+    assert json.loads(replay.body) == {'status': 'acked', 'job_status': 'completed'}
+    completed.assert_called_once_with('job', 1, 1)
+    terminal.assert_called_once_with('success', None)
+    client_terminal.assert_called_once_with('success', job)
+    retry.assert_not_called()
+    assert calls.count(finalizer.conversations_db.get_conversation) == 1
+    assert finalizer.register_recording not in calls
+    assert finalizer.lifecycle_service.delete_empty_recording_conversation not in calls
+    assert finalizer.lifecycle_service.complete_server_batch_capture not in calls
+    assert finalizer.process_with_episode_budget not in calls
+    assert row == retained
+    assert [record.getMessage() for record in caplog.records if 'outcome=discarded' in record.getMessage()] == [
+        'event=server_batch_finalization outcome=discarded'
+    ]
 
 
 @pytest.mark.asyncio
