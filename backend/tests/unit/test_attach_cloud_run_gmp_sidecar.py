@@ -1405,6 +1405,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert kept('omi_batch_projection_claim_busy_backoffs_total')
     assert kept('omi_batch_projection_privacy_blocked_stops_total')
     assert kept('omi_batch_projection_privacy_backoffs_total')
+    assert kept('omi_batch_projection_live_target_backoffs_total')
     assert kept('omi_batch_projection_privacy_row_changed_total')
     assert kept('omi_batch_projection_privacy_resumes_attempted_total')
     assert kept('omi_batch_projection_privacy_resumes_succeeded_total')

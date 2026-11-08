@@ -4,6 +4,35 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cv1-battery-soc
+    command: ["bash", "omi/firmware/omi/tests/battery/run.sh"]
+    triggers: ["omi/firmware/omi/src/battery.c", "omi/firmware/omi/src/lib/core/lib/battery/battery.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/battery/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#20483: charger voltage must not inflate the last off-charger SOC; reject edge-spanning samples and keep disconnected BAS current"
+
+  - id: cv1-device-name
+    command: ["python3", "omi/firmware/omi/tests/test_device_name.py"]
+    triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/settings.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/tests/test_device_name*", "omi/firmware/omi/tests/settings_stubs/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23743: reject partial NVS names without publishing them and keep advertising bytes immutable across BLE RX updates"
+  - id: firmware-ota-slot-geometry
+    command: ["python3", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    triggers: ["omi/firmware/boards/omi/pm_static.yml", "omi/firmware/tools/cv1/pinned-partitions.yml", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    lanes: ["local", "ci"]
+    reason: "#13855: moved OTA slots away from the installed bootloader's compiled addresses, which would stop later OTAs from applying"
+  - id: firmware-capture-mute-durability
+    command: ["bash", "omi/firmware/omi/tests/run_capture_mute_test.sh"]
+    triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14293: a failed NVS write must not receive a successful mute ACK or change the confirmed runtime mute"
+  - id: cv1-power-control
+    command: ["bash", "omi/firmware/omi/tests/run_power_control_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/power_control_gatt.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/tests/test_power*", "omi/firmware/omi/tests/test_capture_mute_settings.c", "omi/firmware/omi/tests/run_power_control_test.sh", "omi/firmware/omi/tests/settings_stubs/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23735: share the persistent mute owner instead of resuming on disconnect; queue orderly shutdown outside the system workqueue"
   - id: cv1-tested-release-contract-tests
     command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
     triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
