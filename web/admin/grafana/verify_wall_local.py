@@ -98,6 +98,9 @@ def screens(out: Path | None = None, wait_seconds: int = 240):
     from playwright.sync_api import sync_playwright
     out = out or RECORD/'build-screens'
     out.mkdir(parents=True,exist_ok=True)
+    # Playwright treats a 0 timeout as no timeout: a board that never loads would hang.
+    if wait_seconds <= 0:
+        raise ValueError('wait_seconds must be positive')
     wait_ms = wait_seconds * 1000
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()

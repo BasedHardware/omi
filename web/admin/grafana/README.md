@@ -178,6 +178,8 @@ Run records and screenshots are written only to
 `/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
 never commit that workspace run directory in the public repository. The local
 verifier writes `omi-tv-v3-1920.png` / `omi-tv-v3-1440.png` (default `build-screens/`).
+A board still loading when `--wait-seconds` (default 240) runs out is written as
+`omi-tv-v3-<width>-partial.png` and reported as a partial board; copy the `-partial` file too.
 Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
