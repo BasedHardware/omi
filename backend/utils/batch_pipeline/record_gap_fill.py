@@ -50,6 +50,7 @@ from database.sync_record_wait_cache import claim_gap_fill_marker
 from utils import encryption
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.live import retained_record_units
+from utils.observability.reasons import ReasonFamily, RecordGapFillOutcome, reason_label
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, owner_storage_write_gate, private_cloud_sync_bucket
@@ -347,7 +348,7 @@ def _keys(uid, conversation_id, wal_content_id):
 
 
 def _report(outcome: str, record: str, seconds: float) -> str:
-    GAP_FILL_TOTAL.labels(outcome=outcome).inc()
+    GAP_FILL_TOTAL.labels(outcome=reason_label(ReasonFamily.RECORD_GAP_FILL, outcome, RecordGapFillOutcome)).inc()
     logger.info(
         'event=sync_record_gap_fill outcome=%s record=%s seconds_bucket=%s',
         outcome,
