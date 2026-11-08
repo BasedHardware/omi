@@ -34,6 +34,42 @@ def validate_worker_failure(failure):
 
 WORKER_VALIDATION_REASON_TOKENS = frozenset(member.value for member in WorkerValidationReason)
 
+# The GPU language barrier refuses a unit whose frozen language the word
+# provider cannot serve. The refusal is typed (BatchValidationError with the
+# closed reason), carries affirmative strict-VAD speech evidence, ends the
+# chain terminally, and hands the unit to the fenced independent-recognizer
+# recovery lane (modulate, then Soniox) which transcribes the retained audio.
+# Nothing about the unit is lost and no retry can change the verdict, so the
+# transition is designed platform behavior — not a worker fault. Logging it
+# through the fault channels misbooks every guarded unit as a production
+# error: the vad_windows unsupported_language family is a top sensor
+# signature purely because the redrive handoff reuses the ERROR worker-fault
+# lines. Both logging sites (the worker boundary and the scheduler's terminal
+# quarantine line) consult this set so the guard demotes together and nothing
+# else does.
+LANGUAGE_GUARD_REDRIVE_REASONS = frozenset({'unsupported_language'})
+
+
+def language_guard_redrive_failure(failure: object) -> bool:
+    """True for a closed terminal diagnosis that is the language-guard redrive.
+
+    Accepts exactly the closed shapes the scheduler stores on a job: the
+    two-key ``{'stage', 'reason'}`` dicts the store validators admit. Anything
+    anonymous (empty diagnosis, extra fields, foreign reason, off-vocabulary
+    stage, non-string tokens, non-dict input) is not the guard and keeps its
+    fault classification. Never raises on hostile input.
+    """
+
+    if not isinstance(failure, dict) or set(failure) != {'stage', 'reason'}:
+        return False
+    stage, reason = failure['stage'], failure['reason']
+    return (
+        isinstance(stage, str)
+        and isinstance(reason, str)
+        and stage in WORKER_VALIDATION_STAGES
+        and reason in LANGUAGE_GUARD_REDRIVE_REASONS
+    )
+
 
 def validate_worker_failure_evidence(failure):
     """Evidence-only diagnostics from an ordinary retryable failure.

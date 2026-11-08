@@ -58,7 +58,7 @@ from utils.batch_pipeline.diarization_gate import (
     unassigned_word_count,
 )
 from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision, record_unit_diarization
-from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.errors import FatalGpuError, LANGUAGE_GUARD_REDRIVE_REASONS
 from utils.batch_pipeline.word_validation import (
     BatchValidationError,
     ValidationReason,
@@ -1468,19 +1468,40 @@ class PipelineWorker:
                     if segment_id in shadow_ids:
                         logger.info('event=batch_shadow_worker_failure stage=%s reason=%s', failure_stage, reason)
                         continue
-                    logger.error(
-                        'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
-                        'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
-                        error_class,
-                        failure_stage,
-                        segment_id,
-                        reason,
-                        samples,
-                        spans,
-                        clips,
-                        asr_words,
-                        owned,
-                    )
+                    if reason in LANGUAGE_GUARD_REDRIVE_REASONS:
+                        # The language barrier is the designed redrive handoff:
+                        # typed refusal, affirmative strict-VAD speech
+                        # evidence, terminal chain end, fenced recovery lane
+                        # waiting below. Keep every diagnostic field the fault
+                        # channel carried, but report the transition instead
+                        # of booking a worker fault per guarded unit.
+                        logger.info(
+                            'event=batch_language_guard outcome=redrive_held error_class=%s stage=%s segment_id=%s '
+                            'reason=%s samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
+                            error_class,
+                            failure_stage,
+                            segment_id,
+                            reason,
+                            samples,
+                            spans,
+                            clips,
+                            asr_words,
+                            owned,
+                        )
+                    else:
+                        logger.error(
+                            'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
+                            'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
+                            error_class,
+                            failure_stage,
+                            segment_id,
+                            reason,
+                            samples,
+                            spans,
+                            clips,
+                            asr_words,
+                            owned,
+                        )
                 except Exception:
                     pass  # Observability failure must never discard healthy results.
             return results

@@ -362,20 +362,50 @@ def test_a_quarantined_barrier_unit_awaits_the_fenced_recovery_lane():
 def test_terminal_quarantine_logs_the_documented_shape(
     caplog,
 ):
+    """A fault terminal keeps the documented ERROR shape; a guard hold demotes.
+
+    The unsupported_language family is the designed redrive handoff: it holds
+    on the exact same durable state but reports
+    event=batch_language_guard outcome=held_for_redrive at INFO instead of the
+    ERROR quarantine line (see docs/batch-language-guard-redrive-classification.md).
+    vad_bounds — a real validation fault — keeps the ERROR line this test
+    originally pinned.
+    """
     store, queue = queue_with_job()
     lease = lease_of(queue)
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.INFO):
         queue.fail(
             lease.item.segment_id,
             lease.token,
             1100.0,
-            worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'},
+            worker_failure={'stage': 'vad_windows', 'reason': 'vad_bounds'},
         )
-    messages = [r.message for r in caplog.records]
+        messages = [r.message for r in caplog.records]
     assert any(
-        'event=batch_quarantined reason=worker_failed attempt=1 recovery=held stage=vad_windows worker_reason=unsupported_language'
+        'event=batch_quarantined reason=worker_failed attempt=1 recovery=held stage=vad_windows worker_reason=vad_bounds'
         in message
         for message in messages
+    )
+    assert not any('event=batch_language_guard' in message for message in messages)
+
+    info_store, info_queue = queue_with_job()
+    info_lease = lease_of(info_queue)
+    with caplog.at_level(logging.INFO):
+        queue_fail = info_queue.fail(
+            info_lease.item.segment_id,
+            info_lease.token,
+            1100.0,
+            worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'},
+        )
+        assert queue_fail is True
+        info_messages = [r.message for r in caplog.records]
+    assert any(
+        'event=batch_language_guard outcome=held_for_redrive attempt=1 recovery=held stage=vad_windows worker_reason=unsupported_language'
+        in message
+        for message in info_messages
+    )
+    assert not any(
+        'event=batch_quarantined' in message and 'unsupported_language' in message for message in info_messages
     )
 
 

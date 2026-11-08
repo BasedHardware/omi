@@ -35,7 +35,12 @@ from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkR
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import activation_surface, activate, field, migrate_legacy, read_control
-from utils.batch_pipeline.errors import error_site_field, validate_worker_failure, validate_worker_failure_evidence
+from utils.batch_pipeline.errors import (
+    error_site_field,
+    language_guard_redrive_failure,
+    validate_worker_failure,
+    validate_worker_failure_evidence,
+)
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
 QUANTUM_SECONDS = 30.0
@@ -1023,12 +1028,26 @@ class Scheduler:
                     diagnosis = worker_failure or worker_failure_evidence or preserved_diagnosis or {}
                     terminal_stage = diagnosis.get('stage', 'unknown')
                     terminal_reason = diagnosis.get('reason', 'unclassified')
-                    logger.error(
-                        'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
-                        attempt,
-                        terminal_stage,
-                        terminal_reason,
-                    )
+                    if language_guard_redrive_failure(diagnosis):
+                        # The language guard is the designed redrive handoff:
+                        # a typed, evidence-backed terminal hold that the
+                        # fenced independent-recognizer lane settles. It keeps
+                        # the same durable state and the awaiting-recovery
+                        # warning below, but it is not a worker fault, so it
+                        # leaves the ERROR quarantine channel to faults.
+                        logger.info(
+                            'event=batch_language_guard outcome=held_for_redrive attempt=%d recovery=held stage=%s worker_reason=%s',
+                            attempt,
+                            terminal_stage,
+                            terminal_reason,
+                        )
+                    else:
+                        logger.error(
+                            'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
+                            attempt,
+                            terminal_stage,
+                            terminal_reason,
+                        )
                     logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
                 except Exception:
                     pass
