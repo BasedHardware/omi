@@ -46,6 +46,18 @@ def event_payloads(model: type[BaseModel], rows):
             continue
 
 
+def _jsonb_text(value) -> str:
+    """Render like PostgreSQL jsonb::text: object keys by (length, bytes)."""
+    if isinstance(value, dict):
+        keys = sorted(value, key=lambda key: (len(key.encode()), key.encode()))
+        return (
+            '{' + ', '.join(f'{json.dumps(key, ensure_ascii=False)}: {_jsonb_text(value[key])}' for key in keys) + '}'
+        )
+    if isinstance(value, (list, tuple)):
+        return '[' + ', '.join(_jsonb_text(item) for item in value) + ']'
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
 def scalar_order(value):
     if value is None:
         return (0, 0)
@@ -57,7 +69,7 @@ def scalar_order(value):
         return (3, value.timestamp())
     if isinstance(value, str):
         return (4, value.encode())
-    return (5, repr(value))
+    return (5, _jsonb_text(value))
 
 
 P = ParamSpec('P')

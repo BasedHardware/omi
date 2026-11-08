@@ -281,7 +281,7 @@ def test_folder_keyset_preserves_legacy_scalar_order(pg):
     assert ids == expected
 
 
-@pytest.mark.parametrize('values', [[['a'], ['b']], [{'a': 0}, {'b': 0}]])
+@pytest.mark.parametrize('values', [[['a'], ['b']], [{'a': 0}, {'b': 0}], [{'b': 0}, {'aa': 0, 'z': 0}]])
 @pytest.mark.parametrize('limit', [1, 2])
 @pytest.mark.parametrize('pending', [False, True])
 def test_folder_keyset_preserves_legacy_json_order(pg, values, limit, pending):
