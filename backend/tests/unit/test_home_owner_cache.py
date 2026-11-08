@@ -324,3 +324,55 @@ def test_owner_cache_uses_one_bounded_redis_client(monkeypatch):
     assert cache._redis() is sentinel
     assert cache._redis() is sentinel
     assert calls == [0.1]
+
+
+def test_kill_switch_off_never_gets_or_sets_and_uses_fresh_owner(runtime, monkeypatch):
+    home_processing.live_owner_for_home(UID)
+    monkeypatch.setenv('HOME_LIVE_OWNER_CACHE_ENABLED', 'false')
+    get = Mock(side_effect=AssertionError('cache get disabled'))
+    set_value = Mock(side_effect=AssertionError('cache set disabled'))
+    monkeypatch.setattr(runtime.redis, 'get', get)
+    monkeypatch.setattr(runtime.redis, 'set', set_value)
+    fresh_owner = dict(runtime.owner, id='new-episode')
+    runtime.fetch.side_effect = [fresh_owner, None]
+    assert home_processing.live_owner_for_home(UID) is fresh_owner
+    assert home_processing.live_owner_for_home(UID) is None
+    assert runtime.fetch.call_count == 3
+    get.assert_not_called()
+    set_value.assert_not_called()
+    assert runtime.redis.writes == 1  # Only the initial warm-up wrote metadata.
+
+
+@pytest.mark.parametrize('delay', [5, 31])
+def test_delayed_redis_fill_after_newer_read_cannot_extend_suppression(runtime, monkeypatch, delay):
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
+    set_value = runtime.redis.set
+
+    def delayed_set(key, value, **kwargs):
+        runtime.clock[0] = 1001
+        runtime.fetch.return_value = None  # The episode closes while the old SET is in flight.
+        assert home_processing.live_owner(UID) is None
+        runtime.clock[0] = 1000 + delay
+        return set_value(key, value, **kwargs)
+
+    monkeypatch.setattr(runtime.redis, 'set', delayed_set)
+    assert home_processing.live_owner_for_home(UID) == runtime.owner
+    runtime.fetch.assert_called_with(UID, firestore_client=None)
+    assert runtime.fetch.call_count == 2
+    wire, expiry = runtime.redis.values[KEY]
+    assert json.loads(wire)['valid_until'] == 1030
+    assert expiry == 1030 + delay
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: 'e:a',
+        },
+        query_params={},
+    )
+    rows = [{'id': 'a', 'status': 'processing', 'episode_id': 'e'}]
+    runtime.clock[0] = max(1030, 1000 + delay)
+    assert runtime.redis.get(KEY) == wire  # Redis still retains the delayed stale fill.
+    assert home_membership.project_list(UID, rows, request, None, filtered=False) == rows
+    assert runtime.fetch.call_count >= 3  # The newer read and project_list's own reads; the stale fill never serves.
+    assert runtime.redis.writes == 1
