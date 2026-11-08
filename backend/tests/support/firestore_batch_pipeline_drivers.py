@@ -17,6 +17,10 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.batch_pipeline_record_dead_letter.record_dead_letter_stock',
+            domains={'namespace': namespaces},
+        ),
+        DriverEntry(
             'utils.record_projection_rebuild.run',
             domains={'mode': ['apply', 'plan']},
             neutrals={'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only')},

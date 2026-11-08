@@ -17,6 +17,7 @@ from config.backlog_state_machine import (
 from utils.batch_pipeline.scheduler import held_redrives
 from config.batch_pipeline import batch_held_dead_letter_enabled
 from utils.backlog_metrics import record_transition
+from database.batch_pipeline_record_dead_letter import record_dead_letter_stock
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import (
@@ -215,4 +216,8 @@ class ProjectionHeldDeadLetter:
             stock = held_expired_stock(self.store.client, self.store.namespace)
             self.metrics.held_expired_stock.set(stock)
             self.metrics.held_expired_observed_at.set(now)
+            if batch_held_dead_letter_enabled():
+                stock = record_dead_letter_stock(self.store.client, self.store.namespace)
+                self.metrics.record_dead_letter_stock.set(stock)
+                self.metrics.record_dead_letter_observed_at.set(now)
         return released

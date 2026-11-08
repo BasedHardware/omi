@@ -550,7 +550,8 @@ def test_retryable_processing_failure_increments_the_attempt_budget():
     assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
 
 
-def test_repeated_record_owner_contention_does_not_consume_processing_budget():
+@pytest.mark.parametrize('reason', ['record_owner_contention', 'live_episode_notes'])
+def test_repeated_scheduling_wait_does_not_consume_processing_budget(reason):
     now = _now()
     ref = _Ref(
         'job-1',
@@ -563,7 +564,7 @@ def test_repeated_record_owner_contention_does_not_consume_processing_budget():
         ref.data.update(claim_tx.updates[0][1])
         transaction = _Transaction()
         assert jobs._mark_finalization_retryable_txn(
-            transaction, ref, 2, claim['lease_epoch'], 'record_owner_contention', now, count_attempt=False
+            transaction, ref, 2, claim['lease_epoch'], reason, now, count_attempt=False
         )
         update = transaction.updates[0][1]
         assert update['status'] == 'queued' and update['attempt_count'] == 4

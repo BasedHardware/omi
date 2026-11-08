@@ -201,6 +201,21 @@ FIELD_SITES = {
     'database/batch_pipeline_purge.py': [
         ('_write_erased_result', 'projection_state', "'erased'", ('previous_segment_id', 'projection_state'))
     ],
+    'database/batch_pipeline_record_dead_letter.py': [
+        (
+            'requeue_record.commit',
+            'state',
+            "'record_pending'",
+            (
+                'available_at',
+                'dead_letter_reason',
+                'merge_pending',
+                'record_dead_letter_at',
+                'record_dead_letter_deadline_at',
+                'state',
+            ),
+        ),
+    ],
     'database/batch_pipeline_quarantine_recovery.py': [
         (
             'RecoveryStore.settle.commit',
@@ -2036,11 +2051,13 @@ FIELD_SITES = {
                 'processed_segments',
                 'reason_code',
                 'recording_age_seconds',
+                'recording_ids',
                 'result',
                 'retry_after',
                 'started_at',
                 'status',
                 'successful_segments',
+                'target_conversation_id',
                 'total_files',
                 'total_segments',
                 'uid',
@@ -2393,6 +2410,12 @@ FIELD_SITES = {
     ],
     'utils/batch_pipeline/live.py': [
         (
+            'drain_recordings.admit_and_defer.defer',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'merge_pending', 'record_dead_letter_at', 'state'),
+        ),
+        (
             'register_recording.commit',
             'state',
             "'record_pending'",
@@ -2412,7 +2435,7 @@ FIELD_SITES = {
                 'segment_id',
                 'state',
             ),
-        )
+        ),
     ],
     'utils/batch_pipeline/merge.py': [
         (

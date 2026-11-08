@@ -348,9 +348,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         } else {
           provider.updateConversation(provider.conversation.id, provider.selectedDate);
           _selectInitialTabIfNeeded(provider.conversation);
+          unawaited(provider.refreshConversation());
         }
       } else {
         _selectInitialTabIfNeeded(provider.conversation);
+        unawaited(provider.refreshConversation());
       }
 
       // Auto-open share to contacts sheet if requested (from important conversation notification)

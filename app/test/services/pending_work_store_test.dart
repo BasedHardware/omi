@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/gen/pending_work_wire.g.dart' as wire;
 import 'package:omi/services/pending_work/pending_work_store.dart';
 
 /// The one-row Home and the bell's Needs attention read one store; retries reuse one idempotency
@@ -59,6 +60,29 @@ PendingWorkStore _store(
 }
 
 void main() {
+  test('generated pending work keeps the recording count and legacy default', () {
+    for (final count in [null, 3]) {
+      final decoded = wire.GeneratedPendingWorkSnapshot.fromJson({
+        'enabled': true,
+        'attention_unseen_count': 0,
+        'items': [
+          {
+            'id': 'sync:job',
+            'kind': 'sync_job',
+            'state': 'transcribing',
+            'conversation_ids': ['target'],
+            'duration_seconds': 0,
+            'started_at': null,
+            'updated_at': null,
+            if (count != null) 'recording_count': count,
+          }
+        ],
+      });
+      final snapshot = PendingWorkSnapshot.fromGenerated(decoded);
+      expect(snapshot.items.single.recordingCount, count ?? 1);
+    }
+  });
+
   test('a backend answering enabled:false reads as empty', () async {
     final calls = _Calls();
     final store = _store(calls);

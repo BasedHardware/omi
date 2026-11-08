@@ -1496,8 +1496,8 @@ def _mark_finalization_retryable_txn(
     projection_collection: Any | None = None,
     count_attempt: bool = True,
 ) -> bool:
-    if not count_attempt and failure_code != 'record_owner_contention':
-        raise ValueError('only route contention may defer without a processing attempt')
+    if not count_attempt and failure_code not in {'record_owner_contention', 'live_episode_notes'}:
+        raise ValueError('only route contention or live episode settlement may defer without a processing attempt')
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False

@@ -177,6 +177,23 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
 }
 
 void main() {
+  test('a live owner hides every combination of closed member states', () {
+    for (final a in _Member.values) {
+      for (final b in _Member.values) {
+        final members = [_conversation('a', a, 0), _conversation('b', b, 1)];
+        final episode = _episode(members, live: true, composed: false, ageMinutes: 0)
+            .copyWith(conversationIds: ['current', 'a', 'b']);
+        final rows = buildHomeRows(members, [episode],
+            enabled: true,
+            liveConversationIds: {'current'},
+            processingConversations: members,
+            groupAwaitingTranscript: true,
+            now: _now);
+        expect(rows, isEmpty, reason: '$a / $b are owned by Listening');
+      }
+    }
+  });
+
   test('every Home row state keeps its invariants', () {
     final scenarios = _scenarios();
     final violations = <String, List<String>>{};

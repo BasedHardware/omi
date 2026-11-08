@@ -12,6 +12,7 @@ from typing import Any
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import time
@@ -20,7 +21,7 @@ from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
-from config.record_audio import require_record_audio_barrier, record_identity
+from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from config.record_drain import (
     record_drain_batch,
@@ -41,7 +42,13 @@ from config.backlog_state_machine import (
 from utils.backlog_metrics import record_transition
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
-from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
+from config.batch_pipeline import (
+    Priority,
+    RecordOwnerContention,
+    record_capture_eligible,
+    batch_held_dead_letter_enabled,
+    RECORD_DEAD_LETTER_SECONDS,
+)
 from database.conversations import claim_record_lane_owner
 from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -65,8 +72,6 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-# config.record_audio.require_record_audio_barrier: the capture is not finalized yet.
-BARRIER_NOT_CLOSED = 'capture upload/finalization barrier not closed'
 
 
 class RecordBarrierOpen(ValueError):
@@ -88,6 +93,23 @@ def record_barrier_redrives(job: dict) -> int:
         return 0
     count = job['barrier_redrives']
     return count if type(count) is int and count >= 0 else MAX_RECORD_BARRIER_REDRIVES
+
+
+def record_park_owns(error: BaseException | None) -> bool:
+    """Class 4 owns this barrier failure: the conversation exists and is not completed.
+
+    While RECORD_PENDING_BARRIER_DEAD_LETTER_ENABLED is on, such a row follows
+    the class 4 ladder (weekly re-drive, then a retained park) for its whole
+    life, and main's record_barrier_aged dead letter is skipped for it. Every
+    other barrier failure, and every row while the switch is off, keeps main's
+    record dead letter unchanged.
+    """
+    return (
+        isinstance(error, RecordBarrierOpen)
+        and error.conversation_present
+        and error.conversation_status != 'completed'
+        and record_barrier_dead_letter_enabled()
+    )
 
 
 def barrier_dead_letter_step(job: dict, *, age: float, error: BaseException | None, now: float) -> str | None:
@@ -148,7 +170,7 @@ _RETRY_REASONS = frozenset(
     {
         'audio staging reservation missing or reclaimed',
         'capture upload barrier changed during staging',
-        'capture upload/finalization barrier not closed',
+        BARRIER_NOT_CLOSED,
         'complete ordered sibling set must match immutable projection binding',
         'conflicting retained audio overlap',
         'existing segment cannot change its immutable intake binding',
@@ -556,7 +578,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     )
 
 
-async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
+async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None) -> bool:
     """Drain one bounded pass; return whether a full page warrants another."""
     started = time.monotonic()
     batch_size = record_drain_batch()
@@ -677,28 +699,62 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             latest = tx.get('jobs', segment)
             step = None
             if latest.get('state') == 'record_pending':
+                now = time.time()
+                expired = False
+                if (
+                    barrier_open
+                    and not record_park_owns(barrier_error)
+                    and latest.get('available_at') == lease
+                    and batch_held_dead_letter_enabled()
+                ):
+                    deadline = latest.get('record_dead_letter_deadline_at')
+                    if deadline is None:
+                        latest['record_dead_letter_deadline_at'] = now + RECORD_DEAD_LETTER_SECONDS
+                    elif (
+                        not isinstance(deadline, bool)
+                        and isinstance(deadline, (int, float))
+                        and math.isfinite(deadline)
+                        and deadline <= now
+                    ):
+                        latest.update(
+                            state='dead',
+                            merge_pending=False,
+                            dead_letter_reason='record_barrier_aged',
+                            record_dead_letter_at=now,
+                        )
+                        expired = True
                 delay = 60
                 if not failed and (latest.get('partial_run') or {}).get('complete'):
                     delay = INVENTORY_POLL_SECONDS
                 elif barrier_open:
                     enqueued = latest.get('enqueued_at')
-                    age = time.time() - enqueued if isinstance(enqueued, (int, float)) else 0.0
+                    age = (
+                        max(0.0, now - enqueued)
+                        if not isinstance(enqueued, bool)
+                        and isinstance(enqueued, (int, float))
+                        and math.isfinite(enqueued)
+                        else 0.0
+                    )
                     if record_drain_barrier_backoff_enabled():
                         # The capture is not finalized yet: back off by how long it has waited.
                         delay = barrier_retry_delay(age)
-                    step = barrier_dead_letter_step(latest, age=age, error=barrier_error, now=time.time())
-                    if step == 'redrive':
-                        delay = RECORD_BARRIER_REDRIVE_SECONDS
-                    elif step == 'dead_letter':
-                        delay = RECORD_BARRIER_PARK_RECHECK_SECONDS
+                    if record_park_owns(barrier_error):
+                        step = barrier_dead_letter_step(latest, age=age, error=barrier_error, now=now)
+                        if step == 'redrive':
+                            delay = RECORD_BARRIER_REDRIVE_SECONDS
+                        elif step == 'dead_letter':
+                            delay = RECORD_BARRIER_PARK_RECHECK_SECONDS
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)
-                latest['available_at'] = max(0 if current == lease else current, time.time() + delay)
+                latest['available_at'] = max(0 if current == lease else current, now + delay)
                 tx.put('jobs', segment, latest)
-            return step
+                return expired, step
+            return False, None
 
-        step = await run_blocking(db_executor, store.run, defer)
+        expired, step = await run_blocking(db_executor, store.run, defer)
+        if expired and metrics is not None:
+            metrics.record_dead_letter.inc()
         # Count only the committed attempt, never inside the retryable callback.
         if step == 'redrive':
             record_transition('record_barrier_redrive')
