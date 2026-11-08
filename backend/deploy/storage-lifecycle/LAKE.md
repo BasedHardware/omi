@@ -76,17 +76,18 @@ upload, alongside the account marker and space key. A newly created late
 candidate removes only its own generation and refuses to return a pointer;
 a create-only retry never removes an existing referenced object. Verified-absence
 failure is a retryable `LakePurgeIncomplete` (a `LakeFetchError`) with HTTP 503.
-After verified prefix absence, deletion removes settled upload candidates and
-candidates older than the 630-second quiescence bound in each conversation's
-exact key range. Young unsettled candidates do not delay HTTP 204: their fenced
-writers remove the row transactionally when their last same-key attempt settles,
-after late-generation cleanup. Worker loss leaves discovery and possibly a late
-blob for account wipe or C3 janitor erasure; this PR does not implement a janitor.
+After verified prefix absence, deletion removes settled upload candidates in
+each conversation's exact key range only after deleting and verifying every
+recorded bucket binding. Unsettled candidates retain discovery at any age and
+schedule a durable re-purge after the newest admission plus 24 hours. Their
+fenced writers may instead erase the row after recorded-bucket absence
+verification and final same-key settlement. The scheduled handler re-deletes
+late blobs before erasing expired discovery; it is not a general orphan janitor.
 
 The developer delete endpoint calls the same orchestrator and therefore also
 purges lake content, adding a raw Firestore snapshot and a synchronous GCS purge
-when the bucket is configured. Its existing error handling returns HTTP 500 on
-lake outage, with durable intent and primary documents retained. Merge targets
+even with current bucket configuration unset. Its existing error handling
+returns HTTP 500 on lake outage, with durable intent and primary documents retained. Merge targets
 encode their own objects; merge-internal donor cleanup and abandoned candidates
 still rely on C3's orphan janitor.
 
@@ -111,7 +112,7 @@ final `lake_key_destroy` step checks every candidate for quiescence, then repeat
 verified prefix purge, deletes and verifies absence of every candidate under the
 owner's pinned release prefix (including abandoned intents and old bucket
 bindings), and destroys keys last. Young unsettled attempts block this final step
-until they settle or exceed the fixed 630-second quiescence bound. Its single-field
+until they settle or exceed the fixed 24-hour request assumption. Its single-field
 `key` range uses the automatic collection index. A newly created upload fenced
 at its post-put check removes its own blob generation. The shared discovery
 intent stays while other pre-fence uploads are active; the last fenced writer
@@ -122,9 +123,18 @@ Candidate admission reads the owner and conversation fences in the same
 Firestore transaction that creates the candidate. A writer delayed until after
 the purge scan therefore cannot recreate an intent even if it dies before put.
 With the bucket unset, the prefix step still performs zero IO; the final key
-step erases any old candidate rows before tombstoning the keys, without GCS IO.
+step still deletes each recorded object in its recorded bucket and verifies absence
+before erasing candidate rows and tombstoning the keys. A bucket change cannot
+strand decryptable content by discarding its discovery row.
 
 Put-success budgets remain positive: a positive drain gives half its duration;
 zero drain uses a fixed five-second put budget. The maximum budget remains 30
-seconds, so changing drain configuration cannot shrink the 630-second quiescence
-bound (maximum budget plus a fixed ten-minute safety margin).
+seconds. SDK socket budgets are not hard request deadlines. The independent
+24-hour bound assumes no storage request can commit a day after admission;
+changing drain configuration cannot shorten it. Conversation deletion retains
+unsettled candidates of any age, and schedules a re-purge strictly after the
+newest admission plus 24 hours via the existing sync Cloud Tasks queue. The
+hidden OIDC handler re-deletes each recorded object and verifies absence before
+erasing expired rows. Missing dispatch configuration or enqueue failure makes
+deletion retry and preserves discovery; no new infrastructure is provisioned.
+See [candidate protocol](../../docs/listen_pusher_pipeline/changes/2026-11-08-lake-upload-candidates.md).

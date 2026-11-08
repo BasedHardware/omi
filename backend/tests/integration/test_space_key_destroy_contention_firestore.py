@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from threading import Barrier, Event
 from unittest.mock import Mock
@@ -25,7 +25,10 @@ def state(tmp_path, monkeypatch):
         pytest.skip('loopback Firestore emulator required; no cloud fallback')
     client = firestore.Client(project='demo-pgf-c4', credentials=AnonymousCredentials())
     uid = f'synthetic-c4-{uuid.uuid4().hex}'
-    bucket = LocalStorageClient(tmp_path).bucket('lake-c4-contention')
+    storage_client = LocalStorageClient(tmp_path)
+    bucket = storage_client.bucket('lake-c4-contention')
+    monkeypatch.setattr(lake, 'create_storage_client', lambda: storage_client)
+    monkeypatch.setattr(lake_wipe, 'schedule_conversation_lake_repurge', Mock())
     for key, value in {
         'BUCKET_OBJECT_LAKE': bucket.name,
         'OBJECT_LAKE_RELEASE': 'v1',
@@ -52,7 +55,7 @@ def state(tmp_path, monkeypatch):
     try:
         yield client, uid, bucket
     finally:
-        lake.delete_space_upload_candidates(uid)
+        lake.delete_space_upload_candidates(uid, now=datetime.now(timezone.utc) + timedelta(days=1, seconds=1))
         for blob in bucket.list_blobs():
             blob.delete()
         client.collection('space_keys').document(uid).delete()
@@ -196,9 +199,12 @@ def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
         assert lake_wipe.purge_owner_lake_content(uid)['candidates_deleted'] == 0
         assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
         assert lake.delete_space_upload_candidates(uid) == 0
-        assert lake.delete_space_upload_candidates(sibling) == 1
+        assert (
+            lake.delete_space_upload_candidates(sibling, now=datetime.now(timezone.utc) + timedelta(days=1, seconds=1))
+            == 1
+        )
     finally:
-        lake.delete_space_upload_candidates(sibling)
+        lake.delete_space_upload_candidates(sibling, now=datetime.now(timezone.utc) + timedelta(days=1, seconds=1))
 
 
 def test_late_upload_worker_loss_keeps_discovery_until_final_purge(state, monkeypatch):
@@ -310,7 +316,7 @@ def test_conversation_purge_erases_settled_and_aged_intents_with_real_ranges(sta
     assert lake_wipe.purge_conversation_lake_objects(uid, 'c') == 1
     assert candidate.get().exists
     now = row['admitted_at'] + timedelta(seconds=lake.config.put_quiescence_seconds() + 1)
-    assert lake.delete_entity_upload_candidates(uid, 'c', now=now) == 1
+    assert lake_wipe.repurge_conversation_lake_objects(uid, 'c', now=now) == 1
     assert lake.delete_space_upload_candidates(uid) == 0
 
 
