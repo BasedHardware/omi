@@ -65,6 +65,11 @@ class DisclosureTests(unittest.TestCase):
                 self.assertEqual(self.detect(line), (set(), set()))
         self.assertEqual(self.detect("+maxReplicas: 8", path="backend/charts/unrelated/values.yaml"), (set(), set()))
 
+    def test_quoted_documentation_and_log_examples_are_not_assignments(self) -> None:
+        for line in ("+`MAX_RELEASE_ATTEMPTS=3` or above", '+log("MAX_DRAINS=8")', "+`os.getenv('IO_CONCURRENCY', '8')`"):
+            with self.subTest(line=line):
+                self.assertEqual(self.detect(line), (set(), set()))
+
     def test_before_after_same_section_name_and_boundaries(self) -> None:
         for body in (
             "before 4 after 8", "MAX_DRAINS before 4", "MAX_DRAINS after 8",
@@ -208,6 +213,15 @@ class GitFixtureTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("0 new states", result.stdout)
 
+    def test_batched_lookup_handles_overlap_absence_and_binary_content(self) -> None:
+        self.write("fixture.bin", b"\x00unique_binary_state\x00".decode())
+        self.git("add", ".")
+        self.git("commit", "-qm", "binary fixture")
+        self.assertEqual(
+            check.existing_literals(self.root, "HEAD", {"known_state", "known", "cross_file_state", "unique_binary_state", "absent_state"}),
+            {"known_state", "known", "cross_file_state", "unique_binary_state"},
+        )
+
     def test_merge_base_not_current_base_tip(self) -> None:
         self.git("checkout", "-qb", "base-advance")
         self.write("elsewhere.txt", "future_state\n")
@@ -225,7 +239,7 @@ class GitFixtureTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("merge-base", result.stderr)
         with self.assertRaisesRegex(RuntimeError, "git grep"):
-            check.existing_literal(self.root, "missing-ref", "missing_state")
+            check.existing_literals(self.root, "missing-ref", {"missing_state"})
 
     def test_fixture_init_scrubs_inherited_git_environment(self) -> None:
         config = self.root / ".git/config"

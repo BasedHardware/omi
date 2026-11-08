@@ -25,9 +25,9 @@ TRIGGERS = (
     "backend/utils/pusher_*.py",
 )
 KNOB = r"(?:max|min|limit|cap|concurrenc\w*|workers?|pool\w*|page_size|batch_size|drains?\w*|per_second|qps|throttle\w*|maxReplicas|minReplicas|targetBacklogPerWorker)\w*"
-ASSIGNMENT = re.compile(rf"\b(?P<knob>{KNOB})\s*[:=]\s*[-\d.]", re.I)
+ASSIGNMENT = re.compile(rf"(?<![`'\"])\b(?P<knob>{KNOB})\s*[:=]\s*[-\d.]", re.I)
 GETENV = re.compile(
-    r"\bos\.getenv\(\s*['\"](?P<knob>\w*CONCURRENCY\w*)['\"]\s*,\s*['\"]?[-\d.]", re.I
+    r"(?<![`'\"])\bos\.getenv\(\s*['\"](?P<knob>\w*CONCURRENCY\w*)['\"]\s*,\s*['\"]?[-\d.]", re.I
 )
 EXCLUDED = re.compile(r"_(?:ENABLED|PERCENT|UIDS|ALLOWLIST|URL)$", re.I)
 LITERAL = re.compile(r"['\"]([a-z][a-z0-9_]{3,40})['\"]")
@@ -151,16 +151,24 @@ def git(root: Path, *args: str) -> str:
     return result.stdout
 
 
-def existing_literal(root: Path, base: str, literal: str) -> bool:
+def existing_literals(root: Path, base: str, literals: set[str]) -> set[str]:
     # Search the entire merge-base tree, not just pipeline paths. grep's exit 1
     # means absent; a missing ref/object or any other error must fail closed.
+    if not literals:
+        return set()
+    patterns = [arg for literal in sorted(literals) for arg in ("-e", literal)]
+    # One tree scan per PR. Only the fixed-string matches are returned; --text
+    # keeps the anywhere-at-base rule even for a match inside a binary blob.
     result = subprocess.run(
-        ["git", "grep", "-q", "-F", "-e", literal, base, "--"],
+        ["git", "grep", "--text", "-h", "-o", "-F", *patterns, base, "--"],
         cwd=root, capture_output=True, text=True, encoding="utf-8",
     )
     if result.returncode not in (0, 1):
         raise RuntimeError(f"git grep at {base}: {result.stderr.strip()}")
-    return result.returncode == 0
+    matches = set(result.stdout.splitlines())
+    # grep can emit only the longer of overlapping patterns. A shorter literal
+    # contained in that match is also present at base.
+    return {literal for literal in literals if any(literal in match for match in matches)}
 
 
 def main() -> int:
@@ -178,7 +186,8 @@ def main() -> int:
                 return result.returncode
         base = git(args.root, "merge-base", args.base, args.head).strip()
         diff = git(args.root, "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, args.head, "--", *TRIGGERS)
-        knobs, states = detect(diff, lambda literal: existing_literal(args.root, base, literal))
+        knobs, candidates = detect(diff, lambda _: False)
+        states = candidates - existing_literals(args.root, base, candidates)
         body = args.pr_body_file.read_text(encoding="utf-8") if args.pr_body_file else ""
         errors, notices = validate(knobs, states, body)
     except (OSError, RuntimeError) as exc:
