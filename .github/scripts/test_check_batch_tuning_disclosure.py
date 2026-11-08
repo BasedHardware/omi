@@ -54,6 +54,17 @@ class DisclosureTests(unittest.TestCase):
             self.assertIn("BATCH_IO_CONCURRENCY", knobs)
             self.assertTrue(check.validate(knobs, set(), "")[0])
 
+    def test_unchanged_values_are_not_tuning_but_full_numeric_changes_are(self) -> None:
+        for old, new in (
+            ("call(max_count=4096)", "call(max_count=4096, client=client)"),
+            ("MAX_DRAINS = 8  # old comment", "MAX_DRAINS = 8  # new comment"),
+            ("MAX_DRAINS = 1_000", "MAX_DRAINS = 1000"),
+            ("os.getenv('IO_CONCURRENCY', '8')", "int(os.getenv('IO_CONCURRENCY', '8'))"),
+        ):
+            self.assertEqual(self.detect("-" + old, "+" + new), (set(), set()))
+        for old, new in (("1_000", "1_500"), (".5", ".6"), ("1e3", "2e3"), ("-1", "-2")):
+            self.assertEqual(self.detect("-MAX_DRAINS = " + old, "+MAX_DRAINS = " + new)[0], {"MAX_DRAINS"})
+
     def test_flags_comments_context_and_unrelated_paths_do_not_trigger(self) -> None:
         for line in (
             "+MAX_ENABLED = 1", "+MAX_PERCENT = 25", "+MAX_UIDS = 8",

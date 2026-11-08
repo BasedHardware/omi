@@ -25,9 +25,10 @@ TRIGGERS = (
     "backend/utils/pusher_*.py",
 )
 KNOB = r"(?:max|min|limit|cap|concurrenc\w*|workers?|pool\w*|page_size|batch_size|drains?\w*|per_second|qps|throttle\w*|maxReplicas|minReplicas|targetBacklogPerWorker)\w*"
-ASSIGNMENT = re.compile(rf"(?<![`'\"])\b(?P<knob>{KNOB})\s*[:=]\s*[-\d.]", re.I)
+NUMBER = r"-?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d+)?"
+ASSIGNMENT = re.compile(rf"(?<![`'\"])\b(?P<knob>{KNOB})\s*[:=]\s*(?P<value>{NUMBER})", re.I)
 GETENV = re.compile(
-    r"(?<![`'\"])\bos\.getenv\(\s*['\"](?P<knob>\w*CONCURRENCY\w*)['\"]\s*,\s*['\"]?[-\d.]", re.I
+    rf"(?<![`'\"])\bos\.getenv\(\s*['\"](?P<knob>\w*CONCURRENCY\w*)['\"]\s*,\s*['\"]?(?P<value>{NUMBER})", re.I
 )
 EXCLUDED = re.compile(r"_(?:ENABLED|PERCENT|UIDS|ALLOWLIST|URL)$", re.I)
 LITERAL = re.compile(r"['\"]([a-z][a-z0-9_]{3,40})['\"]")
@@ -90,13 +91,16 @@ def state_literals(line: str, prefix: str = "") -> set[str]:
 
 
 def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], set[str]]:
-    knobs: set[str] = set()
+    numeric: dict[tuple[str, str, str], set[str]] = {}
     candidates: set[str] = set()
-    for _, lines in diff_hunks(diff):
+    for path, lines in diff_hunks(diff):
         for sign, line in lines:
             if sign in ("+", "-") and code(line):
                 for pattern in (ASSIGNMENT, GETENV):
-                    knobs.update(m["knob"] for m in pattern.finditer(line) if not EXCLUDED.search(m["knob"]))
+                    for match in pattern.finditer(line):
+                        if not EXCLUDED.search(match["knob"]):
+                            key = (path, match["knob"], match["value"].replace("_", ""))
+                            numeric.setdefault(key, set()).add(sign)
         # Count distance in the new file, excluding removed lines entirely.
         added_side = [(sign, line) for sign, line in lines if sign != "-"]
         for i, (sign, line) in enumerate(added_side):
@@ -106,6 +110,9 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
             if any(code(text) and STATE_CONTEXT.search(text) for _, text in nearby):
                 prefix = "\n".join(text for _, text in added_side[max(0, i - 3) : i] if code(text)) + "\n"
                 candidates.update(state_literals(line, prefix))
+    # #24738 only added client/source-metadata arguments beside max_count=4096.
+    # The same knob/value on both sides is not tuning (including moved lines).
+    knobs = {key[1] for key, signs in numeric.items() if len(signs) == 1}
     return knobs, {literal for literal in candidates if not exists_at_base(literal)}
 
 
