@@ -788,3 +788,10 @@ def test_held_oldest_keeps_walking_past_a_page_of_epoch_clocks():
         ]
     )
     assert sample['held_oldest']['record_pending'] == EPOCH - 86400
+
+
+@pytest.mark.parametrize('bad_clock', [None, 'undated', True, False])
+def test_held_oldest_rejects_nonnumeric_or_boolean_record_pending_clocks(bad_clock):
+    assert (
+        _sample(jobs=[{'state': 'record_pending', 'enqueued_at': bad_clock}])['held_oldest']['record_pending'] is None
+    )
