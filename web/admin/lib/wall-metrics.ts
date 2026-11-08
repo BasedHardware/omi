@@ -883,6 +883,9 @@ export async function computeWall(
           if (sonioxUnavailable) missingLines.push("Soniox measured STT");
           if (modulateUnavailable) missingLines.push("Modulate modelled STT");
           if (infraUnavailable) missingLines.push(infraUnavailable);
+          // Dark vendor-balance tables complete the leg with an estimate; the
+          // missing disclosure still names the reason.
+          if (vendorBalance?.dark) missingLines.push(vendorBalance.dark);
           // Soniox: the balance-delta day-rate while the snapshot series covers
           // the day; a covered-but-unpublished row is a disclosed gap, never a
           // reset; beyond the last covered day the dated constant returns with
