@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from io import StringIO
 from unittest import mock
 from pathlib import Path
@@ -15,7 +15,7 @@ from pathlib import Path
 from git_test_env import clean_git_env
 
 from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog
-from feature_flag_registry import load_registry, validate_registry
+from feature_flag_registry import effective_due, ramp_due, load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 
 
@@ -37,7 +37,7 @@ def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]
         "lifecycle": "rollout",
         "surfaces": ["backend"],
         "summary": "Fixture gate",
-        "fail": "closed",
+        "fail": "open" if lifecycle == "ops_kill" else "closed",
         "owner": "tester",
         "created": "2026-08-01",
         "review_by": "2026-11-15",
@@ -57,6 +57,17 @@ def ramp_plan(**overrides: object) -> dict[str, object]:
     }
     ramp.update(overrides)
     return ramp
+
+
+def extension(**overrides: object) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "until": "2026-11-15",
+        "reason": "Complete the staged cohort readout",
+        "by": "release-owner lane",
+        "granted": "2026-11-01",
+    }
+    fields.update(overrides)
+    return fields
 
 
 class RegistryFixture(unittest.TestCase):
@@ -215,7 +226,7 @@ class RegistryFixture(unittest.TestCase):
     def test_missing_merge_base_warns_and_skips_gate(self) -> None:
         errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 1))
         self.assertEqual([], errors)
-        self.assertIn("WARNING: owner backlog gate skipped", "\n".join(warnings))
+        self.assertIn("WARNING: registry diff rules and owner backlog gate skipped", "\n".join(warnings))
         self.assertIn("merge-base with origin/main", "\n".join(warnings))
 
     def test_missing_registry_at_base_warns_and_skips_gate(self) -> None:
@@ -225,7 +236,7 @@ class RegistryFixture(unittest.TestCase):
         self.write_flags([flag()])
         errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 1))
         self.assertEqual([], errors)
-        self.assertIn("WARNING: owner backlog gate skipped", "\n".join(warnings))
+        self.assertIn("WARNING: registry diff rules and owner backlog gate skipped", "\n".join(warnings))
 
     def test_backlog_normalizes_owners_in_output_and_gate(self) -> None:
         rows = self.backlog_base(owner="  Tester (omi-lifecycle)  ")
@@ -233,7 +244,7 @@ class RegistryFixture(unittest.TestCase):
         output = StringIO()
         with redirect_stdout(output):
             errors = self.errors()
-        self.assertEqual("FLAG_OWNER_BACKLOG owner=tester unramped=6\n", output.getvalue())
+        self.assertIn("FLAG_OWNER_BACKLOG owner=tester unramped=6\n", output.getvalue())
         self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(errors))
 
     def test_normalize_owner_collapses_whitespace_left_by_annotations(self) -> None:
@@ -567,42 +578,237 @@ class RegistryFixture(unittest.TestCase):
         self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
         errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 20))
         self.assertEqual(errors, [])
-        self.assertTrue(any("within the 7-day grace: EXAMPLE_ENABLED (review_by 2026-10-13)" in w for w in warnings))
+        self.assertTrue(any("within the 7-day grace: EXAMPLE_ENABLED (due 2026-10-13, owner tester)" in w for w in warnings))
         errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 21))
         self.assertIn("review overdue beyond the 7-day grace: EXAMPLE_ENABLED", "\n".join(errors))
 
-    def test_review_overdue_exception_is_dated_and_prints_loudly(self) -> None:
-        self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
-        exception = {"EXAMPLE_ENABLED": {"expires": "2026-11-20", "reason": "David must decide"}}
-        with mock.patch("check_feature_flag_registry.REVIEW_OVERDUE", exception):
-            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 21))
-            self.assertEqual(errors, [])
-            self.assertTrue(any("review_overdue exception EXAMPLE_ENABLED" in w for w in warnings))
-            errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 21))
-            self.assertIn("review_overdue exception expired 2026-11-20", "\n".join(errors))
+    def test_effective_due_uses_later_review_or_extension_date(self) -> None:
+        self.assertEqual(date(2026, 11, 15), effective_due(flag()))
+        self.assertEqual(date(2026, 11, 15), effective_due(flag(extension=extension(until="2026-11-05"))))
+        self.assertEqual(date(2026, 11, 20), effective_due(flag(extension=extension(until="2026-11-20"))))
+        self.assertEqual(
+            date(2026, 11, 15), ramp_due(flag(ramp=ramp_plan(done_by="2026-11-01"), extension=extension()))
+        )
+        self.assertEqual(date(2026, 11, 20), ramp_due(flag(ramp=ramp_plan(), extension=extension())))
 
-    def test_review_overdue_exception_may_cover_a_row_still_inside_grace(self) -> None:
-        self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
-        exception = {"EXAMPLE_ENABLED": {"expires": "2026-11-20", "reason": "sweep in progress"}}
-        with mock.patch("check_feature_flag_registry.REVIEW_OVERDUE", exception):
-            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 15))
-            self.assertEqual(errors, [])
-            self.assertTrue(any("review_overdue exception EXAMPLE_ENABLED" in w for w in warnings))
-            errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 21))
-            self.assertIn("review_overdue exception expired 2026-11-20", "\n".join(errors))
+    def test_extension_defers_review_and_preserves_grace_boundary(self) -> None:
+        self.write_flags([flag(review_by="2026-11-01", extension=extension())])
+        errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 22))
+        self.assertEqual([], errors)
+        self.assertIn("(due 2026-11-15, owner tester)", "\n".join(warnings))
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 23))
+        self.assertIn(
+            "review overdue beyond the 7-day grace: EXAMPLE_ENABLED (due 2026-11-15, owner tester): "
+            "ramp, retire, or add one extension", errors
+        )
 
-    def test_default_as_of_is_the_utc_date(self) -> None:
-        self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
-        utc_now = datetime(2026, 10, 20, 23, 0, tzinfo=timezone.utc)
+    def test_ramp_deadline_uses_same_extension_and_grace(self) -> None:
+        row = flag(review_by="2026-12-01", ramp=ramp_plan(done_by="2026-11-01"))
+        self.write_flags([row])
+        self.assertEqual([], check(self.root, check_render=False, as_of=date(2026, 11, 8))[0])
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 9))
+        self.assertEqual([
+            "ramp overdue beyond the 7-day grace: EXAMPLE_ENABLED (done_by 2026-11-01, owner tester): "
+            "ramp, retire, or add one extension"
+        ], errors)
+        self.write_flags([dict(row, extension=extension())])
+        self.assertEqual([], check(self.root, check_render=False, as_of=date(2026, 11, 22))[0])
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 23))
+        self.assertIn("(done_by 2026-11-15, owner tester)", "\n".join(errors))
 
-        class FrozenDatetime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return utc_now if tz is not None else utc_now.replace(tzinfo=None) + timedelta(hours=7)
+    def test_decided_rows_require_code_retirement_after_grace(self) -> None:
+        self.write("docs/prereg.md", "# readout\n")
+        for decision in ("graduate", "ship", "kill", "kill_after_readout"):
+            with self.subTest(decision=decision):
+                row = flag(decision=decision, review_by="2026-11-01")
+                if decision == "kill_after_readout":
+                    row.update(lifecycle="experiment", terminal="undecided", prereg="docs/prereg.md")
+                self.write_flags([row])
+                self.assertEqual([], check(self.root, check_render=False, as_of=date(2026, 11, 8))[0])
+                errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 9))
+                self.assertEqual([
+                    f"EXAMPLE_ENABLED decided {decision} but code still reads it (due 2026-11-01): retire the code path"
+                ], errors)
 
-        with mock.patch("check_feature_flag_registry.datetime", FrozenDatetime):
-            errors, _ = check(self.root, check_render=False)
-        self.assertEqual(errors, [])
+    def test_extension_schema_rejects_invalid_dates_reason_and_lane(self) -> None:
+        cases = [
+            (extension(until="2026-11-16"), "0 to 14 days"),
+            (extension(until="2026-10-31"), "0 to 14 days"),
+            (extension(until="bad"), "extension.until must be an ISO date"),
+            (extension(granted=None), "extension.granted must be an ISO date"),
+            (extension(reason=""), "extension.reason"),
+            (extension(reason="ReNeW"), "extension.reason"),
+            (extension(reason=" extend "), "extension.reason"),
+            (extension(reason="TBD"), "extension.reason"),
+            (extension(reason="Later"), "extension.reason"),
+            (extension(reason="Needs more"), "extension.reason"),
+            (extension(by=" "), "extension.by"),
+            ({"until": "2026-11-15"}, "extension.granted"),
+            (None, "extension must be an object"),
+        ]
+        for value, message in cases:
+            with self.subTest(value=value):
+                errors = validate_registry({"flags": [flag(extension=value)], "ignore": [], "retired": []}, root=self.root)
+                self.assertIn(message, "\n".join(errors))
+        self.assertEqual([], validate_registry({"flags": [flag(extension=extension())], "ignore": [], "retired": []}, root=self.root))
+
+    def test_second_extension_or_removal_is_refused_against_base(self) -> None:
+        rows = self.backlog_base(count=1, extension=extension())
+        for changes in ({"extension": extension(until="2026-11-16", granted="2026-11-02")}, {}):
+            row = dict(rows[0])
+            row.pop("extension")
+            row.update(changes)
+            self.write_flags([row])
+            self.assertIn(f"{row['key']}: second extension refused: ramp or retire", self.errors())
+        self.write_flags(rows)
+        self.assertEqual([], self.errors())
+
+    def test_original_dates_cannot_be_moved_later_even_with_extension(self) -> None:
+        rows = self.backlog_base(count=1, ramp=ramp_plan(done_by="2026-11-01"))
+        key = rows[0]["key"]
+        for changes in (
+            {"review_by": "2026-11-16"},
+            {"ramp": ramp_plan(done_by="2026-11-02")},
+            {"review_by": "2026-11-16", "extension": extension()},
+        ):
+            with self.subTest(changes=changes):
+                self.write_flags([dict(rows[0], **changes)])
+                self.assertIn(f"{key}: due date moved later without an extension; add extension: instead", self.errors())
+        self.write_flags([dict(rows[0], extension=extension())])
+        self.assertEqual([], self.errors())
+
+    def test_new_rows_are_exempt_from_date_movement_rule(self) -> None:
+        rows = self.backlog_base(count=1)
+        self.write_flags(rows + [flag("NEW_ENABLED", review_by="2026-12-01", ramp=ramp_plan())])
+        self.assertEqual([], self.errors())
+
+    def test_missing_base_warns_and_skips_all_diff_rules(self) -> None:
+        self.write_flags([flag(owner="dazheng", extension=extension())])
+        with mock.patch("check_feature_flag_registry.load_base_registry", side_effect=ValueError("base unavailable")):
+            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 1))
+        self.assertEqual([], errors)
+        self.assertIn("registry diff rules and owner backlog gate skipped", "\n".join(warnings))
+        self.assertIn("base unavailable", "\n".join(warnings))
+
+    def test_unreadable_base_shape_warns_and_skips_all_diff_rules(self) -> None:
+        with mock.patch("check_feature_flag_registry.load_base_registry", return_value={}):
+            errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 1))
+        self.assertEqual([], errors)
+        self.assertIn("registry diff rules and owner backlog gate skipped", "\n".join(warnings))
+
+    def test_live_ramps_do_not_count_as_owner_debt_until_grace_passes(self) -> None:
+        rows = [
+            flag(),
+            flag("LIVE_ENABLED", ramp=ramp_plan(done_by="2026-11-08")),
+            flag("GRACE_ENABLED", ramp=ramp_plan(done_by="2026-11-01")),
+            flag("EXTENDED_ENABLED", ramp=ramp_plan(done_by="2026-11-01"), extension=extension()),
+        ]
+        self.assertEqual({"tester": 1}, owner_backlog({"flags": rows}, date(2026, 11, 8)))
+        self.assertEqual({"tester": 2}, owner_backlog({"flags": rows}, date(2026, 11, 9)))
+        self.assertEqual({"tester": 4}, owner_backlog({"flags": rows}, date(2026, 11, 23)))
+
+    def test_owner_gate_uses_live_ramps_at_the_requested_date(self) -> None:
+        rows = self.backlog_base(ramp=ramp_plan(done_by="2026-11-01"))
+        self.write_flags(rows + [flag("NEW_ENABLED")])
+        self.assertEqual([], check(self.root, check_render=False, as_of=date(2026, 11, 8))[0])
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 9))
+        self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(errors))
+
+    def test_account_owner_is_refused_for_new_rows_only_in_any_lifecycle(self) -> None:
+        rows = self.backlog_base(count=1, owner="dazheng")
+        self.assertEqual([], self.errors())
+        for lifecycle in ("rollout", "ops_kill", "config_switch"):
+            row = flag("NEW_ENABLED", owner="  DAZHENG (backend) ", lifecycle=lifecycle)
+            if lifecycle != "rollout":
+                row.pop("review_by")
+            self.write_flags(rows + [row])
+            self.assertIn("NEW_ENABLED: owner names an account; name the owning lane or area", self.errors())
+
+    def test_ops_kill_must_default_on_unless_temporarily_allowlisted(self) -> None:
+        row = flag(lifecycle="ops_kill", decision="keep", fail="closed")
+        row.pop("review_by")
+        registry = {"flags": [row], "ignore": [], "retired": []}
+        self.assertIn(
+            "EXAMPLE_ENABLED: ops_kill must default on (off is the kill); use rollout or config_switch",
+            validate_registry(registry, root=self.root),
+        )
+        with mock.patch("feature_flag_registry.OPS_KILL_DEFAULT_OFF_ALLOWLIST", {"EXAMPLE_ENABLED"}):
+            self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2026, 11, 22)))
+            errors = validate_registry(registry, root=self.root, as_of=date(2026, 11, 23))
+            self.assertIn("ops_kill default-off exception expired 2026-11-22: EXAMPLE_ENABLED", errors)
+        for fail in ("open", "inverted"):
+            registry["flags"][0]["fail"] = fail
+            self.assertEqual([], validate_registry(registry, root=self.root))
+
+    def test_ops_kill_allowlist_stale_entries_fail_only_at_real_root(self) -> None:
+        registry = {"flags": [flag()], "ignore": [], "retired": []}
+        with mock.patch("feature_flag_registry.OPS_KILL_DEFAULT_OFF_ALLOWLIST", {"GONE_ENABLED"}):
+            self.assertEqual([], validate_registry(registry, root=self.root))
+            with mock.patch("feature_flag_registry.ROOT", self.root):
+                self.assertIn("remove stale ops_kill default-off allowlist entries: GONE_ENABLED", validate_registry(registry, root=self.root))
+
+    def test_keep_and_with_legacy_rollouts_warn_about_lifecycle(self) -> None:
+        self.write_flags([flag(decision="keep"), flag("LEGACY_ENABLED", decision="with_legacy", terminal="off")])
+        errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 1))
+        self.assertEqual([], errors)
+        self.assertIn("EXAMPLE_ENABLED: rollout row decided keep; relabel config_switch or ops_kill", warnings)
+        self.assertIn("LEGACY_ENABLED: rollout row decided keep; relabel config_switch or ops_kill", warnings)
+
+    def test_machine_reports_dates_counts_and_dark_age_boundaries(self) -> None:
+        self.write_flags([
+            flag("SOON_ENABLED", review_by="2026-11-02", ramp=ramp_plan(done_by="2026-11-01")),
+            flag("LATER_ENABLED", review_by="2026-11-03"),
+            flag("BOUNDARY_ENABLED", created="2026-10-18", fail="closed"),
+            flag("OPEN_ENABLED", fail="open"),
+            flag("DECIDED_ENABLED", decision="ship"),
+        ])
+        output = StringIO()
+        with redirect_stdout(output):
+            errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 7))
+        self.assertEqual([], errors)
+        lines = output.getvalue().splitlines()
+        self.assertIn("FLAG_DUE_SOON key=SOON_ENABLED owner=tester kind=review due=2026-11-02 breaks=2026-11-10", lines)
+        self.assertIn("FLAG_DUE_SOON key=SOON_ENABLED owner=tester kind=ramp due=2026-11-01 breaks=2026-11-09", lines)
+        self.assertFalse(any("FLAG_DUE_SOON key=LATER_ENABLED" in line for line in lines))
+        self.assertIn("FLAG_OVERDUE_COUNT n=2", lines)  # Each row counted once, even with two deadlines.
+        self.assertIn("FLAG_DARK_OVER_14D n=3", lines)
+        output = StringIO()
+        with redirect_stdout(output):
+            check(self.root, check_render=False, as_of=date(2026, 11, 1))
+        self.assertIn("FLAG_DARK_OVER_14D n=2", output.getvalue())  # Exactly 14 days is excluded.
+        output = StringIO()
+        with redirect_stdout(output):
+            check(self.root, check_render=False, as_of=date(2026, 11, 9))
+        self.assertIn("FLAG_OVERDUE_COUNT n=1", output.getvalue())  # SOON's ramp already fails.
+
+    def test_machine_due_soon_uses_extension_date(self) -> None:
+        self.write_flags([flag(review_by="2026-11-01", ramp=ramp_plan(done_by="2026-11-01"), extension=extension())])
+        output = StringIO()
+        with redirect_stdout(output):
+            check(self.root, check_render=False, as_of=date(2026, 11, 20))
+        self.assertIn("kind=review due=2026-11-15 breaks=2026-11-23", output.getvalue())
+        self.assertIn("kind=ramp due=2026-11-15 breaks=2026-11-23", output.getvalue())
+
+    def test_cli_as_of_prints_machine_report_before_deadline_errors(self) -> None:
+        self.write_flags([flag(review_by="2026-11-01")])
+        checker = Path(__file__).with_name("check_feature_flag_registry.py")
+        import sys
+        result = subprocess.run(
+            [sys.executable, str(checker), "--root", str(self.root), "--skip-render", "--as-of", "2026-11-09"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertLess(result.stdout.index("FLAG_OVERDUE_COUNT"), result.stdout.index("review overdue beyond"))
+
+    def test_rendered_rules_and_overdue_respect_row_extension(self) -> None:
+        registry = {"flags": [flag(review_by="2026-11-01", extension=extension())], "ignore": [], "retired": []}
+        early = render(self.root, registry, date(2026, 11, 10))
+        late = render(self.root, registry, date(2026, 11, 16))
+        self.assertIn("None as of 2026-11-10.", early)
+        self.assertIn("review_by 2026-11-01; effective due 2026-11-15", late)
+        self.assertIn("One `extension: {until, reason, by, granted}` per row", early)
+        self.assertIn("pure code changes with a clean revert", early)
+        self.assertNotIn("review_overdue", early)
 
     def test_duplicate_ramp_declarations_fail_across_sources(self) -> None:
         self.write(

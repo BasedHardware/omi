@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +19,12 @@ from feature_flag_registry import (
     ROOT,
     _ramp_applies_to,
     duplicate_declaration_sources,
+    due_dates,
     extract_action_declarations,
     extract_code_reads,
     extract_deploy_declarations,
     load_registry,
-    overdue,
-    overdue_beyond_grace,
+    ramp_due,
     validate_registry,
 )
 
@@ -65,114 +65,9 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
     "TRANSCRIPTION_SHADOW_PERCENT",
     "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
 }
-# Rows already past review_by may carry a dated exception (expiry + reason); it is
-# printed on every run and turns back into an error when it expires. Entries for
-# rows not yet past review_by are stale and fail.
-# 2026-11-08: the ad1268 ramp-or-retire sweep (auditfix) covers every row that
-# would pass its grace before 2026-11-14; the registry v2 checker replaces these
-# with per-row extension fields before they expire.
-_AD1268_SWEEP = {"expires": "2026-11-15", "reason": "ad1268 ramp-or-retire sweep in progress (auditfix)"}
-REVIEW_OVERDUE: dict[str, dict[str, str]] = {
-    "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_HEAD_PRIORITY_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_PERCENT": _AD1268_SWEEP,
-    "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_RECOVERY_MODE": _AD1268_SWEEP,
-    "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST": _AD1268_SWEEP,
-    "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_SERVING_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_SHADOW_PERCENT": _AD1268_SWEEP,
-    "BATCH_PIPELINE_SHARED_LIVE_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED": _AD1268_SWEEP,
-    "BATCH_PIPELINE_UID_ALLOWLIST": _AD1268_SWEEP,
-    "BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED": _AD1268_SWEEP,
-    "CAPTURE_GROUP_CONTAINMENT_MODE": _AD1268_SWEEP,
-    "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED": _AD1268_SWEEP,
-    "DREAM_AGENT_PAID_PERCENT": _AD1268_SWEEP,
-    "DREAM_HISTORY_COMPACT_MODE": _AD1268_SWEEP,
-    "DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT": _AD1268_SWEEP,
-    "DREAM_IDLE_SKIP_MODE": _AD1268_SWEEP,
-    "DREAM_IDLE_SKIP_MODE_SERVE_PERCENT": _AD1268_SWEEP,
-    "DREAM_MATERIAL_BUDGET_MODE": _AD1268_SWEEP,
-    "DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT": _AD1268_SWEEP,
-    "DREAM_NO_PROGRESS_STOP_MODE": _AD1268_SWEEP,
-    "DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT": _AD1268_SWEEP,
-    "DREAM_PAYOFF_ORDER_MODE": _AD1268_SWEEP,
-    "EPISODES_CLIENT_CHANNELS": _AD1268_SWEEP,
-    "EPISODES_PERCENT": _AD1268_SWEEP,
-    "FIRST_SUMMARY_DEADLINE_ENABLED": _AD1268_SWEEP,
-    "FIRST_SUMMARY_DEADLINE_PERCENT": _AD1268_SWEEP,
-    "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED": _AD1268_SWEEP,
-    "FIRST_SUMMARY_UID_ALLOWLIST": _AD1268_SWEEP,
-    "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": _AD1268_SWEEP,
-    "LIVE_CAPTURE_WINDOW_MERGE_UNION": _AD1268_SWEEP,
-    "LIVE_CAPTURE_WINDOW_RETENTION": _AD1268_SWEEP,
-    "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": _AD1268_SWEEP,
-    "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_CLAIMS_ENABLED": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_TIERED_ENABLED": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_TIER_MIN_WORDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS": _AD1268_SWEEP,
-    "OMI_SHAPED_AGENT_MODE": _AD1268_SWEEP,
-    "PARAKEET_EXPLICIT_CUDA_GRAPHS": _AD1268_SWEEP,
-    "PARAKEET_PACKING_ENABLED": _AD1268_SWEEP,
-    "PARAKEET_WINDOW_DIARIZATION": _AD1268_SWEEP,
-    "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT": _AD1268_SWEEP,
-    "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": _AD1268_SWEEP,
-    "SONIOX_ELAPSED_AXIS": _AD1268_SWEEP,
-    "SONIOX_ORDERED_FINALIZE": _AD1268_SWEEP,
-    "SONIOX_WIRE_LEDGER": _AD1268_SWEEP,
-    "SPEAKER_MATCH_SCORES_ENABLED": _AD1268_SWEEP,
-    "STT_CAP_RECOVERY_COHORT": _AD1268_SWEEP,
-    "STT_FAILOVER_RECOVERY_ENABLED": _AD1268_SWEEP,
-    "STT_LEARNED_LANGUAGE_PROFILE": _AD1268_SWEEP,
-    "STT_MULTI_LANGUAGE_HINTS": _AD1268_SWEEP,
-    "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": _AD1268_SWEEP,
-    "STT_PAID_SPILLOVER_BUDGET_ENABLED": _AD1268_SWEEP,
-    "STT_RESILIENT_RECONNECT": _AD1268_SWEEP,
-    "STT_ROUTING_MODE": _AD1268_SWEEP,
-    "STT_ROUTING_ON_PERCENT": _AD1268_SWEEP,
-    "SUMMARY_DEBT_REPAIR_ENABLED": _AD1268_SWEEP,
-    "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED": _AD1268_SWEEP,
-    "SYNC_BACKFILL_ORDER": _AD1268_SWEEP,
-    "SYNC_BACKFILL_ORDER_PERCENT": _AD1268_SWEEP,
-    "SYNC_BACKFILL_ORDER_UID_ALLOWLIST": _AD1268_SWEEP,
-    "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM": _AD1268_SWEEP,
-    "SYNC_DURABLE_REDRIVE_GUARD": _AD1268_SWEEP,
-    "SYNC_LEGACY_COMPLETION_CONVERGENCE": _AD1268_SWEEP,
-    "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED": _AD1268_SWEEP,
-    "SYNC_LINEAGE_RESOLVE_ENABLED": _AD1268_SWEEP,
-    "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST": _AD1268_SWEEP,
-    "SYNC_POLL_BACKOFF_ENABLED": _AD1268_SWEEP,
-    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": _AD1268_SWEEP,
-    "TRANSCRIPTION_FINAL_PASS_PERCENT": _AD1268_SWEEP,
-    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": _AD1268_SWEEP,
-    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": _AD1268_SWEEP,
-    "TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED": _AD1268_SWEEP,
-    "TRANSCRIPTION_SHADOW_ENABLED": _AD1268_SWEEP,
-    "TRANSCRIPTION_SHADOW_PERCENT": _AD1268_SWEEP,
-    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": _AD1268_SWEEP,
-    "onboarding-setup-rating-prompt": _AD1268_SWEEP,
-    "proactivity_v2": _AD1268_SWEEP,
-    "screen_activity_lossless_sync": _AD1268_SWEEP,
-    "screen_activity_lossless_sync_kill": _AD1268_SWEEP,
-    "summary-generation-v2": _AD1268_SWEEP,
-}
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
+ACCOUNT_OWNERS = {"dazheng"}
 # Keys use normalize_owner(); exceptions require an ISO expires date and reason.
 OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {
     # 167 legacy rows name the account, not a lane; the retro N3 batch ruling ramps or retires them.
@@ -188,13 +83,15 @@ def normalize_owner(owner: str) -> str:
     return " ".join(owner.lower().split())
 
 
-def owner_backlog(registry: dict[str, Any]) -> Counter[str]:
+def owner_backlog(registry: dict[str, Any], as_of: date | None = None) -> Counter[str]:
+    current_date = as_of or date.today()
     return Counter(
         normalize_owner(entry["owner"])
         for entry in registry.get("flags", [])
         if entry.get("lifecycle") == "rollout"
         and entry.get("decision") in {"pending", "undecided"}
         and isinstance(entry.get("owner"), str)
+        and ("ramp" not in entry or ramp_due(entry) + timedelta(days=REVIEW_GRACE_DAYS) < current_date)
     )
 
 
@@ -225,18 +122,32 @@ def load_base_registry(root: Path) -> dict[str, Any]:
         return load_registry(path)
 
 
+def check_diff_rules(base: dict[str, Any], registry: dict[str, Any], errors: list[str]) -> None:
+    base_flags = {entry["key"]: entry for entry in base["flags"]}
+    for entry in registry["flags"]:
+        key = entry["key"]
+        if key not in base_flags:
+            if normalize_owner(entry["owner"]) in ACCOUNT_OWNERS:
+                errors.append(f"{key}: owner names an account; name the owning lane or area")
+            continue
+        old = base_flags[key]
+        if "extension" in old and old["extension"]["until"] != entry.get("extension", {}).get("until"):
+            errors.append(f"{key}: second extension refused: ramp or retire")
+        if entry.get("decision") not in {"pending", "undecided"}:
+            continue
+        for previous, current in (
+            (old.get("review_by"), entry.get("review_by")),
+            (old.get("ramp", {}).get("done_by"), entry.get("ramp", {}).get("done_by")),
+        ):
+            if previous and current and date.fromisoformat(current) > date.fromisoformat(previous):
+                errors.append(f"{key}: due date moved later without an extension; add extension: instead")
+
+
 def check_owner_backlog(
-    root: Path, registry: dict[str, Any], current_date: date, errors: list[str], warnings: list[str]
+    base: dict[str, Any], registry: dict[str, Any], current_date: date, errors: list[str], warnings: list[str]
 ) -> None:
-    try:
-        base = load_base_registry(root)
-        base_keys = {entry["key"] for entry in base["flags"]}
-        counts = owner_backlog(base)
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
-        warnings.append(
-            f"WARNING: owner backlog gate skipped: cannot load registry at merge-base with origin/main: {error}"
-        )
-        return
+    base_keys = {entry["key"] for entry in base["flags"]}
+    counts = owner_backlog(base, current_date)
     for entry in registry["flags"]:
         owner = normalize_owner(entry["owner"])
         if entry["key"] in base_keys or entry["lifecycle"] != "rollout" or counts[owner] < MAX_UNRAMPED_PER_OWNER:
@@ -264,17 +175,29 @@ def check_owner_backlog(
 
 
 def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -> tuple[list[str], list[str]]:
-    # UTC, so a pre-push hook on a host ahead of UTC agrees with CI.
-    current_date = as_of or datetime.now(timezone.utc).date()
+    current_date = as_of or date.today()
     registry_path = root / "config/feature-flags.yaml"
     registry = load_registry(registry_path)
-    errors = validate_registry(registry, root=root)
-    for owner, count in sorted(owner_backlog(registry).items()):
-        print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
+    errors = validate_registry(registry, root=root, as_of=current_date)
     if errors:
         return errors, []
+    for owner, count in sorted(owner_backlog(registry, current_date).items()):
+        print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
     warnings: list[str] = []
-    check_owner_backlog(root, registry, current_date, errors, warnings)
+    diff_errors: list[str] = []
+    diff_warnings: list[str] = []
+    try:
+        base = load_base_registry(root)
+        check_diff_rules(base, registry, diff_errors)
+        check_owner_backlog(base, registry, current_date, diff_errors, diff_warnings)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
+        warnings.append(
+            "WARNING: registry diff rules and owner backlog gate skipped: "
+            f"cannot load registry at merge-base with origin/main: {error}"
+        )
+    else:
+        errors.extend(diff_errors)
+        warnings.extend(diff_warnings)
     flags = {entry["key"]: entry for entry in registry["flags"]}
     for key, expected in parser_defaults(root).items():
         if key in flags and flags[key]["fail"] != expected:
@@ -349,42 +272,45 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
                 errors.append(
                     f"{doc.relative_to(root)}: rendered doc drift; regenerate with python3 scripts/render_feature_flag_registry.py --as-of {as_of.isoformat()}"
                 )
-    past_due = overdue(registry, current_date)
-    beyond_grace = set(overdue_beyond_grace(registry, current_date))
-    in_grace = sorted(set(past_due) - beyond_grace)
-    if in_grace:
-        details = ", ".join(f"{key} (review_by {flags[key]['review_by']})" for key in in_grace)
-        warnings.append(f"WARNING: review_by passed but remains within the {REVIEW_GRACE_DAYS}-day grace: {details}")
-
-    active_review_exceptions: set[str] = set()
-    for key in sorted(beyond_grace - set(REVIEW_OVERDUE)):
-        errors.append(
-            f"review overdue beyond the {REVIEW_GRACE_DAYS}-day grace: {key} "
-            f"(review_by {flags[key]['review_by']})"
-        )
-    for key in sorted(set(REVIEW_OVERDUE) & set(past_due)):
-        exception = REVIEW_OVERDUE[key]
-        try:
-            expires = date.fromisoformat(exception["expires"])
-            reason = exception["reason"].strip()
-        except (KeyError, TypeError, ValueError, AttributeError):
-            errors.append(f"review_overdue[{key}] requires an ISO expires date and nonempty reason")
-            continue
-        if not reason:
-            errors.append(f"review_overdue[{key}] requires an ISO expires date and nonempty reason")
-        elif current_date > expires:
-            active_review_exceptions.add(key)
-            if key in beyond_grace:
-                errors.append(f"review_overdue exception expired {expires}: {key} (review_by {flags[key]['review_by']})")
-        else:
-            active_review_exceptions.add(key)
-            warnings.append(
-                f"review_overdue exception {key} (review_by {flags[key]['review_by']}) expires {expires}: {reason}"
-            )
-    if root.resolve() == ROOT.resolve():
-        stale_review_exceptions = sorted(set(REVIEW_OVERDUE) - active_review_exceptions)
-        if stale_review_exceptions:
-            errors.append("remove stale review_overdue entries: " + ", ".join(stale_review_exceptions))
+    in_grace_rows: set[str] = set()
+    beyond_grace_rows: set[str] = set()
+    dark_over_14d = 0
+    for key, entry in sorted(flags.items()):
+        owner = entry["owner"]
+        if entry["lifecycle"] == "rollout" and entry["decision"] in {"keep", "with_legacy"}:
+            warnings.append(f"{key}: rollout row decided keep; relabel config_switch or ops_kill")
+        if (
+            _ramp_applies_to(entry)
+            and entry["fail"] == "closed"
+            and date.fromisoformat(entry["created"]) + timedelta(days=14) < current_date
+        ):
+            dark_over_14d += 1
+        for kind, due in due_dates(entry):
+            breaks = due + timedelta(days=REVIEW_GRACE_DAYS + 1)
+            if current_date < breaks <= current_date + timedelta(days=3):
+                print(f"FLAG_DUE_SOON key={key} owner={owner} kind={kind} due={due} breaks={breaks}")
+            if due < current_date < breaks:
+                in_grace_rows.add(key)
+                warnings.append(
+                    f"WARNING: {kind} passed but remains within the {REVIEW_GRACE_DAYS}-day grace: "
+                    f"{key} (due {due}, owner {owner})"
+                )
+            elif current_date >= breaks:
+                beyond_grace_rows.add(key)
+                if entry["decision"] in {"graduate", "ship", "kill", "kill_after_readout"} and (
+                    key in present or any(alias in present for alias in entry.get("aliases", []))
+                ):
+                    errors.append(
+                        f"{key} decided {entry['decision']} but code still reads it (due {due}): retire the code path"
+                    )
+                else:
+                    field = "due" if kind == "review" else "done_by"
+                    errors.append(
+                        f"{kind} overdue beyond the {REVIEW_GRACE_DAYS}-day grace: {key} "
+                        f"({field} {due}, owner {owner}): ramp, retire, or add one extension"
+                    )
+    print(f"FLAG_OVERDUE_COUNT n={len(in_grace_rows - beyond_grace_rows)}")
+    print(f"FLAG_DARK_OVER_14D n={dark_over_14d}")
     return sorted(set(errors)), warnings
 
 
@@ -392,9 +318,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--skip-render", action="store_true")
+    parser.add_argument("--as-of", type=date.fromisoformat, help="YYYY-MM-DD; defaults to today")
     args = parser.parse_args()
     try:
-        errors, warnings = check(args.root.resolve(), check_render=not args.skip_render)
+        errors, warnings = check(args.root.resolve(), check_render=not args.skip_render, as_of=args.as_of)
+        sys.stdout.flush()
     except (OSError, ValueError, SyntaxError) as error:
         print(f"feature-flag registry: {error}", file=sys.stderr)
         return 1

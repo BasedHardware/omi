@@ -19,6 +19,13 @@ no terminal ruling is recorded yet.
 
 ## Contributing registry rows
 
+- One due date: the later of `review_by` and `extension.until`; pending rollout ramps also enforce `done_by` with the same extension and seven-day grace.
+- One `extension: {until, reason, by, granted}` per row, at most 14 days; explain the delay and name the owning lane. Do not move the original dates later.
+- The owner cap of five counts pending/undecided rollout rows without a live dated ramp, including ramps past grace; new rows name a lane or area, never an account.
+- `ops_kill` defaults on: off is the kill; opt-in behavior is a `rollout` or `config_switch`.
+- Default to merging live with no flag for pure code changes with a clean revert.
+- Use a flag only for a cohort ramp, an incident kill, cost, or custody risk.
+
 Edit `config/feature-flags.yaml`, then regenerate this document with
 `python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional
 for existing rows. It is required for `lifecycle: rollout` rows that are
@@ -43,7 +50,7 @@ ramp:
 ```
 
 Rows created before the cutoff stay grandfathered when `ramp` is absent;
-the checker warns and reports their count. Do not backfill plans into them.
+the checker warns and reports their count. Ramp or retire this debt.
 
 This is **not** a second classification of deployment wiring. Secret vs config
 vs `public_build` still lives only in
@@ -114,11 +121,10 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-These rollout/experiment entries passed `review_by`. The checker warns
-during the seven-day grace, then fails unless a dated `review_overdue`
-exception is recorded for David.
+These rollout/experiment entries passed their effective review due date.
+The checker warns during the seven-day grace, then fails. Ramp, retire,
+or use the row's one bounded extension; decided rows must retire the code path.
 
-- `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` — review_by 2026-11-01 (dazheng)
 - `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` — review_by 2026-11-04 (dazheng)
 - `BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED` — review_by 2026-11-04 (dazheng)
 - `BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED` — review_by 2026-11-04 (dazheng)
@@ -179,8 +185,6 @@ exception is recorded for David.
 - `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT` — review_by 2026-11-04 (backend)
 - `STT_PAID_SPILLOVER_BUDGET_ENABLED` — review_by 2026-11-04 (backend)
 - `STT_RESILIENT_RECONNECT` — review_by 2026-11-04 (backend)
-- `STT_ROUTING_MODE` — review_by 2026-11-04 (dazheng)
-- `STT_ROUTING_ON_PERCENT` — review_by 2026-11-04 (dazheng)
 - `SUMMARY_DEBT_REPAIR_ENABLED` — review_by 2026-11-04 (dazheng)
 - `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` — review_by 2026-11-04 (dazheng)
 - `SYNC_BACKFILL_ORDER` — review_by 2026-11-04 (dazheng)
