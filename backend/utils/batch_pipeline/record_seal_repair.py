@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime
 import hashlib
 import json
+import logging
 import math
 from typing import Any
 
@@ -14,6 +15,7 @@ from database._client import run_transactional
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
+from utils.batch_pipeline.metrics import RECORD_SEAL_ORPHAN_PARKED
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
@@ -78,6 +80,19 @@ def seal_refusal(
     if row.get('deleted') or row.get('discarded') or not row.get('private_cloud_sync_enabled'):
         return 'privacy_refused'
     return None
+
+
+def observe_orphan_parked(job, row, refusal, *, seal_path):
+    """Aggregate-only telemetry; no identities, dispositions or writes change."""
+    if refusal == 'privacy_refused' and row.get('discarded') and job.get('registration_origin') == 'restore':
+        try:
+            logging.getLogger(__name__).info(
+                'event=record_seal_refused outcome=orphan_parked seal_path=%s count=1', seal_path
+            )
+            RECORD_SEAL_ORPHAN_PARKED.labels(seal_path).inc()
+        except Exception:
+            # Observability failure must never alter a seal disposition.
+            pass
 
 
 def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lambda: None, diagnostics=None):
@@ -213,6 +228,7 @@ def plan_seals(
             )
             if refusal:
                 entry['disposition'] = refusal
+                observe_orphan_parked(job, row, refusal, seal_path='repair')
             else:
                 proof = retained_tail_proof(
                     {**job, 'segment_id': job_id},
@@ -270,8 +286,11 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(entry['job_id'])
 
+        observation = {}
+
         @firestore.transactional
         def commit(tx):
+            observation.clear()  # Only the final transaction attempt may emit.
             check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
             row = ref.get(transaction=tx).to_dict() or {}
@@ -286,6 +305,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 repair_closed=plan.get('repair_closed', False),
             )
             if refusal:
+                observation.update(job=current_job, row=row, refusal=refusal)
                 return refusal
             assert_batch_write_allowed(
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
@@ -301,6 +321,8 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
 
         try:
             outcomes[run_transactional(store.client, commit, transient=True)] += 1
+            if observation:
+                observe_orphan_parked(**observation, seal_path='repair')
         except BatchPrivacyBlocked:
             outcomes['privacy_refused'] += 1
         except Exception:

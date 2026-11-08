@@ -22,3 +22,5 @@ These fixes are on without a new flag. Hermetic coverage lives in
 the real completion transaction with StrictFirestore. The existing
 [listen/pusher pipeline](../../listen_pusher_pipeline.mdx) remains the capture
 and upload contract.
+
+An orphan obligation (restore-origin job on a still-discarded row) is parked by design; the `record_pending` terminal transition is deferred to a follow-up; the signal is the `event=record_seal_refused outcome=orphan_parked` log line and the `omi_record_seal_orphan_parked_total` counter.
