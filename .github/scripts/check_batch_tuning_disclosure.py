@@ -123,26 +123,31 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
 
 def prose(body: str) -> str:
     """Remove HTML comments (including unclosed ones), fenced and indented code
-    blocks (including unclosed fences), and code spans."""
+    blocks (including unclosed fences and ones inside blockquotes), and code spans."""
     lines: list[str] = []
     fence = ""
     indented = False  # inside an indented code block
-    blank = True  # previous line was blank (or start of body)
+    opens_code = True  # previous line was blank, a heading, or start of body
     for line in HTML_COMMENT.sub("", body).splitlines(keepends=True):
-        text = line.rstrip("\r\n")
-        if not fence and text.strip() and re.match(r"^(?: {4}|\t)", text) and (blank or indented):
-            # An indented code block starts after a blank line; strip it whole.
-            indented, blank = True, False
-            lines.append("\n")
-            continue
-        if text.strip():
-            indented = False
-        blank = not text.strip()
+        # Judge code blocks on the text inside any blockquote markers.
+        text = re.sub(r"^(?: {0,3}> ?)+", "", line.rstrip("\r\n"))
+        lead = re.match(r"[ \t]*", text).group(0)
+        cols = 0
+        for char in lead:
+            cols = cols + 4 - cols % 4 if char == "\t" else cols + 1
         if fence:
-            if re.fullmatch(rf" {{0,3}}{re.escape(fence[0])}{{{len(fence)},}}[ \t]*", line.rstrip("\r\n")):
+            if re.fullmatch(rf" {{0,3}}{re.escape(fence[0])}{{{len(fence)},}}[ \t]*", text):
                 fence = ""
             lines.append("\n")
-        elif match := re.match(r"^ {0,3}(`{3,}|~{3,})", line):
+            continue
+        if text.strip() and cols >= 4 and (opens_code or indented):
+            # An indented code block follows a blank line or heading; strip it whole.
+            indented, opens_code = True, False
+            lines.append("\n")
+            continue
+        indented = False
+        opens_code = not text.strip() or re.match(r" {0,3}#{1,6}(?:[ \t]|$)", text) is not None
+        if match := re.match(r"^ {0,3}(`{3,}|~{3,})", text):
             fence = match.group(1)
             lines.append("\n")
         else:
