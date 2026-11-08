@@ -151,8 +151,6 @@ exception is recorded for David.
 - `DREAM_IDLE_SKIP_MODE_SERVE_PERCENT` — review_by 2026-11-04 (dazheng)
 - `DREAM_MATERIAL_BUDGET_MODE` — review_by 2026-11-04 (dazheng)
 - `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` — review_by 2026-11-04 (dazheng)
-- `DREAM_NO_PROGRESS_STOP_MODE` — review_by 2026-11-04 (dazheng)
-- `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` — review_by 2026-11-04 (dazheng)
 - `DREAM_PAYOFF_ORDER_MODE` — review_by 2026-11-04 (dazheng)
 - `EPISODES_CLIENT_CHANNELS` — review_by 2026-11-03 (dazheng)
 - `EPISODES_PERCENT` — review_by 2026-11-03 (dazheng)
@@ -316,8 +314,6 @@ and an explicit empty literal renders as `''`.
 | `DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT` | Liberal-verifier serve cohort percentage under shadow mode; default 0, invalid admits nobody | backend | env | open | — | — | — | — | pending | undecided | 2026-11-14 | dazheng |
 | `DREAM_MATERIAL_BUDGET_MODE` | Size the Dream pass token ceiling by new material (dirty refs plus backlog candidates) instead of history size; never above today's ceiling: off/shadow/serve; default shadow | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
 | `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` | Material-budget serve cohort percentage under shadow mode; default 0 | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
-| `DREAM_NO_PROGRESS_STOP_MODE` | End a Dream pass after consecutive tool batches with no new staged proposal once a share of its budget is spent; staged work is still verified: off/shadow/serve; default shadow records the stop point and later yield | backend | env | open | — | — | — | — | kill | off | 2026-11-04 | dazheng |
-| `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` | No-progress stop serve cohort percentage under shadow mode; default 0 | backend | env | open | — | — | — | — | kill | off | 2026-11-04 | dazheng |
 | `DREAM_PAYOFF_ORDER_MODE` | Order each Dream sweep's oldest 1,000 due owners by new material, last yield and heavy size, owners 30 days overdue first: off/shadow/serve (global); default serve (David 2026-10-30: payoff first) | backend | env | open | — | — | — | — | keep | keep | 2026-11-04 | dazheng |
 | `DREAM_PRESCAN_MODE` | Deterministic no-LLM pre-scan hands scheduled hunt passes concrete people/task cleanup targets from bounded projected reads (never decrypted content, never skips a pass): off/shadow/serve; default shadow records counts, targets and hits only | backend | env | open | — | — | — | — | pending | on | 2026-11-10 | dazheng |
 | `DREAM_PRESCAN_MODE_SERVE_PERCENT` | Pre-scan serve cohort percentage under shadow mode; default 0, invalid admits nobody | backend | env | open | — | — | — | — | pending | on | 2026-11-10 | dazheng |
@@ -447,7 +443,6 @@ and an explicit empty literal renders as `''`.
 | `STT_VOCAB_MODE_SHADOW_PERCENT` | Shadow vocabulary source-read sample percentage; default 1 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | dazheng |
 | `SUMMARY_DEBT_REPAIR_ENABLED` | Code default false; production off (held with the 2026-10-20 deferral) on scheduled backend-sync; bounded completed server-minimum repair; requires first-summary gate | backend | env | closed | — | — | {value: 'false', category: rollout} | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` | Bounded fresh-transaction retries for sync assignment contention | backend | env | closed | declared | false | true | — | pending | undecided | 2026-11-04 | dazheng |
-| `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | with_legacy | off | 2026-11-07 | dazheng |
 | `SYNC_BACKFILL_ORDER` | Default oldest; newest selects descending pending capture time and earlier direct-task eligibility for the selected UID cohort | backend | env | closed | — | — | newest | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_BACKFILL_ORDER_PERCENT` | Stable SHA-256 UID cohort for newest ordering; default 100 only when order is newest | backend | env | closed | — | — | 0 (cloud_run/backend-sync-backfill); 100 (cloud_run/backend-sync) | — | pending | undecided | 2026-11-04 | dazheng |
 | `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` | Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
@@ -728,6 +723,7 @@ and an explicit empty literal renders as `''`.
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `PROJECTION_DRAIN_CLAIM_AWARE` | Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` | Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
 | `PROJECTION_DRAIN_PRIVACY_BACKOFF` | Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PROJECTION_PRIVACY_REFUSAL_RESUME` | Default on; retry a projection after its hinted privacy refusal no longer applies, using fenced replay for stored refusals | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
@@ -1002,8 +998,6 @@ and an explicit empty literal renders as `''`.
 | `DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT` | shadow 48 h: would_apply and verify_reasons on every pass → 10% serve with 90% same-day shadow control → 100% serve after a 24 h soak | liberal-applied items' 7-day Undo rate <= the verified-applied Undo rate for the same kinds; failed passes < 2/h; zero dream_lever_error | dazheng | 2026-11-14 |
 | `DREAM_MATERIAL_BUDGET_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
 | `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
-| `DREAM_NO_PROGRESS_STOP_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error; shadow applied_after at the stop point near zero before any serve step | dazheng | 2026-11-04 |
-| `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
 | `DREAM_PAYOFF_ORDER_MODE` | shadow 2026-10-28: reordered 0 (6 h then 7 d aging bound shorter than the backlog cycle) → serve globally 2026-10-30 at the 30-day bound | value-weighted applied edits per sweep not lower than the 10-29 shadow day; no owner more than 30 days past due | dazheng | 2026-11-04 |
 | `DREAM_PRESCAN_MODE` | shadow 24 h: counts, targets and hits on every scheduled pass, seed unchanged → 10% serve with 90% same-day shadow control once shadow hits/applied >= 20% → 50% serve → 100% serve after a 6 h soak | treatment vs control: value per active owner >= control; scan never skips or fails a pass; failed passes < 2/h; zero dream_lever_error | dazheng | 2026-11-10 |
 | `DREAM_PRESCAN_MODE_SERVE_PERCENT` | shadow 24 h: counts, targets and hits on every scheduled pass, seed unchanged → 10% serve with 90% same-day shadow control once shadow hits/applied >= 20% → 50% serve → 100% serve after a 6 h soak | treatment vs control: value per active owner >= control; scan never skips or fails a pass; failed passes < 2/h; zero dream_lever_error | dazheng | 2026-11-10 |
@@ -1269,8 +1263,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT` — Liberal-verifier serve cohort percentage under shadow mode; default 0, invalid admits nobody (fail: open)
 - `DREAM_MATERIAL_BUDGET_MODE` — Size the Dream pass token ceiling by new material (dirty refs plus backlog candidates) instead of history size; never above today's ceiling: off/shadow/serve; default shadow (fail: open)
 - `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` — Material-budget serve cohort percentage under shadow mode; default 0 (fail: open)
-- `DREAM_NO_PROGRESS_STOP_MODE` — End a Dream pass after consecutive tool batches with no new staged proposal once a share of its budget is spent; staged work is still verified: off/shadow/serve; default shadow records the stop point and later yield (fail: open)
-- `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` — No-progress stop serve cohort percentage under shadow mode; default 0 (fail: open)
 - `DREAM_PAYOFF_ORDER_MODE` — Order each Dream sweep's oldest 1,000 due owners by new material, last yield and heavy size, owners 30 days overdue first: off/shadow/serve (global); default serve (David 2026-10-30: payoff first) (fail: open)
 - `DREAM_PRESCAN_MODE` — Deterministic no-LLM pre-scan hands scheduled hunt passes concrete people/task cleanup targets from bounded projected reads (never decrypted content, never skips a pass): off/shadow/serve; default shadow records counts, targets and hits only (fail: open)
 - `DREAM_PRESCAN_MODE_SERVE_PERCENT` — Pre-scan serve cohort percentage under shadow mode; default 0, invalid admits nobody (fail: open)
@@ -1433,6 +1425,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
 - `PLAYBACK_MANIFEST_RECOVERY_ENABLED` — Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation (fail: closed)
 - `PROJECTION_DRAIN_CLAIM_AWARE` — Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests (fail: open)
+- `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` — Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds (fail: open)
 - `PROJECTION_DRAIN_PRIVACY_BACKOFF` — Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change (fail: open)
 - `PROJECTION_PRIVACY_REFUSAL_RESUME` — Default on; retry a projection after its hinted privacy refusal no longer applies, using fenced replay for stored refusals (fail: open)
 - `PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED` — Default on; refresh the live pusher audio_files projection from exact uploaded-object metadata between full prefix rebuilds; 0 restores per-flush listing (fail: open)
@@ -1599,6 +1592,9 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `DREAM_NO_PROGRESS_STOP_MODE` | 2026-11-09 | lead2 ad1268 (a/b); recorded kill decision, off in the serving snapshot and explicit code default; remove the dead no-progress path. |
+| `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` | 2026-11-09 | lead2 ad1268 (a/b); recorded kill decision, off in the serving snapshot and explicit code default; remove the dead no-progress path. |
+| `SYNC_BACKFILL_INFLIGHT_LIMIT` | 2026-11-08 | Counted seed slot replaced by PROJECTION_DRAIN_LIVE_TARGET_BACKOFF. Only reader fed unused try_acquire_backfill_slot; C6 retired the v1 caller and v2 does not acquire Redis admission slots. Registry already specified removal with C6. Legacy token-fenced release and daily-cap controls remain. |
 | `SYNC_LINEAGE_S1_REQUIRED` | 2026-10-20 | David 2026-10-20, DEC-SYN-005 graduate |
 | `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-SYN-007 graduate |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | 2026-10-20 | David 2026-10-20, DEC-SYN-008 graduate |
