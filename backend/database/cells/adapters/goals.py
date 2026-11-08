@@ -17,7 +17,7 @@ from database.ports.goals import (
 )
 
 
-from ._base import WorkflowRepo, atomic
+from ._base import EVENT_SEQUENCE_SQL, WorkflowRepo, atomic
 
 
 class CellGoals(WorkflowRepo):
@@ -174,7 +174,8 @@ class CellGoals(WorkflowRepo):
             row = self._read(goal_id)
             if row is None:
                 raise GoalNotFoundError(goal_id)
-            row.update(status='background', focus_rank=None, updated_at=datetime.now(timezone.utc))
+            if row.get('status') == 'focused':
+                row.update(status='background', focus_rank=None, updated_at=datetime.now(timezone.utc))
             return row
 
         return self._entity(
@@ -189,6 +190,8 @@ class CellGoals(WorkflowRepo):
         self._generation(account_generation)
         if status not in ('paused', 'achieved', 'abandoned'):
             raise ValueError('invalid goal lifecycle target')
+        if relationship_disposition not in ('retain', 'detach'):
+            raise ValueError('invalid goal relationship disposition')
 
         def build():
             row = self._read(goal_id)
@@ -274,7 +277,11 @@ class CellGoals(WorkflowRepo):
     @atomic
     def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
         rows = self.store.query(
-            'goal_events', "doc->>'goal_id'=%s", [goal_id], order="(doc->>'sequence')::bigint DESC", limit=limit
+            'goal_events',
+            f"doc->>'goal_id'=%s AND ({EVENT_SEQUENCE_SQL}) BETWEEN 1 AND 9223372036854775807",
+            [goal_id],
+            order=f"({EVENT_SEQUENCE_SQL}) DESC",
+            limit=limit,
         )
         return [GoalProgressEventEntity.model_construct(**deepcopy(row)) for _, row in rows]
 

@@ -449,7 +449,7 @@ def list_workstream_events(
         .order_by('sequence', direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
-    return parse_snapshots(WorkstreamEvent, query.stream())
+    return [row for row in parse_snapshots(WorkstreamEvent, query.stream()) if row.sequence <= 9223372036854775807]
 
 
 def create_artifact_descriptor(

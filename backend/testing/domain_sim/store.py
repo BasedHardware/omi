@@ -29,6 +29,8 @@ from database.ports.goals import (
     GoalConflictError,
     GoalNotFoundError,
 )
+from database.read_boundary import parse_payload_strict
+from models.workstream import WorkstreamUpdate as WorkstreamPatch
 from database.ports.workstreams import (
     WorkstreamCreate,
     WorkstreamUpdate,
@@ -60,6 +62,15 @@ def _chat_encode(value):
     if isinstance(value, list):
         return [_chat_encode(item) for item in value]
     return value
+
+
+def _event_sequence(row):
+    value = row.get('sequence')
+    text = str(value)
+    if not (text.isascii() and text.isdecimal() and len(text) <= 19):
+        return None
+    sequence = int(text)
+    return sequence if 1 <= sequence <= 9223372036854775807 else None
 
 
 def _scalar_order(value):
@@ -334,7 +345,7 @@ class SimFolders(_Repo):
         rows = [
             {**row, 'id': eid}
             for eid, row in self.store.state['conversations'].items()
-            if row.get('folder_id') == folder_id and (include_discarded or row.get('discarded') is False)
+            if row.get('folder_id') == folder_id and (include_discarded or row.get('discarded', False) is False)
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)
         return deepcopy([row for row in rows[offset : offset + limit] if not row.get('deleted')])
@@ -969,7 +980,8 @@ class SimGoals(_WorkflowRepo):
             row = self._read(goal_id)
             if row is None:
                 raise GoalNotFoundError(goal_id)
-            row.update(status='background', focus_rank=None, updated_at=datetime.now(timezone.utc))
+            if row.get('status') == 'focused':
+                row.update(status='background', focus_rank=None, updated_at=datetime.now(timezone.utc))
             return row
 
         return self._entity(
@@ -983,6 +995,8 @@ class SimGoals(_WorkflowRepo):
         self._generation(account_generation)
         if status not in ('paused', 'achieved', 'abandoned'):
             raise ValueError('invalid goal lifecycle target')
+        if relationship_disposition not in ('retain', 'detach'):
+            raise ValueError('invalid goal relationship disposition')
 
         def build():
             row = self._read(goal_id)
@@ -1057,10 +1071,14 @@ class SimGoals(_WorkflowRepo):
         )
 
     def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
-        rows = [v for k, v in self.store.state['goal_events'].items() if k.startswith(goal_id + '/')]
+        rows = [
+            v
+            for k, v in self.store.state['goal_events'].items()
+            if k.startswith(goal_id + '/') and _event_sequence(v) is not None
+        ]
         return [
             GoalProgressEventEntity.model_construct(**deepcopy(r))
-            for r in sorted(rows, key=lambda r: r['sequence'], reverse=True)[:limit]
+            for r in sorted(rows, key=lambda r: _event_sequence(r) or 0, reverse=True)[:limit]
         ]
 
     def update_progress(
@@ -1208,10 +1226,15 @@ class SimWorkstreams(_WorkflowRepo):
     def update(
         self, workstream_id: str, patch: WorkstreamUpdate, *, idempotency_key: str, account_generation: int
     ) -> WorkstreamEntity:
+        data = parse_payload_strict(
+            WorkstreamPatch,
+            patch.data,
+            document_path=f'users/{self.store.space_id}/workstreams/{workstream_id}/<update>',
+        ).model_dump(mode='python', exclude_unset=True)
         row = self._require(workstream_id, account_generation)
 
         def build():
-            row.update(deepcopy(patch.data), updated_at=datetime.now(timezone.utc))
+            row.update(deepcopy(data), updated_at=datetime.now(timezone.utc))
             return row
 
         return self._entity(
@@ -1260,11 +1283,11 @@ class SimWorkstreams(_WorkflowRepo):
         rows = [
             v
             for k, v in self.store.state['workstream_events'].items()
-            if k.startswith(workstream_id + '/') and v['sequence'] > after_sequence
+            if k.startswith(workstream_id + '/') and (_event_sequence(v) or 0) > max(0, after_sequence)
         ]
         return [
             WorkstreamEventEntity.model_construct(**deepcopy(r))
-            for r in sorted(rows, key=lambda r: r['sequence'])[:limit]
+            for r in sorted(rows, key=lambda r: _event_sequence(r) or 0)[:limit]
         ]
 
     @_locked

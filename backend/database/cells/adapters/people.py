@@ -46,7 +46,11 @@ class CellPeople(Repo):
         if prior is not None:
             return PersonEntity.model_construct(**self._project({**self.store.state['people'][prior], 'id': prior}))
         matches = self.store.query(
-            'people', "doc->>'name'=%s AND doc->'is_dismissed' IS DISTINCT FROM 'true'::jsonb", [draft.name], limit=1
+            'people',
+            "jsonb_typeof(doc->'name')='string' AND doc->>'name'=%s "
+            "AND doc->'is_dismissed' IS DISTINCT FROM 'true'::jsonb",
+            [draft.name],
+            limit=1,
         )
         existing_id = matches[0][0] if matches else None
         existing = self.store.state['people'].get(existing_id) if matches else None

@@ -646,7 +646,7 @@ def list_goal_progress_events(
         .order_by('sequence', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    return parse_snapshots(GoalProgressEvent, query.stream())
+    return [row for row in parse_snapshots(GoalProgressEvent, query.stream()) if row.sequence <= 9223372036854775807]
 
 
 def update_goal_progress(

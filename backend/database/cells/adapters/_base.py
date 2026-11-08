@@ -13,6 +13,10 @@ from pydantic import BaseModel
 
 from database.ports.base import MutationConflict, RevisionConflict
 
+# Legacy event payloads may contain arbitrary JSON. Cast only bounded digit
+# strings, and leave invalid values NULL so callers can skip them.
+EVENT_SEQUENCE_SQL = "CASE WHEN doc->>'sequence' ~ '^[0-9]{1,19}$' " "THEN (doc->>'sequence')::numeric END"
+
 
 def scalar_order(value):
     if value is None:

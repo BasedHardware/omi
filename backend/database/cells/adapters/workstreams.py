@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from typing import Any
 from database.ports.action_items import ActionItemDraft, TaskRelationshipRule
 from database.ports.goals import GoalNotFoundError
+from database.read_boundary import parse_payload_strict
+from models.workstream import WorkstreamUpdate as WorkstreamPatch
 from database.ports.workstreams import (
     WorkstreamCreate,
     WorkstreamUpdate,
@@ -22,7 +24,7 @@ from database.ports.workstreams import (
 )
 
 
-from ._base import WorkflowRepo, atomic
+from ._base import EVENT_SEQUENCE_SQL, WorkflowRepo, atomic
 
 
 class CellWorkstreams(WorkflowRepo):
@@ -104,10 +106,15 @@ class CellWorkstreams(WorkflowRepo):
     def update(
         self, workstream_id: str, patch: WorkstreamUpdate, *, idempotency_key: str, account_generation: int
     ) -> WorkstreamEntity:
+        data = parse_payload_strict(
+            WorkstreamPatch,
+            patch.data,
+            document_path=f'users/{self.store.space_id}/workstreams/{workstream_id}/<update>',
+        ).model_dump(mode='python', exclude_unset=True)
         row = self._require(workstream_id, account_generation)
 
         def build():
-            row.update(deepcopy(patch.data), updated_at=datetime.now(timezone.utc))
+            row.update(deepcopy(data), updated_at=datetime.now(timezone.utc))
             return row
 
         return self._entity(
@@ -156,9 +163,10 @@ class CellWorkstreams(WorkflowRepo):
     ) -> list[WorkstreamEventEntity]:
         rows = self.store.query(
             'workstream_events',
-            "doc->>'workstream_id'=%s AND (doc->>'sequence')::bigint > %s",
+            f"doc->>'workstream_id'=%s AND ({EVENT_SEQUENCE_SQL}) BETWEEN 1 AND 9223372036854775807 "
+            f"AND ({EVENT_SEQUENCE_SQL}) > %s",
             [workstream_id, after_sequence],
-            order="(doc->>'sequence')::bigint",
+            order=f"({EVENT_SEQUENCE_SQL})",
             limit=limit,
         )
         return [WorkstreamEventEntity.model_construct(**deepcopy(row)) for _, row in rows]
