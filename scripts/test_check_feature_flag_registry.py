@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import subprocess
 import tempfile
@@ -97,6 +98,22 @@ class RegistryFixture(unittest.TestCase):
         self.assertEqual([], errors)
         self.assertIn("within the 7-day grace", "\n".join(warnings))
         self.assertTrue(check(self.root, check_render=False, as_of=date(2026, 11, 9))[0])
+
+    def test_live_policy_guard_preserves_default_on_kills_and_accepts_opt_in_lifecycles(self) -> None:
+        path = Path(__file__).resolve().parents[1] / "backend/config/policy/guard.py"
+        spec = importlib.util.spec_from_file_location("flag_registry_policy_guard", path)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        cohort = flag("BATCH_LIVE_STT_RETIRE_PERCENT", notes="Nested batch cohort")
+        for default_on in (True, False):
+            self.write("backend/config/policy/kill_switches.py", f"KILL_SWITCHES = {{'EXAMPLE_ENABLED': {default_on!r}}}\n")
+            for lifecycle in ("ops_kill", "config_switch", "rollout", "experiment"):
+                with self.subTest(default_on=default_on, lifecycle=lifecycle):
+                    self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle=lifecycle), cohort]))
+                    expected = lifecycle == "ops_kill" or (not default_on and lifecycle in {"config_switch", "rollout"})
+                    self.assertEqual(expected, not guard.registry_violations(self.root))
+            self.write("config/feature-flags.yaml", self.yaml([cohort]))
+            self.assertIn("EXAMPLE_ENABLED", "\n".join(guard.registry_violations(self.root)))
 
     def test_shared_boolean_parser_fail_field_is_enforced(self) -> None:
         with mock.patch("check_feature_flag_registry.parser_defaults", return_value={"EXAMPLE_ENABLED": "open"}):
