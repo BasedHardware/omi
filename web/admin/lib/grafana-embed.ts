@@ -167,7 +167,14 @@ export async function mintEmbed(uid: string) {
       }
     }
   }
-  const url = new URL("/d/omi-tv-v2", ORIGIN);
+  // The kiosk rotates the TV playlist (omi-tv-v2 and omi-tv-funnel) once
+  // GRAFANA_TV_PLAYLIST_UID is set; until then it opens the wall board alone.
+  const playlist = process.env.GRAFANA_TV_PLAYLIST_UID;
+  const kioskPath =
+    playlist && /^[A-Za-z0-9_-]{1,64}$/.test(playlist)
+      ? `/playlists/play/${playlist}`
+      : "/d/omi-tv-v2";
+  const url = new URL(kioskPath, ORIGIN);
   url.searchParams.set("kiosk", "");
   url.searchParams.set("refresh", "15m");
   url.searchParams.set("orgId", String(org.id));
