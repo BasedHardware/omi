@@ -32330,7 +32330,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(count(omi_batch_projection_obligation_oldest_age_seconds > 0 and (max_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) - min_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) == 0)) or vector(0)) + (count(omi_batch_pipeline_vendor_held_oldest_age_seconds > 0 and (max_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) - min_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) == 0)) or vector(0)) + (count(omi_summary_debt_oldest_age_seconds > 0 and (max_over_time(omi_summary_debt_oldest_age_seconds[1h]) - min_over_time(omi_summary_debt_oldest_age_seconds[1h]) == 0)) or vector(0)) + (count(omi_demand_processing_queue_age_seconds > 0 and (max_over_time(omi_demand_processing_queue_age_seconds[1h]) - min_over_time(omi_demand_processing_queue_age_seconds[1h]) == 0)) or vector(0)) + ((time() - max(omi_summary_debt_sample_timestamp_seconds) > bool 3600) or vector(1))",
+          "expr": "(count(omi_batch_projection_obligation_oldest_age_seconds > 0 and (max_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) - min_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_batch_projection_obligation_oldest_age_seconds)[1h:1m]) >= 3300)) or vector(0)) + (count(omi_batch_pipeline_vendor_held_oldest_age_seconds > 0 and (max_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) - min_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_batch_pipeline_vendor_held_oldest_age_seconds)[1h:1m]) >= 3300)) or vector(0)) + (count(omi_summary_debt_oldest_age_seconds > 0 and (max_over_time(omi_summary_debt_oldest_age_seconds[1h]) - min_over_time(omi_summary_debt_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_summary_debt_oldest_age_seconds)[1h:1m]) >= 3300) and (time() - omi_summary_debt_sample_timestamp_seconds < 300)) or vector(0)) + (count(omi_demand_processing_queue_age_seconds > 0 and (max_over_time(omi_demand_processing_queue_age_seconds[1h]) - min_over_time(omi_demand_processing_queue_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_demand_processing_queue_age_seconds)[1h:1m]) >= 3300)) or vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -32407,15 +32407,15 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "A positive oldest-age gauge has stayed flat for one hour, or the summary-debt sample is stale or absent.",
+      "summary": "A positive oldest-age gauge is constant across a one-hour window with at least 55 minutes of per-series observation history.",
       "user_impact": "Frozen metrics can hide delayed batch publication or demand processing and mislead backlog triage.",
-      "scope": "Per-series projection obligation, vendor-held, summary-debt and demand-processing ages. Zero ages and absent individual age emitters contribute zero. Summary sample freshness is checked separately. Agent-tier telemetry warning; no lifecycle consumer.",
-      "verification": "Check the emitting pod and its supervised tick logs. Compare max_over_time minus min_over_time over 1h per series, not across replicas. Verify omi_batch_projection_obligation_observed_at_seconds and the existing omi-batch-queue-safety-blind rule on omi_batch_pipeline_metrics_refreshed_at_seconds; timeliness sample-stale owns fresh-gated ages. Check omi_summary_debt_sample_timestamp_seconds is present and younger than 3600s.",
+      "scope": "Per-series projection obligation, vendor-held, summary-debt and demand-processing ages. Each series needs an observation at least 3300s old in its 1h window; a 1m timestamp subquery tolerates scrape cadence without assuming a sample count. Zero ages, absent emitters and short histories contribute zero. Summary ages require the matching replica sample to be younger than 300s. Agent-tier telemetry warning; no lifecycle consumer.",
+      "verification": "Check the emitting pod and its supervised tick logs. Compare max_over_time minus min_over_time over 1h per series and confirm time() minus min_over_time(timestamp(age)[1h:1m]) is at least 3300s; never borrow history across replicas. Verify omi_batch_projection_obligation_observed_at_seconds and the existing omi-batch-queue-safety-blind rule on omi_batch_pipeline_metrics_refreshed_at_seconds; timeliness sample-stale owns fresh-gated ages. Exclude summary replicas whose omi_summary_debt_sample_timestamp_seconds is absent or at least 300s old. Summary producer absence/staleness is separate enablement-aware alert debt, not a failure in this rule.",
       "safe_next_action": "Check the emitting pod's supervised tick logs; restart the pod; confirm the gauge resumes changing. This alert authorizes no runtime changes beyond a pod restart.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
-      "threshold": "$A > 0 for 10m; positive per-series age constant over 1h, or summary sample older than 3600s / absent",
-      "evaluated_bad": "Positive age with max_over_time equal to min_over_time over 1h; stale or absent summary sample.",
-      "evaluated_good": "Zero age or changing age, with a fresh summary sample."
+      "threshold": "$A > 0 for 10m; positive per-series age constant over 1h with at least 3300s observation history; summary replica sample younger than 300s",
+      "evaluated_bad": "Positive age with max_over_time equal to min_over_time over 1h and a timestamp observation at least 3300s old in that window; summary ages also require a fresh matching sampler.",
+      "evaluated_good": "Zero or changing age, fewer than 55 minutes of series history, or absent emitter contributes zero. Stale/absent summary samples are excluded, not proof of healthy summary repair."
     },
     "labels": {
       "alert_identity": "omi-oldest-age-gauge-flat-1h",

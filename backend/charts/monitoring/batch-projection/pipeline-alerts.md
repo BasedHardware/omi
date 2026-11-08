@@ -104,9 +104,16 @@ scheduler, capacity or custody state is changed. The read-only held gauge may re
 `omi-oldest-age-gauge-flat-1h` is an agent-tier warning, muted by `omi-tier-silent`.
 It counts each positive series whose one-hour maximum equals its minimum for
 projection obligations, vendor-held work, summary debt and demand processing.
-Zero is a healthy empty queue. Missing individual age emitters contribute zero;
-summary-debt sample timestamps older than 3600 seconds or absent contribute a
-separate failure. The condition must persist for ten minutes (`noDataState: OK`).
+Each series must also have an observation at least 3300 seconds (55 minutes) old
+in that one-hour window: `time() - min_over_time(timestamp(age)[1h:1m]) >= 3300`.
+The timestamp subquery uses the same labels as the age series, so a new replica
+cannot borrow another replica's history. It tolerates five minutes of scrape/grid
+alignment without assuming that these independently scheduled producers share a
+sample cadence. This establishes an observed span, not uninterrupted scrapes;
+freshness companions still own collection gaps. A single new positive sample or
+ten minutes of constant samples cannot qualify. The condition must then persist
+for ten minutes (`noDataState: OK`), earliest about 65 minutes after first observation.
+Zero is a healthy empty queue. Missing age emitters contribute zero.
 This detects frozen sampling: live ages increase while a head is stuck and fall
 when it drains. Drain-stall and age-threshold rules still own stalled processing.
 
@@ -116,9 +123,19 @@ Check projection-obligation `omi_batch_projection_obligation_observed_at_seconds
 and the existing `omi-batch-queue-safety-blind` companion on
 `omi_batch_pipeline_metrics_refreshed_at_seconds` for queue sampling blindness.
 Fresh-gated timeliness/queue ages vanish instead of going flat; their existing
-sample-stale/blind rules own that absence. Confirm
-`omi_summary_debt_sample_timestamp_seconds` is present and fresh, and compare
+sample-stale/blind rules own that absence. Summary ages additionally require the
+matching replica's `omi_summary_debt_sample_timestamp_seconds` to be younger than
+300 seconds, per `backend/docs/runbooks/summary-guarantee.md`. A former lease
+holder's retained positive gauge must not count after its sample expires. Compare
 series with their original labels rather than aggregating ages across replicas.
+
+**Separate debt: summary-debt producer blindness.** This rule does not alert on a
+missing, zero or stale summary timestamp. Repair is optional and can be disabled;
+there is no exported enablement/expected-producer signal to distinguish that
+intentional state from collection failure. Add a separate enablement-aware
+freshness rule once that signal exists, then verify its disabled/rollback path.
+Until then, excluded or absent summary samples are unknown coverage, not evidence
+of healthy repair. The flat rule never fabricates a failure with `or vector(1)`.
 
 The held-age sampler skips nonnumeric, nonfinite and nonpositive leg clocks,
 continuing oldest-first with a snapshot cursor until a usable clock is found.
