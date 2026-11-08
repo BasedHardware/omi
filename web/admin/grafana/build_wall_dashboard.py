@@ -110,10 +110,18 @@ def hidden(name):
     return prop(name, ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": True}))
 
 
-def legend_hidden(override):
-    """Add to a series' own override: drawn and in the tooltip, but not listed in the legend (the legend has no room for the cost stack)."""
-    override["properties"] += [{"id": "custom.hideFrom", "value": {"legend": True, "tooltip": False, "viz": False}}]
+def short_label(override, label):
+    """Shorter legend label for a series' own override, so a legend beside the plot stays narrow."""
+    for prop_ in override["properties"]:
+        if prop_["id"] == "displayName":
+            prop_["value"] = label
     return override
+
+
+# Legend labels for the cost stack, short enough for a legend beside a 4-column plot.
+STACK_LABELS = {"GCP": "GCP", "Vertex LLM": "Vertex", "OpenAI": "OpenAI", "Anthropic": "Anthropic",
+                "STT measured": "STT meas.", "STT cash (Mercury)": "STT cash", "SaaS measured (Mercury)": "SaaS meas.",
+                "STT est.": "STT est.", "SaaS est.": "SaaS est.", "Modulate modelled": "Modulate"}
 
 
 def legend_right(panel):
@@ -396,10 +404,10 @@ def columns():
                                               ("revenuePerDay", "Revenue", "number"),
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
-                   unit="currencyUSD", draw="bars", stack=True, time_from="35d",
-                   overrides=[*[legend_hidden(color(n, h)) for n, h in COST.items()],
-                              *[legend_hidden(color(n, h)) for n, h in MEASURED.items()],
-                              *[legend_hidden(estimate(n, h)) for n, h in ESTIMATE.items()],
+                   unit="currencyUSD", draw="bars", stack=True, time_from="35d", extra=legend_right,
+                   overrides=[*[short_label(color(n, h), STACK_LABELS[n]) for n, h in COST.items()],
+                              *[short_label(color(n, h), STACK_LABELS[n]) for n, h in MEASURED.items()],
+                              *[short_label(estimate(n, h), STACK_LABELS[n]) for n, h in ESTIMATE.items()],
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
         (10, chart("Uptime by journey",

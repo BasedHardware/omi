@@ -5721,14 +5721,6 @@
                   "mode": "fixed",
                   "fixedColor": "#5c6b80"
                 }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
               }
             ]
           },
@@ -5740,21 +5732,13 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Vertex LLM"
+                "value": "Vertex"
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#8494ab"
-                }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
                 }
               }
             ]
@@ -5775,14 +5759,6 @@
                   "mode": "fixed",
                   "fixedColor": "#aab6c6"
                 }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
               }
             ]
           },
@@ -5802,14 +5778,6 @@
                   "mode": "fixed",
                   "fixedColor": "#cdd5df"
                 }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
               }
             ]
           },
@@ -5821,21 +5789,13 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "STT measured"
+                "value": "STT meas."
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#aab6c6"
-                }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
                 }
               }
             ]
@@ -5848,21 +5808,13 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "STT cash (Mercury)"
+                "value": "STT cash"
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#bfc9d6"
-                }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
                 }
               }
             ]
@@ -5875,21 +5827,13 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "SaaS measured (Mercury)"
+                "value": "SaaS meas."
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#8494ab"
-                }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
                 }
               }
             ]
@@ -5918,14 +5862,6 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
               }
             ]
           },
@@ -5953,14 +5889,6 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
               }
             ]
           },
@@ -5972,7 +5900,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Modulate modelled"
+                "value": "Modulate"
               },
               {
                 "id": "color",
@@ -5988,14 +5916,6 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
               }
             ]
           },
@@ -6075,7 +5995,7 @@
         "legend": {
           "showLegend": true,
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "right"
         },
         "tooltip": {
           "mode": "multi",
