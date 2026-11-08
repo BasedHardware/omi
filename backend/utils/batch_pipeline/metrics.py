@@ -6,6 +6,7 @@ import threading
 import time
 
 from config.firestore_read_levers import lever_enabled
+from config.policy.kill_switches import kill_switch
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
@@ -16,7 +17,13 @@ from config.batch_timeliness import (
     timeliness_epoch,
     timeliness_interval_seconds,
 )
-from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
+from database.batch_pipeline_store import (
+    Store,
+    FirestoreStore,
+    PROJECTION_OBLIGATION_STATES,
+    timeliness_all_time_counts,
+    timeliness_sample,
+)
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
@@ -116,6 +123,7 @@ class QueueMetrics:
     ):
         self.timeliness_leader = timeliness_leader
         self._timeliness_lock = threading.Lock()
+        self._timeliness_all_time_visible = False
         self._timeliness_visible = False
         self._timeliness_expires = 0.0
         self.scope = (worker_release, namespace)
@@ -200,6 +208,15 @@ class QueueMetrics:
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
+        )
+        self.timeliness_all_time = _FreshQueueGauge(
+            'omi_batch_timeliness_all_time_units',
+            'Unpublished stock across all epochs and ages; exact aggregate counts by projection hold leg',
+            ['leg'],
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible()
+            and self._timeliness_all_time_visible
+            and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False),
         )
         self.timeliness_backlog = _FreshQueueGauge(
             'omi_batch_timeliness_backlog_units',
@@ -479,6 +496,9 @@ class QueueMetrics:
                 self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
                 return
+        # Companion counts need leader mode and this replica's lease, so a fleet
+        # never runs them on every replica. Election off means no companion counts.
+        all_time_counts = elected and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False)
         try:
             sample = timeliness_sample(
                 store.client,
@@ -511,6 +531,27 @@ class QueueMetrics:
         self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
+        # Companion counts run only after the epoch gauges above are published,
+        # so a slow or failed COUNT can never delay or stale the epoch series.
+        if all_time_counts:
+            self._refresh_all_time(store)
+        else:
+            self._timeliness_all_time_visible = False
+
+    def _refresh_all_time(self, store: FirestoreStore) -> None:
+        try:
+            counts = timeliness_all_time_counts(store.client, store.namespace)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'event=batch_timeliness_all_time_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            counts = {}
+        # A failed leg must disappear, including a value from the previous refresh;
+        # it cannot become a fake zero or stay stale.
+        self.timeliness_all_time.clear()
+        for leg, units in counts.items():
+            self.timeliness_all_time.labels(leg).set(units)
+        self._timeliness_all_time_visible = bool(counts)
 
     def refresh_projection(self, store: FirestoreStore, now: float) -> None:
         # Reuses the indexed discovery shape, one row, including durable holds.
