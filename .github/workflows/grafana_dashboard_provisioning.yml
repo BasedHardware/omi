@@ -121,7 +121,9 @@ jobs:
             --allowlist omi-tv-v2.json,omi-tv-funnel.json \
             --folder-uid business
       - name: Apply production alert definitions and check drift
-        if: matrix.environment == 'prod'
+        # Dispatch-only: a push resolves to the dev environment anyway, so no
+        # dashboard-path push can reach this prod step.
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
