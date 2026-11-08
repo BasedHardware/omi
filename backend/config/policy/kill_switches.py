@@ -8,6 +8,8 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED': False,
+    'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED': False,
     'CONVERSATION_TERMINAL_FAMILY_MODE': True,
     'BATCH_HELD_DEAD_LETTER_ENABLED': True,
     'BATCH_PIPELINE_LEADER_LEASE_ENABLED': True,
@@ -38,7 +40,7 @@ DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 logger = logging.getLogger(__name__)
 
 
-def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
+def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool = True) -> bool:
     if name not in KILL_SWITCHES:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
@@ -65,11 +67,17 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED',
+        'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED',
         'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
         'PROJECTION_DRAIN_CLAIM_AWARE',
         'PROJECTION_DRAIN_PRIVACY_BACKOFF',
         'PROJECTION_PRIVACY_REFUSAL_RESUME',
     }:
         enabled = default_on(name, enabled, environ=env)
-    logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)
+    # Dark observability callers suppress even the switch-read log when disabled.
+    if log:
+        logger.info(
+            'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled
+        )
     return enabled

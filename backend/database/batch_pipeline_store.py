@@ -796,13 +796,23 @@ def is_terminal_empty(job: dict[str, Any]) -> bool:
 
 @read_origin('job:batch_pipeline_store:timeliness_sample')
 def timeliness_sample(
-    client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
+    client: Any,
+    namespace: str,
+    epoch: float,
+    now: float,
+    sla: float,
+    *,
+    terminal_empty_processed: bool = False,
+    all_time_counts: bool = False,
 ) -> dict[str, Any]:
     """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
     new cohort, and backlog counts before ``epoch``. With ``batch_timeliness_leader`` on, each backlog
     count is capped at 10,000 index entries: values at the cap are lower bounds. The assignment-held
     backlog alert treats saturation as actionable stock, independently of its one-hour growth condition.
     Lever 0 restores the exact, unbounded historical counts. Post-epoch counts stay exact.
+
+    ``all_time_counts`` adds three exact COUNT aggregations on the existing leg queries, with no
+    epoch/SLA filter or document walk. It is opt-in at the metrics caller, never queried on scrape.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
     leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
@@ -940,6 +950,15 @@ def timeliness_sample(
             ),
         },
         'new_over_sla': over_sla,
+        **(
+            {
+                'all_time': {
+                    leg: count(legs[leg][0]) for leg in ('quarantine_held_rows', 'assignment_held', 'projection')
+                }
+            }
+            if all_time_counts
+            else {}
+        ),
         'backlog': {
             'uncommitted_incl_holds': backlog_count(
                 jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)

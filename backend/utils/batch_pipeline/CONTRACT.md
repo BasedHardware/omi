@@ -554,3 +554,33 @@ operator lane. Recovery redrive of `failed_held`: the redrive owner named in eac
 - Automatic redrive of vendor-cause `failed_held` (operator redrive today).
 - Exactly one vendor for language ID (Modulate today; self-LID #23460 is required from 50%).
 - Live preview quality: retire-cohort preview is a preference shift ([ADR 0003](../../docs/adr/0003-retire-flag-is-preview-preference.md)).
+
+
+### Dark projection hold observability (2026-11-08)
+
+`BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED` defaults OFF. Explicit `true` adds
+one INFO `event=batch_projection outcome=quarantine_persisted hold_reason=...`
+after a successful quarantine disposition commit, including partial multipart
+persists, and after a committed sibling acknowledgment retains a held summary.
+The closed reasons are `ambiguous_generation`, `conflict`, `poison_head`,
+`payload_contract`, and `sibling`. Transaction retries and receipt replays emit
+no additional success line; no identifiers or content enter the new line.
+Persisted dispositions and existing logs are unchanged.
+
+`BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED` independently defaults OFF. Explicit
+`true` adds `omi_batch_timeliness_all_time_units{leg=...}` for
+`quarantine_held_rows`, `assignment_held`, and `projection`. These are exact stock
+counts across all epochs and ages, including units younger than the SLA. They
+reuse the existing Firestore COUNT aggregation path: three unbounded count
+aggregations per successful elected timeliness refresh, no document scan and
+no queries on scrape. The timeliness alarm, cadence, election, freshness and
+existing epoch-scoped gauge remain unchanged. This companion is diagnostic;
+there is no alert or production metric-inventory requirement for it.
+
+Both controls are registered in `config/policy/kill_switches.py`,
+`config/feature-flags.yaml`, and `config/flag_budget.json`. They require `true`
+in every parser mode; unset/false emits no new logs or series and performs no
+extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
+No enablement is included: the lead owns a separate canary and expansion
+proposal after review. Rollback: set each switch to `false`; logs stop and the
+companion series disappears on collection. No data migration or cleanup.

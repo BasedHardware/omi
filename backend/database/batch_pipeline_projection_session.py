@@ -84,14 +84,14 @@ class ProjectionSession:
         receipt = self.entry.get('projection') or {}
         return {} if receipt.get('privacy_control_only') else receipt
 
-    def write_receipt(self, transaction, receipt):
-        """Ready acknowledgment and summary share one result-keyed receipt."""
+    def write_receipt(self, transaction, receipt) -> bool:
+        """Ready acknowledgment and summary share one result-keyed receipt. Return a sibling hold for post-commit logging."""
         if self.entry.get('projection_privacy_refusal') or self._privacy_refusal_transaction is transaction:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
             transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
-            return
+            return False
         parts[str(self.part_index)] = receipt
         changes: dict[str, Any] = {'projection_parts': parts}
         summary = dict(self.entry.get('projection') or {})
@@ -101,10 +101,11 @@ class ProjectionSession:
                 summary['state'] = 'quarantined'
                 changes.update(projection=summary, projection_state='quarantine_held')
                 transaction.update(self.result_ref, changes)
-                return
+                return True
             summary['state'] = 'ready'
             changes.update(projection=summary, projection_state='ready')
         transaction.update(self.result_ref, changes)
+        return False
 
     def guard(self, transaction, conversation_ids=()):
         snapshots: dict[str, Any] = {}

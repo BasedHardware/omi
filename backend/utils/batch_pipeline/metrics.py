@@ -6,6 +6,7 @@ import threading
 import time
 
 from config.firestore_read_levers import lever_enabled
+from config.policy.kill_switches import kill_switch
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
@@ -109,6 +110,7 @@ class QueueMetrics:
     ):
         self.timeliness_leader = timeliness_leader
         self._timeliness_lock = threading.Lock()
+        self._timeliness_all_time_visible = False
         self._timeliness_visible = False
         self._timeliness_expires = 0.0
         self.scope = (worker_release, namespace)
@@ -193,6 +195,15 @@ class QueueMetrics:
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
+        )
+        self.timeliness_all_time = _FreshQueueGauge(
+            'omi_batch_timeliness_all_time_units',
+            'Unpublished stock across all epochs and ages; exact aggregate counts by projection hold leg',
+            ['leg'],
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible()
+            and self._timeliness_all_time_visible
+            and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False),
         )
         self.timeliness_backlog = _FreshQueueGauge(
             'omi_batch_timeliness_backlog_units',
@@ -472,6 +483,7 @@ class QueueMetrics:
                 self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
                 return
+        all_time_counts = kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False)
         try:
             sample = timeliness_sample(
                 store.client,
@@ -480,6 +492,7 @@ class QueueMetrics:
                 now,
                 SLA_SECONDS,
                 terminal_empty_processed=TERMINAL_EMPTY_IS_PROCESSED,
+                **({'all_time_counts': True} if all_time_counts else {}),
             )
         except Exception as error:
             self.timeliness_samples.labels('error').inc()
@@ -498,6 +511,9 @@ class QueueMetrics:
             self.timeliness_backlog.labels(leg).set(units)
         for leg, truncated in sample['truncated'].items():
             self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
+        for leg, units in sample.get('all_time', {}).items():
+            self.timeliness_all_time.labels(leg).set(units)
+        self._timeliness_all_time_visible = all_time_counts
         self.timeliness_observed_at.set(now)
         # Only a successful sample extends visibility, including with election
         # disabled. A lease renewal/fail-open result alone cannot revive debt.
