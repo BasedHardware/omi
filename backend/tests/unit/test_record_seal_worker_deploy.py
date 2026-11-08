@@ -51,6 +51,7 @@ def test_cpu_placement_ceiling_and_identity():
     assert json.loads(repair_env['RECORD_SEAL_REPAIR_SERVER_FLAGS'])
     # Only the worker Deployment changes from the former production runtime setting.
     running = documents('--set', 'recordSealWorker.runtimeEnabled=true')
+    assert set(docs) == set(running)
     assert {key for key in docs if docs[key] != running[key]} == {('Deployment', 'record-seal-worker')}
 
 
