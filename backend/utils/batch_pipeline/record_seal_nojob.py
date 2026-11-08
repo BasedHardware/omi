@@ -14,6 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import run_transactional
+from database.batch_pipeline_recovery import terminalize_discarded_restore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.live import record_identity, register_recording
@@ -138,7 +139,21 @@ def plan_backfill(
 
             def read(tx):
                 row = tx.get('conversations', f'{uid}/{cid}')
-                if job_ref.get(transaction=tx.transaction).exists:
+                snapshot = job_ref.get(transaction=tx.transaction)
+                if snapshot.exists:
+                    existing = snapshot.to_dict() or {}
+                    if (
+                        existing.get('registration_origin') == 'restore'
+                        and seal_refusal(
+                            existing,
+                            row,
+                            producer_proof=producer_proof,
+                            repair_upload_failed=repair_upload_failed,
+                            repair_closed=True,
+                        )
+                        == 'privacy_refused'
+                    ):
+                        return row, existing, 'privacy_refused'
                     return row, None, 'already_registered'
                 reason = refusal(row, producer_proof, repair_upload_failed=repair_upload_failed)
                 if reason:
@@ -148,6 +163,8 @@ def plan_backfill(
             row, job, reason = store.run(read)
             if reason:
                 entry['disposition'] = reason
+                if reason == 'privacy_refused' and job is not None:
+                    entry['job_id'] = job_id
             else:
                 proof = retained_tail_proof(job, row, storage_client, artifacts, diagnostics=diagnostics)
                 # Refusals grant no write authority. Do not bind their volatile
@@ -187,7 +204,13 @@ def apply_backfill(store, plan, approved_digest):
     outcomes = Counter()
     for entry in plan['entries']:
         if entry['disposition'] != 'eligible':
-            outcomes[entry['disposition']] += 1
+            disposition = entry['disposition']
+            if disposition == 'privacy_refused' and entry.get('job_id'):
+                disposition = (
+                    terminalize_discarded_restore(store.client, store.namespace, entry['job_id'], time.time())
+                    or disposition
+                )
+            outcomes[disposition] += 1
             continue
         if plan.get('overlap_trim_enabled') and not overlap_trim_enabled():
             outcomes['state_changed'] += 1
@@ -202,7 +225,21 @@ def apply_backfill(store, plan, approved_digest):
         def commit(raw):
             tx = FirestoreTransaction(store.client, store.namespace, raw)
             row = tx.get('conversations', f'{uid}/{cid}')
-            if job_ref.get(transaction=raw).exists:
+            snapshot = job_ref.get(transaction=raw)
+            if snapshot.exists:
+                existing = snapshot.to_dict() or {}
+                if (
+                    existing.get('registration_origin') == 'restore'
+                    and seal_refusal(
+                        existing,
+                        row,
+                        producer_proof=plan['producer_proof'],
+                        repair_upload_failed=plan.get('repair_upload_failed', False),
+                        repair_closed=True,
+                    )
+                    == 'privacy_refused'
+                ):
+                    return 'privacy_refused'
                 return 'already_registered'
             if row_state(row) != entry['row']:
                 return 'state_changed'
@@ -226,7 +263,12 @@ def apply_backfill(store, plan, approved_digest):
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed_registered'
 
         try:
-            outcomes[run_transactional(store.client, commit, transient=True)] += 1
+            disposition = run_transactional(store.client, commit, transient=True)
+            if disposition == 'privacy_refused':
+                disposition = (
+                    terminalize_discarded_restore(store.client, store.namespace, job_id, time.time()) or disposition
+                )
+            outcomes[disposition] += 1
         except BatchPrivacyBlocked:
             outcomes['privacy_refused'] += 1
         except Exception:

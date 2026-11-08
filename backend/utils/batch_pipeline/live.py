@@ -190,6 +190,7 @@ def register_recording(
                 'policy': policy.to_dict(),
                 'policy_source': 'admission',
                 'merge_pending': False,
+                **({'registration_origin': 'restore'} if restoring else {}),
             },
         )
         return True

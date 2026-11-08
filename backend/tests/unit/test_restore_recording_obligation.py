@@ -246,18 +246,35 @@ def test_registration_refusal_does_not_attempt_restore_metadata(restore_store, m
 
 
 def test_reprocess_retry_of_user_kept_row_runs_restore_registration_again(restore_store, monkeypatch):
-    # Metadata may already have committed on an earlier refused registration.
-    assert conversations_db.restore_conversation_from_discarded(UID, CID) is True
+    # Register-first refusal cannot commit visibility or the user's keep marker.
+    restore_store.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+    before = deepcopy(restore_store.rows[ROW_PATH])
     conversation = SimpleNamespace(discarded=False, sync_relevance='keep')
     monkeypatch.setattr(conversations_router, 'process_conversation', lambda *args, **kwargs: conversation)
-    monkeypatch.setattr(conversations_router, 'schedule_reprocessed_learning', lambda *args, **kwargs: conversation)
-    assert (
-        conversations_router.execute_reprocess(
+    learning = Mock(return_value=conversation)
+    monkeypatch.setattr(conversations_router, 'schedule_reprocessed_learning', learning)
+
+    def reprocess():
+        return conversations_router.execute_reprocess(
             UID, CID, conversation, 'en', None, None, False, None, None, user_kept=True
         )
-        is conversation
-    )
-    assert restore_store.rows[JOB_PATH]['state'] == 'record_pending'
+
+    with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='retry restore'):
+        reprocess()
+    assert restore_store.rows[ROW_PATH] == before
+    assert restore_store.rows[ROW_PATH]['discarded'] is True
+    assert restore_store.rows[ROW_PATH].get('sync_relevance_user_kept') == before.get('sync_relevance_user_kept')
+    assert JOB_PATH not in restore_store.rows
+    learning.assert_not_called()
+    restore_store.rows[('users', UID)]['private_cloud_sync_enabled'] = True
+    assert reprocess() is conversation
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+    assert restore_store.rows[ROW_PATH]['sync_relevance_user_kept'] is True
+    obligation = deepcopy(restore_store.rows[JOB_PATH])
+    assert obligation['state'] == 'record_pending'
+    assert reprocess() is conversation
+    assert restore_store.rows[JOB_PATH] == obligation
+    assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in restore_store.rows) == 1
 
 
 def test_reprocess_surfaces_registration_refusal_as_retryable_http(restore_store, monkeypatch):
