@@ -19,7 +19,9 @@ audio for the missing span as new retained objects, and the drain's next
 normal pass admits the record. Admission, `validate_record_tail`, barriers, the
 drain and projection are unchanged.
 
-Gates (all required), checked on the database pool before any audio is read:
+Gates (all required), checked on the database pool before any audio is read,
+on the full conversation row read fresh with its Firestore revision as
+`updated_at`:
 switch and uid cohort; owner context (checked earlier in the function: same uid
 path, source and capture device); no record jobs;
 `require_record_audio_barrier` passes and the row is not partial, deleted,
@@ -73,6 +75,19 @@ a rise in admission errors, or a `_covered` failure after a fill for the same
 `record=` key. Rollback is `RECORD_GAP_FILL=off`; the tagged objects stay and
 are ordinary retained audio for that record (never deleted, per the raw-audio
 rule).
+
+Scope (lead2 bf6d91, option C): the phone sends a closed recording's oldest
+pending 300 s batch first and resends that same batch after each
+`record_capture_pending` 503, so only a gap that starts inside that first
+300 s window can recover. A record whose missing span starts later stays
+stuck as before. Releasing WALs once the server holds a byte-exact durable
+copy (so the phone advances to the next batch) is a separate custody
+decision for David; a client change to advance past waiting batches is the
+app-train alternative.
+
+Playback: gap-fill objects are read by both playback modes; the non-strict
+reader resolves the listed 6-decimal path at the exact timestamp instead of
+rebuilding a 3-decimal key.
 
 Not in this change: admitted records whose WAL holds audio the record lacks or
 does not match (`audio_coverage_unproven`, phase 2).
