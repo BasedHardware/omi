@@ -14,7 +14,7 @@ from pathlib import Path
 
 from git_test_env import clean_git_env
 
-from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, owner_backlog
+from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog
 from feature_flag_registry import load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 
@@ -235,6 +235,10 @@ class RegistryFixture(unittest.TestCase):
             errors = self.errors()
         self.assertEqual("FLAG_OWNER_BACKLOG owner=tester unramped=6\n", output.getvalue())
         self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(errors))
+
+    def test_normalize_owner_collapses_whitespace_left_by_annotations(self) -> None:
+        self.assertEqual("alice bob", normalize_owner("Alice (team) Bob"))
+        self.assertEqual("alice bob", normalize_owner("  alice\tBOB "))
 
     def test_backlog_counts_only_pending_or_undecided_rollouts(self) -> None:
         # undecided is a legacy decision spelling, even if current schema rejects new uses.

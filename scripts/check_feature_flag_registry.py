@@ -80,10 +80,10 @@ OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {
 
 
 def normalize_owner(owner: str) -> str:
-    """Ignore parenthetical annotations, case and surrounding whitespace."""
+    """Ignore parenthetical annotations, case and whitespace runs."""
     while re.search(r"\([^()]*\)", owner):
-        owner = re.sub(r"\([^()]*\)", "", owner)
-    return owner.lower().strip()
+        owner = re.sub(r"\([^()]*\)", " ", owner)
+    return " ".join(owner.lower().split())
 
 
 def owner_backlog(registry: dict[str, Any]) -> Counter[str]:
