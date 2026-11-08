@@ -15,12 +15,15 @@ owns shapes, fences, rollback, metrics and the Firestore cost model.
   malformed/nonfinite/bool enqueue timestamps remain young/unknown and future
   timestamps have zero age. Backoff tests set their switch on every invocation
   (lead2 bus f85d74).
-- Prod backend-integration and the prod listen serving chart declare ghost
-  settlement on; dev remains count-only. Only legacy ready-receipt hints change,
-  at most sixteen per pass; normal publication rechecks its own fences. Review
-  within 24 hours of deployment. Ghost settle uses its own independent
-  `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` switch; the held switch
-  controls record dead-letter and assignment expiry.
+- Ghost settle stays OFF in every environment (default false). It was tripped
+  off on 2026-11-08 at about 02:00Z (lead2 ea819b, f5a331): the ghost branch
+  bypassed `_target_restorable`, so rows whose live record target was never
+  persisted failed at the head of their owner chain (`SyncAssignmentConflict`
+  'batch live target not persisted', about 465 per 15 min), blocking later
+  conversations. Turning it on waits for the `_target_restorable` fix
+  (lcwake/uicleanup) and a head-error baseline. Ghost settle keeps its own
+  independent `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` switch; the held
+  switch controls record dead-letter and assignment expiry.
 - Committed assignment holds that fail the real-held gate use the same stamped
   window and expiry markers as other held receipts. Identity, privacy refusal,
   operator intent, timestamp and multipart-suffix fences remain. Existing held

@@ -292,7 +292,6 @@ def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: Simple
     if env == 'prod':
         batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
     assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
-    assert ('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'prod')
     assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
     assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY

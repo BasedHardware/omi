@@ -237,8 +237,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
-            # Approved prod-only serving release scan; pusher never releases projection hints.
-            "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED",
             # Only listen's runtime reads these to advertise mobile control-channel
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",
