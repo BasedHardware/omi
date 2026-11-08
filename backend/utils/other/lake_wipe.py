@@ -20,7 +20,9 @@ def purge_owner_lake_content(uid: str) -> dict:
         raise RuntimeError('lake purge requires a running account wipe')
     if not account_deletion_blocks_access(status):
         raise RuntimeError('lake purge requires a blocking deletion marker')
-    time.sleep(config.wipe_drain_seconds())
+    drain = config.wipe_drain_seconds()
+    if drain:
+        time.sleep(drain)
     count = object_lake.delete_space_prefix(uid)
     # Keep discovery through all intervening wipe steps: an admitted upload can
     # land after this listing and lose its worker before its post-put check.
@@ -51,7 +53,11 @@ def purge_conversation_lake_objects(uid: str, conversation_id: str, source_ids=(
     # record the public route's intent. Preserve existing tombstone bindings.
     for entity_id in entity_ids:
         _fence_conversation_uploads(uid, entity_id)
-    return sum(object_lake.delete_space_entity(uid, entity_id) for entity_id in entity_ids)
+    count = 0
+    for entity_id in entity_ids:
+        count += object_lake.delete_space_entity(uid, entity_id)
+        object_lake.delete_entity_upload_candidates(uid, entity_id)
+    return count
 
 
 def _fence_conversation_uploads(uid: str, conversation_id: str) -> None:

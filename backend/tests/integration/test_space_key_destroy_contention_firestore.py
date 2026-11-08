@@ -182,7 +182,7 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
             release.set()
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
-    assert lake.delete_space_upload_candidates(uid) == 1
+    assert lake.delete_space_upload_candidates(uid) == 0
 
 
 def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
@@ -296,3 +296,34 @@ def test_same_key_admissions_use_server_times_and_settle_independently(state):
     lake._settle_upload_candidate(bucket.name, key, one)
     assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
     assert lake.delete_space_upload_candidates(uid) == 0
+
+
+def test_conversation_purge_erases_settled_and_aged_intents_with_real_ranges(state):
+    client, uid, bucket = state
+    lake.put_space_object(uid, 'transcript', 'c', b'settled')
+    key = f'v1/spaces/{uid}/transcript/c/abandoned'
+    lake._record_upload_candidate('old-bucket', key)
+    candidate = client.collection('lake_upload_candidates').document(
+        hashlib.sha256(f'old-bucket/{key}'.encode()).hexdigest()
+    )
+    row = candidate.get().to_dict()
+    assert lake_wipe.purge_conversation_lake_objects(uid, 'c') == 1
+    assert candidate.get().exists
+    now = row['admitted_at'] + timedelta(seconds=lake.config.put_quiescence_seconds() + 1)
+    assert lake.delete_entity_upload_candidates(uid, 'c', now=now) == 1
+    assert lake.delete_space_upload_candidates(uid) == 0
+
+
+def test_last_conversation_attempt_deletes_candidate_in_real_transaction(state):
+    client, uid, bucket = state
+    key = f'v1/spaces/{uid}/transcript/c/digest'
+    one = lake._record_upload_candidate(bucket.name, key)
+    two = lake._record_upload_candidate(bucket.name, key)
+    lake_wipe.purge_conversation_lake_objects(uid, 'c')
+    candidate = client.collection('lake_upload_candidates').document(
+        hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
+    )
+    lake._settle_upload_candidate(bucket.name, key, one, delete_if_fenced=True)
+    assert set(candidate.get().to_dict()['in_flight']) == {two}
+    lake._settle_upload_candidate(bucket.name, key, two, delete_if_fenced=True)
+    assert not candidate.get().exists

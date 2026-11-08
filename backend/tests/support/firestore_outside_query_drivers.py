@@ -559,3 +559,9 @@ _driver(
     base={'space_id': UID},
     neutrals={'now': (None, 'clock injection only; the query shape is a fixed key range')},
 )
+
+_driver(
+    'utils.other.object_lake.delete_entity_upload_candidates',
+    base={'space_id': UID, 'entity_id': 'conversation-1'},
+    neutrals={'now': (None, 'clock injection only; the query shape is a fixed entity key range')},
+)

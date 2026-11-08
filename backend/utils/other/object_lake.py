@@ -239,9 +239,9 @@ def put_space_object(
         blob = _lake_bucket().blob(key)
         blob.metadata = stamp
         # Write-ahead intent survives a refused replay, an ambiguous upload
-        # result or worker loss before the pointer commits. Never self-delete:
-        # another writer may already reference this content-addressed name.
-        with _upload_candidate(config.bucket(), key):
+        # result or worker loss before the pointer commits. Only a deletion fence
+        # permits erasure; another writer may reference the same name.
+        with _upload_candidate(config.bucket(), key) as attempt:
             # The SDK accepts (connect, read) tuples and retry=None; its signatures
             # type both from their defaults, so call it untyped.
             gcs: Any = blob
@@ -270,9 +270,9 @@ def put_space_object(
                     _parse_ref(ref)
                 except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
                     raise LakeObjectConflict('Existing lake object metadata is invalid') from None
-                _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline)
+                _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline, attempt=attempt)
                 return ref
-            _check_put_authority(space_id, entity_id, blob, created=True, deadline=deadline)
+            _check_put_authority(space_id, entity_id, blob, created=True, deadline=deadline, attempt=attempt)
     except (space_keys.SpaceKeyDestroyed, space_keys.SpaceKeyUnavailable):
         raise
     except ObjectLakeError:
@@ -286,12 +286,12 @@ def put_space_object(
 def _upload_candidate(bucket: str, key: str):
     attempt = _record_upload_candidate(bucket, key)
     try:
-        yield
+        yield attempt
     except Exception:
         _settle_upload_candidate(bucket, key, attempt)
         raise
     else:
-        _settle_upload_candidate(bucket, key, attempt)
+        _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True)
     # Process loss leaves the attempt unsettled. No finally: a killed writer
     # cannot establish that its remote request has finished.
 
@@ -344,11 +344,13 @@ def _record_upload_candidate(bucket: str, key: str) -> str:
     return attempt
 
 
-def _settle_upload_candidate(bucket: str, key: str, attempt: str) -> None:
+def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_fenced: bool = False) -> None:
     """Settle only this request; a concurrent upload of the same key stays live."""
     client = space_keys.space_key_firestore_client()
     candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
     candidate = client.collection('lake_upload_candidates').document(candidate_id)
+    _, _, space_id, _, entity_id, _ = key.split('/')
+    tombstone = client.collection('users').document(space_id).collection('deleted_conversations').document(entity_id)
 
     @firestore.transactional
     def settle(transaction):
@@ -357,7 +359,10 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str) -> None:
             return  # Never recreate discovery after the wipe's final erasure.
         pending = dict((snapshot.to_dict() or {}).get('in_flight', {}))
         pending.pop(attempt, None)
-        transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
+        if delete_if_fenced and not pending and tombstone.get(transaction=transaction).exists:
+            transaction.delete(candidate)
+        else:
+            transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
 
     settle(client.transaction())
 
@@ -382,26 +387,73 @@ def assert_space_uploads_quiescent(space_id: str, *, now: datetime | None = None
         query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
         for snapshot in query.stream():
             row = snapshot.to_dict() or {}
-            pending = row.get('in_flight')
-            if pending is None:
-                pending = {'legacy': row.get('created_at')}
-            if (
-                not isinstance(pending, dict)
-                or row.get('settled') is True
-                and pending
-                or pending == {}
-                and row.get('settled') is not True
-            ):
-                raise LakeFetchError('Lake upload candidate state invalid')
-            for admitted_at in pending.values():
-                if not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None:
-                    raise LakeFetchError('Lake upload admission time unavailable')
-                if (now - admitted_at).total_seconds() <= config.put_quiescence_seconds():
-                    raise LakeFetchError('Lake uploads still in flight; retry wipe later')
+            if not _candidate_is_quiescent(row, now):
+                raise LakeFetchError('Lake uploads still in flight; retry wipe later')
     except ObjectLakeError:
         raise
     except Exception:
         raise LakeFetchError('Lake upload quiescence unavailable') from None
+
+
+def _candidate_is_quiescent(row: dict, now: datetime) -> bool:
+    pending = row.get('in_flight')
+    if pending is None:
+        pending = {'legacy': row.get('created_at')}
+    if (
+        not isinstance(pending, dict)
+        or row.get('settled') is True
+        and pending
+        or pending == {}
+        and row.get('settled') is not True
+    ):
+        raise LakeFetchError('Lake upload candidate state invalid')
+    for admitted_at in pending.values():
+        if not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None:
+            raise LakeFetchError('Lake upload admission time unavailable')
+    return all(
+        (now - admitted_at).total_seconds() > config.put_quiescence_seconds() for admitted_at in pending.values()
+    )
+
+
+def delete_entity_upload_candidates(
+    space_id: str, entity_id: str, *, now: datetime | None = None, firestore_client=None
+) -> int:
+    """After verified entity purge, erase settled/aged intents behind its fence.
+
+    Young live attempts retain discovery until their fenced writer cleans up and
+    settles. Worker loss leaves discovery for account wipe or C3's janitor.
+    """
+    now = now if now is not None else datetime.now(timezone.utc)
+    try:
+        client = firestore_client if firestore_client is not None else space_keys.space_key_firestore_client()
+        tombstone = (
+            client.collection('users').document(space_id).collection('deleted_conversations').document(entity_id)
+        )
+        base = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
+        collection = client.collection('lake_upload_candidates')
+
+        @firestore.transactional
+        def erase(transaction, candidate):
+            if not tombstone.get(transaction=transaction).exists:
+                raise LakeWriteFenced('Candidate purge requires conversation deletion fence')
+            snapshot = candidate.get(transaction=transaction)
+            if snapshot.exists and _candidate_is_quiescent(snapshot.to_dict() or {}, now):
+                transaction.delete(candidate)
+                return 1
+            return 0
+
+        count = 0
+        for data_class in DATA_CLASSES:
+            lo = f'{base}{data_class}/{_segment(entity_id)}/'
+            hi = lo[:-1] + '0'
+            query = collection.where(filter=FieldFilter('key', '>=', lo)).where(filter=FieldFilter('key', '<', hi))
+            for row in query.stream():
+                count += erase(client.transaction(), collection.document(row.id))
+        return count
+    except ObjectLakeError:
+        raise
+    except Exception:
+        raise LakeFetchError('Lake conversation upload candidate purge unavailable') from None
 
 
 def _assert_owner_write_allowed(space_id, entity_id, *, firestore_client=None, transaction=None):
@@ -431,7 +483,7 @@ def _remaining_put_seconds(deadline):
     return remaining
 
 
-def _check_put_authority(space_id, entity_id, blob, *, created, deadline):
+def _check_put_authority(space_id, entity_id, blob, *, created, deadline, attempt):
     try:
         _assert_owner_write_allowed(space_id, entity_id)
         if space_keys.get_space_keys(space_id) is None:
@@ -445,6 +497,7 @@ def _check_put_authority(space_id, entity_id, blob, *, created, deadline):
         # The candidate cannot acquire a live reference after the durable
         # account/conversation fence, and its pointer has not been returned.
         if not created:
+            _settle_upload_candidate(config.bucket(), blob.name, attempt, delete_if_fenced=True)
             raise
         try:
             blob.delete(if_generation_match=blob.generation)
@@ -452,9 +505,9 @@ def _check_put_authority(space_id, entity_id, blob, *, created, deadline):
             pass
         except Exception:
             raise LakeFetchError('Fenced lake upload cleanup unavailable') from None
-        # Keep the shared discovery intent: another pre-fence writer may still
-        # be uploading this name. Owner wipe erases intents after its fence;
-        # conversation-only deletion leaves them discoverable for the janitor.
+        # Remove discovery only after our late generation is absent and every
+        # same-key attempt has settled under the conversation tombstone.
+        _settle_upload_candidate(config.bucket(), blob.name, attempt, delete_if_fenced=True)
         raise
 
 

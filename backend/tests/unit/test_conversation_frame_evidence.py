@@ -150,10 +150,23 @@ def test_lake_purge_precedes_doc_delete_and_includes_deduped_donors(monkeypatch)
         lambda *args: {'sync_merged_from': ['c', 'd', 'd', '', 'e']},
     )
     monkeypatch.setattr(object_lake, 'delete_space_entity', lambda uid, cid: events.append(('lake', uid, cid)) or 1)
+    monkeypatch.setattr(
+        object_lake, 'delete_entity_upload_candidates', lambda uid, cid: events.append(('candidates', uid, cid)) or 1
+    )
     conversation_frame_evidence.delete_conversation_and_frame_evidence(
         'u', 'c', delete_conversation=lambda *args: events.append('delete')
     )
-    assert events == ['outbox', ('lake', 'u', 'c'), ('lake', 'u', 'd'), ('lake', 'u', 'e'), 'delete', 'requests']
+    assert events == [
+        'outbox',
+        ('lake', 'u', 'c'),
+        ('candidates', 'u', 'c'),
+        ('lake', 'u', 'd'),
+        ('candidates', 'u', 'd'),
+        ('lake', 'u', 'e'),
+        ('candidates', 'u', 'e'),
+        'delete',
+        'requests',
+    ]
 
 
 def test_lake_dark_deletion_does_no_lake_or_conversation_inventory_io(monkeypatch):

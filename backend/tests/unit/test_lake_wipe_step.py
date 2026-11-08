@@ -113,7 +113,7 @@ def test_drain_is_between_fence_and_purge(world, monkeypatch):
     assert events == ['fence', ('drain', 2.5), 'purge']
 
 
-@pytest.mark.parametrize('value,expected', [(None, 5), ('60', 60), ('1.25', 1.25)])
+@pytest.mark.parametrize('value,expected', [(None, 5), ('60', 60), ('1.25', 1.25), ('0', 0)])
 def test_drain_bounds(monkeypatch, value, expected):
     if value is None:
         monkeypatch.delenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', raising=False)
@@ -122,7 +122,7 @@ def test_drain_bounds(monkeypatch, value, expected):
     assert config.wipe_drain_seconds() == expected
 
 
-@pytest.mark.parametrize('value', ['nan', 'inf', '-inf', 'bad', '-1', '0', '70'])
+@pytest.mark.parametrize('value', ['nan', 'inf', '-inf', 'bad', '-1', '70'])
 def test_invalid_drain_fails_closed(monkeypatch, value):
     monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', value)
     with pytest.raises(ValueError):
@@ -608,3 +608,135 @@ def test_quiescence_discovery_failure_blocks_final_purge(world, monkeypatch):
     with pytest.raises(lake.LakeFetchError, match='quiescence unavailable'):
         lake_wipe.destroy_owner_lake_keys('owner')
     forbidden.assert_not_called()
+
+
+def test_zero_drain_skips_sleep_but_still_purges(world, monkeypatch):
+    bucket, store = world
+    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '0')
+    lake.put_space_object('owner', 'transcript', 'c', b'[]')
+    marker(store)
+    assert lake_wipe.purge_owner_lake_content('owner')['objects_deleted'] == 1
+    lake_wipe.time.sleep.assert_not_called()
+    assert not list(bucket.list_blobs())
+
+
+def test_conversation_purge_erases_settled_and_aged_candidates_only(world):
+    bucket, store = world
+    lake.put_space_object('owner', 'transcript', 'c', b'settled')
+    lake.put_space_object('owner', 'transcript', 'donor', b'donor')
+    # Key ranges cover orphan intents and old bucket bindings too.
+    old_key = 'v1/spaces/owner/transcript/c/old'
+    legacy_key = 'v1/spaces/owner/transcript/c/legacy'
+    young_key = 'v1/spaces/owner/transcript/c/young'
+    for key in (old_key, legacy_key, young_key):
+        lake._record_upload_candidate('old-bucket', key)
+    lake.put_space_object('owner', 'transcript', 'c-sibling', b'keep')
+    lake.put_space_object('owner-other', 'transcript', 'c', b'keep owner')
+    past = datetime.now(timezone.utc) - timedelta(seconds=config.put_quiescence_seconds() + 1)
+    for path, row in store.rows.items():
+        if path[0] == 'lake_upload_candidates' and row['key'] == old_key:
+            row['in_flight'] = {'lost': past}
+        if path[0] == 'lake_upload_candidates' and row['key'] == legacy_key:
+            row.pop('in_flight')
+            row['created_at'] = past
+    assert lake_wipe.purge_conversation_lake_objects('owner', 'c', ['donor']) == 2
+    remaining = {row['key'] for path, row in store.rows.items() if path[0] == 'lake_upload_candidates'}
+    assert young_key in remaining and len(remaining) == 3
+    assert all('/c-sibling/' in blob.name or '/owner-other/' in blob.name for blob in bucket.list_blobs())
+    # A lost worker cannot self-clean; a later janitor/retry after the bound can.
+    assert (
+        lake.delete_entity_upload_candidates(
+            'owner', 'c', now=datetime.now(timezone.utc) + timedelta(seconds=config.put_quiescence_seconds() + 1)
+        )
+        == 1
+    )
+
+
+def test_last_fenced_attempt_erases_shared_candidate_transactionally(world):
+    _, store = world
+    key = 'v1/spaces/owner/transcript/c/digest'
+    one = lake._record_upload_candidate('old-bucket', key)
+    two = lake._record_upload_candidate('old-bucket', key)
+    lake_wipe.purge_conversation_lake_objects('owner', 'c')
+    lake._settle_upload_candidate('old-bucket', key, two, delete_if_fenced=True)
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert set(row['in_flight']) == {one}
+    lake._settle_upload_candidate('old-bucket', key, one, delete_if_fenced=True)
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert store.transactions[-1].deletes
+
+
+def test_conversation_failed_prefix_retains_candidates(world, monkeypatch):
+    _, store = world
+    lake.put_space_object('owner', 'transcript', 'c', b'[]')
+    monkeypatch.setattr(lake, 'delete_space_entity', Mock(side_effect=lake.LakePurgeIncomplete('not absent')))
+    with pytest.raises(lake.LakePurgeIncomplete):
+        lake_wipe.purge_conversation_lake_objects('owner', 'c')
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_failed_late_generation_cleanup_retains_discovery(world, monkeypatch):
+    bucket, store = world
+    original = LocalBlob.upload_from_string
+
+    def late_upload(blob, *args, **kwargs):
+        lake_wipe.purge_conversation_lake_objects('owner', 'c')
+        original(blob, *args, **kwargs)
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', late_upload)
+    monkeypatch.setattr(LocalBlob, 'delete', Mock(side_effect=RuntimeError('storage down')))
+    with pytest.raises(lake.LakeFetchError, match='cleanup unavailable'):
+        lake.put_space_object('owner', 'transcript', 'c', b'late')
+    assert len(list(bucket.list_blobs())) == 1
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+@pytest.mark.parametrize('bad_time', [None, 'invalid', datetime(2026, 1, 1)])
+def test_conversation_candidate_invalid_admission_fails_closed(world, bad_time):
+    _, store = world
+    lake._record_upload_candidate('old-bucket', 'v1/spaces/owner/transcript/c/digest')
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    row['in_flight'] = {'lost': bad_time}
+    with pytest.raises(lake.LakeFetchError, match='admission time unavailable'):
+        lake_wipe.purge_conversation_lake_objects('owner', 'c')
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+def test_conversation_candidate_discovery_failure_is_retryable(world, monkeypatch):
+    _, store = world
+    original = store.collection
+
+    def fail(name):
+        if name == 'lake_upload_candidates':
+            raise RuntimeError('discovery down')
+        return original(name)
+
+    monkeypatch.setattr(store, 'collection', fail)
+    with pytest.raises(lake.LakeFetchError, match='candidate purge unavailable'):
+        lake_wipe.purge_conversation_lake_objects('owner', 'c')
+
+
+def test_conversation_worker_loss_retains_young_candidate_until_account_wipe(world, monkeypatch):
+    bucket, store = world
+    upload = LocalBlob.upload_from_string
+
+    class WorkerLost(BaseException):
+        pass
+
+    def lost_writer(blob, *args, **kwargs):
+        lake_wipe.purge_conversation_lake_objects('owner', 'c')
+        upload(blob, *args, **kwargs)
+        raise WorkerLost()
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', lost_writer)
+    with pytest.raises(WorkerLost):
+        lake.put_space_object('owner', 'transcript', 'c', b'late worker loss')
+    assert len(list(bucket.list_blobs())) == 1
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert row['in_flight'] and not row['settled']
+    assert lake.delete_entity_upload_candidates('owner', 'c', now=row['admitted_at']) == 0
+    marker(store)
+    now = row['admitted_at'] + timedelta(seconds=config.put_quiescence_seconds() + 1)
+    assert lake_wipe.destroy_owner_lake_keys('owner', now=now)['status'] == 'destroyed'
+    assert not list(bucket.list_blobs())
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
