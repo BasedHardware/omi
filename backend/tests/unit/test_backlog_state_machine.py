@@ -741,7 +741,8 @@ def alert_episodes(rule, samples, end_day):
 
     b = alert_backtest()
     expr = rule['data'][0]['model']['expr']
-    window = int(re.search(r'\[(\d+)d\]', expr).group(1)) * 86400
+    amount, unit = re.search(r'\[(\d+)([hd])\]', expr).groups()
+    window = int(amount) * (86400 if unit == 'd' else 3600)
 
     def counter_at(t):
         return max([value for at, value in samples if at <= t], default=0)
