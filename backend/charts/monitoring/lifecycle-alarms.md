@@ -142,3 +142,10 @@ with audience agent and `omi-tier-silent`, so known BYOK debt does not page on
 import. The blocked-state triage owner still tracks the debt; the threshold
 does not authorize lifecycle changes. Read back pause flags and BYOK mute/tier
 after the separately authorized prod provisioning dispatch.
+
+The reviewed lifecycle source inventory records BYOK's agent tier. Eleven table
+rows that borrow the paused record/unpublished/held pages are explicit strict
+known gaps under ruling699300, not claimed active coverage. The invariant still
+rejects every paused dwell rule; unpause produces a strict XPASS until the owner
+removes that row's debt record. All runtime states, exits and deadlines are
+unchanged. Unreviewed pauses still fail normally.
