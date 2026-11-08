@@ -286,6 +286,16 @@ state, result/transcript, receipt/parts, audio, job and watermark. At
 `MAX_RELEASE_ATTEMPTS=3` or above, that same one-time CAS saves the count as
 `held_expired_release_attempts` and resets `projection_release_attempts=0`.
 Already marked rows are never repeatedly reset.
+Default-off `BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED` also routes
+restorable holds at or above that cap through the identical eligibility fences
+and deadline/expiry CAS. It requires `BATCH_HELD_DEAD_LETTER_ENABLED`; the
+stamping or expiry pass never releases the row. Off retains the capped hold.
+With this switch on, a privacy refusal or any nonempty `privacy_reason` on the
+summary or any part refuses release and expiry without writes.
+With this switch on, every ordinary release transaction rechecks the expiry
+stamp and refuses marked rows without writes, including the other leg of the
+same scan. Only nightly redrive with `dead_before` strictly after the marker
+may release an eligible row. A falsy `None` tombstone is not an expiry stamp.
 
 The same release helper is the sanctioned projection expiry/re-drive CAS;
 `H:ProjectionHeldDeadLetter.tick` invokes it for previous-day marked rows.
