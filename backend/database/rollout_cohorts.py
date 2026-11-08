@@ -129,6 +129,19 @@ def _optional_str(value: Any, field: str, limit: int = 128) -> str | None:
     return value
 
 
+def _audit_reason_base(reason: object) -> str:
+    # Full override evidence belongs to history. Keep the serving reason token
+    # readable by already deployed readers with the original 40-character schema.
+    if not isinstance(reason, str):
+        raise RampDocumentError('ramp reason malformed')
+    base_reason, sep, override = reason.partition(' accept_not_live:')
+    if not _is_token(base_reason, _TOKEN_RE) or (
+        sep and (len(override.strip()) < 15 or any(ord(c) < 32 for c in override))
+    ):
+        raise RampDocumentError('ramp reason malformed')
+    return base_reason
+
+
 def normalize_ramp_env(raw: Any) -> dict[str, Any]:
     """Validate one `envs.<env>` object. Nesting violations are left to callers (reader clamps, writer refuses)."""
     if not isinstance(raw, dict):
@@ -265,15 +278,7 @@ def write_ramp(
         raise RampDocumentError('ramp env unsupported')
     if not _is_token(actor, _ACTOR_RE):
         raise RampDocumentError('ramp actor malformed')
-    # Full override evidence belongs to history. Keep the serving reason token
-    # readable by already deployed readers with the original 40-character schema.
-    if not isinstance(reason, str):
-        raise RampDocumentError('ramp reason malformed')
-    base_reason, sep, override = reason.partition(' accept_not_live:')
-    if not _is_token(base_reason, _TOKEN_RE) or (
-        sep and (len(override.strip()) < 15 or any(ord(c) < 32 for c in override))
-    ):
-        raise RampDocumentError('ramp reason malformed')
+    base_reason = _audit_reason_base(reason)
     if not _is_revision(expected_revision):
         raise RampDocumentError('ramp expected_revision malformed')
     client = firestore_client or get_data_plane_firestore_client()
