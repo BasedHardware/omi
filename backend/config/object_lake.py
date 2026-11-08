@@ -100,21 +100,23 @@ def validate_write_settings(stage: str, enabled: object, percent: object) -> lis
 
 
 _MAX_WIPE_DRAIN_SECONDS = 60
+_ZERO_DRAIN_PUT_SECONDS = 5
 
 
 def wipe_drain_seconds() -> float:
     value = float(os.getenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '5'))
-    if not math.isfinite(value) or not 0 < value <= _MAX_WIPE_DRAIN_SECONDS:
-        raise ValueError('OBJECT_LAKE_WIPE_DRAIN_SECONDS must be finite and in (0, 60]')
+    if not math.isfinite(value) or not 0 <= value <= _MAX_WIPE_DRAIN_SECONDS:
+        raise ValueError('OBJECT_LAKE_WIPE_DRAIN_SECONDS must be finite and in [0, 60]')
     # Validate the derived upload budget here as well, before a wipe can drain.
-    if not 0 < value / 2 < value:
+    if value and not 0 < value / 2 < value:
         raise ValueError('Lake put deadline must be positive and shorter than the wipe drain')
     return value
 
 
 def put_deadline_seconds() -> float:
-    """One total put budget, derived so it cannot equal or exceed the drain."""
-    return wipe_drain_seconds() / 2
+    """Half a positive drain, or a fixed five-second budget when drain is zero."""
+    drain = wipe_drain_seconds()
+    return drain / 2 if drain else _ZERO_DRAIN_PUT_SECONDS
 
 
 def put_quiescence_seconds() -> float:
