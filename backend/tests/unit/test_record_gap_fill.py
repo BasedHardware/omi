@@ -702,16 +702,60 @@ async def test_serving_entry_runs_both_phases(world, monkeypatch):
     )
     monkeypatch.setattr(record_gap_fill, 'users_db', SimpleNamespace(get_data_protection_level=lambda uid: 'standard'))
     monkeypatch.setattr(record_gap_fill.audio_archive, 'admitted', lambda *a, **kw: False)
+    monkeypatch.setattr(record_gap_fill, '_fresh_row', lambda store, uid, cid: closed_row())
     outcome = await record_gap_fill.run_gap_fill(
         uid=UID,
         conversation_id=CID,
-        row=closed_row(),
         paths=['synthetic-wal.bin'],
         wal_content_id='c',
         store=world.store,
     )
     assert outcome == 'written'
     assert list(fills(world)) == [f'chunks/{UID}/{CID}/105.000000.bin']
+
+
+def test_fresh_row_carries_the_firestore_revision_for_the_settle_gate(world):
+    # A raw to_dict() row has no updated_at; a just-released upload session
+    # must still count as a recent write.
+    stored = closed_row(updated_at=None)
+    revision = datetime.fromtimestamp(NOW - 10, timezone.utc)
+    snapshot = SimpleNamespace(to_dict=lambda: dict(stored), update_time=revision)
+    doc = SimpleNamespace(get=lambda: snapshot)
+    node = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda key: doc))
+    world.store.client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda key: node))
+    row = record_gap_fill._fresh_row(world.store, UID, CID)
+    assert record_gap_fill._epoch(row['updated_at']) == NOW - 10
+    assert fill(world, row=row) == 'skipped_recent'
+
+
+async def test_serving_entry_skips_a_missing_conversation(world, monkeypatch):
+    monkeypatch.setattr(record_gap_fill, '_fresh_row', lambda store, uid, cid: None)
+    outcome = await record_gap_fill.run_gap_fill(
+        uid=UID, conversation_id=CID, paths=['synthetic-wal.bin'], wal_content_id='c', store=world.store
+    )
+    assert outcome == 'skipped_gate'
+    assert not world.markers
+
+
+def test_playback_merge_reads_six_decimal_gap_fill_keys(world, monkeypatch):
+    # The non-strict reader rebuilds keys at 3 decimals; it must resolve the
+    # listed 6-decimal gap-fill path (strict playback already did).
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: world.bucket))
+    world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
+    world.wal['units'] = [audio_unit(100.0, ramp(12))]
+    assert fill(world) == 'written'
+    listed = world.bucket.listing()
+    requested = []
+
+    def loader(path):
+        requested.append(path)
+        return world.bucket.objects[path]['data'] if path in world.bucket.objects else None
+
+    pcm = storage.download_audio_chunks_and_merge(
+        UID, CID, [c['timestamp'] for c in listed], listed_chunks=listed, chunk_loader=loader
+    )
+    assert f'chunks/{UID}/{CID}/105.000000.bin' in requested
+    assert pcm[5 * RATE * 2 :] == ramp(12)[5 * RATE * 2 : 11 * RATE * 2]
 
 
 def test_marker_client_is_bounded(monkeypatch):

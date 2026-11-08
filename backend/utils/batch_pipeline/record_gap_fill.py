@@ -43,6 +43,7 @@ from config.record_gap_fill import (
     gap_fill_enabled,
 )
 from database import users as users_db
+from database.conversations import document_data_with_revision
 from database.audio_timeline import span_blob_metadata
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_record_wait_cache import claim_gap_fill_marker
@@ -356,7 +357,17 @@ def _report(outcome: str, record: str, seconds: float) -> str:
     return outcome
 
 
-async def run_gap_fill(*, uid, conversation_id, row, paths, wal_content_id, store) -> str | None:
+def _fresh_row(store, uid, conversation_id):
+    """The whole conversation row with its Firestore revision as ``updated_at``.
+
+    The caller's row may be a field-masked provenance read or a raw
+    ``to_dict()`` without the revision; the gates need neither gap.
+    """
+    ref = store.client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    return document_data_with_revision(ref.get())
+
+
+async def run_gap_fill(*, uid, conversation_id, paths, wal_content_id, store) -> str | None:
     """Serving entry: gates on the database pool, audio work on the storage pool.
 
     Returns the outcome, or None while the switch is off. Never raises: the
@@ -367,7 +378,9 @@ async def run_gap_fill(*, uid, conversation_id, row, paths, wal_content_id, stor
     record, segment, wal = _keys(uid, conversation_id, wal_content_id)
     seconds = 0.0
     try:
-        outcome = await run_blocking(
+        row = await run_blocking(db_executor, _fresh_row, store, uid, conversation_id)
+        outcome = 'skipped_gate' if not row else None
+        outcome = outcome or await run_blocking(
             db_executor, _gates, uid, conversation_id, row, record, segment, wal, store, time.time()
         )
         if outcome is None:

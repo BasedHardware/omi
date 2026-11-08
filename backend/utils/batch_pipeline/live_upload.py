@@ -365,7 +365,6 @@ async def registered_record_response(
             await record_gap_fill.run_gap_fill(
                 uid=uid,
                 conversation_id=conversation_id,
-                row=row,
                 paths=paths,
                 wal_content_id=content_id,
                 store=store,
