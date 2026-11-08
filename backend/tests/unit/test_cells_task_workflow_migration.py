@@ -539,3 +539,18 @@ def test_wrong_typed_workstream_generation_is_a_nonmatch(pg, case, generation):
     repo = pg.workstreams(sid)
     assert [row.id for row in repo.list_open(account_generation=1)] == ['ws-one']
     assert [row.id for row in repo.list_open(account_generation=0)] == ['ws-missing']
+
+
+@pytest.mark.parametrize('case,generation', [(0, True), (1, '1'), (2, None)])
+def test_wrong_typed_workstream_generation_refuses_mutation(pg, case, generation):
+    from database.ports.workstreams import WorkstreamGenerationMismatchError
+
+    sid = pg.space(f'legacy-generation-guard-{case}')
+    now = datetime.now(timezone.utc)
+    row = {'workstream_id': 'ws-bad', 'title': 'Legacy', 'objective': 'Finish', 'status': 'open'}
+    pg.seed(
+        sid, 'workstreams', 'ws-bad', {**row, 'created_at': now, 'updated_at': now, 'account_generation': generation}
+    )
+    repo = pg.workstreams(sid)
+    with pytest.raises(WorkstreamGenerationMismatchError):
+        repo.update('ws-bad', WorkstreamUpdate(data={'title': 'Changed'}), idempotency_key='g', account_generation=1)

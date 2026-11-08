@@ -20,7 +20,7 @@ from database.ports.action_items import (
 
 from database.ports.base import Page
 
-from ._base import ACCOUNT_GENERATION_SQL, WorkflowRepo, atomic
+from ._base import ACCOUNT_GENERATION_SQL, WorkflowRepo, atomic, generation_matches
 
 # Normalize DESC created time to a negative epoch for a uniform keyset. The UTC
 # conversion makes EXTRACT immutable, so migration 0003 can index the same key.
@@ -88,7 +88,7 @@ class CellActionItems(WorkflowRepo):
                 self.save(mutation_id, digest, entity_id)
                 return entity_id
         if document_id is not None and document_id in self._rows():
-            if self._rows()[document_id].get('account_generation', 0) != generation:
+            if not generation_matches(self._rows()[document_id], generation):
                 raise TaskRelationshipConflictError('document id belongs to another account generation')
             self.save(mutation_id, digest, document_id)
             return document_id

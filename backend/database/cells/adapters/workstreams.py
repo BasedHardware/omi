@@ -24,7 +24,7 @@ from database.ports.workstreams import (
 )
 
 
-from ._base import ACCOUNT_GENERATION_SQL, EVENT_SEQUENCE_SQL, WorkflowRepo, atomic, event_payloads
+from ._base import ACCOUNT_GENERATION_SQL, EVENT_SEQUENCE_SQL, WorkflowRepo, atomic, event_payloads, generation_matches
 
 
 class CellWorkstreams(WorkflowRepo):
@@ -38,7 +38,7 @@ class CellWorkstreams(WorkflowRepo):
         row = self._read(workstream_id)
         if row is None:
             raise WorkstreamNotFoundError(workstream_id)
-        if row.get('account_generation', 0) != generation:
+        if not generation_matches(row, generation):
             raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
         return row
 

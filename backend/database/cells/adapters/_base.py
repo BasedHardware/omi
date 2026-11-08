@@ -36,6 +36,14 @@ EVENT_SEQUENCE_DESC_SQL = (
 ACCOUNT_GENERATION_SQL = "coalesce(doc->'account_generation', '0'::jsonb)=to_jsonb(%s::bigint)"
 
 
+def generation_matches(row: dict, expected: int) -> bool:
+    """Python twin of ACCOUNT_GENERATION_SQL: missing is 0, only JSON numbers match."""
+    if 'account_generation' not in row:
+        return expected == 0
+    stored = row['account_generation']
+    return isinstance(stored, (int, float)) and not isinstance(stored, bool) and stored == expected
+
+
 def event_payloads(model: type[BaseModel], rows):
     """Match the Firestore presentation model's skip-malformed read boundary."""
     for _, row in rows:
