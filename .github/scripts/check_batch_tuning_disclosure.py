@@ -34,6 +34,8 @@ LITERAL = re.compile(r"['\"]([a-z][a-z0-9_]{3,40})['\"]")
 STATE_CONTEXT = re.compile(r"\b(?:\w+_)?(?:status|state|phase|disposition|outcome|reason)\b", re.I)
 EXIT = re.compile(r"\b(?:exit\w*|terminal\w*|dead.letter\w*|re-?entr\w*|clear\w*|recover\w*)\b", re.I)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+FIELD_VALUE = re.compile(r"(?P<field>[a-zA-Z_]\w*)['\"]?\]?\s*(?::|(?<![=!<>])=(?!=))\s*$")
+FIELD_LOOKUP = re.compile(r"(?:\.(?:get|pop|setdefault)\(|[\w)\]]\[)\s*$")
 
 
 def triggered(path: str) -> bool:
@@ -66,6 +68,24 @@ def code(line: str) -> bool:
     return bool(line.strip()) and not line.lstrip().startswith(("#", "//", "/*", "* ", '"""', "'''"))
 
 
+def state_literals(line: str) -> set[str]:
+    """Ignore field names/lookups and values explicitly assigned to other fields.
+
+    The historical sweep found registration_origin next to state updates: a
+    new metadata key is not a lifecycle value merely because it is nearby.
+    """
+    values: set[str] = set()
+    for match in LITERAL.finditer(line):
+        before, after = line[: match.start()], line[match.end() :]
+        field = FIELD_VALUE.search(before)
+        if after.lstrip().startswith(":") or FIELD_LOOKUP.search(before):
+            continue
+        if field and not STATE_CONTEXT.fullmatch(field["field"]):
+            continue
+        values.add(match.group(1))
+    return values
+
+
 def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], set[str]]:
     knobs: set[str] = set()
     candidates: set[str] = set()
@@ -81,7 +101,7 @@ def detect(diff: str, exists_at_base: Callable[[str], bool]) -> tuple[set[str], 
                 continue
             nearby = added_side[max(0, i - 3) : i + 4]
             if any(code(text) and STATE_CONTEXT.search(text) for _, text in nearby):
-                candidates.update(LITERAL.findall(line))
+                candidates.update(state_literals(line))
     return knobs, {literal for literal in candidates if not exists_at_base(literal)}
 
 
@@ -119,7 +139,7 @@ def validate(knobs: set[str], states: set[str], body: str) -> tuple[list[str], l
             "naming at least one knob, or Numbers-waived: <reason>."
         )
     for state in sorted(states):
-        if not any(token(state, part) and EXIT.search(part) for part in parts):
+        if not (token(state, cleaned) and EXIT.search(cleaned)):
             errors.append(f"New state '{state}' must name its exit/terminal/recovery path, or State-exit-waived: <reason>.")
     return errors, notices
 

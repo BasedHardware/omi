@@ -88,6 +88,7 @@ class DisclosureTests(unittest.TestCase):
             self.assertTrue(check.validate(knobs, states, body)[0])
         for exit_word in ("exit", "terminal", "dead-letter", "re-entry", "reentry", "clear", "recover"):
             self.assertFalse(check.validate(knobs, states, f"awaiting_repair: {exit_word} via retry")[0])
+        self.assertFalse(check.validate(knobs, states, "## State\nawaiting_repair\n## Recovery\nrecover via retry")[0])
 
     def test_state_distance_hunk_and_file_boundaries(self) -> None:
         self.assertEqual(self.detect(' status = (', '+"awaiting_repair"')[1], {"awaiting_repair"})
@@ -99,6 +100,17 @@ class DisclosureTests(unittest.TestCase):
 
     def test_existing_states_never_trigger(self) -> None:
         self.assertEqual(self.detect('+status = "awaiting_repair"', existing=("awaiting_repair",)), (set(), set()))
+
+    def test_metadata_next_to_state_is_not_a_new_state(self) -> None:
+        for line in (
+            "+**({'registration_origin': 'restore'} if restoring else {})",
+            "+job['new_metadata_key'] = value", "+job.get('new_metadata_key')",
+            "+description = 'new_description'",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.detect(' status = current', line), (set(), set()))
+        self.assertEqual(self.detect("+job['state'] = 'awaiting_repair'")[1], {"awaiting_repair"})
+        self.assertEqual(self.detect("+{'state': 'awaiting_repair'}")[1], {"awaiting_repair"})
 
     def test_unrelated_state_context_does_not_cross_hunks_or_files(self) -> None:
         diff = patch(' status = "known_state"') + '@@ -90 +90 @@\n+label = "unrelated_word"\n'
