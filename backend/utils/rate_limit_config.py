@@ -96,8 +96,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "spaces:changes": (600, 60),
     # Cursor acknowledgements track device pull frequency.
     "spaces:cursors": (600, 60),
-    # Full resync snapshots are rare (425 recovery).
+    # Full resync starts (including epoch restarts) are rare (425 recovery).
     "spaces:snapshot": (30, 3600),
+    # 600 pages/min permits 300,000 rows/min at the 500-row page budget during a large resync.
+    "spaces:snapshot_page": (600, 60),
     # User edits share the memories/action-items write class.
     "spaces:mutations": (120, 3600),
     "users:surface_state": (60, 60),  # Multiple devices plus foreground transitions; metadata only.

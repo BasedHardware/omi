@@ -27,6 +27,7 @@ from database.jobstore.connection import Pool
 from routers import spaces
 from testing.cells_fixtures import cells_dsn, make_cell_store, make_directory
 from utils.other import endpoints as auth
+from utils.rate_limit_config import RATE_POLICIES
 
 
 @pytest.fixture(scope='module')
@@ -195,16 +196,48 @@ def test_gate_matrix(api, monkeypatch, endpoint, gate, status, code):
         api.limiter.assert_not_called()
 
 
-def test_member_role_gets_no_sync_access(api):
+@pytest.mark.parametrize('role', ['member', 'owner'])
+def test_other_uid_gets_no_personal_sync_access_even_with_owner_role(api, role):
     enroll(api)
     member = api.sid + '-member'
-    api.directory.add_member(api.sid, member, now=time.time())
+    api.directory.add_member(api.sid, member, role=role, now=time.time())
     api.identity['uid'] = member
     for endpoint in ['changes', 'snapshot', 'mutations', 'cursors']:
         response = request(api, endpoint)
         assert response.status_code == 404, endpoint
         assert response.json()['detail'] == 'Space not found'
     assert api.cell.read_doc(api.sid, 'notes', 'a') == {'text': 'original'}
+
+
+def test_personal_uid_still_requires_owner_role(api):
+    enroll(api)
+    api.directory.add_member(api.sid, api.sid, role='member', now=time.time())
+    for endpoint in ['changes', 'snapshot', 'mutations', 'cursors']:
+        response = request(api, endpoint)
+        assert response.status_code == 404, endpoint
+        assert response.json()['detail'] == 'Space not found'
+
+
+@pytest.mark.parametrize('endpoint', ['changes', 'snapshot', 'mutations', 'cursors'])
+def test_sync_routes_enforce_auth_byok_validation(api, monkeypatch, endpoint):
+    enroll(api)
+    api.app.dependency_overrides.clear()
+    monkeypatch.setattr(auth, 'verify_token', lambda token: api.sid)
+    for name in [
+        'enforce_account_deletion_http_access',
+        '_enforce_cutover_http_if_request',
+        '_resolve_request_plane_or_503',
+        'record_user_platform',
+        'record_client_device',
+    ]:
+        monkeypatch.setattr(auth, name, Mock())
+    validate = Mock(side_effect=HTTPException(403, detail='Synthetic BYOK validation rejection'))
+    monkeypatch.setattr(auth, 'validate_byok_request', validate)
+    monkeypatch.setattr(auth, '_recover_locked_content_if_request', no_io)
+    response = request(api, endpoint, headers={'Authorization': 'Bearer synthetic-token'})
+    assert response.status_code == 403
+    validate.assert_called_once_with(api.sid)
+    api.limiter.assert_not_called()
 
 
 def test_invalid_sid_and_membership_refresh(api):
@@ -325,6 +358,7 @@ def test_snapshot_since_includes_feed_shaped_delete(api):
 @pytest.mark.parametrize(
     'token',
     [
+        '',
         '!',
         'e30=',
         'WzFd',
@@ -336,6 +370,75 @@ def test_snapshot_since_includes_feed_shaped_delete(api):
 def test_malformed_snapshot_tokens(api, token):
     enroll(api)
     assert request(api, 'snapshot', params={'page_token': token}).status_code == 422
+    api.limiter.assert_called_once_with(api.sid, 'spaces:snapshot')
+    api.limiter.side_effect = HTTPException(429, detail='Rate limit exceeded')
+    assert request(api, 'snapshot', params={'page_token': token}).status_code == 429
+
+
+def test_large_snapshot_pages_survive_exhausted_start_budget_and_epoch_restart(api):
+    enroll(api)
+    start_max = RATE_POLICIES['spaces:snapshot'][0]
+    # More pages than the hourly start allowance, with real keyset tokens from PostgreSQL.
+    api.cell.run(
+        api.sid,
+        lambda tx: [tx.put('notes', f'b{i:03}', {'v': i}) for i in range(start_max + 1)],
+        actor_uid=api.sid,
+        now=time.time(),
+    )
+    counts = {}
+
+    def enforce(uid, policy, **kwargs):
+        assert uid == api.sid
+        counts[policy] = counts.get(policy, 0) + 1
+        if counts[policy] > RATE_POLICIES[policy][0]:
+            raise HTTPException(429, detail='Rate limit exceeded')
+
+    api.limiter.side_effect = enforce
+    for _ in range(start_max):
+        first = request(api, 'snapshot', params={'limit': 1})
+        assert first.status_code == 200
+    page = first.json()
+    token = page['next_page_token']
+    rows = list(page['rows'])
+    while page['next_page_token']:
+        response = request(api, 'snapshot', params={'limit': 1, 'page_token': page['next_page_token']})
+        assert response.status_code == 200, response.text
+        page = response.json()
+        rows.extend(page['rows'])
+    assert len(rows) == start_max + 2
+    assert counts['spaces:snapshot'] == start_max
+    assert counts['spaces:snapshot_page'] > start_max
+    api.cell.bump_epoch(api.sid, now=time.time())
+    changed = request(api, 'snapshot', params={'limit': 1, 'page_token': token})
+    assert changed.status_code == 200
+    assert changed.json()['epoch'] != first.json()['epoch']
+    # Client discards the old pages and restarts without a token, charging a new start.
+    assert request(api, 'snapshot', params={'limit': 1}).status_code == 429
+    assert counts['spaces:snapshot'] == start_max + 1
+
+
+@pytest.mark.parametrize('forgery', ['unsigned', 'address', 'signature', 'space', 'since'])
+def test_forged_snapshot_tokens_consume_start_budget(api, forgery):
+    enroll(api)
+    first = request(api, 'snapshot', params={'limit': 1}).json()
+    parts = json.loads(base64.b64decode(first['next_page_token']))
+    params = {'limit': 1}
+    if forgery == 'unsigned':
+        parts = parts[:2]
+    elif forgery == 'address':
+        parts[1] = 'forged-address'
+    elif forgery == 'signature':
+        parts[2] = '0' * 64
+    elif forgery == 'space':
+        parts[2] = spaces._page_signature(api.sid + '-other', 0, parts[:2])
+    else:
+        params['since'] = 1
+    params['page_token'] = base64.b64encode(json.dumps(parts).encode()).decode()
+    api.limiter.reset_mock()
+    assert request(api, 'snapshot', params=params).status_code == 422
+    api.limiter.assert_called_once_with(api.sid, 'spaces:snapshot')
+    api.limiter.side_effect = HTTPException(429, detail='Rate limit exceeded')
+    assert request(api, 'snapshot', params=params).status_code == 429
 
 
 def test_mutation_apply_replay_conflicts_delete_and_events(api):
