@@ -158,3 +158,11 @@ module stub (3 setup errors), because the real module's outbox dependency is
 intentionally absent in that unrelated endpoint fixture. The meeting fixture
 retains the unset enabled default and models no live owner. No flags were
 disabled and no production code changed for these fixture corrections.
+
+The full app CI run also found two old cached-detail read-count assertions in
+`conversation_detail_carried_transcript_test.dart`. The observed counts were
+one read on cached entry and two after resume, matching the intentional quiet
+explicit-detail refresh that grants the current open's notes lease. Expectations
+now assert those counts; the carried-transcript refresh test is unchanged. The
+second push gate was stopped before publication to include this correction in
+the same follow-up. No production code changed for this test update.
