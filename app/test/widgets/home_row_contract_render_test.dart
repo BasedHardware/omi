@@ -15,6 +15,10 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +29,20 @@ import '../helpers/sfpro_font_fixtures.dart';
 import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('HOME_ROW_RENDER_OUTPUT');
+const _baseline = bool.fromEnvironment('HOME_OVERLAP_BASELINE');
+
+class _LiveCapture extends CaptureProvider {
+  _LiveCapture()
+      : super(
+            externalActions: const NoopCaptureExternalActions(),
+            inProgressConversationLoader: () async {},
+            localSegmentStore: LocalSegmentStore.disabled());
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  bool get pendantCaptureVerified => true;
+}
+
 const _phone = Size(393, 852);
 const _tall = Size(393, 3200);
 const _processingKey = Key('home_processing_row');
@@ -111,7 +129,10 @@ EpisodeProvider _episodes() => EpisodeProvider(
 
 /// Pumps the real Home (ConversationsPage) with [items] on a tall view so every row is
 /// built for assertions. Returns the boundary key used by [_capture].
-Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items) async {
+Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
+    {EpisodeProvider? episodeProvider,
+    CaptureProvider? capture,
+    List<ServerConversation> processing = const []}) async {
   debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = _tall;
@@ -120,8 +141,8 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items)
   addTearDown(() => OmiColors.active = OmiPalette.light);
   SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
   await SharedPreferencesUtil.init();
-  final conversations = _conversationsFor(items);
-  final episodes = _episodes();
+  final conversations = _conversationsFor(items)..processingConversations = processing;
+  final episodes = episodeProvider ?? _episodes();
   addTearDown(() {
     conversations.dispose();
     episodes.dispose();
@@ -132,6 +153,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items)
     child: await buildTypedConversationScreen(
       conversations,
       episodes: episodes,
+      captureProvider: capture,
       initializePreferences: false,
       theme: buildOmiTheme(brightness: Brightness.light),
     ),
@@ -179,6 +201,40 @@ void main() {
     await _fonts();
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
+
+  testWidgets('live episode owns its three closed processing recordings', (tester) async {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(minutes: 24));
+    final members = [
+      for (var i = 0; i < 3; i++) _conv('closed-$i', start.add(Duration(minutes: i * 5)), homeStep: 'transcribing')
+    ];
+    // Live and Home requests race: the live snapshot knows only the current
+    // recording; the Home snapshot already includes the earlier closed members.
+    final full = Episode(
+        id: 'live',
+        live: true,
+        startedAt: start,
+        lastActivityAt: now,
+        conversationIds: members.map((m) => m.id).toList(),
+        members: members);
+    final latest = full.copyWith(conversationIds: ['current'], members: []);
+    final episodes = EpisodeProvider(
+      fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: latest)),
+      fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [full])),
+    );
+    final capture = _LiveCapture();
+    addTearDown(capture.dispose);
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    await episodes.refreshLive();
+    episodes.debugSetHomeEpisodes([full]);
+    final boundary = await _pumpHome(tester, members, episodeProvider: episodes, capture: capture, processing: members);
+    expect(find.byType(LiveEpisodeRow), findsOneWidget);
+    expect(find.byKey(_processingKey), _baseline ? findsWidgets : findsNothing);
+    await _capture(
+        tester, boundary, _baseline ? '001-mobile-ios-home-overlap-before' : '002-mobile-ios-home-overlap-after');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('001-davids-home-today', (tester) async {
     final now = DateTime.now();

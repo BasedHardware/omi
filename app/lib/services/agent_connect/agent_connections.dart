@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/mcp_api.dart';
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/backend/schema/connector_access.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
@@ -19,10 +20,10 @@ final chatGptDirectoryUrl =
 Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': prompt});
 
 /// OAuth client ids that mean "ChatGPT holds a grant". The directory listing always grants under
-/// the prod id, even on a dev backend; mirrors backend `PUBLIC_CHATGPT_CLIENT_IDS`.
+/// the prod id, even on a dev backend. Fallback when served metadata is absent.
 const chatGptClientIds = {'omi-chatgpt-prod', 'omi-chatgpt-dev'};
 
-/// What the ChatGPT screens ask ChatGPT to read (backend `config/mcp_scopes.py`). The backend
+/// Fallback when the backend does not serve ChatGPT required scopes. The backend
 /// enforces each scope separately, so a grant missing one gets refused for that kind of question.
 const chatGptRequiredScopes = {'memories.read', 'conversations.read', 'action_items.read', 'goals.read'};
 
@@ -87,10 +88,16 @@ class AgentConnections {
         chatGptMissingScopes: chatGptMissingScopes,
       );
 
-  static AgentConnections from({required List<Map<String, dynamic>> grants, required List<McpApiKey> keys}) {
+  static AgentConnections from({
+    required List<Map<String, dynamic>> grants,
+    required List<McpApiKey> keys,
+    ConnectorAccess? chatGptAccess,
+  }) {
+    final clientIds = chatGptAccess?.clientIds ?? chatGptClientIds;
+    final requiredScopes = chatGptAccess?.requiredScopes ?? chatGptRequiredScopes;
     final live = [
       for (final grant in grants)
-        if (chatGptClientIds.contains(grant['client_id']) && isLiveGrant(grant) && grant['id'] is String) grant,
+        if (clientIds.contains(grant['client_id']) && isLiveGrant(grant) && grant['id'] is String) grant,
     ];
     final chatGpt = [for (final grant in live) grant['id'] as String];
     final scopes = <String>{
@@ -105,7 +112,7 @@ class AgentConnections {
     return AgentConnections(
       chatGptGrantIds: chatGpt,
       agentKeys: agentKeys,
-      chatGptMissingScopes: scopes.isEmpty ? const {} : chatGptRequiredScopes.difference(scopes),
+      chatGptMissingScopes: scopes.isEmpty ? const {} : requiredScopes.difference(scopes),
     );
   }
 }
@@ -113,7 +120,7 @@ class AgentConnections {
 /// The calls the Connect an Agent screens make. Fields are seams for tests.
 class AgentConnectService {
   AgentConnectService({
-    Future<List<Map<String, dynamic>>> Function()? loadGrants,
+    Future<McpOauthGrants> Function()? loadGrants,
     Future<void> Function(String grantId)? revokeGrant,
     Future<List<McpApiKey>> Function()? loadKeys,
     Future<McpApiKeyCreated> Function(String name)? createKey,
@@ -128,7 +135,7 @@ class AgentConnectService {
         _share = share ?? ((secret) => createZkrShare(secret, name: 'omi-mcp-key.txt')),
         _apiBase = apiBase;
 
-  final Future<List<Map<String, dynamic>>> Function() _loadGrants;
+  final Future<McpOauthGrants> Function() _loadGrants;
   final Future<void> Function(String grantId) _revokeGrant;
   final Future<List<McpApiKey>> Function() _loadKeys;
   final Future<McpApiKeyCreated> Function(String name) _createKey;
@@ -139,14 +146,21 @@ class AgentConnectService {
   Future<AgentConnections> load() async {
     final results = await Future.wait([_loadGrants(), _loadKeys()]);
     return AgentConnections.from(
-      grants: results[0] as List<Map<String, dynamic>>,
+      grants: (results[0] as McpOauthGrants).grants,
+      chatGptAccess: (results[0] as McpOauthGrants).chatGptAccess,
       keys: results[1] as List<McpApiKey>,
     );
   }
 
   /// Whether ChatGPT can look up a conversation; grants only, for surfaces that do not show keys.
-  Future<bool> chatGptCanReadConversations() async =>
-      AgentConnections.from(grants: await _loadGrants(), keys: const []).chatGptCanReadConversations;
+  Future<bool> chatGptCanReadConversations() async {
+    final response = await _loadGrants();
+    return AgentConnections.from(
+      grants: response.grants,
+      keys: const [],
+      chatGptAccess: response.chatGptAccess,
+    ).chatGptCanReadConversations;
+  }
 
   Future<void> disconnectChatGpt(AgentConnections connections) =>
       Future.wait(connections.chatGptGrantIds.map(_revokeGrant));

@@ -64,7 +64,7 @@ _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 
 
 @observe_sync_failures
-def enrich_conversation(uid: str, conversation_id: str, language: str):
+def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
@@ -268,9 +268,10 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
     # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
     # this function; that stored trigger is the already-processed signal.
-    already_sync_processed = (
-        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
-    )
+    already_sync_processed = isinstance(prior_decision, dict) and prior_decision.get('trigger') in {
+        ProcessingTrigger.SYNC_UPDATE.value,
+        ProcessingTrigger.BACKLOG_CHOICE.value,
+    }
     # Visible rows must not accept again. A prior discard is not a visible
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
@@ -282,7 +283,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             uid=uid,
             language_code=language or 'en',
             conversation=conversation,
-            trigger=ProcessingTrigger.SYNC_UPDATE,
+            trigger=ProcessingTrigger.BACKLOG_CHOICE if user_selected else ProcessingTrigger.SYNC_UPDATE,
             defer_derived_effects=silent_redrive,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
             persistence_observer=_require_current_conversation_persistence,

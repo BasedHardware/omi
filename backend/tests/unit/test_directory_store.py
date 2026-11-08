@@ -229,3 +229,24 @@ def test_tombstoned_owner_cannot_recreate_directory_indexes(harness, uid):
     assert store.tokens_for_uid(uid) == []
     assert store.memberships_for_uid(uid) == []
     assert store.public_conversation_owner(uid + ':conversation') is None
+
+
+def test_active_owner_lookup(harness, uid):
+    store = harness.store
+    assert not store.is_active_owner(uid, uid)
+    store.get_or_create_personal_space(uid, cell='cell1', now=NOW)
+    assert store.is_active_owner(uid, uid)
+    assert not store.is_active_owner(uid, 'unknown-member')
+    store.add_member(uid, 'another-member', now=NOW)
+    assert not store.is_active_owner(uid, 'another-member')
+    store.add_member(uid, 'another-member', now=NOW, role='owner')
+    # Directory roles support future shared spaces; HTTP pilot admission also requires sid == uid.
+    assert store.is_active_owner(uid, 'another-member')
+    store.revoke_member(uid, 'another-member', now=NOW + 1)
+    assert not store.is_active_owner(uid, 'another-member')
+    store.add_member(uid, uid, now=NOW + 1, role='member')
+    assert not store.is_active_owner(uid, uid)
+    store.add_member(uid, uid, now=NOW + 2, role='owner')
+    assert store.is_active_owner(uid, uid)
+    store.purge_owner(uid, now=NOW)
+    assert not store.is_active_owner(uid, uid)

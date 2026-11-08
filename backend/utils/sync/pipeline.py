@@ -1069,7 +1069,7 @@ def retrieve_vad_segments(
 
 
 @observe_sync_failures
-def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
+def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
@@ -1273,9 +1273,10 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
     # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
     # this function; that stored trigger is the already-processed signal.
-    already_sync_processed = (
-        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
-    )
+    already_sync_processed = isinstance(prior_decision, dict) and prior_decision.get('trigger') in {
+        ProcessingTrigger.SYNC_UPDATE.value,
+        ProcessingTrigger.BACKLOG_CHOICE.value,
+    }
     # Visible rows must not accept again. A prior discard is not a visible
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
@@ -1287,7 +1288,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             uid=uid,
             language_code=language or 'en',
             conversation=conversation,
-            trigger=ProcessingTrigger.SYNC_UPDATE,
+            trigger=ProcessingTrigger.BACKLOG_CHOICE if user_selected else ProcessingTrigger.SYNC_UPDATE,
             defer_derived_effects=silent_redrive,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
             persistence_observer=_require_current_conversation_persistence,
@@ -2256,12 +2257,22 @@ def _reprocess_merged_conversations(
 
                 mark(uid, conversation_id, language, sync_hold=hold)
             else:
-                processed = _reprocess_conversation_after_update(uid, conversation_id, language)
+                processed = (
+                    _reprocess_conversation_after_update(uid, conversation_id, language, user_selected=True)
+                    if user_selected
+                    else _reprocess_conversation_after_update(uid, conversation_id, language)
+                )
                 if user_selected:
                     complete_explicit(uid, processed, ProcessingTrigger.BACKLOG_CHOICE)
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
+        except processing_hold.ProcessingDeferred:
+            if user_selected:
+                raise
+            # The live-member notes gate enrolled durable enrichment before
+            # yielding this legacy direct path. Audio/transcript intake succeeded.
+            logger.info('event=sync_conversation_reprocess outcome=deferred')
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
