@@ -210,6 +210,8 @@ class GitFixtureTests(unittest.TestCase):
         result = self.run_check(base="missing-ref")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("merge-base", result.stderr)
+        with self.assertRaisesRegex(RuntimeError, "git grep"):
+            check.existing_literal(self.root, "missing-ref", "missing_state")
 
 
 if __name__ == "__main__":

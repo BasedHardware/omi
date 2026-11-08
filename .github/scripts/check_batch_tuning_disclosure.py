@@ -124,9 +124,9 @@ def validate(knobs: set[str], states: set[str], body: str) -> tuple[list[str], l
     return errors, notices
 
 
-def git(root: Path, *args: str, allow_no_match: bool = False) -> str:
+def git(root: Path, *args: str) -> str:
     result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, encoding="utf-8")
-    if result.returncode and not (allow_no_match and result.returncode == 1):
+    if result.returncode:
         raise RuntimeError(f"git {' '.join(args)}: {result.stderr.strip()}")
     return result.stdout
 
@@ -134,7 +134,13 @@ def git(root: Path, *args: str, allow_no_match: bool = False) -> str:
 def existing_literal(root: Path, base: str, literal: str) -> bool:
     # Search the entire merge-base tree, not just pipeline paths. grep's exit 1
     # means absent; a missing ref/object or any other error must fail closed.
-    return bool(git(root, "grep", "-l", "-F", "-e", literal, base, "--", allow_no_match=True))
+    result = subprocess.run(
+        ["git", "grep", "-q", "-F", "-e", literal, base, "--"],
+        cwd=root, capture_output=True, text=True, encoding="utf-8",
+    )
+    if result.returncode not in (0, 1):
+        raise RuntimeError(f"git grep at {base}: {result.stderr.strip()}")
+    return result.returncode == 0
 
 
 def main() -> int:
