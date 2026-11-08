@@ -9,7 +9,7 @@ from copy import deepcopy
 import pytest
 
 from config import dream_levers
-from config.dream_session import HEAVY_TOKENS, LIGHT_TOKENS, MEDIUM_TOKENS, SessionLimits
+from config.dream_session import SessionLimits
 from database import dream_feedback
 from models.agent_tools import DEFECT_TOOL, ReportDefect, tool_schemas
 from tests.unit.test_dream_cleanup_edits import records, UID
@@ -29,14 +29,10 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
     for name in dream_levers.PER_OWNER:
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name + '_SERVE_PERCENT', raising=False)
-    # Retired 2026-10-30 from the 10-29 shadow day: idle-skip and no-progress default off.
+    # Idle skip remains off; the retained levers preserve their existing defaults.
     assert dream_levers.arms('owner-a') == {
         'idle_skip': 'off',
-        'material_budget': 'shadow',
-        'no_progress_stop': 'off',
-        'history_compact': 'shadow',
         'hunt_backoff': 'shadow',
-        'prescan': 'shadow',
         # The verify hold only moves budget from searching to verifying, so it serves.
         'verify_hold': 'serve',
         'liberal_verifier': 'shadow',
@@ -55,12 +51,12 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
 def test_lever_cohorts_are_salted_per_lever(monkeypatch):
     monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '50')
-    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_SERVE_PERCENT_ENV, '50')
+    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_SERVE_PERCENT_ENV, '50')
     owners = [f'owner-{index}' for index in range(400)]
     idle = {uid for uid in owners if dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, uid) == 'serve'}
-    budget = {uid for uid in owners if dream_levers.arm(dream_levers.MATERIAL_BUDGET_MODE_ENV, uid) == 'serve'}
-    assert 120 < len(idle) < 280 and 120 < len(budget) < 280
-    assert idle != budget
+    backoff = {uid for uid in owners if dream_levers.arm(dream_levers.HUNT_BACKOFF_MODE_ENV, uid) == 'serve'}
+    assert 120 < len(idle) < 280 and 120 < len(backoff) < 280
+    assert idle != backoff
 
 
 def test_lever_errors_fail_open_to_off(monkeypatch):
@@ -68,7 +64,7 @@ def test_lever_errors_fail_open_to_off(monkeypatch):
         raise RuntimeError('parse')
 
     monkeypatch.setattr(dream_levers.refactor_modes, 'mode', broken)
-    assert dream_levers.arm(dream_levers.NO_PROGRESS_STOP_MODE_ENV, 'owner-a') == 'off'
+    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'off'
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'off'
 
 
@@ -80,15 +76,6 @@ def test_payoff_order_is_global_mode_only(monkeypatch):
     monkeypatch.delenv(dream_levers.PAYOFF_ORDER_MODE_ENV)
     # David 2026-10-30: payoff first.
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'serve'
-
-
-def test_material_budget_never_raises_the_ceiling():
-    assert dream_agent.material_tokens(0, HEAVY_TOKENS) == LIGHT_TOKENS
-    assert dream_agent.material_tokens(4, HEAVY_TOKENS) == LIGHT_TOKENS
-    assert dream_agent.material_tokens(5, HEAVY_TOKENS) == MEDIUM_TOKENS
-    assert dream_agent.material_tokens(16, HEAVY_TOKENS) == HEAVY_TOKENS
-    assert dream_agent.material_tokens(40, MEDIUM_TOKENS) == MEDIUM_TOKENS
-    assert dream_agent.material_tokens(0, 20000) == 20000
 
 
 # --- telemetry ----------------------------------------------------------------------------------
@@ -343,40 +330,28 @@ def test_looser_privacy_gate():
     assert feedback_rejection(_defect('translation of english summary failed')) == 'language_not_defect'
 
 
-# --- pass-level levers (scripted model, dry run) ------------------------------------------------
-
-
-def _scripted(owner_records, limits, monkeypatch):
+def test_pass_retains_full_budget_history_and_normal_completion(runtime, monkeypatch):
+    limits = SessionLimits(bucket='heavy', turns=16, tools=16, tokens=900000, read_bytes=640000)
+    owner_records = EvidenceRecords(records(runtime))
     monkeypatch.setattr(
         dream_seed,
         'load',
         lambda uid, caps: ({'targets': list(owner_records), 'vocabulary': []}, owner_records, [], limits),
     )
-
-
-def test_history_compaction_serve_elides_old_tool_results(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.HISTORY_COMPACT_MODE_ENV, 'serve')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', '1000')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_KEEP_RESULTS', '2')
-    monkeypatch.setattr(dream_agent, 'COMPACT_MIN_CHARS', 10)
-    limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=900000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    seen = []
+    captured = []
 
     async def model(uid, lane, mount, messages):
-        if lane != MAIN_LANE:
-            pytest.fail('No staged work should need verification')
-        step = len(seen) + 1
-        seen.append(deepcopy(messages))
+        assert lane == MAIN_LANE
+        captured.append(deepcopy(messages))
+        step = len(captured)
         tool_call = (
             call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 6
+            if step < 10
             else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
         )
         return Turn(
-            tokens=5000,
-            prompt_tokens=5000,
+            tokens=70000,
+            prompt_tokens=70000,
             completion_tokens=0,
             cached_tokens=0,
             tool_calls=(tool_call,),
@@ -385,148 +360,11 @@ def test_history_compaction_serve_elides_old_tool_results(runtime, monkeypatch):
 
     report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
     assert report['status'] == 'complete', report
-    final = seen[-1]
-    tools = [message for message in final if message.get('role') == 'tool']
-    elided = [message for message in tools if message['content'] == dream_agent.ELIDED_TOOL_RESULT]
-    assert elided and tools[-1]['content'] != dream_agent.ELIDED_TOOL_RESULT
-    assert len(tools) - len(elided) >= 2
-    # Seed and system prompt are untouched.
-    assert final[:2] == seen[0][:2]
-    compaction = report['levers']['history_compact']
-    assert compaction['arm'] == 'serve' and compaction['compactions'] >= 1 and compaction['elided_chars'] > 0
-
-
-def test_history_compaction_shadow_changes_nothing(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.HISTORY_COMPACT_MODE_ENV, 'shadow')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', '1000')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_KEEP_RESULTS', '2')
-    monkeypatch.setattr(dream_agent, 'COMPACT_MIN_CHARS', 10)
-    limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=900000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    seen = []
-
-    async def model(uid, lane, mount, messages):
-        step = len(seen) + 1
-        seen.append(deepcopy(messages))
-        tool_call = (
-            call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 6
-            else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
-        )
-        return Turn(
-            tokens=5000,
-            prompt_tokens=5000,
-            completion_tokens=0,
-            cached_tokens=0,
-            tool_calls=(tool_call,),
-            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
-        )
-
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
-    assert all(message.get('content') != dream_agent.ELIDED_TOOL_RESULT for message in seen[-1])
-    compaction = report['levers']['history_compact']
-    assert compaction['fired'] and compaction['compactions'] == 0 and compaction['would_elide_chars'] > 0
-
-
-def _idle_reader(count):
-    async def model(uid, lane, mount, messages):
-        if lane != MAIN_LANE:
-            pytest.fail('No staged work should need verification')
-        count.append(1)
-        step = len(count)
-        tool_call = (
-            call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 12
-            else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
-        )
-        return Turn(
-            tokens=20000,
-            prompt_tokens=20000,
-            completion_tokens=0,
-            cached_tokens=0,
-            tool_calls=(tool_call,),
-            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
-        )
-
-    return model
-
-
-@pytest.mark.parametrize('arm', ['shadow', 'serve'])
-def test_no_progress_stop(runtime, monkeypatch, arm):
-    monkeypatch.setenv(dream_levers.NO_PROGRESS_STOP_MODE_ENV, arm)
-    monkeypatch.setenv('DREAM_NO_PROGRESS_BATCHES', '3')
-    monkeypatch.setenv('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', '0.1')
-    limits = SessionLimits(bucket='light', turns=32, tools=32, read_bytes=640000, read_call_bytes=64000, tokens=400000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    count = []
-    report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['no_progress_stop']
-    assert report['status'] == 'complete', report
-    assert lever['arm'] == arm and lever['fired'] and lever['batch'] == 3
-    if arm == 'serve':
-        assert report['stop_reason'] == 'no_progress' and len(count) == 3
-    else:
-        assert report['stop_reason'] == 'finished' and len(count) == 13
-        assert lever['staged_after'] == 0 and lever['tokens_after'] > 0
-
-
-def test_material_budget_serve_shrinks_limits(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_MODE_ENV, 'serve')
-    limits = SessionLimits(
-        bucket='heavy', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=HEAVY_TOKENS
-    )
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    count = []
-    report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['material_budget']
-    assert lever == {'arm': 'serve', 'tokens_before': HEAVY_TOKENS, 'tokens_after': LIGHT_TOKENS}
-    assert report['token_limit'] == LIGHT_TOKENS
-    assert report['material'] == 0
-
-
-def test_material_budget_shadow_counts_the_tail_a_cap_would_cut(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_MODE_ENV, 'shadow')
-    monkeypatch.setattr(dream_agent, 'material_tokens', lambda material, current: 100000)
-    limits = SessionLimits(
-        bucket='heavy', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=HEAVY_TOKENS
-    )
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    count = []
-    report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['material_budget']
-    assert report['token_limit'] == HEAVY_TOKENS and len(count) == 13
-    assert lever == {
-        'arm': 'shadow',
-        'tokens_before': HEAVY_TOKENS,
-        'tokens_after': 100000,
-        'crossed': True,
-        'staged_after_cap': 0,
-        'applied_after_cap': 0,
-    }
-
-
-def test_cap_tail_counts_only_work_staged_after_the_crossing():
-    staged = {'early': 1, 'late-applied': 2, 'late-rejected': 3}
-    outcomes = [
-        {'key': 'early', 'status': 'applied'},
-        {'key': 'late-applied', 'status': 'applied'},
-        {'key': 'late-rejected', 'status': 'verifier_disagree'},
-        'malformed',
-    ]
-    assert dream_agent.cap_tail(staged, {'early'}, outcomes) == {
-        'crossed': True,
-        'staged_after_cap': 2,
-        'applied_after_cap': 1,
-    }
-    assert dream_agent.cap_tail(staged, None, outcomes) == {
-        'crossed': False,
-        'staged_after_cap': 0,
-        'applied_after_cap': 0,
-    }
+    assert report['stop_reason'] == 'finished' and len(captured) == 10
+    assert report['token_limit'] == limits.tokens
+    assert not {'history_compact', 'material_budget', 'no_progress_stop', 'prescan'} & report['levers'].keys()
+    first_result = next(message['content'] for message in captured[1] if message.get('role') == 'tool')
+    assert any(message.get('content') == first_result for message in captured[-1] if message.get('role') == 'tool')
 
 
 # --- admission, parking and ordering (Firestore fake) -------------------------------------------

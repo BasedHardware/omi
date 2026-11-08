@@ -19,23 +19,11 @@ Arm = Literal['off', 'shadow', 'serve']
 # Skip a scheduled pass when the owner has no new material (David 2026-10-28: no slow-rotation floor).
 IDLE_SKIP_MODE_ENV = 'DREAM_IDLE_SKIP_MODE'
 IDLE_SKIP_SERVE_PERCENT_ENV = 'DREAM_IDLE_SKIP_MODE_SERVE_PERCENT'
-# Size the pass token budget by new material instead of total history.
-MATERIAL_BUDGET_MODE_ENV = 'DREAM_MATERIAL_BUDGET_MODE'
-MATERIAL_BUDGET_SERVE_PERCENT_ENV = 'DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT'
-# End a pass that stops staging anything for several turns.
-NO_PROGRESS_STOP_MODE_ENV = 'DREAM_NO_PROGRESS_STOP_MODE'
-NO_PROGRESS_STOP_SERVE_PERCENT_ENV = 'DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT'
-# Elide old tool results from the re-sent conversation once a pass's prompt grows large.
-HISTORY_COMPACT_MODE_ENV = 'DREAM_HISTORY_COMPACT_MODE'
-HISTORY_COMPACT_SERVE_PERCENT_ENV = 'DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT'
 # Order each sweep's due owners by expected payoff, with an aging bound. Global: off/shadow/serve only.
 PAYOFF_ORDER_MODE_ENV = 'DREAM_PAYOFF_ORDER_MODE'
 # Back off an owner's hunt cadence after dry hunts (David 2026-10-30: replaces the idle-skip hunt floor).
 HUNT_BACKOFF_MODE_ENV = 'DREAM_HUNT_BACKOFF_MODE'
 HUNT_BACKOFF_SERVE_PERCENT_ENV = 'DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT'
-# Deterministic no-LLM pre-scan handing hunts concrete people/task cleanup targets.
-PRESCAN_MODE_ENV = 'DREAM_PRESCAN_MODE'
-PRESCAN_SERVE_PERCENT_ENV = 'DREAM_PRESCAN_MODE_SERVE_PERCENT'
 
 # Hold the two verifier calls' token reserve out of the main loop so staged work is
 # verified (10-30/31: 171 of 252 daily verifier_unverified items had zero verifier calls).
@@ -48,35 +36,23 @@ LIBERAL_VERIFIER_SERVE_PERCENT_ENV = 'DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT'
 LIBERAL_VERIFIER_KINDS = frozenset({'dismiss_person', 'spelling', 'title', 'overview', 'set_language', 'vocabulary'})
 LIBERAL_VERIFIER_REASONS = frozenset({'call_failed', 'single_vote', 'budget_tokens', 'budget_deadline'})
 
-# Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
-# applied edits and the no-progress stop 31%, so both are retired (off); payoff ordering
-# serves (David 2026-10-30: payoff first). The verify hold serves: it only moves budget
-# from searching to verifying what was found. Every other lever measures in shadow.
+# Idle skip stays off; payoff ordering and the verifier hold serve by default.
 DEFAULT_MODES: dict[str, Arm] = {
     IDLE_SKIP_MODE_ENV: 'off',
-    NO_PROGRESS_STOP_MODE_ENV: 'off',
     PAYOFF_ORDER_MODE_ENV: 'serve',
     VERIFY_HOLD_MODE_ENV: 'serve',
 }
 
 PER_OWNER = (
     IDLE_SKIP_MODE_ENV,
-    MATERIAL_BUDGET_MODE_ENV,
-    NO_PROGRESS_STOP_MODE_ENV,
-    HISTORY_COMPACT_MODE_ENV,
     HUNT_BACKOFF_MODE_ENV,
-    PRESCAN_MODE_ENV,
     VERIFY_HOLD_MODE_ENV,
     LIBERAL_VERIFIER_MODE_ENV,
 )
 SHORT_NAMES = {
     IDLE_SKIP_MODE_ENV: 'idle_skip',
-    MATERIAL_BUDGET_MODE_ENV: 'material_budget',
-    NO_PROGRESS_STOP_MODE_ENV: 'no_progress_stop',
-    HISTORY_COMPACT_MODE_ENV: 'history_compact',
     PAYOFF_ORDER_MODE_ENV: 'payoff_order',
     HUNT_BACKOFF_MODE_ENV: 'hunt_backoff',
-    PRESCAN_MODE_ENV: 'prescan',
     VERIFY_HOLD_MODE_ENV: 'verify_hold',
     LIBERAL_VERIFIER_MODE_ENV: 'liberal_verifier',
 }

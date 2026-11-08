@@ -297,6 +297,14 @@
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
+    "DREAM_HISTORY_COMPACT_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_MATERIAL_BUDGET_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_NO_PROGRESS_STOP_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_PRESCAN_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_PRESCAN_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
       "replaced_by": null
