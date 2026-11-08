@@ -2,6 +2,8 @@
 
 import logging
 
+from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
+
 from config.policy import SchedulerPolicy
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.capture.retry_cap import observe, retry_cap
@@ -29,6 +31,8 @@ def quarantine_job(tx, job: dict, now: float, reason: str) -> None:
         recovery_state='held',
     )
     job.pop('retry_started_at', None)
+    if batch_held_dead_letter_enabled():
+        job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
     tx.put('owners', job['owner_key'], owner)
 
 

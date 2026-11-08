@@ -10,6 +10,8 @@ from datetime import date
 from unittest import mock
 from pathlib import Path
 
+from git_test_env import clean_git_env
+
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
@@ -57,13 +59,16 @@ def ramp_plan(**overrides: object) -> dict[str, object]:
 
 class RegistryFixture(unittest.TestCase):
     def setUp(self) -> None:
+        git_env = mock.patch.dict(os.environ, clean_git_env(), clear=True)
+        git_env.start()
+        self.addCleanup(git_env.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="omi-flag-registry-")
         self.root = Path(self.temp.name)
         subprocess.run(
             ["git", "init", "-q"],
             cwd=self.root,
             check=True,
-            env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+            env=clean_git_env(),
         )
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))
@@ -245,6 +250,34 @@ class RegistryFixture(unittest.TestCase):
     def test_alias_without_code_read_is_stale(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(aliases=["FORMER_ENABLED"])]))
         self.assertIn("stale registry entry: delete it or restore the read: FORMER_ENABLED", self.errors())
+
+    def test_reads_tracked_at_head_are_scanned_in_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone sources:
+        # the read scanner must fall back to the HEAD blob or every app/web
+        # flag is misreported as stale in a backend-scoped lane.
+        self.write(
+            "app/lib/services/experiments/gate.dart",
+            "final a = ExperimentDefinition<String>(key: 'SPARSE_MOBILE_GATE');\n",
+        )
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml([flag(), flag(key="SPARSE_MOBILE_GATE", surfaces=["mobile"])]),
+        )
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        identity = ["-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests"]
+        subprocess.run(["git", "-C", str(self.root), *identity, "add", "-A"], check=True, env=env)
+        subprocess.run(["git", "-C", str(self.root), *identity, "commit", "-qm", "fixture"], check=True, env=env)
+        (self.root / "app/lib/services/experiments/gate.dart").unlink()
+        self.assertEqual(self.errors(), [])
+        # An alias with no read on disk or at HEAD is still stale: the HEAD
+        # fallback widens sparse visibility, it does not weaken the check.
+        (self.root / "config/feature-flags.yaml").write_text(
+            self.yaml([flag(), flag(key="SPARSE_MOBILE_GATE", surfaces=["mobile"], aliases=["SPARSE_GONE"])]),
+            encoding="utf-8",
+        )
+        errors = self.errors()
+        self.assertIn("stale registry entry: delete it or restore the read: SPARSE_GONE", errors)
+        self.assertNotIn("stale registry entry: delete it or restore the read: SPARSE_MOBILE_GATE", errors)
 
     def test_deploy_key_missing_from_registry(self) -> None:
         self.write("backend/deploy/runtime_env/_base.yaml", "services:\n  MISSING_KILL_SWITCH:\n    value: false\n")
@@ -541,6 +574,31 @@ class RegistryFixture(unittest.TestCase):
             "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")])
         )
         self.assertEqual(self.errors(), [])
+
+    def test_prereg_tracked_at_head_counts_in_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths: a
+        # prereg doc committed at HEAD but absent from the working tree is
+        # still valid evidence and must not fail the registry check.
+        self.write("docs/prereg/example.md", "# prereg\n")
+        self.write(
+            "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")])
+        )
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        commit_env_identity = [
+            "-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests",
+        ]
+        subprocess.run(["git", "-C", str(self.root), *commit_env_identity, "add", "-A"], check=True, env=env)
+        subprocess.run(
+            ["git", "-C", str(self.root), *commit_env_identity, "commit", "-qm", "fixture"], check=True, env=env
+        )
+        (self.root / "docs/prereg/example.md").unlink()
+        self.assertEqual(self.errors(), [])
+        # A path in neither the working tree nor HEAD still fails closed.
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/never-committed.md")]),
+        )
+        self.assertIn("prereg file does not exist", "\n".join(self.errors()))
 
     def test_running_experiments_table_links_prereg_and_marks_overdue(self) -> None:
         running = flag(lifecycle="experiment", prereg="docs/prereg/example.md", review_by="2026-10-15")

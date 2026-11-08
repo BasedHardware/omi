@@ -47,7 +47,7 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
     from database import action_items, conversations, memories, redis_db
     from database._client import db
     from utils.fair_use import invalidate_enforcement_cache
-    from utils.subscription import clear_trial_paywall_cache, resolve_transcription_allowance
+    from utils.subscription import resolve_transcription_allowance
     from utils.observability.fallback import record_fallback
 
     now = now or datetime.now(timezone.utc)
@@ -95,13 +95,9 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
             conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
         finally:
             # Repair access caches even when a later recheck denies or fails,
-            # or a helper raises after an already-committed page. A paywall
-            # cache error must not skip fair-use invalidation.
+            # or a helper raises after an already-committed page.
             redis_db.set_credits_invalidation_signal(uid)
-            try:
-                clear_trial_paywall_cache(uid)
-            finally:
-                invalidate_enforcement_cache(uid)
+            invalidate_enforcement_cache(uid)
         # Each memory collection has its own page. A full page stays incomplete
         # until a later short page proves the tail. Two short pages (60 + 60)
         # are drained even though their sum reaches PAGE_SIZE.

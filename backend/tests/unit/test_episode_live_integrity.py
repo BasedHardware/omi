@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from copy import deepcopy
 import json
 
 import pytest
@@ -169,6 +170,76 @@ def test_closed_episode_window_move_is_still_refused_on_overlap(lane):
             updates={'last_activity_at': T0 + timedelta(minutes=40)},
             firestore_client=store,
         )
+
+
+@pytest.mark.parametrize('overlap', ['same_start', 'predecessor', 'successor'])
+def test_live_poll_defers_conflicted_idle_close_without_rewriting_episodes(lane, monkeypatch, overlap, caplog):
+    from routers import episodes as router
+    from utils.other import endpoints as auth
+
+    store, c, _ = lane
+    monkeypatch.setattr(service, '_close_conflicts', {})
+    _old_overlap(store)
+    current = store.rows[('users', 'u', 'episodes', 'y')]
+    current['status'] = 'live'
+    current['conversation_ids'] = ['y']
+    other = store.rows[('users', 'u', 'episodes', 'x')]
+    other['conversation_ids'] = ['x']
+    if overlap == 'predecessor':
+        other['started_at'] = T0 - timedelta(minutes=1)
+    elif overlap == 'successor':
+        other['started_at'] = T0 + timedelta(minutes=10)
+    # The late member's recording extends past the next episode, while its
+    # processing arrival is hours later. The close must not guess ownership.
+    store.rows[('users', 'u', 'conversations', 'y')] = row('y', seconds=40 * 60)
+    store.rows[('users', 'u', 'episode_links', 'current')] = {'episode_id': 'y'}
+    c.now = lambda: NOW
+    before = deepcopy(store.rows)
+    close_calls = []
+    close = episodes.close_episode
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_window_overlap'):
+        close('u', 'y', 'idle', firestore_client=store, expected_activity_at=current['last_activity_at'])
+
+    def tracked_close(*args, **kwargs):
+        close_calls.append(args)
+        return close(*args, **kwargs)
+
+    monkeypatch.setattr(episodes, 'close_episode', tracked_close)
+    live = service.live_episode
+    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
+    monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
+    counter = service.metrics.EPISODE_CLOSE_CONFLICT_TOTAL.labels(reason='recorded_window_overlap')
+    count_before = counter._value.get()
+    client = TestClient(app)
+    for _ in range(3):
+        response = client.get('/v1/episodes/live')
+        assert response.status_code == 200
+        assert response.json()['episode']['id'] == 'y'
+    assert len(close_calls) == 1
+    assert counter._value.get() == count_before + 1
+    assert 'event=episode_close_conflict reason=recorded_window_overlap' in caplog.text
+    assert store.rows == before
+    assert not store.transactions[-1].has_written
+
+    # New episode state bypasses the cooldown, rather than hiding new activity.
+    current['state_version'] += 1
+    assert client.get('/v1/episodes/live').status_code == 200
+    assert len(close_calls) == 2
+    # The same state is retried after the bounded cooldown, allowing a repaired
+    # timeline to close without a process restart or a write to this episode.
+    fingerprint, _ = service._close_conflicts['u']
+    service._close_conflicts['u'] = (fingerprint, 0)
+    other['started_at'] = T0 + timedelta(minutes=50)
+    other['last_activity_at'] = T0 + timedelta(minutes=60)
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: None)
+    response = client.get('/v1/episodes/live')
+    assert response.status_code == 200 and response.json()['episode'] is None
+    assert len(close_calls) == 3
+    assert episodes.get_episode('u', 'y', firestore_client=store)['status'] == 'closed'
 
 
 @pytest.mark.parametrize('writer', ['commit', 'update', 'reopen'])
@@ -458,7 +529,7 @@ def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(la
     monkeypatch.setattr(
         service,
         '_record_recovered',
-        lambda uid, eid, cid, row, collab: (recovered.append(cid), recover(uid, eid, cid, row, collab))[1],
+        lambda uid, eid, cid, row, collab, **kw: (recovered.append(cid), recover(uid, eid, cid, row, collab, **kw))[1],
     )
     finalized = service.on_conversation_finalized
     monkeypatch.setattr(
@@ -1033,10 +1104,92 @@ def test_meaningful_sync_append_is_admitted_after_old_model_discard(lane, monkey
         ),
     )
     monkeypatch.setattr(service.client_gate, 'client_seen_cached', lambda uid: True)
-    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped_applied')
     c.now = lambda: T0 + timedelta(minutes=3)
     assert not is_relevance_discarded(expanded)
     assert service.attach_synced_intake('u', expanded['id'], expanded, collaborators=c) == 'recorded'
     owner = episodes.get_episode_for_conversation('u', expanded['id'], firestore_client=store)
     assert owner['id'] == episodes.get_episode_for_conversation('u', 'pendant', firestore_client=store)['id']
     assert visible_episode('u', owner, firestore_client=store) is not None
+
+
+def test_unchanged_recorded_attach_has_no_repartition_reads_or_writes(lane, monkeypatch):
+    store, c, _ = lane
+    member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
+    store.rows[('users', 'u', 'conversations', 'same')] = member
+    service._attach_synced_once('u', 'same', member, c)
+    before = deepcopy(store.rows)
+
+    def unexpected(*a, **kw):
+        pytest.fail('unchanged attach entered repartition')
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', unexpected)
+    monkeypatch.setattr(episodes, 'read_memberships', unexpected)
+    assert service._attach_synced_once('u', 'same', member, c) == 'recorded'
+    assert store.rows == before
+
+
+@pytest.mark.parametrize(
+    'change', ['span', 'source', 'revision', 'proof', 'membership', 'new_member', 'deleted', 'discarded']
+)
+def test_recorded_attach_falls_through_on_changed_evidence(lane, monkeypatch, change):
+    store, c, _ = lane
+    member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
+    store.rows[('users', 'u', 'conversations', 'same')] = member
+    placed = service.attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
+    owner_path = ('users', 'u', 'episodes', placed['id'])
+    if change == 'span':
+        member['recorded_end'] = T0 + timedelta(minutes=2)
+    elif change == 'source':
+        member['source'] = 'phone'
+    elif change == 'revision':
+        store.rows[owner_path]['state_version'] += 1
+    elif change == 'proof':
+        store.rows[owner_path].pop('recorded_partition')
+    elif change == 'membership':
+        store.rows[owner_path]['conversation_ids'].append('extra')
+    elif change == 'new_member':
+        member = {**member, 'id': 'new'}
+        store.rows[('users', 'u', 'conversations', 'new')] = member
+    else:
+        member[change] = True
+    calls = []
+    real = episode_timeline.recorded_candidates
+
+    def counted(*a, **kw):
+        calls.append(a)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', counted)
+    if change in {'deleted', 'discarded'}:
+        before = deepcopy(store.rows)
+        with pytest.raises(episodes.EpisodeConflict, match='conversation_hidden'):
+            service.attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
+        assert store.rows == before
+    else:
+        result = service.attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
+        assert member['id'] in result['conversation_ids']
+        if change == 'span':
+            assert result['last_activity_at'] == member['recorded_end']
+        if change == 'new_member':
+            assert set(result['conversation_ids']) == {'same', 'new'}
+    assert calls
+
+
+def test_unrelated_timeline_revision_does_not_invalidate_unchanged_owner(lane, monkeypatch):
+    store, c, _ = lane
+    member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
+    store.rows[('users', 'u', 'conversations', 'same')] = member
+    service._attach_synced_once('u', 'same', member, c)
+    other = row(
+        'other',
+        start=T0 + timedelta(days=1),
+        recorded_start=T0 + timedelta(days=1),
+        recorded_end=T0 + timedelta(days=1, seconds=30),
+    )
+    store.rows[('users', 'u', 'conversations', 'other')] = other
+    service._attach_synced_once('u', 'other', other, c)
+    monkeypatch.setattr(
+        episode_timeline, 'recorded_candidates', lambda *a, **kw: pytest.fail('unrelated window invalidated proof')
+    )
+    assert service._attach_synced_once('u', 'same', member, c) == 'recorded'

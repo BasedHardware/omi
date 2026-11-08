@@ -19,11 +19,14 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/core/storage.h"
 #endif
-#include <hal/nrf_reset.h>
+#ifndef CONFIG_OMI_NATIVE_SIM
+#include <zephyr/fatal.h>
+#endif
 
 #include "imu.h"
 #include "lib/core/sd_card.h"
 #include "rtc.h"
+#include "safe_mode.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
 
@@ -37,30 +40,6 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
-
-static void print_reset_reason(void)
-{
-    uint32_t reas;
-
-    reas = nrf_reset_resetreas_get(NRF_RESET);
-    nrf_reset_resetreas_clear(NRF_RESET, reas);
-
-    if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
-        printk("Reset by WATCHDOG\n");
-    } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
-        printk("Wake up by NFC field detect\n");
-    } else if (reas & NRF_RESET_RESETREAS_RESETPIN_MASK) {
-        printk("Reset by pin-reset\n");
-    } else if (reas & NRF_RESET_RESETREAS_SREQ_MASK) {
-        printk("Reset by soft-reset\n");
-    } else if (reas & NRF_RESET_RESETREAS_LOCKUP_MASK) {
-        printk("Reset by CPU LOCKUP\n");
-    } else if (reas) {
-        printk("Reset by a different source (0x%08X)\n", reas);
-    } else {
-        printk("Power-on-reset\n");
-    }
-}
 
 static void codec_handler(uint8_t *data, size_t len)
 {
@@ -190,14 +169,37 @@ int main(void)
     int ret;
     printk("Starting omi ...\n");
 
-    // print reset reason at startup
-    print_reset_reason();
+#ifdef CONFIG_OMI_NATIVE_SIM
+    safe_mode_early_boot();
+#endif
 
     // Initialize watchdog first to catch any early freezes
     ret = watchdog_init();
     if (ret) {
         LOG_WRN("Watchdog init failed (err %d), continuing without watchdog", ret);
     }
+
+    /* Decide from validated RAM first. Only cold/invalid RAM (or an interrupted
+     * DFU commit) needs the isolated bootstate read. Never load app settings in SAFE.
+     */
+    safe_mode_restore();
+    if (safe_mode_boot()) {
+        safe_mode_run();
+        return 0;
+    }
+    int setting_ret = app_settings_init();
+    safe_mode_settings_ready(setting_ret);
+    ret = safe_mode_devices_init();
+    if (ret) {
+        LOG_ERR("Deferred device initialization failed (%d)", ret);
+        return ret;
+    }
+#ifdef CONFIG_OMI_FAULT_INJECT_HARD_FAULT
+    printk("FAULT_INJECT: fatal before BLE\n");
+    k_msleep(CONFIG_OMI_FAULT_INJECT_HARD_FAULT_DELAY_MS);
+    __asm__ volatile("udf #0");
+    CODE_UNREACHABLE;
+#endif
 
     // Initialize Haptic driver first; this is building up for future of omi turn on sequence - long press to turn on
     // instead of short press
@@ -234,7 +236,6 @@ int main(void)
 
     // Initialize settings
     LOG_INF("Initializing settings...\n");
-    int setting_ret = app_settings_init();
     if (setting_ret) {
         LOG_ERR("Failed to initialize settings (err %d)", setting_ret);
     }
@@ -349,7 +350,17 @@ int main(void)
 
     LOG_INF("Device initialized successfully\n");
 
+    safe_mode_main_loop_ready(transport_advertising_started());
     while (1) {
+#ifdef CONFIG_OMI_FAULT_INJECT_WDT_STARVE
+        if (k_uptime_get() >= 30000) {
+            printk("FAULT_INJECT: watchdog starvation\n");
+            for (;;) {
+                k_msleep(1000);
+            }
+        }
+#endif
+        safe_mode_poll();
         watchdog_feed();
 #ifdef CONFIG_OMI_ENABLE_MONITOR
         monitor_log_metrics();

@@ -27,6 +27,7 @@ except ImportError:
 
 from config.batch_pipeline_providers import provider_config
 from config.batch_pipeline_empty_asr import safety_net_enabled
+from utils.batch_pipeline.word_validation import validate_words
 from diarizer.batch_pipeline import (
     PipelineWorker,
     SAMPLE_RATE,
@@ -34,19 +35,31 @@ from diarizer.batch_pipeline import (
     crop_model_vad_spans,
     padded_retry_fits,
     padded_retry_seconds,
-    validate_words,
 )
 from diarizer.batch_pipeline_context import capture_stream
-from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
+from diarizer.batch_pipeline_flight import (
+    VAD_SEGMENTATION_KEY,
+    FlightPyannote,
+    VadSegmentationReuse,
+    diarization_payload,
+    install_shared_trunk,
+)
 from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
 from utils.batch_pipeline import leaf_timings
 
+# NeMo label-looping CUDA graph modes; both replay the eager algorithm exactly.
+# "no_graphs" is NeMo's stateful test path and never a production mode.
+_GRAPH_MODES = frozenset({'full_graph', 'no_while_loops'})
 
-def pin_parakeet_decoding(model):
-    """Persist eager decoding across NeMo's first timestamp initialization.
 
-    A one-shot disable_cuda_graphs() is insufficient: transcribe(timestamps=True)
-    rebuilds decoding from cfg. Set both options before that reconstruction.
+def pin_parakeet_decoding(model, *, cuda_graphs):
+    """Persist the chosen decoding mode across NeMo's first timestamp initialization.
+
+    A one-shot toggle is insufficient: transcribe(timestamps=True) rebuilds
+    decoding from cfg. Set every option before that reconstruction. Both modes
+    run batched label-looping greedy TDT (arXiv 2406.06220); graphs only remove
+    per-step kernel launches. NeMo recaptures only when a call exceeds the
+    captured batch or frame count, so varying window counts replay one graph.
     """
     config = deepcopy(model.cfg.decoding)
     # Some checkpoints use a structured DictConfig with initially absent fields.
@@ -58,27 +71,38 @@ def pin_parakeet_decoding(model):
         else nullcontext()
     )
     with editing:
+        config.strategy = 'greedy_batch'
         config.compute_timestamps = True
-        config.greedy.use_cuda_graph_decoder = False
+        config.greedy.use_cuda_graph_decoder = cuda_graphs
     model.change_decoding_strategy(config, verbose=False)
-    model.decoding.decoding.disable_cuda_graphs()
-    assert_eager_decoding(model)
+    if not cuda_graphs:
+        model.decoding.decoding.disable_cuda_graphs()
+    assert_decoding_mode(model, cuda_graphs)
 
 
-def assert_eager_decoding(model):
-    computer = model.decoding.decoding.decoding_computer
-    if computer.allow_cuda_graphs is not False or computer.full_graph is not None:
+def assert_decoding_mode(model, cuda_graphs):
+    # Only GreedyBatchedTDTInfer owns a label-looping computer.
+    computer = getattr(model.decoding.decoding, 'decoding_computer', None)
+    if computer is None:
+        raise RuntimeError('worker CUDA graph policy violated; restart required')
+    mode = getattr(computer.cuda_graphs_mode, 'value', computer.cuda_graphs_mode)
+    if cuda_graphs:
+        actual = computer.allow_cuda_graphs is True and mode in _GRAPH_MODES
+    else:
+        actual = computer.allow_cuda_graphs is False and mode is None and computer.full_graph is None
+    if not actual:
         raise RuntimeError('worker CUDA graph policy violated; restart required')
 
 
 class ParakeetWords:
-    def __init__(self, model, *, enforce_eager=False):
+    def __init__(self, model, *, cuda_graphs=None):
         self.model = model
-        self.enforce_eager = enforce_eager
+        # None skips the assertion (unpinned fakes); a bool is the pinned mode.
+        self.cuda_graphs = cuda_graphs
 
     def transcribe_batch(self, samples):
-        if self.enforce_eager:
-            assert_eager_decoding(self.model)
+        if self.cuda_graphs is not None:
+            assert_decoding_mode(self.model, self.cuda_graphs)
         # NeMo accepts float32 16kHz arrays: no file write, read or second decode.
         hypotheses = self.model.transcribe(
             samples,
@@ -88,8 +112,8 @@ class ParakeetWords:
             num_workers=0,
             verbose=False,
         )
-        if self.enforce_eager:
-            assert_eager_decoding(self.model)
+        if self.cuda_graphs is not None:
+            assert_decoding_mode(self.model, self.cuda_graphs)
         result = []
         for hypothesis in hypotheses:
             entries = hypothesis.timestamp.get('word', [])
@@ -136,30 +160,42 @@ class ParakeetWords:
 
 
 class PyannoteDiarizer:
-    def __init__(self, model, *, timings_of: Callable[[], Any] | None = None):
+    def __init__(self, model, *, timings_of: Callable[[], Any] | None = None, segmentation_reuse=None):
         self.model = model
         self.timings_of = timings_of or (lambda: None)
+        self.segmentation_reuse = segmentation_reuse
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
+        file = {'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000}
+        if self.segmentation_reuse is not None:
+            # Full-unit diarization of the waveform VAD just scored: same forwards.
+            scores = self.segmentation_reuse.take(samples)
+            if scores is not None:
+                file[VAD_SEGMENTATION_KEY] = scores
         with leaf_timings.active(self.timings_of()), leaf_timings.embedding_hook(self.model), torch.inference_mode():
-            output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
+            output = self.model(file)
         return diarization_payload(output)
 
 
 class PyannoteVAD:
-    def __init__(self, model):
+    def __init__(self, model, *, segmentation_reuse=None):
         self.model = model
+        self.segmentation_reuse = segmentation_reuse
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
-        with torch.inference_mode():
+        reuse = self.segmentation_reuse
+        with reuse.capturing(samples) if reuse is not None else nullcontext(), torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        return crop_model_vad_spans(
+        spans = crop_model_vad_spans(
             [(float(t.start), float(t.end)) for t in output.get_timeline().support()], len(samples) / 16000
         )
+        if reuse is not None and not spans:
+            reuse.forget(samples)  # Silence is never diarized.
+        return spans
 
 
 class StagedAudio:
@@ -353,11 +389,20 @@ def create_local_worker(
         raise ValueError(
             'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
         )
-    pin_parakeet_decoding(parakeet_model)
-    words = ParakeetWords(parakeet_model, enforce_eager=True)
+    pin_parakeet_decoding(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
+    words = ParakeetWords(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
     flight = (
         FlightPyannote.create(pyannote_model, vad_model, budget_seconds=config.flight_batch_seconds)
         if config.flight_batching
+        else None
+    )
+    if flight is None and config.shared_embedding_trunk:
+        install_shared_trunk(pyannote_model)
+    # Flight batching shares segmentation its own way; the serial chain hands
+    # VAD's raw scores to full-unit diarization instead of a second forward.
+    reuse = (
+        VadSegmentationReuse.install(pyannote_model, vad_model)
+        if flight is None and config.vad_segmentation_reuse
         else None
     )
     # Resolve dynamically: run_process binds its private registry after loading.
@@ -369,10 +414,12 @@ def create_local_worker(
 
     worker = PipelineWorker(
         decode=staged.decode,
-        vad=PyannoteVAD(vad_model),
+        vad=PyannoteVAD(vad_model, segmentation_reuse=reuse),
         words_providers={'parakeet': words},
         recover_words=words.recover_empty,
-        diarizers={'pyannote': PyannoteDiarizer(pyannote_model, timings_of=lambda: worker.timings)},
+        diarizers={
+            'pyannote': PyannoteDiarizer(pyannote_model, timings_of=lambda: worker.timings, segmentation_reuse=reuse)
+        },
         persist=persist,
         config=config,
         live_words=live_words,

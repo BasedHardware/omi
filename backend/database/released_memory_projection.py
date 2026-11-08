@@ -19,7 +19,10 @@ from typing import Any, cast
 from prometheus_client import REGISTRY, Counter
 
 from database.firestore_read_origin import current_read_origin, read_origin
-from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD as HEAD_DOCUMENT
+from database.memory_collections import (
+    RELEASED_MEMORY_CHANGE_HEAD as HEAD_DOCUMENT,
+    RELEASED_MEMORY_CHANGE_SCHEMA as HEAD_SCHEMA,
+)
 from utils.observability.fallback import record_fallback
 from utils.other.list_budget import (
     ListReadBudgetExhausted,
@@ -51,6 +54,7 @@ MAX_BYTES = 16 * 1024 * 1024
 MAX_ENTRY_BYTES = 2 * 1024 * 1024
 TTL_SECONDS = 60
 MIN_CACHE_ROWS = 3
+MAX_COMMIT_GENERATION = (1 << 63) - 1
 _lock = threading.Lock()
 _entries: OrderedDict[Any, Any] = OrderedDict()
 _small_queries: OrderedDict[Any, Any] = OrderedDict()
@@ -61,12 +65,12 @@ def enabled() -> bool:
     coverage = os.environ.get('MEMORY_RELEASED_WRITERS_COVERED', '')
     return (
         os.environ.get('MEMORY_RELEASED_PROJECTION', '').strip().lower() not in {'off', 'false', '0', 'no'}
-        and coverage.startswith('v1:')
+        and coverage.startswith('v2:')
         and bool(coverage[3:].strip())
     )
 
 
-def _head(client: Any, uid: str, budget: Any, *, conversations: bool = False) -> str | None:
+def _head(client: Any, uid: str, budget: Any, *, conversations: bool = False) -> tuple[str, int, str] | None:
     path = (
         f'users/{uid}/list_serving_versions/conversations'
         if conversations
@@ -82,13 +86,21 @@ def _head(client: Any, uid: str, budget: Any, *, conversations: bool = False) ->
     data = snap.to_dict() if getattr(snap, 'exists', False) else {}
     if not isinstance(data, dict) or data.get('blocked') is not None:
         return None
-    if conversations:
-        version = data.get('version')
-        return version if isinstance(version, str) and len(version) == 32 else None
-    if data.get('schema') != 1:
+    generation = data.get('commit_generation')
+    # A saturated increment can no longer invalidate; unknown/old writers and
+    # legacy P1 heads must keep the source path rather than grant cache reuse.
+    if data.get('schema') != HEAD_SCHEMA or type(generation) is not int or not 0 < generation < MAX_COMMIT_GENERATION:
         return None
-    token = data.get('token')
-    return token if isinstance(token, str) and token else None
+    token = data.get('version' if conversations else 'token')
+    if not isinstance(token, str) or not token or (conversations and len(token) != 32):
+        return None
+    # Generation forces a real metadata change on each Commit application.
+    # The server revision also distinguishes head deletion/recreation, even
+    # when an old prepared request is replayed and its counter restarts.
+    stamp = getattr(snap, 'update_time', None)
+    formatter = getattr(stamp, 'rfc3339', None) or getattr(stamp, 'isoformat', None)
+    revision = formatter() if callable(formatter) else None
+    return (token, generation, revision) if isinstance(revision, str) and revision else None
 
 
 def _pack(snapshots: list[Any]) -> list[dict[str, Any]]:
@@ -158,9 +170,13 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
         client = query._client
         parent = list(query._parent._path)
         conversations = len(parent) == 3 and parent[2] == 'conversations' and surface == 'mcp_cards'
-        card_coverage = bool(os.environ.get('OMI_LIST_VERSION_EPOCH', '').strip()) and os.environ.get(
-            'OMI_LIST_PROJECTION_WRITER_ENABLED', 'true'
-        ).strip().lower() not in {'0', 'false', 'off'}
+        card_epoch = os.environ.get('OMI_LIST_VERSION_EPOCH', '').strip()
+        card_coverage = (
+            card_epoch.startswith('v2:')
+            and bool(card_epoch[3:].strip())
+            and os.environ.get('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true').strip().lower()
+            not in {'0', 'false', 'off'}
+        )
         eligible = (
             len(parent) == 3
             and parent[0] == 'users'

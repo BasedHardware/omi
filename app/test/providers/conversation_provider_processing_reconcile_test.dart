@@ -33,6 +33,12 @@ void main() {
         OptimisticProcessingPlaceholder.conversation(targetConversationId: 'target'),
       );
       await provider.forceRefreshConversations();
+      if (status == ConversationStatus.in_progress) {
+        // The person just ended this conversation and the Process Now request has not landed yet, so the
+        // server still reads it as in progress. The placeholder holds the Home row; its timeout still expires it.
+        expect(provider.processingConversations.map((row) => row.id), ['0']);
+        return;
+      }
       expect(provider.processingConversations.any((row) => row.id == '0'), isFalse);
       final active = status == ConversationStatus.processing || status == ConversationStatus.merging;
       expect(provider.processingConversations.map((row) => row.id), active ? ['target'] : isEmpty);
@@ -175,6 +181,23 @@ void main() {
 
     expect(provider.processingConversations, isEmpty);
     expect(provider.conversations.map((c) => c.id), contains('c1'));
+  });
+
+  test('in-progress placeholder outside the active date filter is not kept on the filtered list', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.in_progress), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.selectedStartDate = DateTime(2020, 1, 1);
+    provider.selectedEndDate = DateTime(2020, 1, 1);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.processingConversations, isEmpty);
   });
 
   test('refresh clears the processing card when lifecycle rolls back to in progress', () async {
@@ -923,7 +946,7 @@ void main() {
     addTearDown(provider.dispose);
 
     provider.conversations = [conversation];
-    provider.deleteConversationLocally(conversation, conversationLocalDayKey(conversation.createdAt));
+    provider.deleteConversationLocally(conversation);
     provider.deleteConversationOnServer(conversation.id);
 
     await provider.forceRefreshConversations();

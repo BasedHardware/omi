@@ -11,7 +11,7 @@ from config import episodes as episodes_config
 from database import users as users_db
 from utils.episodes import incremental, output_language as episode_language
 from utils.episodes.output_language import resolved_invoke
-from utils.llm.output_language import normalize_language, resolve_output_language
+from utils.llm.output_language import normalize_language, resolve_output_language, dominant_segment_language
 
 NOW = datetime(2026, 10, 28, 9, 0, tzinfo=timezone.utc)
 
@@ -104,12 +104,12 @@ def test_segment_languages_select_a_weighted_dominant_code_without_provider_read
         {'text': 'Đây là cuộc trò chuyện dài bằng tiếng Việt về bữa trưa và kế hoạch ngày mai.', 'language': 'vi'},
         {'text': 'And a longer Vietnamese sentence about lunch plans and the meeting tomorrow.', 'language': 'vi'},
     ]
-    assert episode_language.dominant_segment_language(segments) == 'vi'
+    assert dominant_segment_language(segments) == 'vi'
 
 
 def test_segment_text_detection_uses_only_long_enough_segments():
     assert (
-        episode_language.dominant_segment_language(
+        dominant_segment_language(
             [
                 {'text': 'okay'},
                 {'text': 'Đây là cuộc trò chuyện dài bằng tiếng Việt về bữa trưa và kế hoạch ngày mai.'},

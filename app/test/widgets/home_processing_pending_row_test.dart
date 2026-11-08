@@ -8,12 +8,27 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 
 import '../support/typed_conversation_screen.dart';
+
+List<TranscriptSegment> _finishedSpeech() => [
+      TranscriptSegment(
+        id: 'speech',
+        text: 'A finished recording.',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        personId: null,
+        start: 0,
+        end: 10,
+        translations: const [],
+      ),
+    ];
 
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
@@ -44,10 +59,8 @@ void main() {
             conversationIds: const ['a', 'b', 'c'],
             members: [a, b, c],
             title: 'Dinner and plans',
-            moments: [
-              EpisodeMoment(
-                  id: 'm', conversationId: 'a', startedAt: now, endedAt: now, points: const [EpisodePoint('Point')])
-            ],
+            // Not composed yet: members still processing hold the row. A composed episode keeps
+            // its notes row instead (home_rows_test).
           );
       final provider = ConversationProvider(isSignedIn: () => false)
         ..isLoadingConversations = false
@@ -59,7 +72,6 @@ void main() {
         fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [episode(live)])),
       );
       addTearDown(provider.dispose);
-      addTearDown(episodes.dispose);
       final screen = await buildTypedConversationScreen(provider, episodes: episodes);
       episodes
         ..debugSetLive(null)
@@ -83,6 +95,8 @@ void main() {
       expect(find.text('Dinner and plans'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      // Dispose before the test ends: a processing hold re-reads on a timer that must not outlive the page.
+      episodes.dispose();
     });
   }
 
@@ -114,6 +128,7 @@ void main() {
       createdAt: DateTime.now(),
       structured: Structured('', ''),
       status: ConversationStatus.completed,
+      transcriptSegments: _finishedSpeech(),
     );
     final provider = ConversationProvider(
       isSignedIn: () => true,
@@ -130,6 +145,50 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('home_processing_row')), findsNothing);
     expect(find.byType(ConversationListItem), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Home keeps a transcript-free server replacement reachable until speech lands', (tester) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime.now();
+    var server = ServerConversation(
+      id: 'finished',
+      createdAt: now,
+      structured: Structured('', ''),
+      status: ConversationStatus.completed,
+    );
+    final provider = ConversationProvider(
+      isSignedIn: () => true,
+      conversationListFetcher: () async => (items: [server], ok: true),
+      conversationLifecycleFetcher: (_) async => (item: server, ok: true),
+    )..isLoadingConversations = false;
+    addTearDown(provider.dispose);
+    final screen = await buildTypedConversationScreen(provider);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'finished'));
+    await tester.pumpWidget(screen);
+    await tester.pump(const Duration(milliseconds: 300));
+    await provider.forceRefreshConversations();
+    await tester.pump();
+    expect(provider.processingConversations, isEmpty, reason: 'the local optimistic placeholder has retired');
+    expect(find.text('Processing…'), findsOneWidget);
+    final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+    expect(row.episode!.conversationIds, ['finished']);
+    expect(row.episode!.members.single, same(provider.conversations.single));
+
+    server = ServerConversation(
+      id: 'finished',
+      createdAt: now,
+      structured: Structured('', ''),
+      status: ConversationStatus.completed,
+      transcriptSegments: _finishedSpeech(),
+    );
+    await provider.forceRefreshConversations();
+    await tester.pump();
+    expect(find.byType(ProcessingConversationRow), findsNothing);
+    expect(find.byKey(const ValueKey('finished')), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

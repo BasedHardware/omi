@@ -39,8 +39,16 @@ class EpisodeProvider extends ChangeNotifier {
   List<Episode> get homeEpisodes => enabled && _ownerUid == SharedPreferencesUtil().uid ? _homeEpisodes : const [];
   String? _homeKey;
   DateTime? _homeReadAt;
+  DateTime? _homeFrom;
+  DateTime? _homeTo;
   Timer? _homeHold;
+  // Backoff step only; backend-call budgets below never reset when held episodes change.
+  int _homeHoldAttempts = 0;
+  final _homeHoldEpisodeCalls = <String, Map<String, int>>{};
+  final _homeHoldWindowCalls = <String, int>{};
   int _homeGeneration = 0;
+  Future<bool>? _homeRead;
+  String? _homeReadingKey;
 
   ConversationProvider? _homeConversations;
   Set<String> _hiddenHomeMembers = {};
@@ -56,6 +64,19 @@ class EpisodeProvider extends ChangeNotifier {
     if (identical(provider, _homeConversations)) return;
     _homeConversations?.removeListener(_syncHomeVisibility);
     _homeConversations = provider;
+    provider.heldHomeEpisodes = () => {
+          for (final episode in homeEpisodes)
+            if (episode.live ||
+                (episode.composed &&
+                    episode.members
+                            .where((m) =>
+                                !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
+                            .length >=
+                        2))
+              episode.id: episode.members
+                  .where((m) => !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
+                  .toList(),
+        };
     _homeVisibilityRows = null;
     provider.addListener(_syncHomeVisibility);
     _syncHomeVisibility();
@@ -86,7 +107,11 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   void invalidateHome() {
+    _homeHold?.cancel();
+    _homeReadingKey = null;
     _homeReadAt = null;
+    _homeFrom = null;
+    _homeTo = null;
     _homeGeneration++;
   }
 
@@ -96,53 +121,140 @@ class EpisodeProvider extends ChangeNotifier {
     invalidateHome();
   }
 
-  /// Load all pages atomically so partially loaded membership never splits an episode on Home.
-  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false}) async {
+  /// Load all pages atomically. False means failure/incomplete membership, not a ready empty overlay.
+  Future<bool> refreshHome(DateTime from, DateTime to, {bool force = false, bool bootstrap = false}) {
     _ensureOwner();
-    if (!_enabled) return;
+    return _refreshHome(from, to, force: force, bootstrap: bootstrap);
+  }
+
+  Future<bool> _refreshHome(DateTime from, DateTime to,
+      {required bool force, required bool bootstrap, Set<String>? heldIds}) {
+    final key = '$_ownerUid|$from|$to|$bootstrap';
+    if (!force && key == _homeReadingKey && _homeRead != null) return _homeRead!;
+    final read = _readHome(from, to, force: force, bootstrap: bootstrap, heldIds: heldIds);
+    _homeReadingKey = key;
+    _homeRead = read;
+    return read.whenComplete(() {
+      if (identical(_homeRead, read)) {
+        _homeRead = null;
+        _homeReadingKey = null;
+      }
+    });
+  }
+
+  Future<bool> _readHome(DateTime from, DateTime to,
+      {required bool force, required bool bootstrap, Set<String>? heldIds}) async {
+    if (!_enabled && !bootstrap) return false;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
-    if (!force && key == _homeKey && _homeReadAt != null && _clock().difference(_homeReadAt!) < pollInterval) return;
+    if (!force &&
+        _homeReadAt != null &&
+        _clock().difference(_homeReadAt!) < pollInterval &&
+        _homeFrom != null &&
+        _homeTo != null &&
+        !from.isBefore(_homeFrom!) &&
+        !to.isAfter(_homeTo!)) {
+      return true;
+    }
+    _homeHold?.cancel();
     _homeKey = key;
-    _homeReadAt = _clock();
     final generation = ++_homeGeneration;
     final uid = _ownerUid;
     final collected = <String, Episode>{};
     final cursors = <String>{};
     String? cursor;
+    final episodeCalls = _homeHoldEpisodeCalls.putIfAbsent(uid, () => {});
+    final windowKey = '$uid|$key';
     do {
+      if (heldIds != null) {
+        if ((_homeHoldWindowCalls[windowKey] ?? 0) >= homeHoldWindowCalls ||
+            heldIds.any((id) => (episodeCalls[id] ?? 0) >= homeHoldAttempts)) {
+          break;
+        }
+        // Charge before dispatch, including failed/stale reads, to every episode this read serves.
+        _homeHoldWindowCalls[windowKey] = (_homeHoldWindowCalls[windowKey] ?? 0) + 1;
+        for (final id in heldIds) {
+          episodeCalls[id] = (episodeCalls[id] ?? 0) + 1;
+        }
+      }
       final result = await _fetchPage(from, to, cursor: cursor);
-      if (_disposed || generation != _homeGeneration || uid != SharedPreferencesUtil().uid || !_enabled) return;
+      if (_disposed ||
+          generation != _homeGeneration ||
+          uid != SharedPreferencesUtil().uid ||
+          (!_enabled && !bootstrap)) {
+        return false;
+      }
       if (result case ApiSuccess(:final data)) {
         if (!data.enabled) {
           _enabled = false;
           _live = null;
           _homeEpisodes = const [];
           notifyListeners();
-          return;
+          return true;
         }
+        _enabled = true;
         for (final episode in data.episodes) {
           collected[episode.id] = _ended.contains(episode.id) ? episode.copyWith(live: false) : episode;
         }
         cursor = data.nextCursor;
-        if (cursor != null && !cursors.add(cursor)) return;
+        if (cursor != null && !cursors.add(cursor)) return false;
       } else {
-        _holdHome(from, to, key);
-        return;
+        _holdHome(from, to, key, generation);
+        return false;
       }
-    } while (cursor != null);
-    _homeEpisodes = collected.values.toList();
+    } while (cursor != null && (heldIds == null || !heldIds.every(collected.containsKey)));
+    // A bounded hold read may stop mid-window. Preserve membership and update only its targets.
+    _homeEpisodes = heldIds == null
+        ? collected.values.toList()
+        : [
+            for (final episode in _homeEpisodes)
+              heldIds.contains(episode.id) ? collected[episode.id] ?? episode : episode
+          ];
+    _homeFrom = from;
+    _homeTo = to;
+    _homeReadAt = _clock();
     notifyListeners();
-    _holdHome(from, to, key);
+    _holdHome(from, to, key, generation);
+    return true;
   }
 
   /// Nothing else rebuilds Home while a finished episode waits, so re-read until it settles.
-  /// A single member shows as its own conversation and never waits.
-  void _holdHome(DateTime from, DateTime to, String key) {
+  /// Budgets survive settlement, new episodes, invalidation and range revisits. Each timer can
+  /// fetch only the remaining budget: at most 10 backend calls per held episode in total and
+  /// 20 per user/window over this provider's lifetime, plus ordinary explicit Home loads.
+  /// One initial P-page load plus all automatic retries costs at most P + 20 calls.
+  void _holdHome(DateTime from, DateTime to, String key, int generation) {
+    if (generation != _homeGeneration) return;
     _homeHold?.cancel();
-    if (!_homeEpisodes.any((e) => e.members.length != 1 && e.awaitingSummary(_clock()))) return;
-    _homeHold = Timer(pollInterval, () {
-      if (key == _homeKey) unawaited(refreshHome(from, to, force: true));
+    final now = _clock();
+    final episodeCalls = _homeHoldEpisodeCalls.putIfAbsent(_ownerUid, () => {});
+    final held =
+        _homeEpisodes.where((e) => e.members.length != 1 && (e.awaitingSummary(now) || _homeHeldByProcessingMember(e)));
+    final eligible = held.where((e) => (episodeCalls[e.id] ?? 0) < homeHoldAttempts).toList();
+    if (eligible.isEmpty || (_homeHoldWindowCalls['$_ownerUid|$key'] ?? 0) >= homeHoldWindowCalls) {
+      _homeHoldAttempts = 0;
+      return;
+    }
+    final backoff = _homeHoldAttempts > 4 ? 4 : _homeHoldAttempts;
+    final seconds = pollInterval.inSeconds << backoff;
+    final delay = eligible.any((e) => e.awaitingSummary(now))
+        ? pollInterval
+        : Duration(seconds: seconds > homeHoldMaxDelay.inSeconds ? homeHoldMaxDelay.inSeconds : seconds);
+    _homeHoldAttempts++;
+    final ids = eligible.map((e) => e.id).toSet();
+    _homeHold = Timer(delay, () {
+      _ensureOwner();
+      if (key == _homeKey && generation == _homeGeneration) {
+        unawaited(_refreshHome(from, to, force: true, bootstrap: false, heldIds: ids));
+      }
     });
+  }
+
+  /// A closed episode needs another read while a member is still processing: Home's pending hold
+  /// keeps the uncomposed copy on screen until a read brings the composed one.
+  bool _homeHeldByProcessingMember(Episode episode) {
+    if (episode.live || episode.composed || episode.members.length == 1) return false;
+    final processing = _homeConversations?.processingConversations;
+    return processing != null && processing.any((c) => episode.conversationIds.contains(c.id));
   }
 
   @visibleForTesting
@@ -160,6 +272,11 @@ class EpisodeProvider extends ChangeNotifier {
 
   /// How often a watcher (Home's live row, the live page) re-reads the live episode.
   static const pollInterval = Duration(seconds: 30);
+
+  /// Hard backend-call budgets for automatic held-episode reads, including failed page fetches.
+  static const homeHoldAttempts = 10;
+  static const homeHoldWindowCalls = 20;
+  static const homeHoldMaxDelay = Duration(minutes: 5);
 
   /// Until a live episode shows up, a watcher re-reads sooner: the server opens one at the first
   /// words, and the row should switch to it (and hide its fragments) within seconds, not half a minute.
@@ -212,10 +329,13 @@ class EpisodeProvider extends ChangeNotifier {
     _previousBeforeCapture = null;
     _homeEpisodes = const [];
     _homeHold?.cancel();
+    _homeHoldAttempts = 0;
     _hiddenHomeMembers = {};
     _homeVisibilityRows = null;
     _homeKey = null;
     _homeReadAt = null;
+    _homeFrom = null;
+    _homeTo = null;
     _homeGeneration++;
     _byConversation.clear();
     _cachedAt.clear();

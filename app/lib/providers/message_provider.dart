@@ -1,3 +1,10 @@
+// The chat message provider: history load, send, SSE stream consumption, and
+// message state shared by every chat surface in the app.
+//
+// Pendant voice turns address the server-current main conversation because the
+// voice endpoint carries no conversation id -- this provider resolves which
+// conversation is current instead of each caller, keeping voice and typed chat
+// on one timeline.
 import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'dart:async';

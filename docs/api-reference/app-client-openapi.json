@@ -134,6 +134,17 @@
         "title": "AccountCutoverClientAction",
         "type": "string"
       },
+      "AccountCutoverClientState": {
+        "description": "Cutover state as released clients decode it.\n\n``migrated`` (a cell cutover) is server-internal: routing is invisible to\nclients, so the control projection reports it as ``legacy``.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverClientState",
+        "type": "string"
+      },
       "AccountCutoverControl": {
         "additionalProperties": false,
         "description": "Authenticated bootstrap/control projection for bridge clients.",
@@ -191,7 +202,7 @@
             "type": "integer"
           },
           "state": {
-            "$ref": "#/components/schemas/AccountCutoverState",
+            "$ref": "#/components/schemas/AccountCutoverClientState",
             "default": "legacy"
           },
           "stranded_new_data": {
@@ -262,17 +273,6 @@
         },
         "title": "AccountCutoverManifestSummary",
         "type": "object"
-      },
-      "AccountCutoverState": {
-        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
-        "enum": [
-          "legacy",
-          "migrating",
-          "new",
-          "rolled_back_stranded"
-        ],
-        "title": "AccountCutoverState",
-        "type": "string"
       },
       "AccountDeletionActionResponse": {
         "properties": {
@@ -551,6 +551,16 @@
             "title": "Description",
             "type": "string"
           },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "due_at": {
             "anyOf": [
               {
@@ -604,6 +614,26 @@
               }
             ],
             "title": "Ownership Confidence"
+          },
+          "reminder_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_segment_ids": {
             "items": {
@@ -688,6 +718,16 @@
             "minLength": 1,
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -939,9 +979,31 @@
             ],
             "title": "Created At"
           },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
+          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -1073,6 +1135,16 @@
             ],
             "title": "Recurrence Rule"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sort_order": {
             "default": 0,
             "title": "Sort Order",
@@ -1193,6 +1265,16 @@
               }
             ],
             "title": "Description"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -6276,6 +6358,116 @@
         "title": "CalendarOnboardingStatusResponse",
         "type": "object"
       },
+      "CampaignAttributionResponse": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "checkout_url": {
+            "title": "Checkout Url",
+            "type": "string"
+          },
+          "discount_percent": {
+            "title": "Discount Percent",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "state",
+          "checkout_url",
+          "discount_percent"
+        ],
+        "title": "CampaignAttributionResponse",
+        "type": "object"
+      },
+      "CampaignSnapshotResponse": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "claimable_months": {
+            "title": "Claimable Months",
+            "type": "integer"
+          },
+          "claimed_months": {
+            "title": "Claimed Months",
+            "type": "integer"
+          },
+          "earned_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned Months"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "milestone_progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Progress"
+          },
+          "qualified_purchases": {
+            "title": "Qualified Purchases",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "referral_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Url"
+          },
+          "reward_status": {
+            "title": "Reward Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "enabled",
+          "qualified_purchases",
+          "claimed_months",
+          "claimable_months",
+          "reward_status"
+        ],
+        "title": "CampaignSnapshotResponse",
+        "type": "object"
+      },
       "CancelSubscriptionRequest": {
         "properties": {
           "reason": {
@@ -6751,6 +6943,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -6800,6 +7004,16 @@
           },
           "proposed_action": {
             "$ref": "#/components/schemas/CandidateAction"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resolution_reason": {
             "anyOf": [
@@ -6943,6 +7157,18 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Candidate Id",
             "type": "string"
+          },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
           },
           "newly_resolved": {
             "title": "Newly Resolved",
@@ -8683,6 +8909,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -8753,6 +8991,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -8974,6 +9224,38 @@
           "terminal_state"
         ],
         "title": "ColdStartSequenceTerminalReceipt",
+        "type": "object"
+      },
+      "ConnectorAccess": {
+        "properties": {
+          "client_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Client Ids",
+            "type": "array"
+          },
+          "default_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Scopes",
+            "type": "array"
+          },
+          "required_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_ids",
+          "required_scopes",
+          "default_scopes"
+        ],
+        "title": "ConnectorAccess",
         "type": "object"
       },
       "ConnectorSynthesisRequest": {
@@ -9297,6 +9579,18 @@
               }
             ]
           },
+          "capture_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Timezone"
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -9401,6 +9695,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
@@ -10695,6 +11003,18 @@
               }
             ]
           },
+          "capture_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Timezone"
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -10799,6 +11119,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
@@ -11513,6 +11847,40 @@
           "revision"
         ],
         "title": "ConversationSyncState",
+        "type": "object"
+      },
+      "ConversationTaskPresenceRequest": {
+        "properties": {
+          "conversation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Conversation Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation_ids"
+        ],
+        "title": "ConversationTaskPresenceRequest",
+        "type": "object"
+      },
+      "ConversationTaskPresenceResponse": {
+        "properties": {
+          "presence": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Presence",
+            "type": "object"
+          }
+        },
+        "required": [
+          "presence"
+        ],
+        "title": "ConversationTaskPresenceResponse",
         "type": "object"
       },
       "ConversationTestPromptResponse": {
@@ -21388,6 +21756,9 @@
             ],
             "title": "App Id"
           },
+          "connector_access": {
+            "$ref": "#/components/schemas/ConnectorAccess"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -21491,6 +21862,14 @@
       },
       "McpOauthGrantsResponse": {
         "properties": {
+          "connector_access": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ConnectorAccess"
+            },
+            "default": {},
+            "title": "Connector Access",
+            "type": "object"
+          },
           "grants": {
             "default": [],
             "items": {
@@ -24861,6 +25240,18 @@
       },
       "Participant": {
         "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short alias explicitly asserted for this person; never derive it",
+            "title": "Alias"
+          },
           "email": {
             "anyOf": [
               {
@@ -24935,6 +25326,14 @@
             ],
             "title": "Source",
             "type": "string"
+          },
+          "speaker_bindings": {
+            "description": "Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Speaker Bindings",
+            "type": "array"
           }
         },
         "required": [
@@ -25020,6 +25419,28 @@
           }
         },
         "title": "PaymentCheckoutSessionResponse",
+        "type": "object"
+      },
+      "PaymentIssue": {
+        "description": "A paid plan whose renewal charge failed and can still be paid.\n\nSet only while the stored Stripe subscription is past_due or unpaid with an\nopen invoice. The fix is a Stripe-hosted page the client opens through\nPOST /v1/payments/customer-portal; this response carries no payment URL.",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "status": {
+            "enum": [
+              "past_due",
+              "unpaid"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "plan"
+        ],
+        "title": "PaymentIssue",
         "type": "object"
       },
       "PaymentMethodStatusResponse": {
@@ -25272,6 +25693,11 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "recording_count": {
+            "default": 1,
+            "title": "Recording Count",
+            "type": "integer"
           },
           "started_at": {
             "anyOf": [
@@ -25941,6 +26367,16 @@
           "insights_gained_used": {
             "title": "Insights Gained Used",
             "type": "integer"
+          },
+          "payment_issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "phone_call_quota": {
             "anyOf": [
@@ -27813,6 +28249,462 @@
         "title": "RecordedClock",
         "type": "string"
       },
+      "RecordingMemberCount": {
+        "properties": {
+          "applied_count": {
+            "title": "Applied Count",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "applied_count"
+        ],
+        "title": "RecordingMemberCount",
+        "type": "object"
+      },
+      "RecordingSelection": {
+        "properties": {
+          "conversation_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordingVoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "conversation_id",
+          "segment_ids"
+        ],
+        "title": "RecordingSelection",
+        "type": "object"
+      },
+      "RecordingSpeakerConflict": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "const": "recording_speaker_rename_disabled",
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/RecordingStaleDetail"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "RecordingSpeakerConflict",
+        "type": "object"
+      },
+      "RecordingSpeakerLimit": {
+        "properties": {
+          "detail": {
+            "const": "recording_speaker_limit_exceeded",
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "RecordingSpeakerLimit",
+        "type": "object"
+      },
+      "RecordingSpeakerRequest": {
+        "properties": {
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "selections": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingSelection"
+            },
+            "maxItems": 100,
+            "title": "Selections",
+            "type": "array"
+          },
+          "use_for_speech_training": {
+            "default": true,
+            "title": "Use For Speech Training",
+            "type": "boolean"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordingVoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "whole_recording": {
+            "default": true,
+            "title": "Whole Recording",
+            "type": "boolean"
+          }
+        },
+        "title": "RecordingSpeakerRequest",
+        "type": "object"
+      },
+      "RecordingSpeakerResponse": {
+        "properties": {
+          "applied_count": {
+            "title": "Applied Count",
+            "type": "integer"
+          },
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingMemberCount"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "coverage": {
+            "default": "partial",
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
+          }
+        },
+        "required": [
+          "conversations",
+          "applied_count"
+        ],
+        "title": "RecordingSpeakerResponse",
+        "type": "object"
+      },
+      "RecordingStaleDetail": {
+        "properties": {
+          "code": {
+            "const": "stale_speaker",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "RecordingStaleDetail",
+        "type": "object"
+      },
+      "RecordingTranscriptMember": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "recording_offset_seconds": {
+            "title": "Recording Offset Seconds",
+            "type": "number"
+          },
+          "transcript_segments": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingTranscriptSegment"
+            },
+            "title": "Transcript Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "recording_offset_seconds",
+          "transcript_segments"
+        ],
+        "title": "RecordingTranscriptMember",
+        "type": "object"
+      },
+      "RecordingTranscriptResponse": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingTranscriptMember"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "coverage": {
+            "default": "partial",
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
+          }
+        },
+        "required": [
+          "enabled",
+          "conversations"
+        ],
+        "title": "RecordingTranscriptResponse",
+        "type": "object"
+      },
+      "RecordingTranscriptSegment": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable captured text when text includes active corrections.",
+            "title": "Original Text"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "SPEAKER_00",
+            "title": "Speaker"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "speaker_id_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id Scope"
+          },
+          "speaker_label_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "auto",
+                  "carried"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label Source"
+          },
+          "speech_profile_processed": {
+            "default": true,
+            "title": "Speech Profile Processed",
+            "type": "boolean"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "stream_speaker": {
+            "title": "Stream Speaker",
+            "type": "string"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "translations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Translation"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translations"
+          }
+        },
+        "required": [
+          "text",
+          "is_user",
+          "start",
+          "end",
+          "stream_speaker"
+        ],
+        "title": "RecordingTranscriptSegment",
+        "type": "object"
+      },
+      "RecordingVoice": {
+        "properties": {
+          "speaker_id_scope": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Speaker Id Scope",
+            "type": "string"
+          },
+          "stream_speaker": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Stream Speaker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_id_scope",
+          "stream_speaker"
+        ],
+        "title": "RecordingVoice",
+        "type": "object"
+      },
       "RedeemCodeRequest": {
         "properties": {
           "code": {
@@ -28001,6 +28893,100 @@
           "release_channel"
         ],
         "title": "ReleaseChannel",
+        "type": "object"
+      },
+      "ReminderIntent": {
+        "additionalProperties": false,
+        "description": "Model annotation, validated against exact source turns before admission.",
+        "properties": {
+          "due_expression": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Expression"
+          },
+          "kind": {
+            "enum": [
+              "explicit_reminder",
+              "quoted",
+              "hypothetical",
+              "current_session",
+              "status",
+              "waiting_on"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ReminderIntent",
+        "type": "object"
+      },
+      "ReminderOrigin": {
+        "additionalProperties": false,
+        "properties": {
+          "extracted_at": {
+            "format": "date-time",
+            "title": "Extracted At",
+            "type": "string"
+          },
+          "input_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Input Revision",
+            "type": "string"
+          },
+          "policy_revision": {
+            "const": "explicit-reminders-v1",
+            "default": "explicit-reminders-v1",
+            "title": "Policy Revision",
+            "type": "string"
+          },
+          "review_reason": {
+            "anyOf": [
+              {
+                "const": "owner_unresolved",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Reason"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
+          },
+          "speaker_evidence_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Speaker Evidence Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_revision",
+          "speaker_evidence_revision",
+          "extracted_at"
+        ],
+        "title": "ReminderOrigin",
         "type": "object"
       },
       "ReorderFoldersRequest": {
@@ -29308,6 +30294,19 @@
             "title": "Fcm Token",
             "type": "string"
           },
+          "registration_order": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Order"
+          },
           "time_zone": {
             "title": "Time Zone",
             "type": "string"
@@ -29387,6 +30386,13 @@
             "default": "unknown",
             "title": "Capture Completeness",
             "type": "string"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenDeviceCoverage"
+            },
+            "title": "Devices",
+            "type": "array"
           },
           "first_observed_at": {
             "anyOf": [
@@ -29637,6 +30643,40 @@
           "last_id"
         ],
         "title": "ScreenActivitySyncResponse",
+        "type": "object"
+      },
+      "ScreenDeviceCoverage": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "title": "First Observed At",
+            "type": "string"
+          },
+          "last_observed_at": {
+            "title": "Last Observed At",
+            "type": "string"
+          },
+          "synced_through": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Through"
+          }
+        },
+        "required": [
+          "device_id",
+          "first_observed_at",
+          "last_observed_at"
+        ],
+        "title": "ScreenDeviceCoverage",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {
@@ -30186,6 +31226,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -30260,6 +31312,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -30700,6 +31764,21 @@
               }
             ],
             "title": "Due At"
+          },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Certainty"
           },
           "owner_name": {
             "anyOf": [
@@ -33583,7 +34662,7 @@
             "type": "string"
           },
           "participants": {
-            "description": "People and AI agents evidenced by the meeting roster or the transcript; never the account owner",
+            "description": "People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner",
             "items": {
               "$ref": "#/components/schemas/Participant"
             },
@@ -34217,6 +35296,11 @@
             "title": "Successful Segments",
             "type": "integer"
           },
+          "total_files": {
+            "default": 0,
+            "title": "Total Files",
+            "type": "integer"
+          },
           "total_segments": {
             "default": 0,
             "title": "Total Segments",
@@ -34734,6 +35818,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -34849,6 +35943,16 @@
               }
             ],
             "title": "Description"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -35002,6 +36106,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35048,6 +36162,121 @@
           "task_change"
         ],
         "title": "TaskCompleteCandidate",
+        "type": "object"
+      },
+      "TaskConversationPageRequest": {
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "include_discarded": {
+            "default": false,
+            "title": "Include Discarded",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Query",
+            "type": "string"
+          },
+          "starred": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starred"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        "title": "TaskConversationPageRequest",
+        "type": "object"
+      },
+      "TaskConversationPageResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Conversation"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "partial": {
+            "default": false,
+            "title": "Partial",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TaskConversationPageResponse",
         "type": "object"
       },
       "TaskCreateCandidate": {
@@ -35103,6 +36332,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35152,6 +36391,16 @@
             "minLength": 1,
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -35223,6 +36472,101 @@
           "description"
         ],
         "title": "TaskCreatePayload",
+        "type": "object"
+      },
+      "TaskDue": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "instant": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant"
+          },
+          "kind": {
+            "enum": [
+              "none",
+              "date",
+              "instant",
+              "unresolved"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "year_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spoken",
+                  "source_relative",
+                  "next_future_occurrence"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Basis"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "TaskDue",
         "type": "object"
       },
       "TaskGoalLinkImport": {
@@ -35834,6 +37178,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35934,6 +37288,16 @@
             "default": "update",
             "title": "Proposed Action",
             "type": "string"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_surface": {
             "maxLength": 64,
@@ -36333,6 +37697,17 @@
             ],
             "title": "Speaker Id"
           },
+          "speaker_id_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id Scope"
+          },
           "speaker_label_source": {
             "anyOf": [
               {
@@ -36398,7 +37773,7 @@
         "type": "object"
       },
       "TranscriptionAllowanceSnapshot": {
-        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(no transcription access). ``remaining_seconds`` is null when unlimited.",
         "properties": {
           "mode": {
             "title": "Mode",
@@ -38223,6 +39598,16 @@
             "title": "Insights Gained Used",
             "type": "integer"
           },
+          "payment_issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "phone_call_quota": {
             "anyOf": [
               {
@@ -38974,6 +40359,16 @@
             "default": "create",
             "title": "Proposed Action",
             "type": "string"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_surface": {
             "maxLength": 64,
@@ -49766,6 +51161,93 @@
         ]
       }
     },
+    "/v1/conversations/task-presence": {
+      "post": {
+        "operationId": "task_presence_v1_conversations_task_presence_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTaskPresenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTaskPresenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Task Presence",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/topic": {
       "post": {
         "description": "Return-only emoji + short title through the managed conv_structure feature.\n\nDoes not write Firestore. Desktop clients call this for the fast provisional title\non a just-saved conversation instead of inventing one via Anthropic Haiku chat\ncompletions; full backend processing still overwrites it later.",
@@ -49849,6 +51331,93 @@
           }
         ],
         "summary": "Generate Conversation Topic Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/with-tasks/page": {
+      "post": {
+        "operationId": "conversations_with_tasks_v1_conversations_with_tasks_page_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskConversationPageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskConversationPageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Conversations With Tasks",
         "tags": [
           "conversations"
         ]
@@ -52062,6 +53631,238 @@
           }
         ],
         "summary": "Conversation Has Audio Recording",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/recording-speakers": {
+      "get": {
+        "operationId": "get_recording_speakers_v1_conversations__conversation_id__recording_speakers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingTranscriptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerLimit"
+                }
+              }
+            },
+            "description": "Recording exceeds the member or segment limit"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Recording Speakers",
+        "tags": [
+          "conversations"
+        ]
+      },
+      "patch": {
+        "operationId": "assign_recording_speakers_v1_conversations__conversation_id__recording_speakers_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingSpeakerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerConflict"
+                }
+              }
+            },
+            "description": "Recording rename disabled or speaker selection stale"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerLimit"
+                }
+              }
+            },
+            "description": "Recording exceeds the member or segment limit"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Assign Recording Speakers",
         "tags": [
           "conversations"
         ]
@@ -57259,6 +59060,141 @@
           }
         ],
         "summary": "Get Episode",
+        "tags": [
+          "episodes"
+        ]
+      }
+    },
+    "/v1/episodes/{episode_id}/assign-speaker": {
+      "patch": {
+        "operationId": "assign_episode_speaker_v1_episodes__episode_id__assign_speaker_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "title": "Episode Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingSpeakerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerConflict"
+                }
+              }
+            },
+            "description": "Recording rename disabled or speaker selection stale"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerLimit"
+                }
+              }
+            },
+            "description": "Recording exceeds the member or segment limit"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Assign Episode Speaker",
         "tags": [
           "episodes"
         ]
@@ -64535,6 +66471,35 @@
         ]
       }
     },
+    "/v1/mcp/keys/scopes": {
+      "get": {
+        "operationId": "get_mcp_key_scope_contract",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Key Scope Contract",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/v1/mcp/keys/{key_id}": {
       "delete": {
         "operationId": "delete_key_v1_mcp_keys__key_id__delete",
@@ -67574,6 +69539,38 @@
       "get": {
         "operationId": "pending_work_v1_pending_work_get",
         "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Home-Ownership",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Home-Ownership"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -76856,7 +78853,7 @@
     },
     "/v1/users/me/paywall": {
       "get": {
-        "description": "Trial-paywall status for the calling user on the given platform.\n\nUsed by the Rust desktop-backend middleware to decide whether to proxy\npaid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of\n`is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth\naccount >3d old + platform in {macos, desktop}. Mobile platforms always\nreturn `paywalled=false`.\n\nPlatform comes from `X-App-Platform` header (preferred) or `platform`\nquery param (fallback). Unknown / missing platforms are never paywalled.",
+        "description": "Released desktop middleware still reads this permanently disabled gate.",
         "operationId": "get_user_paywall_status_v1_users_me_paywall_get",
         "parameters": [
           {
@@ -77207,7 +79204,7 @@
     },
     "/v1/users/me/trial": {
       "get": {
-        "description": "Structured trial metadata for the calling user.\n\nReturns trial timing info (start, end, remaining seconds, expired flag)\nplus the list of features available during trial and the plan the user\nfalls to after trial expiry. Used by desktop clients to render countdown\nbanners and pre-expiry upgrade nudges.\n\nPaid-plan and BYOK users get `trial_expired=False` with zeroed timing\n(trial is irrelevant to them — they have full access).",
+        "description": "Retain the disabled trial's constant metadata for released desktop decoders.",
         "operationId": "get_user_trial_status_v1_users_me_trial_get",
         "parameters": [
           {
@@ -83690,6 +85687,7 @@
     },
     "/v2/firmware/latest": {
       "get": {
+        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered. Releases with an\naudience (allow_uid_sha256, channels) also read the caller's token and app channel.",
         "operationId": "get_latest_version_v2_firmware_latest_get",
         "parameters": [
           {
@@ -83726,6 +85724,22 @@
             "schema": {
               "title": "Manufacturer Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
             }
           }
         ],
@@ -83812,7 +85826,7 @@
     },
     "/v2/firmware/version": {
       "get": {
-        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.",
+        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.\nExplicit requests ignore rollout_percent for support/reverts, but blocked releases return 404.",
         "operationId": "get_firmware_version_v2_firmware_version_get",
         "parameters": [
           {
@@ -85277,6 +87291,24 @@
             }
           },
           {
+            "description": "Original batch job for an exact custody repair bundle",
+            "in": "query",
+            "name": "repair_job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Original batch job for an exact custody repair bundle",
+              "title": "Repair Job Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-App-Platform",
             "required": false,
@@ -85496,6 +87528,22 @@
           },
           {
             "in": "header",
+            "name": "X-Omi-Custody-Repair-Protocol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Custody-Repair-Protocol"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -85653,6 +87701,166 @@
         "summary": "Tts Synthesize",
         "tags": [
           "tts"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign": {
+      "get": {
+        "operationId": "get_campaign_v2_users_me_referral_campaign_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Campaign",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign/attribution": {
+      "post": {
+        "operationId": "attribute_campaign_v2_users_me_referral_campaign_attribution_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignAttributionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Attribute Campaign",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign/claim": {
+      "post": {
+        "operationId": "claim_campaign_v2_users_me_referral_campaign_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Campaign",
+        "tags": [
+          "referrals"
         ]
       }
     },

@@ -188,7 +188,7 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
     assert 'Import allowlisted live-STT Grafana alerts' not in deploy_names
     assert 'Verify imported live-STT Grafana alert coverage' not in deploy_names
 
-    assert provision['if'] == "github.ref == 'refs/heads/main'"
+    assert provision['if'] == "github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'"
     assert provision['environment'] == deploy['environment']
     assert provision['permissions'] == {'contents': 'read'}
     assert 'needs' not in provision

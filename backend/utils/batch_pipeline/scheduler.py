@@ -1,6 +1,5 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
-from dataclasses import asdict
 import hashlib
 import math
 import logging
@@ -12,14 +11,24 @@ from time import monotonic
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key, shard_spread_enabled
+from config.batch_pipeline import (
+    FRESH_CAPTURE_LAG_SECONDS,
+    SCHEDULER_SHARDS,
+    control_candidate_fanout,
+    pull_busy_borrow_enabled,
+    pull_multi_lease_enabled,
+    scheduler_control_key,
+    shard_spread_enabled,
+    skip_unchanged_control_write_enabled,
+)
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
+from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
-from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
@@ -28,6 +37,9 @@ LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+# The walk visits another queue only below this many buffered writes (flush
+# refuses 450); a stop commits the rotations so far and the next pull resumes.
+PULL_WRITE_HEADROOM = 300
 HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 PULL_CLAIM_SECONDS = 30.0
@@ -66,14 +78,75 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     queue['tail'] = job['segment_id']
     job['next'] = ''
     tx.put('queues', queue_key, queue)
-    activate(tx, control, job['priority'], job['available_at'])
-    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    control_key = scheduler_control_key(job['owner_key'])
+    activate(tx, control, job['priority'], job['available_at'], control_key)
+    # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
+    # the shard identical; rewriting it only conflicts with every pull and admission on it.
+    if not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key):
+        tx.put('control', control_key, control)
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
-    return job['duration_seconds'] <= max_seconds and not (
+    return within_unit_ceiling(job['duration_seconds'], max_seconds) and not (
         shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
     )
+
+
+def _park_reason(job: dict, max_seconds: float, shared_gpu: bool) -> str:
+    """Bounded label for a head this pull cannot lease; privacy is labeled by the caller."""
+    if not within_unit_ceiling(job['duration_seconds'], max_seconds):
+        return 'pool_duration'
+    if shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span':
+        return 'pool_unit_kind'
+    return 'shared_live_policy'
+
+
+class _OwnWrites:
+    """A pull transaction whose index queries see the jobs it already wrote.
+
+    Firestore and Postgres transactions buffer writes until commit, and their
+    index queries read the snapshot. Once one transaction leases or splices
+    several units, a later query must not return those units as still ready.
+    """
+
+    def __init__(self, tx: Transaction):
+        self._tx, self._jobs, self._written = tx, set(), set()
+
+    def __getattr__(self, name):
+        return getattr(self._tx, name)  # Store-specific helpers pass through unchanged.
+
+    def get(self, table: str, key: str) -> dict:
+        return self._tx.get(table, key)
+
+    def put(self, table: str, key: str, value: dict) -> None:
+        if table == 'jobs':
+            self._jobs.add(key)
+        self._written.add((table, key))
+        self._tx.put(table, key, value)
+
+    def buffered_writes(self) -> int:
+        return len(self._written)
+
+    def patch(self, table: str, key: str, fields: dict) -> None:
+        self._tx.patch(table, key, fields)
+
+    def _own(self, job: dict | None) -> dict | None:
+        return self._tx.get('jobs', job['segment_id']) if job and job['segment_id'] in self._jobs else job
+
+    def first_pending(self, owner_key: str) -> dict | None:
+        return self._own(self._tx.first_pending(owner_key))
+
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._own(self._tx.first_ready_pending(owner_key))
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        return self._own(self._tx.ready_predecessor(owner_key, priority, segment_id))
+
+    def service_frontier(self, priority: int) -> float:
+        return self._tx.service_frontier(priority)
+
+    def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        return self._tx.check_privacy(uid, conversation_ids, expected_generation)
 
 
 def _prefer_merge_head(
@@ -112,7 +185,7 @@ def _prefer_merge_head(
     ):
         return job
     previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
-    if not previous or previous.get('next') != head['segment_id']:
+    if not previous or previous.get('state') != 'ready' or previous.get('next') != head['segment_id']:
         observations.append(('head_not_found', None))
         return job
     try:
@@ -174,7 +247,7 @@ class Scheduler:
             raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
         # Live jobs are never shadow; keep their documents free of the field.
-        immutable = {key: value for key, value in asdict(item).items() if key != 'shadow'}
+        immutable = {key: value for key, value in item.to_dict().items() if key != 'shadow'}
         immutable['priority'] = int(item.priority)
         if previous.get('state') == 'record_pending' and (
             previous.get('owner_id') != item.owner_id
@@ -196,7 +269,8 @@ class Scheduler:
         watermark = owner.get('watermark')
         control = read_control(tx, scheduler_control_key(key))
         job = {
-            **immutable,
+            # Unstamped work keeps the legacy document shape; readers default to None.
+            **{key: value for key, value in immutable.items() if key != 'timing_store' or value is not None},
             'policy': policy.to_dict(),
             'policy_source': 'admission',
             'protocol_version': 1,
@@ -225,7 +299,14 @@ class Scheduler:
         tx.put('owners', key, owner)
         return True
 
-    def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
+    def pull(
+        self,
+        now: float,
+        limit: int = 1,
+        *,
+        capacity: PoolCapacity | None = None,
+        borrow_when_fresh_busy: bool = False,
+    ) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
         with self._contention_lock:
@@ -245,13 +326,24 @@ class Scheduler:
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
         contention_deferred = False
-        for _ in range(limit):
+        shared_gpu_id = capacity.gpu_id if capacity is not None and capacity.shared_with_live else None
+        # One shard transaction may lease several units from the ring it has
+        # already read; the kill switch restores one lease per transaction.
+        multi = pull_multi_lease_enabled() and shared_gpu_id is None
+        # Only a dedicated-batch lane may borrow past claimed fresh shards; a
+        # shared live GPU takes one short item and stays strictly fresh-first.
+        borrow = borrow_when_fresh_busy and shared_gpu_id is None and pull_busy_borrow_enabled()
+        while len(result) < limit:
+            remaining = limit - len(result) if multi else 1
             try:
-                lease = self._pull_one(
+                leases = self._pull_one(
                     now,
                     allow_backfill=allow_backfill and backfill_budget > 0,
                     max_seconds=max_seconds,
-                    shared_gpu_id=capacity.gpu_id if capacity is not None and capacity.shared_with_live else None,
+                    shared_gpu_id=shared_gpu_id,
+                    max_fresh=remaining,
+                    max_backfill=min(remaining, backfill_budget),
+                    borrow_when_fresh_busy=borrow,
                 )
             except Exception as error:
                 if isinstance(error, FirestoreContentionExhausted):
@@ -290,11 +382,10 @@ class Scheduler:
                     error_site_field(error),
                 )
                 break
-            if lease is None:
+            if not leases:
                 break
-            result.append(lease)
-            if lease.item.priority != Priority.FRESH:
-                backfill_budget -= 1
+            result.extend(leases)
+            backfill_budget -= sum(lease.item.priority != Priority.FRESH for lease in leases)
             if capacity is not None and capacity.shared_with_live:
                 break  # One non-preemptible short item, never a mixed long batch.
         if not contention_deferred:
@@ -305,51 +396,94 @@ class Scheduler:
         return result
 
     def _pull_one(
-        self, now: float, *, allow_backfill: bool, max_seconds: float, shared_gpu_id: str | None = None
-    ) -> LeasedWork | None:
+        self,
+        now: float,
+        *,
+        allow_backfill: bool,
+        max_seconds: float,
+        shared_gpu_id: str | None = None,
+        max_fresh: int = 1,
+        max_backfill: int = 1,
+        borrow_when_fresh_busy: bool = False,
+    ) -> list[LeasedWork]:
         for priority in Priority:
             if priority != Priority.FRESH and not allow_backfill:
+                break
+            max_leases = max_fresh if priority == Priority.FRESH else max_backfill
+            if max_leases < 1:
                 break
             spread = shard_spread_enabled()
             excluded = set()
             busy = False
+            candidates = None
+            refreshed = False
+            candidate_fanout = control_candidate_fanout()
             for _ in range(128):
                 if spread:
-                    shard = self.store.control_candidate(
-                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
-                    )
+                    if candidates is None:
+                        candidates = self.store.control_candidates(
+                            int(priority), self.pool, now, worker_id=self.worker_id, fanout=candidate_fanout
+                        )
+                    shard = next((key for key in candidates if key not in excluded), None)
                 else:
                     shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
+                    if (
+                        spread
+                        and busy
+                        and not refreshed
+                        and candidate_fanout < SCHEDULER_SHARDS
+                        and candidates is not None
+                        and len(candidates) >= candidate_fanout
+                    ):
+                        # A full busy prefix proves nothing about the remaining
+                        # shards. Spend the sole refresh on the legacy width,
+                        # skipping every already-tried claim locally.
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
+                        continue
                     break
-                receipt, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id)
-                if receipt:
-                    lease, enqueued_at = receipt
-                    if self.metrics:
-                        try:
-                            self.metrics.record('leased', wait_seconds=now - enqueued_at)
-                        except Exception:
-                            pass  # Metrics cannot turn an issued lease into a failed pull.
-                    return lease
+                receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
+                if receipts:
+                    for _, enqueued_at, relet in receipts:
+                        if self.metrics:
+                            try:
+                                self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
+                            except Exception:
+                                pass  # Metrics cannot turn an issued lease into a failed pull.
+                    return [lease for lease, _, _ in receipts]
                 if eligible == 'reserved':
-                    return None
+                    return []
                 if eligible == 'busy':
                     excluded.add(shard)
                     busy = True
                     continue
+                if spread:
+                    if not eligible:
+                        excluded.add(shard)
+                    # Share one wide refresh budget with busy-window refill.
+                    # Later deficit rounds retry the eligible head locally.
+                    if not refreshed:
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.
                     continue
             else:
-                return None
-            if busy:
+                return []
+            if busy and not borrow_when_fresh_busy:
                 # Busy higher-priority work is still pending. Do not borrow
                 # backfill capacity while another puller owns its shard.
-                return None
-        return None
+                return []
+            # A borrowing lane found every eligible shard of this priority
+            # claimed: each claimant is serving that work right now, so this
+            # lane leases the next priority instead of idling. The pump's
+            # first lane never borrows, which keeps fresh-first per pump.
+        return []
 
-    def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id):
-        token = uuid.uuid4().hex
+    def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):
         candidates = {}
         started = monotonic()
         spread = shard_spread_enabled()
@@ -365,7 +499,8 @@ class Scheduler:
                 return None, 'busy'
 
         def commit(tx):
-            observations = []
+            tx = _OwnWrites(tx)
+            observations, receipts = [], []
             if spread:
                 claim = tx.get('pull_claims', shard)
                 if claim.get('token') != claim_token or claim.get('expires_at', 0) <= current_time():
@@ -378,11 +513,19 @@ class Scheduler:
             if gpu.get('token'):
                 return None, 'reserved', observations
             control = read_control(tx, shard)
+            consume_frontier_hint(tx, control, int(priority), current_time())
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
             head_budget = [HEAD_OWNER_BUDGET]
-            for _ in range(MAX_VISITS):
+            visits, write_stop = 0, False
+            # MAX_VISITS still bounds the whole walk, and with it the queue
+            # writes; later leases spend what the first left, from cached reads.
+            while visits < MAX_VISITS and len(receipts) < max_leases:
+                if tx.buffered_writes() >= PULL_WRITE_HEADROOM:
+                    write_stop = True
+                    break
+                visits += 1
                 if not ring:
                     break
                 queue_key = ring[0]
@@ -401,6 +544,7 @@ class Scheduler:
                         )
                     except BatchPrivacyBlocked:
                         blocked.add(queue_key)
+                        observations.append(('parked_privacy', None))
                     else:
                         privacy_checked_segment = job['segment_id']
                         policy = stage_in_transaction(
@@ -419,6 +563,7 @@ class Scheduler:
                                 candidates=candidates,
                             )
                         job.setdefault('unit_kind', 'conversation')
+                        park = None
                         try:
                             if job['segment_id'] != privacy_checked_segment:
                                 tx.check_privacy(
@@ -431,11 +576,14 @@ class Scheduler:
                                 not gpu_key or policy.shared_live
                             )
                         except BatchPrivacyBlocked:
-                            allowed = False
+                            allowed, park = False, 'privacy'
                         if allowed:
                             eligible_queues[queue_key] = job['duration_seconds']
                         else:
                             blocked.add(queue_key)
+                            # Parking is otherwise silent: the owner's whole FIFO waits behind this head.
+                            park = park or _park_reason(job, max_seconds, bool(gpu_key))
+                            observations.append((f'parked_{park}', None))
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
                     if len(blocked) == len(ring):
@@ -466,6 +614,7 @@ class Scheduler:
                 if not queue['head']:
                     queue.update(tail='', deficit=0.0, continuing=False)
                     ring.pop(0)
+                token = uuid.uuid4().hex
                 job.update(
                     state='leased',
                     token=token,
@@ -485,23 +634,30 @@ class Scheduler:
                     )
                 tx.put('queues', queue_key, queue)
                 tx.put('jobs', job['segment_id'], job)
-                control[field(int(priority), 'active')] = bool(ring)
                 control[field(int(priority), 'service')] += cost / owner_count
-                tx.put('control', shard, control)
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-                return (
-                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']),
-                    True,
-                    observations,
+                # defer() refunds the attempt, so an admission-deferred re-lease
+                # is a relet only through its admission_refusals streak; a
+                # charged attempt (> 1 after this lease's increment) marks every
+                # other re-lease.
+                relet = job.get('admission_refusals', 0) > 0 or job['attempt'] > 1
+                receipts.append(
+                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at'], relet)
                 )
+                # The owner's next head is a different unit: it gets its own
+                # privacy, policy and pool checks before it can be leased.
+                eligible_queues.pop(queue_key, None)
+                owner_count = max(1, len(ring))
+            # Ring rotations after the last lease commit with their deficits.
             control[field(int(priority), 'active')] = bool(ring)
-            if not eligible_queues:
+            if not receipts and not eligible_queues and not write_stop:
                 control[field(int(priority), self.pool + '_available_at')] = now + 30
             tx.put('control', shard, control)
-            return None, bool(eligible_queues), observations
+            # A write stop proved nothing about the unvisited queues: no backoff.
+            return receipts or None, bool(receipts or eligible_queues or write_stop), observations
 
         with pull_operation('pull', shard):
-            receipt, eligible, observations = self.store.run(commit)
+            receipts, eligible, observations = self.store.run(commit)
         try:
             record_policy_observations(observations)
         except Exception:
@@ -515,7 +671,7 @@ class Scheduler:
                     self.metrics.record_head(event, priority, age=age)
                 except Exception:
                     pass  # Metrics cannot turn an issued lease into a failed pull.
-        return receipt, eligible
+        return receipts, eligible
 
     def heartbeat(self, segment_id: str, token: str, now: float) -> bool:
         def commit(tx):
@@ -539,12 +695,12 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
+                return result.matches_persisted(job.get('result')) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
                 return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
                 return False, False, 0
-            job.update(state='result_ready', result=asdict(result), ready_at=now)
+            job.update(state='result_ready', result=result.to_dict(), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
@@ -691,7 +847,10 @@ class Scheduler:
         deferred = self.store.run(commit)
         if deferred and admission_refused and self.metrics:
             try:
-                self.metrics.record('admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred')
+                self.metrics.record(
+                    'admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred',
+                    reason=held_reason,
+                )
             except Exception:
                 pass  # Metrics cannot turn a committed defer into a retry.
         return deferred
@@ -754,6 +913,81 @@ class Scheduler:
                     recovered += 1
                     observe_recovery(outcome, self.metrics)
         return recovered
+
+    @staticmethod
+    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Requeue one CAS-verified missing-input repair under its original identity.
+
+        The artifact-missing store owns the content/privacy/staging checks. No
+        paid recovery intent or sibling receipt is reset by this queue mutation.
+        """
+        marker = job.get('artifact_disposition') or {}
+        if (
+            job.get('state') != 'quarantined'
+            or job.get('recovery_state') != 'failed_held'
+            or marker.get('state') != 'restored'
+            or job.get('result')
+            or job.get('merge_pending') is not False
+            or job.get('token')
+            or job.get('lease_until', 0) > now
+        ):
+            raise ValueError('verified missing-input repair required')
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
+
+    @staticmethod
+    def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
+        """Dormant worker holds only; never reopen an active paid/operator intent."""
+        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        state_ok = job.get('state') == 'quarantined' or held_dead
+        lease_until = job.get('lease_until', 0)
+        if (
+            not state_ok
+            or job.get('quarantine_reason') != 'worker_failed'
+            # Provider-STT units do not belong to the GPU DRR ring. Their
+            # vendor-attempt custody needs its own sanctioned re-drive path.
+            or (job.get('stt_route') or {}).get('stt_route') == 'provider'
+            or job.get('recovery_state') not in {'held', 'failed_held'}
+            or job.get('result')
+            # Expiry retains the legacy dead re-drive contract. Also accept
+            # earlier held-expired rows written with merge_pending=False.
+            or not (job.get('merge_pending') is False or (held_dead and job.get('merge_pending') is True))
+            or job.get('token')
+            or isinstance(lease_until, bool)
+            or not isinstance(lease_until, (int, float))
+            or not math.isfinite(lease_until)
+            or lease_until > now
+        ):
+            return False
+        recovery = job.get('recovery') or {}
+        if recovery and not recovery.get('settled_at'):
+            return False
+        if any(
+            job.get(key) and (job.get(key) or {}).get('state') not in {'completed', 'failed_held'}
+            for key in ('silence_disposition', 'terminal_disposition', 'speech_redrive')
+        ):
+            return False
+        return not tx.get('results', job['segment_id'])
+
+    @staticmethod
+    def requeue_quarantined_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+        """CAS requeue without deleting audio, results, intent or attempt history.
+
+        RecoveryStore owns content/ledger/privacy checks, as the missing-input
+        store does for restore_audio_in_transaction. The commit fence still runs.
+        """
+        if not Scheduler.held_requeue_eligible(tx, job, now):
+            return False
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        owner = tx.get('owners', job['owner_key'])
+        owner['revision'] = owner.get('revision', 0) + 1
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        _append(tx, control, job)
+        tx.put('owners', job['owner_key'], owner)
+        tx.put('jobs', job['segment_id'], job)
+        return True
 
     @staticmethod
     def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:

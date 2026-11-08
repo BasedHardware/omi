@@ -90,7 +90,9 @@ fi
 
 selected_tests=()
 while IFS= read -r test_path; do
-  if [[ -n "$test_path" && "$test_path" != testing/e2e/* ]]; then
+  # Automatic unit selections leave E2E to its own CI job. An explicit list
+  # must honor hermetic E2E paths too, rather than silently report no tests.
+  if [[ -n "$test_path" && ( "$test_path" != testing/e2e/* || -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ) ]]; then
     selected_tests+=("$test_path")
   fi
 done < "$test_list_file"
@@ -188,6 +190,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   active_pids=()
   active_status_files=()
   active_test_paths=()
+  trap 'set +u; [ "${#active_test_paths[@]}" -gt 0 ] && echo "backend unit: cancelled with files in flight: ${active_test_paths[*]}" >&2 || true' TERM
   failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
@@ -255,6 +258,15 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     set -u
   }
 
+  # GNU timeout is available on CI; keep macOS/Bash 3 hosts without it on
+  # the existing execution path. Include Python so the array is never empty
+  # (empty array expansion under set -u fails on Bash 3).
+  file_budget="${BACKEND_UNIT_FILE_BUDGET_SECONDS:-300}"
+  runner=("$PYTHON_BIN")
+  if command -v timeout >/dev/null 2>&1; then
+    runner=(timeout --signal=TERM --kill-after=30s "${file_budget}s" "$PYTHON_BIN")
+  fi
+
   if [[ "$isolated_count" -gt 0 ]]; then
     for test_path in "${isolated_tests[@]}"; do
       status_file="$status_dir/$test_index.status"
@@ -273,19 +285,27 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
           fi
           unset test_source
         fi
+        # Bash's clock avoids starting extra Python processes for every file.
+        # Include collection/import and process shutdown, which pytest's
+        # call-phase duration summary omits. Precision is one second.
+        file_started=$SECONDS
         set +e
         if [[ -n "${BACKEND_COVERAGE_MAP_DIR:-}" ]]; then
           # Coverage-map collection (scripts/build_test_coverage_map.py): one data file per isolated test file.
           # Only the dedicated coverage-map workflow sets this; it installs `coverage` itself.
           coverage_slug="${test_path//\//__}"
           printf '%s\n' "$test_path" > "$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.path"
-          "$PYTHON_BIN" -m coverage run --data-file="$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.cov" --source="$PWD" \
+          "${runner[@]}" -m coverage run --data-file="$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.cov" --source="$PWD" \
             -m pytest "${file_pytest_args[@]}" "$test_path"
         else
-          "$PYTHON_BIN" -m pytest "${file_pytest_args[@]}" "$test_path"
+          "${runner[@]}" -m pytest "${file_pytest_args[@]}" "$test_path"
         fi
         status=$?
         set -e
+        echo "BACKEND-UNIT-FILE-WALL $((SECONDS - file_started))s $test_path"
+        if [[ "$status" -eq 124 ]]; then
+          echo "::error title=Backend unit file timed out::$test_path exceeded ${file_budget}s (TERM, then KILL) and was terminated"
+        fi
         if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
           echo "No tests matched marker expression for $test_path; treating as skipped."
           status=0

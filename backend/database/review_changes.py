@@ -6,6 +6,9 @@ so unrelated edits survive and conflicting later edits return 409. No deletes
 of memories or person records. Entity merges retain a redirect node.
 """
 
+from contextlib import nullcontext
+from database.action_item_fence import fenced_action_item_commit
+
 import copy
 import hashlib
 import re
@@ -19,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from database import (
     entities,
     memory_ledger,
+    transcript_pointer,
     review_memory_hygiene,
     review_queries,
     review_store as store,
@@ -30,7 +34,7 @@ from database.review_field_states import read_field_state, write_field_state
 from utils import dream_telemetry
 from utils.dream_metrics import record_undo
 from utils.review_projection import sync_conversations
-from config.dream_agent import dream_journal_key, eligible
+from config.dream_agent import canary_uid, dream_journal_key, eligible
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangeDiff, ReviewChangesResponse
 
@@ -196,9 +200,22 @@ def record_agent_change(
         return {'mutations': mutations, 'projection_writer': write}
 
     try:
-        memory_ledger.append_commit_with_builder(
-            uid, None, build, use_current_head=True, firestore_client=store.client()
-        )
+        with (
+            fenced_action_item_commit(uid)
+            if any(edit.collection == 'action_items' for edit in edits)
+            else nullcontext()
+        ):
+            try:
+                transcript_pointer.run_preloaded_operation(
+                    memory_ledger.append_commit_with_builder,
+                    uid,
+                    None,
+                    build,
+                    use_current_head=True,
+                    firestore_client=store.client(),
+                )
+            except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                raise store.ReviewConflict('Transcript unavailable') from None
     except _Unchanged:
         pass
     sync_conversations(uid, edits, firestore_client=store.client())
@@ -304,14 +321,17 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
 
+    # The canary undoes its own fixture every run; it is not an owner decision.
+    counted = uid != canary_uid()
+
     def tracked(change, transitioned=None):
-        if undone and data and not data['change']['undone']:
+        if counted and undone and data and not data['change']['undone']:
             record_undo(change)
         # The main path knows its transaction committed a transition; special paths
         # compare with the pre-read state.
         if transitioned is None:
             transitioned = bool(data) and bool(data['change']['undone']) != undone
-        kind = dream_telemetry.change_kind(data or result) if transitioned else None
+        kind = dream_telemetry.change_kind(data or result) if counted and transitioned else None
         if kind:
             source = data or result
             dream_telemetry.record_outcome(kind, 'undo' if undone else 'redo', applied_at=source.get('created_at'))
@@ -458,9 +478,22 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         return {'mutations': mutations, 'projection_writer': write}
 
     try:
-        memory_ledger.append_commit_with_builder(
-            uid, None, build, use_current_head=True, firestore_client=store.client()
-        )
+        with (
+            fenced_action_item_commit(uid)
+            if any(edit.get('collection') == 'action_items' for edit in (data or {}).get('edits', []))
+            else nullcontext()
+        ):
+            try:
+                transcript_pointer.run_preloaded_operation(
+                    memory_ledger.append_commit_with_builder,
+                    uid,
+                    None,
+                    build,
+                    use_current_head=True,
+                    firestore_client=store.client(),
+                )
+            except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                raise store.ReviewConflict('Transcript unavailable') from None
     except _Unchanged:
         return _wire(result)
     sync_conversations(uid, result['edits'], firestore_client=store.client())

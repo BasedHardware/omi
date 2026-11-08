@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from config import directory_routing
+from database.directory.wipe import purge_owner_planes
+
 from database.messaging import MessagingStore
 
 import asyncio
@@ -187,6 +190,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     except Exception as e:
         record_failure('required_failures', 'screen_activity_vectors', e)
         logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        vector_db.delete_all_user_vector_copies(uid)
+    except Exception as e:
+        record_failure('required_failures', 'all_vector_copies', e)
+        logger.error(f'delete_account purge all vector copies failed for {uid}: {sanitize(str(e))}')
 
     try:
         result['recordings_deleted'] = delete_all_conversation_recordings(uid) or 0
@@ -429,6 +438,10 @@ def background_wipe_user_data(
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
+        if directory_routing.directory_configured():
+            current_operation = 'cell_directory_purge'
+            heartbeat()
+            purge_owner_planes(uid)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)

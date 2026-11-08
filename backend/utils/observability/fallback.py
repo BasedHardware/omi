@@ -187,6 +187,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
 
 ALLOWED_COMPONENTS = frozenset(
     {
+        'episode_f_join',
         'screen_task_gate',
         'sync_dispatch',
         'pusher',
@@ -212,6 +213,7 @@ ALLOWED_COMPONENTS = frozenset(
         'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
+        'speaker_assignments',
         'daily_summary',
         'feature_flags',
         'other',

@@ -1,3 +1,9 @@
+// The conversation detail page: summary/transcript panes over one conversation
+// with speaker labels, action items, and citations.
+//
+// Loads are generation-fenced (ConversationDetailRequestGate) so a response for
+// an older request can never overwrite the visible conversation after a fast
+// switch between items.
 import OmiSupport
 import OmiTheme
 import SwiftUI
@@ -799,7 +805,9 @@ struct ConversationDetailView: View {
 
   private var summaryPane: some View {
     ScrollView {
-      ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+      ConversationDetailProcessingLayout(
+        isProcessing: isEnrichingDeferred && displayConversation.showsSummaryProcessing
+      ) {
         deferredProcessingSection
       } content: {
         // Spacing 0: each section carries its own top inset, so one that renders nothing (or only

@@ -11,9 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response, JSONResponse
 
-from config.batch_pipeline import read_only_metrics_enabled
+from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
@@ -187,7 +188,11 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
-    outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    started = time.monotonic()
+    try:
+        outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    finally:
+        logger.info('event=batch_recovery_stage stage=recognition duration_seconds=%.3f', time.monotonic() - started)
     if outcome == 'held':
         try:
             await run_blocking(
@@ -202,7 +207,13 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if outcome == 'disabled':
         return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:
-        await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id)
+        started = time.monotonic()
+        try:
+            await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id, owner_only=True)
+        finally:
+            logger.info(
+                'event=batch_recovery_stage stage=post_recovery duration_seconds=%.3f', time.monotonic() - started
+            )
     return {'status': outcome}
 
 
@@ -210,6 +221,33 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
 async def redrive_dead(body: RedriveRequest):
     try:
         accepted = await run_blocking(db_executor, body.service().queue().redrive_dead, body.segment_id, time.time())
+    except BatchPrivacyBlocked:
+        accepted = False
+    return {'accepted': accepted}
+
+
+@router.post('/requeue-quarantined', include_in_schema=False)
+async def requeue_quarantined(body: RedriveRequest):
+    """Same private worker OIDC boundary; usable even with expiry disabled."""
+    from database.batch_pipeline_quarantine_recovery import RecoveryStore
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    try:
+        accepted = await run_blocking(
+            db_executor, RecoveryStore(body.service().store).requeue_quarantined, body.segment_id, time.time()
+        )
+    except (BatchPrivacyBlocked, ProjectionBlocked):
+        accepted = False
+    return {'accepted': accepted}
+
+
+@router.post('/requeue-record', include_in_schema=False)
+async def requeue_record(body: RedriveRequest):
+    """Private worker OIDC; rechecks the record reason and commit privacy fence."""
+    try:
+        accepted = await run_blocking(
+            db_executor, requeue_record_job, body.service().store, body.segment_id, time.time()
+        )
     except BatchPrivacyBlocked:
         accepted = False
     return {'accepted': accepted}
@@ -253,7 +291,7 @@ async def reconcile(body: WorkerRequest):
 @router.get('/metrics', include_in_schema=False)
 async def metrics():
     service = serving_for_stage(current_stage())
-    if read_only_metrics_enabled() and service.metrics is not None:
+    if (projection_pump_enabled() or read_only_metrics_enabled()) and service.metrics is not None:
         await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
     else:
         # Periodic maintenance uses the leader lease; per-unit policy decides follow-ups.
@@ -262,8 +300,13 @@ async def metrics():
 
 
 @router.post('/authorize-compute', include_in_schema=False)
-async def authorize_compute(body: HeartbeatRequest):
-    return await authorize(body.service().store, [lease.model_dump() for lease in body.leases])
+async def authorize_compute(body: HeartbeatRequest, request: Request):
+    # Workers advertise their client budget in a header so either side may roll first.
+    return await authorize(
+        body.service().store,
+        [lease.model_dump() for lease in body.leases],
+        budget=request.headers.get('x-omi-admission-seconds'),
+    )
 
 
 async def enrichment_response(payload: dict):
@@ -286,7 +329,9 @@ async def enrichment_response(payload: dict):
             from routers.enrichment import consume
             from utils.workers.consumer import http_response
 
-            return http_response(await run_blocking(postprocess_executor, consume, document_id, token))
+            return http_response(
+                await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
+            )
         # Summaries must not queue behind long transcription jobs. Reuse the
         # conversation-processing bulkhead; the master flag restores the old pool.
         executor = postprocess_executor if summary_deadline_enabled() else sync_executor

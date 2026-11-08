@@ -35,6 +35,7 @@ from routers import (
     dream_cohort,
     dream_report,
     dream_sweep,
+    error_class_sweep,
     review,
     proactivity,
     chat,
@@ -54,6 +55,7 @@ from routers import (
     support,
     trends,
     sync,
+    sync_worker,
     batch_pipeline,
     batch_provider_stt,
     enrichment,
@@ -65,7 +67,10 @@ from routers import (
     storefront,
     integration,
     conversations,
+    conversation_tasks,
+    recording_speakers,
     conversation_mutations,
+    spaces,
     memories,
     api_key_management,
     mcp,
@@ -182,12 +187,16 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(dream_report),
     Mount(dream_sweep, roles=API_WORKERS),  # Scheduler: /v2/dream-agent/sweep, canary
     Mount(candidate_integration_sweep, roles=API_WORKERS),  # Scheduler: /v2/candidate-integrations/sweep
+    Mount(error_class_sweep, roles=API_WORKERS),  # Scheduler: /v2/error-class-alerts/sweep
     Mount(transcribe, roles=API_REALTIME),  # /v4/listen websocket
     Mount(static_map),
     Mount(omni_relay, roles=API_REALTIME),  # websockets
     Mount(auto_model),
     Mount(conversations),
+    Mount(conversation_tasks),
+    Mount(recording_speakers),
     Mount(conversation_mutations),
+    Mount(spaces),
     Mount(public_shared_conversation_chat),
     Mount(action_items),
     Mount(account_cutover),
@@ -227,6 +236,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(firmware),
     Mount(updates),
     Mount(sync, roles=API_WORKERS),  # uploads (api) and Cloud Tasks /v2/sync-jobs/run (workers)
+    Mount(sync_worker, roles=API_WORKERS),  # OIDC backfill pull-worker control plane
     Mount(batch_pipeline, roles=API_WORKERS),  # GPU worker RPC pull and recovery tasks
     Mount(enrichment, roles=API_WORKERS),  # Cloud Tasks /v2/enrichment/run (lane 9; contract (a) phase 1)
     Mount(batch_provider_stt, roles=API_WORKERS),  # Cloud Tasks /v2/batch-pipeline/provider-stt/run (lane 8)

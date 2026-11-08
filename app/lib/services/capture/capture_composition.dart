@@ -63,6 +63,7 @@ class CaptureDependencies {
     required this.ensureDeviceConnection,
     this.pendantReconnect,
     this.pendantReconnectBlocked,
+    this.excludeSpeaker,
   });
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
   final Future<void> Function(String deviceId)? pendantReconnect;
@@ -85,6 +86,7 @@ class CaptureDependencies {
   final Future<BleAudioCodec> Function(String) codec;
   final Future<bool> Function() microphonePermission;
   final Future<void> Function() refreshConversation;
+  final Future<bool> Function(String conversationId, List<String> segmentIds)? excludeSpeaker;
 }
 
 /// Production must use this exact constructor path too. No test-only subclass.
@@ -131,6 +133,7 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       deviceConnectionLoader: dependencies.ensureDeviceConnection,
       pendantReconnect: dependencies.pendantReconnect,
       pendantReconnectBlocked: dependencies.pendantReconnectBlocked,
+      excludeSpeaker: dependencies.excludeSpeaker,
     );
 
 /// Composition entry signature for main.dart. Builder must resolve defaults

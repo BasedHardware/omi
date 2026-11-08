@@ -181,10 +181,17 @@ class Episode {
           if (item.visible) item
       ];
 
-  Episode copyWith({List<EpisodeItem>? items, bool? live, List<ServerConversation>? members}) => Episode(
+  Episode copyWith({
+    List<EpisodeItem>? items,
+    bool? live,
+    List<ServerConversation>? members,
+    List<String>? conversationIds,
+    DateTime? startedAt,
+  }) =>
+      Episode(
         id: id,
         live: live ?? this.live,
-        startedAt: startedAt,
+        startedAt: startedAt ?? this.startedAt,
         lastActivityAt: lastActivityAt,
         closedAt: closedAt,
         closeReason: closeReason,
@@ -197,7 +204,7 @@ class Episode {
         people: people,
         items: items ?? this.items,
         moments: moments,
-        conversationIds: conversationIds,
+        conversationIds: conversationIds ?? this.conversationIds,
         sources: sources,
         stateUpdatedAt: stateUpdatedAt,
         timerStartedAt: timerStartedAt,

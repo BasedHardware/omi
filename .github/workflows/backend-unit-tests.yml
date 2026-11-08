@@ -148,35 +148,36 @@ jobs:
   # run, only two files above 4.5s of test time), and sharing processes
   # across files is blocked by dense sys.modules contamination (see the
   # BACKEND_PYTEST_PARALLEL_SESSION measurement in backend/test.sh). So the
-  # SAME selection fans out to six parallel shard jobs — standard runners
-  # on this public repository are free — each executing an interleaved slice
-  # of the sorted file list with the same per-file isolation. Union of the
-  # shards is exactly the full selection. Run 38168319908 selected 1,727 files:
-  # four shard contract walls were 710/472/772/651s. Shard 3's four Dream files
-  # spanned only 17s including startup; it was not a Dream reasoning timeout.
-  # Six shards reduce the per-runner selection from 432 to at most 288 files
-  # while retaining process isolation and the unchanged 720s regression gate.
+  # SAME selection fans out to eight parallel shard jobs with weighted LPT
+  # dealing and per-file isolation; their union is exactly the full selection.
+  # By 2026-11-03 the suite grew to ~2,540 files (+47% since the six-shard
+  # sizing), and otherwise-green shard walls reached 729s against the 720s
+  # regression gate (run 41672443401). Eight shards project ~555s at the
+  # measured 740s six-shard upper wall, leaving ~165s of headroom without
+  # changing the gate or the 25-minute job hang bound. Standard runners on
+  # this public repository are free; the cost is two more jobs per run.
   backend-unit-shard:
-    name: Backend unit shard ${{ matrix.shard }}/6
+    name: Backend unit shard ${{ matrix.shard }}/8
     runs-on: ubuntu-latest
-    # This ceiling covers runner SETUP plus the 720s step budget, unlike the
-    # step budget it must leave room for: setup measured 73-92s typical but
+    # This ceiling covers runner SETUP plus the step regression budget, unlike
+    # the step budget it must leave room for: setup measured 73-92s typical but
     # 227s worst (run 39741901310 attempt 2, 2026-10-22: checkout 72s, apt
     # 155s), and 227s + 720s = 947s > the old 900s line, so the job timeout
     # cancelled shards mid-run while their test step was still inside budget
     # (conclusion 'cancelled' → gate "backend unit shards result was
     # 'cancelled'"; four such 917-920s walls in the week to 2026-10-22:
-    # 39741901310, 39739120103, 39676205452, 39668020536). 25m holds the
-    # 720s budget plus worst-plausible setup with the apt step capped at 10m
-    # (72s worst checkout + ~90s toolchain + ~570s apt cold allowance,
-    # 2026-10-23) and teardown; slow TEST steps still fail loudly through
-    # the step's own 720s budget check, so this ceiling stays a hang bound,
-    # not the gate.
-    timeout-minutes: 25
+    # 39741901310, 39739120103, 39676205452, 39668020536). 30m holds the
+    # 900s step budget (2026-10-26 recalibration, see the env comment) plus
+    # worst-plausible setup with the apt step capped at 10m (72s worst
+    # checkout + ~90s toolchain + ~570s apt cold allowance) and teardown —
+    # 72+90+570+900 = 1632s, leaving 168s inside the line; slow TEST steps
+    # still fail loudly through the step's own budget check, so this ceiling
+    # stays a hang bound, not the gate.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -230,8 +231,8 @@ jobs:
         # azure.archive.ubuntu.com. Cold downloads use Ubuntu's official
         # HTTPS archives via step-local sources, never the runner mirrorlist.
         # Slice downloads only: killing an install can interrupt dpkg.
-        # 7m + 72s checkout + 90s toolchain + 720s test budget leaves 198s
-        # inside the 25m job for cache save and post-job cleanup.
+        # 7m + 72s checkout + 90s toolchain + 900s test budget leaves 318s
+        # inside the 30m job for cache save and post-job cleanup.
         timeout-minutes: 7
         run: |
           COLD_BUDGET=300
@@ -300,14 +301,27 @@ jobs:
       - name: Run authoritative backend unit contract
         working-directory: backend
         env:
-          # Regression budget: a shard carries ~1/6 of the selection
-          # and includes preflight/typecheck plus per-file sessions.
-          # Setup is outside this timer. Main shard walls run 420-540s and
-          # one fully green shard took 602s against the old 600s line, so
-          # 720s holds that worst observed wall with 118s (19.6%) headroom
-          # without assuming exactly which files grew. Raise only with
-          # measured evidence.
-          BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"
+          # Regression budget: a shard carries ~1/8 of the selection since
+          # the weighted eight-shard rebalance (#23767), and includes
+          # preflight/typecheck plus per-file sessions. Setup is outside
+          # this timer. 2026-10-26 recalibration, measured under the prior
+          # six-shard split: the full selection grew 1727 -> 2319 files
+          # since the six-shard rebalance (#21259, 2026-10-11) put ~288
+          # files per shard under the 720s line set on 2026-10-03, so
+          # shards then carried ~387 and their walls drifted past it on
+          # unrelated PRs — breaches 725/727/727/735/753s on 2026-10-24
+          # (runs 40066874798 s1, 40061077340 s4, 40042164324 s4,
+          # 40065443584 s6, 40066103575 s6) and 727/841/746/808s on
+          # 2026-10-26 (40255084596 s4 main, 40267543640 s5, 40271533916
+          # s3, 40278890153 s3 — whose re-run passed at 719s on identical
+          # code and selection). Green main shard walls ran 583-701s, so
+          # the 720s line sat inside the wall distribution's right tail.
+          # 900s is above mean+3sigma of the eight observed breaches
+          # (757.75 +/- 41.6) and holds the 841s worst with 59s headroom
+          # without assuming which files grew. No single file regressed —
+          # the per-file session cost is unchanged and the drift tracks
+          # selection growth. Raise only again with measured evidence.
+          BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"
         run: |
           step_started=$SECONDS
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -315,14 +329,14 @@ jobs:
             # rather than the event-payload base.sha, which can be stale for a
             # queued run (FC-stale-event-payload-diff-base, #10785).
             ../scripts/changed-files "origin/${{ github.base_ref }}"...HEAD > /tmp/backend-changed-files.txt
-            bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt --shard 6/${{ matrix.shard }}
+            bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt --shard 8/${{ matrix.shard }}
           else
-            bash scripts/run-unit-ci.sh --all --shard 6/${{ matrix.shard }}
+            bash scripts/run-unit-ci.sh --all --shard 8/${{ matrix.shard }}
           fi
           elapsed=$((SECONDS - step_started))
           echo "backend unit shard wall: ${elapsed}s (budget ${BACKEND_UNIT_STEP_BUDGET_SECONDS}s)"
           if [ "${BACKEND_UNIT_STEP_BUDGET_SECONDS}" -gt 0 ] && [ "$elapsed" -gt "${BACKEND_UNIT_STEP_BUDGET_SECONDS}" ]; then
-            echo "FAIL: backend unit shard ${{ matrix.shard }} took ${elapsed}s, over its ${BACKEND_UNIT_STEP_BUDGET_SECONDS}s regression budget. The per-file duration summary above names the slow tail; fix the regression or raise the budget with measured evidence." >&2
+            echo "FAIL: backend unit shard ${{ matrix.shard }} took ${elapsed}s, over its ${BACKEND_UNIT_STEP_BUDGET_SECONDS}s regression budget. Fix the regression or raise the budget with measured evidence." >&2
             exit 1
           fi
 

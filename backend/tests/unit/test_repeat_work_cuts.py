@@ -11,7 +11,7 @@ from config import repeat_work, sync_reprocess
 from database import conversations
 from models.structured import Structured
 from utils.conversations import llm_input_dedupe as dedupe
-from utils.other import storage
+from utils.other import storage, raw_audio_read
 from utils.other.playback_identity import source_fingerprint
 from utils.sync import repeat_work_metrics as metrics
 from utils.sync.poll_limit import with_poll_hint
@@ -168,10 +168,14 @@ def test_default_off_flags_are_independent(monkeypatch):
         'SYNC_POLL_BACKOFF_ENABLED',
         'SYNC_REPROCESS_COALESCE_ENABLED',
         'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED',
+        'OMI_ENV_STAGE',
+        'FIRESTORE_EMULATOR_HOST',
     ):
         monkeypatch.delenv(name, raising=False)
     assert not repeat_work.playback_on_demand() and not repeat_work.revision_reuse() and not repeat_work.poll_backoff()
-    assert not sync_reprocess.coalesce_enabled() and not sync_reprocess.dedupe_enabled()
+    # 2026-11-01 (repeatflags): dedupe is the serving default everywhere; the
+    # outbox coalesce default needs an outbox-owning runtime (prod/emulator).
+    assert not sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     assert sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()
@@ -288,7 +292,7 @@ def test_late_upload_covering_raw_fragment_keeps_sample_clock_identity(monkeypat
     monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
     fragment = dict(timestamp=1010.00025, path='raw-live/u/c/pack', generation='8', raw_end=1011.0, size=32000)
     projection = Mock(side_effect=[[fragment], []])
-    monkeypatch.setattr(storage, 'uncovered_raw_packs', projection)
+    monkeypatch.setattr(raw_audio_read, 'uncovered_raw_packs', projection)
     during_upload = storage.list_audio_chunks('u', 'c', source_identity=True)
     stamped = conversations._finalize_audio_file_group('u', 'c', during_upload[:1], []).dict()
     after_upload = storage.list_audio_chunks('u', 'c', source_identity=True)

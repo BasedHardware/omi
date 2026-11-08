@@ -1,3 +1,4 @@
+import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -19,11 +20,13 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
 part 'sync_job_fetch.dart';
+part 'conversation_home_list.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -94,6 +97,8 @@ Future<List<ServerConversation>> getConversations({
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
+  Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+  void Function(int)? onStorageCount,
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
@@ -115,7 +120,21 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     starred: starred,
   );
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  final held = <String, ServerConversation>{};
+  final pairs = <String>[];
+  for (final entry in heldHomeEpisodes.entries) {
+    for (final member in entry.value) {
+      if (pairs.length == 50) break;
+      pairs.add('${entry.key}:${member.id}');
+      held[member.id] = member;
+    }
+    if (pairs.length == 50) break;
+  }
+  var response = await makeApiCall(
+      url: url,
+      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      method: 'GET',
+      body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;
@@ -126,8 +145,13 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         size: bodyBytes.length,
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
-    Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
+    onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    // Preserve an exact local fallback for each server omission. If a later
+    // overlay refresh drops this episode, its members can still render on Home.
+    final retained =
+        retainSuppressedHomeMembers(memories, held, (response.headers['x-omi-home-suppressed-ids'] ?? '').split(','));
+    Logger.debug('getConversations length: ${retained.length}');
+    return (items: retained, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
   return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -379,10 +403,11 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
-    headers: {},
+    headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'},
     method: 'GET',
     body: '',
   );
@@ -437,8 +462,8 @@ extension _Let<T> on T {
   R let<R>(R Function(T) f) => f(this);
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
-  return (await getConversationByIdResult(conversationId)).item;
+Future<ServerConversation?> getConversationById(String conversationId, {bool userInitiated = false}) async {
+  return (await getConversationByIdResult(conversationId, userInitiated: userInitiated)).item;
 }
 
 String conversationCollectionUrl(
@@ -489,11 +514,10 @@ class ConversationApi {
     DateTime? endDate,
     String? folderId,
     bool? starred,
-  }) async {
-    final sent = await executeApi<String>(
-      request: ApiRequest(
-        url: conversationCollectionUrl(
-          _baseUrl,
+    Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+    void Function(int)? onStorageCount,
+  }) =>
+      _listHomeConversations(this,
           limit: limit,
           offset: offset,
           statuses: statuses,
@@ -502,20 +526,8 @@ class ConversationApi {
           endDate: endDate,
           folderId: folderId,
           starred: starred,
-        ),
-        method: 'GET',
-      ),
-      send: _send,
-      decode: (body) => body,
-    );
-    return switch (sent) {
-      ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (await _decodeOffUi(data, conversationRowsDecoder)) {
-          ApiSuccess(:final data, :final rejectedRows) => _rows(data, rejectedRows, truncated),
-          ApiFailure(:final problem) => ApiFailure(problem),
-        },
-    };
-  }
+          heldHomeEpisodes: heldHomeEpisodes,
+          onStorageCount: onStorageCount);
 
   static ApiResult<List<ServerConversation>> _rows(List<ServerConversation> rows, int rejectedRows, bool truncated) {
     // decodeApiRows' partial-decode report, raised here because the decode may run on another isolate.
@@ -532,16 +544,19 @@ class ConversationApi {
   /// runs on Home's load-more while the user scrolls, and on the detail open
   /// right after a tap. [decode] is read before the hop because the other
   /// isolate has its own copy of every global.
-  static Future<R> _decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
+  static Future<R> decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
         () => decode(body),
         size: body.length,
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_parse',
       );
 
-  Future<ApiResult<ServerConversation>> byId(String id) async {
+  Future<ApiResult<ServerConversation>> byId(String id, {bool userInitiated = false}) async {
     final sent = await executeApi<String>(
-      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      request: ApiRequest(
+          url: '${_baseUrl}v1/conversations/$id',
+          method: 'GET',
+          headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'}),
       send: _send,
       decode: (body) => body,
     );
@@ -550,7 +565,7 @@ class ConversationApi {
         return ApiFailure(problem);
       case ApiSuccess(:final data, :final truncated):
         try {
-          return ApiSuccess(await _decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
+          return ApiSuccess(await decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
         } on FormatException {
           return const ApiFailure(ApiProblem(ApiProblemKind.decode));
         }
@@ -832,7 +847,11 @@ class SyncUploadHttpException implements Exception {
   /// server gave no pacing guidance (e.g. platform-generated 503s).
   final int? retryAfterSeconds;
 
-  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds, this.reasonCode});
+  /// Body pacing for one recording's wait; never an account cooldown.
+  final int? recordingWaitSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message,
+      {this.retryAfterSeconds, this.reasonCode, this.recordingWaitSeconds});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -1049,94 +1068,101 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
-  assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
-  String? captureManifest;
-  if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
-    captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-  }
-  var url = '${Env.apiBaseUrl}v2/sync-local-files';
-  final query = <String, String>{
-    if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
-    if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
-    if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
-    if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
-  };
-  if (query.isNotEmpty) {
-    url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
-  }
-  var response = await makeMultipartApiCall(
-    url: url,
-    files: files,
-    headers: {
-      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
-      if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
-      if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
-    },
-    onUploadProgress: onUploadProgress,
-  );
-
-  if (response.statusCode == 200) {
-    // Fast-path: server processed synchronously and returned the result. A
-    // legacy server can still encode partial work in a 200, which must follow
-    // the retry path rather than acknowledging/deleting the local WAL.
-    final completed = SyncLocalFilesResponse.fromGenerated(
-      wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
-    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
-  }
-  if (response.statusCode == 202) {
-    final start = SyncJobStartResponse.fromGenerated(
-      wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
-    if (start.jobId.isEmpty) {
-      throw Exception('Upload accepted but no job id returned');
+  final work = lagWork.begin(LagWork.upload);
+  try {
+    assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
+    String? captureManifest;
+    if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
+      captureManifest = await _createSyncCaptureManifest(files, conversationId!);
     }
-    return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
-  }
-  if (response.statusCode == 400) {
-    final refusal = switch (decodeSyncUploadRefusal(response)) {
-      ApiSuccess(:final data) => data,
-      ApiFailure() => const SyncUploadRefusalBody(),
+    var url = '${Env.apiBaseUrl}v2/sync-local-files';
+    final query = <String, String>{
+      if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
+      if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
+      if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
+      if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
     };
-    if (refusal.invalidCaptureTime) {
-      throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
+    if (query.isNotEmpty) {
+      url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
     }
-    // Other 400s stay terminal, but the server's own reason travels with the
-    // refusal instead of being dropped at the HTTP boundary.
-    throw SyncUploadHttpException(
-      response.statusCode,
-      'Audio file could not be processed by server',
-      reasonCode: refusal.reasonCode,
+    var response = await makeMultipartApiCall(
+      url: url,
+      files: files,
+      headers: {
+        if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+        if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
+        if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+      },
+      onUploadProgress: onUploadProgress,
     );
-  } else if (response.statusCode == 401 || response.statusCode == 403) {
-    throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
-  } else if (response.statusCode == 413) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload', reasonCode: 'too_large');
-  } else if (isSyncContentInProgressResponse(response)) {
-    final existingJob = syncContentInProgressResult(response);
-    if (existingJob != null) return existingJob;
-    throw SyncRateLimitedException(
-      kind: SyncRateLimitKind.edgeThrottle,
-      retryAfterSeconds: max(60, _parseRetryAfterSeconds(response) ?? 60),
-      reasonCode: 'sync_content_in_progress',
-    );
-  } else if (isSyncUploadRateLimitResponse(response)) {
-    throw SyncRateLimitedException(
-      kind: syncRateLimitKindForResponse(response),
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-      reasonCode: syncRateLimitReasonCode(response),
-      statusCode: response.statusCode,
-    );
-  } else if (isSyncRecoveryWindowExceededResponse(response)) {
-    throw const SyncRecoveryWindowExceededException();
-  } else if (response.statusCode >= 500) {
-    throw SyncUploadHttpException(
-      response.statusCode,
-      'Server is temporarily unavailable',
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-    );
+
+    if (response.statusCode == 200) {
+      // Fast-path: server processed synchronously and returned the result. A
+      // legacy server can still encode partial work in a 200, which must follow
+      // the retry path rather than acknowledging/deleting the local WAL.
+      final completed = SyncLocalFilesResponse.fromGenerated(
+        wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      );
+      return UploadFilesResult.done(requireCompleteSyncUpload(completed));
+    }
+    if (response.statusCode == 202) {
+      final start = SyncJobStartResponse.fromGenerated(
+        wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      );
+      if (start.jobId.isEmpty) {
+        throw Exception('Upload accepted but no job id returned');
+      }
+      return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
+    }
+    if (response.statusCode == 400) {
+      final refusal = switch (decodeSyncUploadRefusal(response)) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => const SyncUploadRefusalBody(),
+      };
+      if (refusal.invalidCaptureTime) {
+        throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
+      }
+      // Other 400s stay terminal, but the server's own reason travels with the
+      // refusal instead of being dropped at the HTTP boundary.
+      throw SyncUploadHttpException(
+        response.statusCode,
+        'Audio file could not be processed by server',
+        reasonCode: refusal.reasonCode,
+      );
+    } else if (response.statusCode == 401 || response.statusCode == 403) {
+      throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
+    } else if (response.statusCode == 413) {
+      throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload', reasonCode: 'too_large');
+    } else if (isSyncContentInProgressResponse(response)) {
+      final existingJob = syncContentInProgressResult(response);
+      if (existingJob != null) return existingJob;
+      throw SyncRateLimitedException(
+        kind: SyncRateLimitKind.edgeThrottle,
+        retryAfterSeconds: max(60, _parseRetryAfterSeconds(response) ?? 60),
+        reasonCode: 'sync_content_in_progress',
+      );
+    } else if (isSyncUploadRateLimitResponse(response)) {
+      throw SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response),
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncRateLimitReasonCode(response),
+        statusCode: response.statusCode,
+      );
+    } else if (isSyncRecoveryWindowExceededResponse(response)) {
+      throw const SyncRecoveryWindowExceededException();
+    } else if (response.statusCode >= 500) {
+      throw SyncUploadHttpException(
+        response.statusCode,
+        'Server is temporarily unavailable',
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncUploadServerWaitReasonCode(response),
+        recordingWaitSeconds: syncUploadServerWaitSeconds(response),
+      );
+    }
+    throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
+  } finally {
+    lagWork.end(work);
   }
-  throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }
 
 /// Why a single job-status fetch did not yield a usable status.
@@ -1166,48 +1192,53 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
 /// the polling cadence and decides what to do per [SyncJobFetchOutcome].
 Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
-    return const SyncJobFetch(SyncJobFetchOutcome.transient);
-  }
-  final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
-  if (outcome == SyncJobFetchOutcome.throttled) {
-    return SyncJobFetch.throttled(SyncRateLimitedException(
-      kind: syncRateLimitKindForResponse(response),
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-      reasonCode: syncRateLimitReasonCode(response),
-    ));
-  }
-  if (outcome == SyncJobFetchOutcome.notFound) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {
-      'jobId': jobId,
-      'httpStatus': response.statusCode,
-      'outcome': 'notFound',
-    });
-    return const SyncJobFetch(SyncJobFetchOutcome.notFound);
-  }
-  if (outcome == SyncJobFetchOutcome.transient) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {
-      'jobId': jobId,
-      'httpStatus': response.statusCode,
-      'outcome': 'transient',
-    });
-    return const SyncJobFetch(SyncJobFetchOutcome.transient);
-  }
+  final work = lagWork.begin(LagWork.reconcilePoll);
   try {
-    return SyncJobFetch(
-      SyncJobFetchOutcome.ok,
-      SyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+      headers: {},
+      method: 'GET',
+      body: '',
     );
-  } catch (e) {
-    Logger.debug('fetchSyncJobStatus parse error: $e');
-    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    if (response == null) {
+      DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    }
+    final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
+    if (outcome == SyncJobFetchOutcome.throttled) {
+      return SyncJobFetch.throttled(SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response),
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncRateLimitReasonCode(response),
+      ));
+    }
+    if (outcome == SyncJobFetchOutcome.notFound) {
+      DebugLogManager.logEvent('fetch_sync_job_status', {
+        'jobId': jobId,
+        'httpStatus': response.statusCode,
+        'outcome': 'notFound',
+      });
+      return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+    }
+    if (outcome == SyncJobFetchOutcome.transient) {
+      DebugLogManager.logEvent('fetch_sync_job_status', {
+        'jobId': jobId,
+        'httpStatus': response.statusCode,
+        'outcome': 'transient',
+      });
+      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    }
+    try {
+      return SyncJobFetch(
+        SyncJobFetchOutcome.ok,
+        SyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      );
+    } catch (e) {
+      Logger.debug('fetchSyncJobStatus parse error: $e');
+      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    }
+  } finally {
+    lagWork.end(work);
   }
 }
 

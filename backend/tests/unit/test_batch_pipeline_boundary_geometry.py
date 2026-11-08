@@ -18,7 +18,8 @@ import pytest
 import numpy as np
 
 from config.batch_pipeline_providers import ProviderConfig
-from diarizer.batch_pipeline import BatchValidationError, PipelineWorker, bounded_window_words, validate_words
+from diarizer.batch_pipeline import PipelineWorker, bounded_window_words
+from utils.batch_pipeline.word_validation import BatchValidationError, validate_words
 
 # build_incoming's function-level imports (pre_recorded pulls the deepgram SDK,
 # deterministic_minimum, models.conversation, sync.capture) land in whichever
@@ -43,7 +44,7 @@ from utils.batch_pipeline.contracts import (
     worker_vad_word_spans,
 )
 from utils.batch_pipeline.projection import build_incoming
-from utils.batch_pipeline.projection_parts import bounded_projection_words
+from utils.batch_pipeline.projection_parts import bounded_projection_words, split_result
 from utils.batch_pipeline.source_audio import MAGIC, materialize
 
 SAMPLE = 1 / 16000
@@ -320,31 +321,36 @@ def test_manifest_pcm_digest_change_is_rejected():
 @pytest.mark.parametrize(
     'audio_seconds,accepted',
     [
-        (0.9, True),  # nominal -0.1 s: the double 0.09999999999999998 passes
+        (0.9, True),
         (0.9 + SAMPLE, True),
         (1.1 - SAMPLE, True),
-        # The nominal +0.1 s overruns reject (1.1 - 1.0 is the double
-        # 0.10000000000000009, one ulp past the fence), and one sample past
-        # the tolerance rejects in both directions. Deterministic, pinned.
-        (1.1, False),
-        (0.9 - SAMPLE, False),
-        (1.1 + SAMPLE, False),
+        # Admit decimal rounding and one decoded PCM sample at either edge.
+        # Two samples beyond the 100 ms tolerance remain a real mismatch.
+        (1.1, True),
+        (0.9 - SAMPLE, True),
+        (1.1 + SAMPLE, True),
+        (0.9 - 2 * SAMPLE, False),
+        (1.1 + 2 * SAMPLE, False),
     ],
 )
-def test_projection_payload_duration_tolerance_is_one_hundred_ms(audio_seconds, accepted):
-    """The fence build_incoming/split_result share: +-0.1 s around the admitted
-    capture, so a sample-rounded decoded clock always passes and a real
-    mismatch by one sample past the tolerance fails."""
+@pytest.mark.parametrize('projection', ['incoming', 'parts'])
+def test_projection_duration_tolerance_is_100ms_plus_one_pcm_sample(audio_seconds, accepted, projection):
+    """Both production projections use the decoded sample-rounding contract."""
     item = WorkItem('seg', 'sim-owner', 0.0, 'gs://synthetic/audio', 1.0, Priority.DEEP)
     payload = {**SUCCESS_PAYLOAD, 'audio_seconds': audio_seconds, 'speech_seconds': min(0.5, audio_seconds)}
     payload['speech_spans'] = [{'start': 0.0, 'end': min(0.5, audio_seconds)}]
     payload['words'] = [{'word': 'Hello.', 'timestamp': [0.0, min(0.5, audio_seconds)]}]
     binding = ProjectionBinding('sim-owner', 'job', 'content', ('seg',))
+    project = (
+        (lambda: build_incoming(item, binding, payload))
+        if projection == 'incoming'
+        else (lambda: split_result(item, payload))
+    )
     if accepted:
-        assert build_incoming(item, binding, payload)
+        assert project()
     else:
         with pytest.raises(ValueError, match='duration'):
-            build_incoming(item, binding, payload)
+            project()
 
 
 def test_audio_unit_wav_covers_exactly_the_admitted_frames():

@@ -1,3 +1,13 @@
+"""The /v1/trigger/listen WebSocket: binary device-audio ingestion, live STT and
+speaker dispatch, and record-barrier custody for realtime capture.
+
+Each long-lived connection supervises several concurrent tasks under a strict
+executor-pool discipline (workers are leaf operations; coordinators never share
+a pool with their children), and uncommitted audio is never dropped -- durable
+receipts and backpressure own the handoff. backend/docs/listen_pusher_pipeline.mdx
+owns the wire and finalization contract this file implements.
+"""
+
 import hashlib
 import os
 import struct
@@ -8,10 +18,22 @@ from contextlib import ExitStack
 from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
+from utils.pusher_audio_window import append_window_run, v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
+from config.audio_custody import framed_pack
 from config.audio_outbox import enabled as audio_outbox_enabled
+from utils.pusher_audio_projection import PusherAudioProjection
+from utils.batch_pipeline.record_projection_rebuild import projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
+from utils.pusher_storage_budget import RetainedPcmWindow, StoragePcmBudget, storage_pcm_budget_bytes
+from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
 from utils.pusher_receive_metrics import SocketObservation, observe_work
-from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
+from utils.pusher_record_finish import (
+    ProjectionQueueWaitTimeout,
+    RecordProjectionQueue,
+    retain_closed_record_drain,
+    abandon_evicted_record_drain,
+    log_closed_record_drain_cap,
+)
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -19,10 +41,8 @@ from starlette.websockets import WebSocketState
 from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
-import database.conversations as conversations_db
-from database import conversation_tombstones
+from database.privacy_check_metrics import with_session_census
 from database import users as users_db
-from database._client import get_firestore_client
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
@@ -52,7 +72,14 @@ from utils.app_integrations import (
     trigger_realtime_integrations,
     trigger_realtime_audio_bytes,
 )
-from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
+from utils.executors import (
+    db_executor,
+    storage_executor,
+    record_barrier_executor,
+    run_blocking,
+    start_background_task,
+    ExecutorFutureTracker,
+)
 from utils.episodes.live import on_session_end as flush_episode_moment
 from utils.async_tasks import (
     supervise_tasks,
@@ -76,6 +103,10 @@ from utils.metrics import (
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
     PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL,
     PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL,
+    PUSHER_STORAGE_PCM_INFLIGHT_BYTES,
+    PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES,
+    PUSHER_STORAGE_PCM_REFUSALS_TOTAL,
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL,
 )
 from utils.readiness import ReadinessGate
 from utils.observability.fallback import record_fallback
@@ -88,6 +119,43 @@ from config.rollout_cohorts import warm_rollout_cohorts
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_pcm_commits: set[asyncio.Task[Any]] = set()
+MAX_PCM_WINDOW_FRAMES = 4096
+storage_pcm_budget = StoragePcmBudget(storage_pcm_budget_bytes())
+PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES.set(storage_pcm_budget.limit)
+_pcm_error_logged_at: dict[str, float] = {}
+# Count every fail-open through the shared helper; the caller supplies the
+# rate-limited warning below instead of a duplicate warning for every window.
+_pcm_fallback_metrics_log = logging.Logger(f'{__name__}.pcm_fallback', level=logging.CRITICAL)
+
+
+def _record_pcm_error(reason: PusherPcmErrorReason, error: Exception) -> None:
+    """Bounded telemetry must never interfere with custody or socket survival."""
+    try:
+        PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+            reason=reason_label(ReasonFamily.PUSHER_PCM, reason, PusherPcmErrorReason)
+        ).inc()
+    except Exception:
+        pass
+    try:
+        if reason is PusherPcmErrorReason.ACQUIRE:
+            record_fallback(
+                component='pusher',
+                from_mode='storage_pcm_budget',
+                to_mode='unbudgeted_storage',
+                reason='gate_unavailable',
+                outcome='degraded',
+                log=_pcm_fallback_metrics_log,
+            )
+    except Exception:
+        pass
+    try:
+        now = time.monotonic()
+        if now - _pcm_error_logged_at.get(reason.value, float('-inf')) >= 60:
+            _pcm_error_logged_at[reason.value] = now
+            logger.warning('event=pusher_pcm_error reason=%s error_type=%s', reason.value, type(error).__name__)
+    except Exception:
+        pass
 
 
 def _parse_finalization_result_protocol(value: Any) -> int:
@@ -116,7 +184,6 @@ PROJECTION_RETRY_BUDGET = 2
 # discontinuity beyond it flushes the partial chunk and pending batch; an
 # overlap is trimmed (or an exact replay ignored); conflicting bytes for the
 # same range fail closed and are never overwritten.
-AUDIO_TIMELINE_CONTINUITY_TOLERANCE = 0.001
 
 
 def _projection_raising_frame(exc: BaseException) -> str:
@@ -139,26 +206,6 @@ def _projection_grpc_code(exc: BaseException) -> str:
     if isinstance(code, StatusCode):
         return code.name
     return 'UNKNOWN'
-
-
-def _projection_owner_gone(uid: str, conversation_id: str) -> bool:
-    """Deletion-intent read for a projection NotFound: owner gone, or live?
-
-    Same tombstone read as the custody write gate (utils/other/storage.py);
-    a missing conversation doc covers hard-deleted rows without a tombstone.
-    Runs only on the NotFound arm, so live conversations pay no extra reads.
-    """
-    if conversation_tombstones.is_deleted(uid, conversation_id):
-        return True
-    doc = (
-        get_firestore_client()
-        .collection('users')
-        .document(uid)
-        .collection('conversations')
-        .document(conversation_id)
-        .get()
-    )
-    return not doc.exists
 
 
 # Queue size limits
@@ -249,103 +296,6 @@ def _queue_speaker_sample_request(data: bytes, speaker_sample_queue: 'Deque[Spea
         )
 
 
-def _append_window_run(
-    *, durable: bool, sequence: int, buffer: bytearray, audio_data: bytes, start: float, budget: ByteBudget
-) -> tuple[Optional[dict], bool]:
-    """Buffer one accepted private-cloud run; returns (frame checkpoint, stored).
-
-    The checkpoint pins the run into the durable window manifest when the
-    session runs the outbox; legacy sessions buffer the same bytes for the
-    batched .batch.enc projection without a checkpoint.
-    """
-    checkpoint = None
-    if durable:
-        # The per-message commit rejected non-sample-aligned PCM as a protocol
-        # error; keep that contract at the buffer edge so odd payloads cannot
-        # merge into a silently zero-sample window.
-        if len(audio_data) % 2:
-            raise ValueError('audio payload is not sample-aligned')
-        checkpoint = {
-            'sequence': sequence,
-            'byte_offset': len(buffer),
-            'bytes': len(audio_data),
-            'start': start,
-            'samples': len(audio_data) // 2,
-            'gap_before': False,
-            'sha256': hashlib.sha256(audio_data).hexdigest(),
-        }
-    stored = extend_bounded(buffer, audio_data, 'private_cloud_buffer', budget)
-    return checkpoint, stored
-
-
-def _v2_overlap_conflict(
-    run_start: float,
-    overlap_bytes: int,
-    audio: bytes,
-    *,
-    sample_rate: int,
-    private_cloud_chunk_start_time: float | None,
-    private_cloud_sync_buffer: bytearray,
-    v2_flushed_runs: Deque[Tuple[float, float, str]],
-) -> bool:
-    """True when the overlapping range's bytes cannot be proven identical.
-
-    The overlap region [run_start, run_start + overlap_bytes) is
-    verified against the live buffer (byte compare) and, for the part
-    predating it, against the flushed-run digest ledger. Any region
-    that can be neither compared nor digest-matched is a conflict: the
-    already-stored bytes stay, the unverified overlap is dropped, and
-    only the frame's new tail past the accepted end is kept.
-    """
-    tol = AUDIO_TIMELINE_CONTINUITY_TOLERANCE
-    bps = sample_rate * 2
-    overlap_hi = run_start + overlap_bytes / bps
-    buffer_lo = private_cloud_chunk_start_time if private_cloud_sync_buffer else None
-
-    def flushed_runs_cover(need_lo: float, need_hi: float) -> bool:
-        if need_hi <= need_lo + tol:
-            return True
-        covered_hi = need_hi
-        for fs, fe, digest in reversed(v2_flushed_runs):
-            if fe <= need_lo + tol:
-                break
-            if fs >= covered_hi - tol:
-                continue
-            if fs < need_lo - tol:
-                # Partial run overlap: only whole-run digests exist.
-                return False
-            off = round((fs - run_start) * bps)
-            n = round((fe - fs) * bps)
-            if off < 0 or off + n > len(audio) or hashlib.sha256(audio[off : off + n]).hexdigest() != digest:
-                return False
-            covered_hi = fs
-            if covered_hi <= need_lo + tol:
-                return True
-        return covered_hi <= need_lo + tol
-
-    if buffer_lo is None or buffer_lo > run_start + tol:
-        pre_hi = overlap_hi if buffer_lo is None else min(overlap_hi, buffer_lo)
-        if not flushed_runs_cover(run_start, pre_hi):
-            return True
-    if buffer_lo is not None:
-        b_lo = max(run_start, buffer_lo)
-        if b_lo < overlap_hi - tol:
-            in_audio = round((b_lo - run_start) * bps)
-            in_audio -= in_audio % 2
-            in_buffer = round((b_lo - buffer_lo) * bps)
-            in_buffer -= in_buffer % 2
-            comparable = min(
-                overlap_bytes - in_audio, len(audio) - in_audio, len(private_cloud_sync_buffer) - in_buffer
-            )
-            if (
-                comparable > 0
-                and bytes(private_cloud_sync_buffer[in_buffer : in_buffer + comparable])
-                != audio[in_audio : in_audio + comparable]
-            ):
-                return True
-    return False
-
-
 async def _commit_durable_audio_window(
     *,
     uid: str,
@@ -363,6 +313,8 @@ async def _commit_durable_audio_window(
     budget: ByteBudget,
     queue_wait_timeout: float | None,
     on_committed: Optional[Callable[[], None]] = None,
+    framed: bool = False,
+    tail: bool = False,
 ) -> Optional[AudioReceipt]:
     """Commit one immutable media+manifest pair for a buffered audio window.
 
@@ -378,23 +330,90 @@ async def _commit_durable_audio_window(
     """
     if not frames or start is None:
         return None
-    with observe_work('custody_commit'):
-        receipt = await run_blocking(
-            storage_executor,
-            commit_pcm_window,
-            uid,
-            payload,
-            conversation_id,
-            start,
-            sample_rate,
-            custody_root,
-            frames[0]['sequence'],
-            frames,
-            data_protection_level=protection_level,
-            clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
-        )
+    # Refusal is an ordinary non-ACK outcome, never an exception into socket
+    # supervision. Nothing owns a receipt and the caller retains its buffers.
+    admission = storage_pcm_budget
+    payload_size = len(payload)
+    reserved = False
+    admitted = True
+    try:
+        if admission.limit:
+            admitted = admission.admit(payload_size, tail=tail)
+            reserved = admitted
+    except Exception as exc:
+        # admit rolls back even a partially mutated counter. A budget fault
+        # uses the flag-0 dispatch path; it cannot become a socket failure.
+        _record_pcm_error(PusherPcmErrorReason.ACQUIRE, exc)
+    if not admitted:
+        try:
+            PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(
+                stage=reason_label(
+                    ReasonFamily.PUSHER_PCM, PusherPcmStage.TAIL if tail else PusherPcmStage.LIVE, PusherPcmStage
+                )
+            ).inc()
+        except Exception:
+            pass
+        return None
+    pcm_observed = False
+    storage_task = None
+    try:
+        try:
+            PUSHER_STORAGE_PCM_INFLIGHT_BYTES.inc(len(payload))
+            pcm_observed = True
+        except Exception:
+            pass
+        with observe_work('custody_commit'):
+            storage_call = run_blocking(
+                storage_executor,
+                commit_pcm_window,
+                uid,
+                payload,
+                conversation_id,
+                start,
+                sample_rate,
+                custody_root,
+                frames[0]['sequence'],
+                frames,
+                data_protection_level=protection_level,
+                clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
+                framed=framed,
+            )
+            if reserved:
+                # Shield this await independently of the socket tracker: byte
+                # capacity belongs to the actual storage completion, including
+                # cancellation before submission or during a running thread.
+                storage_task = create_named_task(storage_call, name='pusher_pcm_commit', task_set=_pcm_commits)
+                receipt = await asyncio.shield(storage_task)
+            else:
+                receipt = await storage_call  # Flag 0 retains today's exact dispatch.
+    finally:
+
+        def settled(done=None):
+            if done is not None and not done.cancelled():
+                error = done.exception()
+                if error is not None:
+                    _record_pcm_error(PusherPcmErrorReason.LATE_STORAGE, error)
+            if reserved:
+                try:
+                    admission.settle(payload_size)
+                except Exception as exc:
+                    # settle retires exactly this reservation even when the
+                    # underlying release fails before or after mutation.
+                    _record_pcm_error(PusherPcmErrorReason.RELEASE, exc)
+            if pcm_observed:
+                try:
+                    PUSHER_STORAGE_PCM_INFLIGHT_BYTES.dec(payload_size)
+                except Exception:
+                    pass
+
+        if storage_task is not None and not storage_task.done():
+            storage_task.add_done_callback(settled)
+        else:
+            settled()
     if receipt.conversation_id and receipt.samples:
-        durable_queue.stage_committed(AudioProjection(receipt, start, 0, receipt.samples))
+        durable_queue.stage_committed(
+            AudioProjection(receipt, start, 0, receipt.samples, tuple(frames) if framed else ())
+        )
     payload_size = len(payload)
     del payload  # Queue-capacity wait owns a receipt only, never a second PCM copy.
     budget.release(payload_size)
@@ -534,16 +553,24 @@ async def _run_websocket_util_trigger(
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
+    log_closed_record_drain_cap()
+    record_futures = ExecutorFutureTracker(storage_executor, record_barrier_executor)
+    framed_audio = durable_audio and audio_timeline_v2 and sample_rate == 16000 and framed_pack(uid)
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
     durable_queue = RecordProjectionQueue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    refused_windows: deque[RetainedPcmWindow] = deque()
+    pcm_admission_wait_active = False
     queue_wait_timeout = WS_RECEIVE_TIMEOUT if _projection_wait_bound_enabled() else None
     inline_finish_conversation: Optional[str] = None
     inline_projection_drained = asyncio.Event()
     inline_finish_done = asyncio.Event()
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
+
+    audio_projection = PusherAudioProjection(uid)
+    deleted_conversations: set[str] = set()
 
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
@@ -557,7 +584,7 @@ async def _run_websocket_util_trigger(
         async def flush_refs(conv_id: str) -> None:
             refs = pending_refs.pop(conv_id, [])
             queued_at.pop(conv_id, None)
-            if not refs:
+            if not refs or conv_id in deleted_conversations:
                 return
 
             try:
@@ -568,6 +595,8 @@ async def _run_websocket_util_trigger(
                     if len(pcm) != ref.samples * 2:
                         raise ValueError('durable projection sample range is incomplete')
                     chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
+                    if ref.frames:
+                        chunk['custody_receipt'] = ref.receipt.to_dict()
                     if audio_timeline_v2:
                         chunk['span'] = {
                             'start': ref.start,
@@ -580,7 +609,7 @@ async def _run_websocket_util_trigger(
                     # not capture positions. Preserve the old continuous batch
                     # and its first timestamp; jitter cannot create v2 spans.
                     chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
-                await run_blocking(
+                uploaded_paths = await run_blocking(
                     storage_executor,
                     upload_audio_chunks_batch,
                     chunks,
@@ -592,23 +621,22 @@ async def _run_websocket_util_trigger(
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
-                audio_files = await run_blocking(
-                    storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
+                applied = await run_blocking(
+                    storage_executor,
+                    audio_projection.refresh,
+                    conv_id,
+                    uploaded_paths,
+                    force=not websocket_active or conv_id in record_close_requests,
                 )
-                if audio_files:
-                    applied = await run_blocking(
-                        storage_executor,
-                        conversations_db.update_conversation,
-                        uid,
-                        conv_id,
-                        {'audio_files': [af.model_dump() for af in audio_files]},
-                    )
-                    if applied:
-                        schedule_person_voice_learning_retry(uid, conv_id)
-                        if len(identity_refreshed) < 128:
-                            identity_refreshed.add(conv_id)
+                if applied:
+                    schedule_person_voice_learning_retry(uid, conv_id)
+                    if len(identity_refreshed) < 128:
+                        identity_refreshed.add(conv_id)
+                elif applied is False:
+                    deleted_conversations.add(conv_id)
                 projection_retries.pop(conv_id, None)
             except AudioChunkContentConflict:
+                audio_projection.inventory.pop(conv_id, None)
                 # Deterministic projection conflict: different bytes already
                 # live at this run's content-addressed name. Every retry would
                 # re-run the same collision, so the batch drops now.
@@ -627,6 +655,8 @@ async def _run_websocket_util_trigger(
                 )
                 logger.warning('Durable audio projection conflict; archive receipt retained')
             except InvalidArgument as exc:
+                audio_projection.inventory.pop(conv_id, None)
+                await audio_projection.defer_rebuild(conv_id)
                 # Custody and its generation-pinned manifest remain durable.
                 # Retrying a deterministic projection rejection cannot repair
                 # the payload, and a sticky custody failure would strand it.
@@ -661,10 +691,12 @@ async def _run_websocket_util_trigger(
                 # as live rather than propagate out of the drain loop.
                 gone = False
                 try:
-                    gone = await run_blocking(db_executor, _projection_owner_gone, uid, conv_id)
+                    gone = await run_blocking(db_executor, projection_owner_gone, uid, conv_id)
                 except Exception:
                     logger.warning('Durable audio projection gone-owner check failed; treating as transient')
                 if gone:
+                    deleted_conversations.add(conv_id)
+                    audio_projection.inventory.pop(conv_id, None)
                     projection_retries.pop(conv_id, None)
                     logger.info('Durable audio projection skipped; conversation gone')
                     return
@@ -708,6 +740,10 @@ async def _run_websocket_util_trigger(
             # inheriting this one's exhaustion, and the entry stops
             # counting toward the bounded retry map.
             projection_retries.pop(conv_id, None)
+            audio_projection.inventory.pop(conv_id, None)
+            # The close-debt cache may be full. Persist terminal projection debt
+            # by its exact owner rather than relying on that bounded inventory.
+            await audio_projection.defer_rebuild(conv_id)
             await record_barrier.fail_recording(conv_id)
             record_failure('projection', reason='transient')
             record_fallback(
@@ -746,7 +782,8 @@ async def _run_websocket_util_trigger(
                         end = refs[-1].start + refs[-1].samples / refs[-1].sample_rate
                         total_bytes = (sum(r.samples for r in refs) + ref.samples) * 2
                         if (
-                            (audio_timeline_v2 and abs(ref.start - end) > AUDIO_TIMELINE_CONTINUITY_TOLERANCE)
+                            framed_audio
+                            or (audio_timeline_v2 and abs(ref.start - end) > AUDIO_TIMELINE_CONTINUITY_TOLERANCE)
                             or len(refs) >= 60
                             or total_bytes > BUFFERED_AUDIO_MAX_BYTES
                         ):
@@ -767,6 +804,8 @@ async def _run_websocket_util_trigger(
                 ):
                     await flush_refs(conv_id)
             for conv_id in list(record_close_requests):
+                if websocket_active and any(window.conversation_id == conv_id for window in refused_windows):
+                    continue  # Uncommitted PCM is still owned by this socket.
                 if (
                     conv_id == inline_finish_conversation
                     and conv_id not in pending_refs
@@ -774,21 +813,24 @@ async def _run_websocket_util_trigger(
                 ):
                     # Wake even on projection failure so the receiver can
                     # observe its sticky failure without waiting out the budget.
+                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                        continue
                     inline_projection_drained.set()
                     await inline_finish_done.wait()
                     if conv_id not in record_close_requests:
                         continue
-                if (
-                    conv_id not in record_barrier.failed_recordings
-                    and not record_barrier.record_upload_failed
-                    and conv_id not in pending_refs
-                    and not durable_queue.has_conversation(conv_id)
-                ):
+                if conv_id in pending_refs or durable_queue.has_conversation(conv_id):
+                    continue
+                if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    continue
+                if conv_id not in record_barrier.failed_recordings and not record_barrier.record_upload_failed:
                     if not await record_barrier.finish_recording(conv_id):
                         continue
-                elif conv_id in pending_refs or durable_queue.has_conversation(conv_id):
-                    continue
                 retire_record_close(conv_id)
+        for conv_id in list(audio_projection.close_debt):
+            for _ in range(PROJECTION_RETRY_BUDGET + 1):
+                if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    break
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -854,7 +896,6 @@ async def _run_websocket_util_trigger(
         # Conversations deleted underneath us (e.g. discarded as empty at rollover).
         # Their chunks can never be referenced, played or cleaned up again, so we
         # stop uploading rather than leaving more orphans in the bucket (#11742).
-        deleted_conversations: set[str] = set()
         identity_refreshed: set[str] = set()
         # Set when the storage authority refuses this account's writes because a
         # destructive operation owns the gate (account deletion in progress): the
@@ -916,7 +957,7 @@ async def _run_websocket_util_trigger(
             nonlocal application_failed, upload_fenced
             if not batch or len(batch['data']) == 0:
                 return
-            if upload_fenced:
+            if upload_fenced or batch['conversation_id'] in deleted_conversations:
                 # The fence latched earlier this session: this batch was already
                 # queued before the refusal — drop it instead of replaying a
                 # write the authority has refused for the rest of the session.
@@ -945,7 +986,7 @@ async def _run_websocket_util_trigger(
                 reconcile_prefix = conv_id in v2_replay_seen or v2_reconcile_exempt.get(conv_id) != batch_generation
                 if not reconcile_prefix:
                     PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL.inc()
-                await run_blocking(
+                uploaded_paths = await run_blocking(
                     storage_executor,
                     cast(Any, upload_audio_chunks_batch),
                     chunks_to_upload,
@@ -971,33 +1012,28 @@ async def _run_websocket_util_trigger(
                     v2_flushed_runs.append((timestamp, batch['end'], hashlib.sha256(chunk_data).hexdigest()))
                 del chunks_to_upload
                 try:
-                    audio_files = await run_blocking(
-                        storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
+                    applied = await run_blocking(
+                        storage_executor,
+                        audio_projection.refresh,
+                        conv_id,
+                        uploaded_paths,
+                        force=not websocket_active or conv_id in record_close_requests,
                     )
-                    if audio_files:
-                        files_payload = [af.model_dump() for af in audio_files]
-                        applied = await run_blocking(
-                            storage_executor,
-                            conversations_db.update_conversation,
-                            uid,
-                            conv_id,
-                            {'audio_files': files_payload},
+                    if applied:
+                        schedule_person_voice_learning_retry(uid, conv_id)
+                        if len(identity_refreshed) < 128:
+                            identity_refreshed.add(conv_id)
+                    elif applied is False:
+                        deleted_conversations.add(conv_id)
+                        logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
+                        record_fallback(
+                            component='pusher',
+                            from_mode='private_cloud_sync',
+                            to_mode='drop',
+                            reason='policy',
+                            outcome='exhausted',
+                            log=logger,
                         )
-                        if applied:
-                            schedule_person_voice_learning_retry(uid, conv_id)
-                            if len(identity_refreshed) < 128:
-                                identity_refreshed.add(conv_id)
-                        else:
-                            deleted_conversations.add(conv_id)
-                            logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
-                            record_fallback(
-                                component='pusher',
-                                from_mode='private_cloud_sync',
-                                to_mode='drop',
-                                reason='policy',
-                                outcome='exhausted',
-                                log=logger,
-                            )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))
@@ -1067,7 +1103,8 @@ async def _run_websocket_util_trigger(
                 for conv_id in list(record_close_requests):
                     retire_record_close(conv_id)
             for conv_id in record_close_requests.intersection(record_barrier.failed_recordings):
-                retire_record_close(conv_id)
+                if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    retire_record_close(conv_id)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -1142,11 +1179,17 @@ async def _run_websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in ready_batches)
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
+                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                        continue
                     if await record_barrier.finish_recording(conv_id):
                         retire_record_close(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
+        for conv_id in list(audio_projection.close_debt):
+            for _ in range(PROJECTION_RETRY_BUDGET + 1):
+                if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    break
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -1269,14 +1312,16 @@ async def _run_websocket_util_trigger(
         # buffered in private_cloud_sync_buffer, pinned verbatim into one
         # manifest when the window commits at a flush boundary.
         durable_window_frames: List[Dict[str, Any]] = []
+        private_cloud_window_opened_at: Optional[float] = None
         durable_tail_has_receipt = False
         durable_commit_unresolved = False
+        pcm_admission_cancelled = False
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
         audio_timeline_last_end: Optional[float] = None
 
-        async def commit_durable_window() -> Optional[AudioReceipt]:
+        async def commit_durable_window(window: RetainedPcmWindow, *, tail: bool = False) -> Optional[AudioReceipt]:
             """Commit the buffered window as one custody pair (see _commit_durable_audio_window)."""
             nonlocal durable_tail_has_receipt
             nonlocal durable_commit_unresolved
@@ -1285,16 +1330,17 @@ async def _run_websocket_util_trigger(
             def committed():
                 nonlocal durable_tail_has_receipt
                 durable_tail_has_receipt = True
-                _reset_private_cloud_buffer()
-                durable_window_frames.clear()
+                refused_windows.popleft()
+                window.payload.clear()
+                window.frames.clear()
 
             try:
                 return await _commit_durable_audio_window(
                     uid=uid,
-                    payload=bytes(private_cloud_sync_buffer),
-                    frames=list(durable_window_frames),
-                    conversation_id=current_conversation_id,
-                    start=private_cloud_chunk_start_time,
+                    payload=bytes(window.payload),
+                    frames=list(window.frames),
+                    conversation_id=window.conversation_id,
+                    start=window.start,
                     sample_rate=sample_rate,
                     custody_root=custody_root,
                     protection_level=cached_protection_level,
@@ -1305,6 +1351,8 @@ async def _run_websocket_util_trigger(
                     budget=audio_budget,
                     queue_wait_timeout=queue_wait_timeout,
                     on_committed=committed,
+                    framed=framed_audio,
+                    tail=tail,
                 )
             except BaseException:
                 # A failed/cancelled dispatch can have committed remotely. The
@@ -1313,14 +1361,59 @@ async def _run_websocket_util_trigger(
                     durable_commit_unresolved = True
                 raise
 
-        async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
+        async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False, tail: bool = False) -> None:
+            nonlocal durable_window_frames, pcm_admission_wait_active, pcm_admission_cancelled
+            if current_conversation_id in deleted_conversations:
+                # A gone-owner result is terminal for both encoded projection
+                # and future raw custody windows in this socket.
+                audio_budget.release(len(private_cloud_sync_buffer))
+                _reset_private_cloud_buffer()
+                durable_window_frames.clear()
+                if not durable_audio:
+                    return
             if durable_audio:
                 if durable_commit_unresolved:
                     raise RuntimeError('custody commit unresolved; producer fence retained')
-                # Custody never drops a zero run: it is captured audio, and
-                # the projection reads it back exactly like any other frame.
-                if private_cloud_sync_enabled and len(private_cloud_sync_buffer) > 0:
-                    await commit_durable_window()
+                if private_cloud_sync_enabled and private_cloud_sync_buffer:
+                    # Move the originals, without copying or releasing their
+                    # per-socket byte charge. A refused conversation/size/gap
+                    # boundary cannot reset or rebind this retained window.
+                    refused_windows.append(
+                        RetainedPcmWindow(
+                            private_cloud_sync_buffer,
+                            durable_window_frames,
+                            current_conversation_id,
+                            private_cloud_chunk_start_time,
+                        )
+                    )
+                    _reset_private_cloud_buffer()
+                    durable_window_frames = []
+                while refused_windows:
+                    window = refused_windows[0]
+                    if window.conversation_id in deleted_conversations:
+                        # Apply the existing gone-owner disposition to each
+                        # retained owner, even after the socket switches owner.
+                        audio_budget.release(len(window.payload))
+                        refused_windows.popleft()
+                        window.payload.clear()
+                        window.frames.clear()
+                        continue
+                    if await commit_durable_window(refused_windows[0], tail=tail) is None:
+                        if not tail:
+                            # Stop intake on the FIRST refusal: another PCM
+                            # window must never consume the socket's remaining
+                            # byte budget while pod admission is full. Sleep
+                            # is cancellable; tails and metadata never wait.
+                            pcm_admission_wait_active = True
+                            try:
+                                await asyncio.sleep(0.05)
+                            except asyncio.CancelledError:
+                                pcm_admission_cancelled = True
+                                raise
+                            finally:
+                                pcm_admission_wait_active = False
+                            continue
+                        break  # Tail refusal leaves the producer unacknowledged.
                 return
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
                 return
@@ -1381,8 +1474,10 @@ async def _run_websocket_util_trigger(
         def _reset_private_cloud_buffer() -> None:
             nonlocal private_cloud_sync_buffer
             nonlocal private_cloud_chunk_start_time
+            nonlocal private_cloud_window_opened_at
             private_cloud_sync_buffer = bytearray()
             private_cloud_chunk_start_time = None
+            private_cloud_window_opened_at = None
 
         async def finish_receive() -> None:
             nonlocal inline_finish_conversation, websocket_active, websocket_close_code
@@ -1397,8 +1492,12 @@ async def _run_websocket_util_trigger(
             tail_committed = False
             durable_tail_has_receipt = False
             try:
-                await _queue_private_cloud_chunk()
-                tail_committed = durable_audio
+                # Cancelling admission leaves the unacknowledged window for
+                # WAL replay. Never start storage (or ACK a departed peer) in
+                # this cancellation cleanup, which must not wait on GCS retries.
+                if not pcm_admission_cancelled:
+                    await _queue_private_cloud_chunk(tail=True)
+                    tail_committed = durable_audio and not refused_windows
             except ProjectionQueueWaitTimeout:
                 observation.reason = 'queue_wait_timeout'
                 websocket_close_code = 1011
@@ -1422,6 +1521,20 @@ async def _run_websocket_util_trigger(
                         # queue delivery failed. Keep the producer token, but
                         # do not permanently poison retained custody.
                         record_barrier.hold_recording(current_conversation_id, tail_committed=durable_tail_has_receipt)
+            finally:
+                # Every unresolved owner must stay fenced on every exit,
+                # including a prior owner's storage failure, cancellation or
+                # ACK departure before later retained windows are attempted.
+                # A receipt for A can never certify the buffered tail of B.
+                if durable_audio:
+                    if refused_windows:
+                        tail_committed = False
+                    for window in refused_windows:
+                        if window.conversation_id:
+                            record_barrier.hold_recording(window.conversation_id)
+                    if private_cloud_sync_buffer and current_conversation_id:
+                        tail_committed = False
+                        record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
             if (
@@ -1455,7 +1568,7 @@ async def _run_websocket_util_trigger(
 
         async def process_frame(data: bytes) -> None:
             nonlocal conversation_generation, custody_sequence
-            nonlocal audiobuffer, trigger_audiobuffer, private_cloud_chunk_start_time
+            nonlocal audiobuffer, trigger_audiobuffer, private_cloud_chunk_start_time, private_cloud_window_opened_at
             nonlocal current_conversation_id, audio_timeline_last_end
             try:
                 header_type = frame_header(data)
@@ -1586,6 +1699,7 @@ async def _run_websocket_util_trigger(
                 # Parse: header(4) | timestamp(8 bytes double) | audio_data
                 buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                 audio_data = data[12:]
+                run_gap_before = False
 
                 if audio_timeline_v2:
                     # v2: the timestamp is the projected start of this
@@ -1599,6 +1713,7 @@ async def _run_websocket_util_trigger(
                     run_end = run_start + run_seconds
                     if audio_timeline_last_end is not None:
                         delta = run_start - audio_timeline_last_end
+                        run_gap_before = delta > 0.002
                         if delta > AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
                             # skip_if_silent: audio for this conversation
                             # has arrived beyond the gap, so a later
@@ -1606,8 +1721,9 @@ async def _run_websocket_util_trigger(
                             # flush stores (or drops) — the only flush
                             # where a skipped all-zero run is provably
                             # interior, never the recording's last.
-                            await _queue_private_cloud_chunk(skip_if_silent=True)
-                            _reset_private_cloud_buffer()
+                            if not framed_audio:
+                                await _queue_private_cloud_chunk(skip_if_silent=True)
+                                _reset_private_cloud_buffer()
                         elif delta < -AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
                             # Any overlap of already-accepted audio is
                             # replay evidence for this conversation: the
@@ -1634,7 +1750,7 @@ async def _run_websocket_util_trigger(
                             # an accepted range are never re-stored; the
                             # frame's genuinely new tail past the accepted
                             # end still continues the run from there.
-                            if _v2_overlap_conflict(
+                            if v2_overlap_conflict(
                                 run_start,
                                 overlap_bytes,
                                 audio_data,
@@ -1642,6 +1758,7 @@ async def _run_websocket_util_trigger(
                                 private_cloud_chunk_start_time=private_cloud_chunk_start_time,
                                 private_cloud_sync_buffer=private_cloud_sync_buffer,
                                 v2_flushed_runs=v2_flushed_runs,
+                                frames=durable_window_frames if framed_audio else None,
                             ):
                                 OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL.inc()
                                 logger.warning(
@@ -1668,20 +1785,37 @@ async def _run_websocket_util_trigger(
                 # id, committed under 'unlinked' at the next flush boundary);
                 # the window itself commits in _queue_private_cloud_chunk.
                 if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
+                    if storage_pcm_budget.limit and len(durable_window_frames) >= MAX_PCM_WINDOW_FRAMES:
+                        await _queue_private_cloud_chunk()
+                        _reset_private_cloud_buffer()
+                    if (
+                        framed_audio
+                        and private_cloud_sync_buffer
+                        and (
+                            len(private_cloud_sync_buffer) + len(audio_data)
+                            > min(16 * 1024 * 1024, sample_rate * 2 * 60)
+                            or len(durable_window_frames) >= 4096
+                            or time.monotonic() - (private_cloud_window_opened_at or time.monotonic()) >= 60
+                        )
+                    ):
+                        await _queue_private_cloud_chunk()
+                        _reset_private_cloud_buffer()
                     if current_conversation_id:
                         with observe_work('record_begin'):
                             await record_barrier.begin_recording(current_conversation_id)
                     if private_cloud_chunk_start_time is None:
                         # Use timestamp from first buffer of this 5-second chunk
                         private_cloud_chunk_start_time = buffer_start_timestamp
+                        private_cloud_window_opened_at = time.monotonic()
 
-                    frame_checkpoint, stored_capture = _append_window_run(
+                    frame_checkpoint, stored_capture = append_window_run(
                         durable=durable_audio,
                         sequence=custody_sequence,
                         buffer=private_cloud_sync_buffer,
                         audio_data=audio_data,
                         start=buffer_start_timestamp,
                         budget=audio_budget,
+                        gap_before=run_gap_before,
                     )
                     custody_sequence += 1
                     if not stored_capture:
@@ -1796,7 +1930,10 @@ async def _run_websocket_util_trigger(
             has_record_debt = (
                 record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
             )
-            if (has_record_debt or record_barrier.close_retry_at) and retain_closed_record_drain(private_worker):
+            if (has_record_debt or record_barrier.close_retry_at) and retain_closed_record_drain(
+                private_worker,
+                on_capacity=lambda: abandon_evicted_record_drain(private_worker, record_barrier, record_futures),
+            ):
                 bg_main_tasks.remove(private_worker)
         else:
             with observe_work('drain'):
@@ -1804,13 +1941,14 @@ async def _run_websocket_util_trigger(
 
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
-        receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
-        bg_main_tasks = [
-            create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
-            create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
-            create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
-            create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
-        ]
+        with record_futures.scope():
+            receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
+            bg_main_tasks = [
+                create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
+                create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
+                create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
+                create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
+            ]
 
         exit_result = await supervise_tasks(
             receive_task=receive_task,
@@ -1843,9 +1981,10 @@ async def _run_websocket_util_trigger(
     except asyncio.CancelledError:
         websocket_close_code = 1006
         observation.reason = 'cancelled'
-        if durable_queue.capacity_wait_active and receive_task is not None:
-            # Only interrupt the capacity wait, after custody and slot ownership
-            # are known. Let normal receive cleanup and the same worker drain.
+        if receive_task is not None and (durable_queue.capacity_wait_active or pcm_admission_wait_active):
+            # Interrupt projection capacity after custody, or PCM admission
+            # before submission. A cancelled admission pause keeps its tail
+            # unacknowledged for WAL replay without starting storage in cleanup.
             receive_task.cancel()
             try:
                 await receive_task
@@ -1863,6 +2002,7 @@ async def _run_websocket_util_trigger(
 
         all_to_cancel = [t for t in bg_main_tasks if not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
+        await audio_projection.persist_pending()
 
         if application_failed and observation.reason == 'peer':
             observation.reason = 'application_error'
@@ -1880,6 +2020,7 @@ async def _run_websocket_util_trigger(
 
 
 @router.websocket("/v1/trigger/listen")
+@with_session_census('pusher')
 async def websocket_endpoint_trigger(
     websocket: WebSocket,
     uid: str,

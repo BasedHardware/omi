@@ -33,6 +33,7 @@ from run_checks import (
     detect_platform,
     execute_checks,
     execute_parallel_checks,
+    head_blob,
     load_durations,
     load_manifest,
     resolve_check_selections,
@@ -281,6 +282,43 @@ class ManifestContractTests(unittest.TestCase):
             validate_manifest(invalid, REPO_ROOT),
         )
 
+    def test_explicit_trigger_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths, so
+        # a real trigger path can be absent from the working tree. Validation
+        # must accept anything tracked at HEAD, or every sparse checkout fails
+        # pre-push at manifest resolution.
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        tracked_but_sparse = "web/app/Dockerfile"
+        malformed = Check(
+            first.id,
+            first.command,
+            (*first.triggers, tracked_but_sparse),
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "explicit trigger path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
+    def test_command_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        malformed = Check(
+            first.id,
+            ("python3", "mcp/tests/test_date_filters.py"),
+            first.triggers,
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "command path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
     def test_workflow_checks_are_registered_or_exempt(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         registered = registered_script_paths()
@@ -340,11 +378,17 @@ class ManifestContractTests(unittest.TestCase):
         offenders: list[str] = []
         for check in manifest.checks:
             for relative in interpreter_invoked_test_modules(check.command):
+                # Cone-mode sparse checkouts keep out-of-cone paths in the
+                # index without materialising them; read disk first, HEAD blob
+                # second, and only report "does not exist" when neither has it.
                 path = REPO_ROOT / relative
-                if not path.exists():
+                source = (
+                    path.read_text(encoding="utf-8") if path.is_file() else head_blob(REPO_ROOT, relative)
+                )
+                if source is None:
                     offenders.append(f"{check.id}: {relative} does not exist")
                     continue
-                reason = non_self_running_reason(path.read_text(encoding="utf-8"))
+                reason = non_self_running_reason(source)
                 if reason:
                     offenders.append(f"{check.id}: {relative} {reason}")
         self.assertEqual(offenders, [], f"manifest test commands that execute no cases: {offenders}")
@@ -417,19 +461,28 @@ class RunnerBehaviorTests(unittest.TestCase):
         checks: list[dict[str, object]],
         *,
         changed_files: tuple[str, ...] = ("backend/example.py",),
+        append_trace: bool = True,
     ) -> tuple[Path, Path]:
         """Create a tiny committed repo that exercises the real runner CLI."""
         scripts = root / "checks"
         scripts.mkdir(parents=True)
         runs_file = root / "runs.txt"
+        run_markers = root / "run-markers"
+        run_markers.mkdir()
         manifest_lines = ["checks:"]
         for spec in checks:
             check_id = str(spec["id"])
             script = scripts / f"{check_id}.py"
             exit_code = int(spec.get("exit_code", 0))
+            trace = (
+                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                if append_trace
+                else ""
+            )
             script.write_text(
                 "from pathlib import Path\n"
-                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                f"Path({json.dumps(str(run_markers / check_id))}).touch()\n"
+                f"{trace}"
                 f"raise SystemExit({exit_code})\n",
                 encoding="utf-8",
             )
@@ -546,9 +599,13 @@ class RunnerBehaviorTests(unittest.TestCase):
                     {"id": "body-first", "requires_pr_body": True, "exit_code": 3},
                     {"id": "body-second", "requires_pr_body": True, "exit_code": 4},
                 ],
+                append_trace=False,
             )
             result = self._run_cli(root, manifest, changed, "--metadata-only")
-            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+            # Shared append traces can lose an entry on Windows. Independent
+            # receipts prove each parallel check ran; serial order tests below
+            # still assert the append trace, and result assertions stay intact.
+            runs = [path.name for path in (root / "run-markers").iterdir()]
 
         self.assertEqual(result.returncode, 1)
         # Python checks may run in parallel, so only the set of runs is fixed; the summary stays in manifest order.
@@ -1452,13 +1509,16 @@ class DeferredMarkerTests(unittest.TestCase):
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
         marker = "TO" + "DO"
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT, prefix=".manifest-marker-") as tmp:
-            root = Path(tmp)
-            candidate = root / "fixture.txt"
-            changed = root / "changed.txt"
-            relative = candidate.relative_to(REPO_ROOT).as_posix()
-            changed.write_text(f"{relative}\n", encoding="utf-8")
-
+        # The fixture must sit in the repository (the guard diffs repo-relative paths), but as single files, never
+        # a temporary directory: manifest checks now run in parallel, and a directory that vanishes mid-walk
+        # crashes another check's rglob (agents-md-lean FileNotFoundError, 2026-11-01). A vanished file does not,
+        # wherever TMPDIR points.
+        with tempfile.NamedTemporaryFile(dir=REPO_ROOT, prefix=".manifest-marker-", suffix=".txt", delete=False) as handle:
+            candidate = Path(handle.name)
+        with tempfile.NamedTemporaryFile(prefix="manifest-marker-changed-", suffix=".txt", delete=False) as handle:
+            changed = Path(handle.name)
+        try:
+            changed.write_text(f"{candidate.relative_to(REPO_ROOT).as_posix()}\n", encoding="utf-8")
             candidate.write_text(f"// {marker}: missing owner\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 1)
@@ -1466,6 +1526,9 @@ class DeferredMarkerTests(unittest.TestCase):
             candidate.write_text(f"// {marker}(#9448): owned follow-up\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 0)
+        finally:
+            candidate.unlink(missing_ok=True)
+            changed.unlink(missing_ok=True)
 
     def test_marker_guard_ignores_product_text_and_reformatted_existing_comments(self) -> None:
         module = load_deferred_marker_module()
@@ -1554,24 +1617,101 @@ class ParallelRunnerTests(unittest.TestCase):
 
     def test_checks_finished_by_the_first_failure_keep_their_real_result(self) -> None:
         """Luna r1 on #24232: a pass or a second failure that finished alongside the first must not read CANCELLED."""
+        self.assert_finished_checks_keep_their_real_result(parent_start_delay=0)
+
+    def test_finished_checks_keep_their_result_when_parent_is_delayed_after_launch(self) -> None:
+        """The readiness handshake survives a parent descheduled during launch."""
+        self.assert_finished_checks_keep_their_real_result(parent_start_delay=0.5)
+
+    def test_completed_results_survive_a_failure_before_the_first_poll(self) -> None:
+        """Exercise an actual early exit without the ready/release sleep hook."""
+        real_popen = subprocess.Popen
+        processes = {}
+        observed_before_poll = []
+        quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [self.script(root, name, body) for name, body in quick.items()]
+            checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
+
+            def start(command, *args, **kwargs):
+                process = real_popen(command, *args, **kwargs)
+                name = Path(command[1]).stem if len(command) > 1 else None
+                if name in quick:
+                    processes[name] = process
+                if name in {"bad", "slow"}:
+                    # bad exits before its siblings launch; before returning
+                    # the last launch, all quick exits must already be visible.
+                    required = ("bad",) if name == "bad" else tuple(quick)
+                    deadline = time.monotonic() + 120
+                    while (
+                        not all(key in processes and processes[key].poll() is not None for key in required)
+                        and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.02)
+                    if name == "slow":
+                        observed_before_poll.append(all(processes[key].poll() is not None for key in quick))
+                return process
+
+            with patch("run_checks.subprocess.Popen", start):
+                result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
+            self.assertEqual(observed_before_poll, [True])
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS fine", stdout)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("CANCELLED fine", stdout)
+            self.assertNotIn("CANCELLED also-bad", stdout)
+            self.assertIn("Manifest checks failed: bad, also-bad", stderr)
+
+    def assert_finished_checks_keep_their_real_result(self, *, parent_start_delay: float) -> None:
         real_sleep = time.sleep
+        real_popen = subprocess.Popen
+        processes = {}
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
             checks = [
-                self.script(root, name, f"import pathlib\npathlib.Path('{name}.done').touch()\n{body}\n")
+                self.script(
+                    root,
+                    name,
+                    "import pathlib, time\n"
+                    f"time.sleep({parent_start_delay if name == 'also-bad' else 0})\n"
+                    f"pathlib.Path('{name}.done').touch()\n"
+                    "deadline = time.monotonic() + 120\n"
+                    "while not pathlib.Path('release').exists() and time.monotonic() < deadline: time.sleep(0.01)\n"
+                    "if not pathlib.Path('release').exists(): raise SystemExit(97)\n"
+                    f"{body}\n",
+                )
                 for name, body in quick.items()
             ]
             checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
 
+            def start(command, *args, **kwargs):
+                process = real_popen(command, *args, **kwargs)
+                name = Path(command[1]).stem if len(command) > 1 else None
+                if name in quick:
+                    processes[name] = process
+                if name == "bad":
+                    # Before the ready/release barrier this lets bad exit before
+                    # the first poll, while also-bad has not written its marker.
+                    real_sleep(parent_start_delay)
+                return process
+
             def wait_for_quick_checks(_seconds: float) -> None:
-                # Hold the poll until all three quick checks have exited, so one scan sees them together.
+                # No quick child can exit before this first sleep/poll barrier.
+                # Latch readiness, release them together, then observe actual exit.
                 deadline = time.monotonic() + 120  # interpreter startup alone took >30 s at load 140 on m5
                 while not all((root / f"{name}.done").exists() for name in quick) and time.monotonic() < deadline:
                     real_sleep(0.02)
+                (root / "release").touch()
+                while (
+                    not all(name in processes and processes[name].poll() is not None for name in quick)
+                    and time.monotonic() < deadline
+                ):
+                    real_sleep(0.02)
                 real_sleep(0.5)
 
-            with patch("run_checks.time.sleep", wait_for_quick_checks):
+            with patch("run_checks.subprocess.Popen", start), patch("run_checks.time.sleep", wait_for_quick_checks):
                 result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
             self.assertEqual(result, 1)
             self.assertIn("<== PASS fine", stdout)

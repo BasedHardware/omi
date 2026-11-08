@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "बॅटरी १५% च्या वर",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "आपल्या डिव्हाइसमध्ये १५% बॅटरी आहे याची खात्री करा।",
+    "firmwareBatteryRequirement": "बॅटरी ३०% च्या वर",
+    "firmwareEnsureBattery": "आपल्या डिव्हाइसमध्ये ३०% बॅटरी आहे याची खात्री करा।",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "अपडेट अयशस्वी",
     "firmwareUpdateFailedMessage": "अपडेट पूर्ण झाले नाही. तुमचे डिव्हाइस अजूनही सध्याच्या फर्मवेअरवर आहे आणि वापरण्यास सुरक्षित आहे. ते चार्ज करून फोनजवळ ठेवा, मग पुन्हा प्रयत्न करा.",
     "firmwareDownloadFailedMessage": "अपडेट डाउनलोड होऊ शकले नाही आणि तुमच्या डिव्हाइसमध्ये बदल झाला नाही. इंटरनेट कनेक्शन तपासा, मग पुन्हा प्रयत्न करा.",
-    "firmwareBatteryTooLow": "बॅटरी {level}% आहे. अपडेट करण्यापूर्वी डिव्हाइस किमान 15% चार्ज करा.",
+    "firmwareBatteryUnavailable": "बॅटरीची पातळी अद्याप उपलब्ध नाही. थोडा वेळ थांबा आणि असेच राहिल्यास पुन्हा कनेक्ट करा.",
+    "firmwareBatteryTooLow": "बॅटरी {level}% आहे. अपडेट करण्यापूर्वी डिव्हाइस किमान 30% चार्ज करा.",
     "startUpdate": "अपडेट सुरू करा",
     "otaNotSupported": "हे फर्मवेअर Wi-Fi द्वारे अपडेट करता येत नाही.",
     "otaConnectFailed": "{deviceName} शी कनेक्ट होऊ शकले नाही. ते चालू आणि जवळ ठेवा, मग पुन्हा प्रयत्न करा.",
@@ -11284,13 +11282,8 @@
     "reviewChangesSectionTerms": "नावे आणि संज्ञा",
     "reviewChangesSectionTitles": "शीर्षके आणि सारांश",
     "reviewChangesSectionOther": "इतर बदल",
-    "reviewChangeConversationCount": "{count, plural, =1{1 संभाषण} other{{count} संभाषणे}}",
-    "reviewChangePlaceCount": "{count, plural, =1{1 ठिकाण} other{{count} ठिकाणे}}",
-    "reviewChangeShowAll": "सर्व {count} दाखवा",
     "reviewChangeUndoAll": "सर्व पूर्ववत करा",
-    "reviewChangeSeeEvidence": "पुरावा पहा",
     "reviewChangeViewConversation": "संभाषण पहा",
-    "reviewChangeViewTask": "कार्य पहा",
     "reviewChangesUndoPartial": "पूर्ववत करता आले नाहीत: {failed}/{total}. पुन्हा प्रयत्न करा.",
     "reviewShowMore": "आणखी दाखवा",
     "entityKeptCurrent": "Omi द्वारे अद्ययावत ठेवलेले",
@@ -11313,7 +11306,6 @@
     "tasksGroupByProject": "प्रोजेक्टनुसार गटबद्ध करा",
     "tasksGroupByDate": "तारखेनुसार गटबद्ध करा",
     "dreamReportTitle": "Dream अहवाल",
-    "dreamReportShadowBanner": "पूर्वावलोकन मोड: Dream काय बदलले असते ते दाखवते, पण तुमच्या खात्यात अजून काहीही बदलत नाही.",
     "dreamReportLiveBanner": "Dream हे बदल स्वतःच लागू करते. कोणताही बदल अलीकडील बदल मध्ये पूर्ववत करा.",
     "dreamReportRunNow": "आता चालवा",
     "dreamReportRunLimit": "आज एकही मॅन्युअल रन शिल्लक नाही",
@@ -11328,20 +11320,14 @@
     "dreamReportFailed": "अयशस्वी ({error})",
     "dreamReportTimedOut": "वेळमर्यादेवर थांबले",
     "dreamReportNothingFound": "दुरुस्त करण्यासारखे काही नाही",
-    "dreamReportStats": "{records} आयटम वाचले · {tokens} टोकन",
     "dreamReportWouldFix": "दुरुस्त केले असते",
     "dreamReportFixed": "दुरुस्त केले",
     "dreamReportWouldAsk": "तुम्हाला विचारले असते",
     "dreamReportWouldSuggestTasks": "कामे सुचवली असती",
     "dreamReportLearnedWords": "शिकलेले शब्द",
-    "dreamReportFeedback": "Omi टीमला कळवले",
     "dreamReportDeletedItem": "हटवलेला आयटम",
-    "dreamReportPasses": "आज {count}/{limit} पास",
-    "dreamReportQueued": "{count, plural, =0{कोणताही बदल प्रतीक्षेत नाही} =1{1 बदल प्रतीक्षेत} other{{count} बदल प्रतीक्षेत}}",
     "dreamReportRunsLeft": "{count, plural, =1{आज 1 मॅन्युअल रन शिल्लक} other{आज {count} मॅन्युअल रन शिल्लक}}",
     "dreamReportFound": "{fixes, plural, =1{1 दुरुस्ती} other{{fixes} दुरुस्त्या}} · {asks, plural, =1{1 सूचना} other{{asks} सूचना}}",
-    "dreamReportDropped": "{count, plural, =1{1 जुना बदल वगळला} other{{count} जुने बदल वगळले}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयतेसाठी 1 अहवाल रोखला} other{गोपनीयतेसाठी {count} अहवाल रोखले}}",
     "speakerTagPromptExcerptSaved": "या उताऱ्यासाठी उत्तर जतन केले.",
     "pinPersonDescription": "पिन केलेले लोक तुमच्या लोक यादीच्या वर राहतात आणि स्वच्छता त्यांना काढत नाही.",
     "chatAppsProblemFailed": "काहीतरी चूक झाली. पुन्हा प्रयत्न करा.",
@@ -11541,6 +11527,9 @@
     "paywallTrialSaveAmount": "{amount} वाचवा",
     "paywallTrialCta": "{price} मध्ये सुरू करा",
     "paywallTrialCancelNote": "कधीही रद्द करा. कोणतेही शुल्क नाही, कोणतीही दंडात्मक कारवाई नाही.",
+    "paywallMonthlyFallbackTitle": "पूर्ण वर्षासाठी अजून तयार नाही?",
+    "paywallMonthlyFallbackTrialBody": "त्याऐवजी मासिकने सुरुवात करा. तेच {days} दिवस मोफत, नंतर दरमहा {price}. कधीही रद्द करा.",
+    "paywallMonthlyFallbackTrialCta": "मासिक मोफत वापरून पहा",
     "paywallTrialStarted": "तुमची Omi Pro ची {days} दिवसांची मोफत चाचणी सुरू झाली आहे.",
     "paywallCancelAnytime": "कधीही रद्द करा.",
     "connectAnAgent": "एजंट कनेक्ट करा",
@@ -11552,9 +11541,6 @@
     "syncCardTranscribingAmount": "{amount} चे संभाषणांमध्ये रूपांतर होत आहे",
     "syncCardTranscribedOf": "{done} / {total} पूर्ण · तुम्ही ही स्क्रीन सोडू शकता",
     "syncCardReadyAmount": "{amount} सिंकसाठी तयार",
-    "syncStepLabelDownload": "Omi → फोन",
-    "syncStepLabelUpload": "अपलोड",
-    "syncStepLabelTranscribe": "ट्रान्सक्रिप्शन",
     "syncDetailsTitle": "सिंक तपशील",
     "syncDetailsRightNow": "आत्ता",
     "syncDetailsYourOmi": "तुमचा Omi",
@@ -11562,7 +11548,6 @@
     "syncDetailsWaitingOnOmi": "Omi वर प्रतीक्षेत",
     "syncDetailsWaitingOnPhone": "या फोनवर प्रतीक्षेत",
     "syncDetailsTranscribing": "Omi वर ट्रान्सक्राइब होत आहे",
-    "syncDetailsForSupport": "सपोर्टसाठी",
     "syncDetailsAudioFiles": "ऑडिओ फाइल्स",
     "syncDetailsServerJobs": "सर्व्हर जॉब्स (पूर्ण / एकूण)",
     "syncDetailsCopy": "सपोर्टसाठी तपशील कॉपी करा",
@@ -11878,17 +11863,13 @@
     "episodeContinues": "“{title}” सुरू आहे",
     "episodeLiveSince": "· {time} पासून",
     "episodeNotesStartWithTranscript": "अंतिम ट्रान्स्क्रिप्ट आल्यावर नोट्स सुरू होतील.",
-    "episodeOnDeviceNotesFootnote": "तुम्ही बोलत असताना तुमच्या फोनवरच तयार होतात. संपूर्ण नोट्स अंतिम ट्रान्स्क्रिप्टसोबत येतील.",
-    "episodeOnThisPhone": "या फोनवर",
     "livePreviewBehind": "अंतिम ट्रान्स्क्रिप्ट सुमारे {duration} मागे आहे",
     "livePreviewCatchingUp": "अंतिम ट्रान्स्क्रिप्ट पोहोचत आहे",
     "livePreviewNoEngineBody": "तुम्ही बोलल्याच्या एक-दोन मिनिटांनी तुमचे शब्द येथे दिसतील.",
-    "livePreviewNoEngineTitle": "सुरक्षित रेकॉर्ड होत आहे",
     "livePreviewOnPhoneDivider": "आत्ताच, या फोनवर",
     "livePreviewTurnOnLiveText": "लाइव्ह मजकूर सुरू करा",
     "deviceCatchUpOnItsWay": "येत आहे",
     "deviceCatchUpWhenOnline": "ऑनलाइन झाल्यावर",
-    "onTheWayCatchingUp": "{duration} प्रक्रियेत आहे",
     "onTheWayUploadsByItself": "आपोआप अपलोड होते. संभाषण आल्याबरोबर भरत जातात.",
     "onTheWayUploadsWhenOnline": "तुम्ही पुन्हा ऑनलाइन आल्यावर आपोआप अपलोड होते. संभाषण आल्याबरोबर भरत जातात.",
     "onTheWayDayUploading": "अपलोड होत आहे",
@@ -11896,10 +11877,6 @@
     "onTheWayDayQueued": "रांगेत आहे",
     "onTheWayNoDate": "तारीख नाही",
     "onTheWayFootnote": "अपयशी ठरलेली रेकॉर्डिंग पार्श्वभूमीमध्ये पुन्हा प्रयत्न करत राहतात. आम्ही लिप्यंतरित करू न शकणारे मजकूर आपोआप आम्हाला नोंदवला जातो.",
-    "onTheWayDetailsForSupport": "समर्थनासाठी तपशील",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
-    "homeNoiseFoldShow": "दाखवा",
-    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}",
     "deleteLocalRecordingsWarning": "{count, plural, =1{१ रेकॉर्डिंग अजून अपलोड झालेले नाही. आता हटवल्यास ते गमवाल — अपलोड पूर्ण होईपर्यंत अ‍ॅप उघडे ठेवा.} other{{count} रेकॉर्डिंग अजून अपलोड झालेली नाहीत. आता हटवल्यास ती गमवाल — अपलोड पूर्ण होईपर्यंत अ‍ॅप उघडे ठेवा.}}",
     "deleteConfirmGraceSubtitle": "जाण्यापूर्वी तुमच्या डेटाचे काय होईल ते पाहा.",
     "deletePauseConfirmation": "Omi थांबवले आहे. कधीही रेकॉर्डिंग पुन्हा सुरू करा.",
@@ -11944,9 +11921,283 @@
     "chatAppsWaitingMessageIn": "{app} अॅपमध्ये मेसेज पाठवा. Omi ला तो मिळताच ही स्क्रीन अपडेट होईल.",
     "chatAppsCodeExpiredMessageIn": "नवीन कोड मिळवा आणि तो {app} अॅपमधून पाठवा.",
     "episodeWritingNotes": "नोट्स लिहीत आहे…",
+    "homeStepTranscribing": "ट्रान्सक्राइब होत आहे…",
+    "homeRecordingsCount": "{count, plural, one{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
     "episodeWritingNotesDetail": "आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.",
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
     "liveAudioSaved": "{duration} जतन केले",
-    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील."
+    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.",
+    "searchNoiseFilter": "लहान क्लिप",
+    "reviewChangeConversationCount": "{count, plural, =1{1 संभाषण} other{{count} संभाषणे}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 ठिकाण} other{{count} ठिकाणे}}",
+    "reviewChangeShowAll": "सर्व {count} दाखवा",
+    "reviewChangeSeeEvidence": "पुरावा पहा",
+    "reviewChangeViewTask": "कार्य पहा",
+    "dreamReportShadowBanner": "पूर्वावलोकन मोड: Dream काय बदलले असते ते दाखवते, पण तुमच्या खात्यात अजून काहीही बदलत नाही.",
+    "dreamReportStats": "{records} आयटम वाचले · {tokens} टोकन",
+    "dreamReportFeedback": "Omi टीमला कळवले",
+    "dreamReportPasses": "आज {count}/{limit} पास",
+    "dreamReportQueued": "{count, plural, =0{कोणताही बदल प्रतीक्षेत नाही} =1{1 बदल प्रतीक्षेत} other{{count} बदल प्रतीक्षेत}}",
+    "dreamReportDropped": "{count, plural, =1{1 जुना बदल वगळला} other{{count} जुने बदल वगळले}}",
+    "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयतेसाठी 1 अहवाल रोखला} other{गोपनीयतेसाठी {count} अहवाल रोखले}}",
+    "syncStepLabelDownload": "Omi → फोन",
+    "syncStepLabelUpload": "अपलोड",
+    "syncStepLabelTranscribe": "ट्रान्सक्रिप्शन",
+    "syncDetailsForSupport": "सपोर्टसाठी",
+    "episodeOnDeviceNotesFootnote": "तुम्ही बोलत असताना तुमच्या फोनवरच तयार होतात. संपूर्ण नोट्स अंतिम ट्रान्स्क्रिप्टसोबत येतील.",
+    "episodeOnThisPhone": "या फोनवर",
+    "livePreviewNoEngineTitle": "सुरक्षित रेकॉर्ड होत आहे",
+    "onTheWayCatchingUp": "{duration} प्रक्रियेत आहे",
+    "onTheWayDetailsForSupport": "समर्थनासाठी तपशील",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
+    "homeNoiseFoldShow": "दाखवा",
+    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}",
+    "speakerWholeRecording": "संपूर्ण रेकॉर्डिंगवर लागू करा",
+    "speakerSelectionChanged": "वक्ता बदलला आहे. ओळी पुन्हा निवडा.",
+    "speakerRenameIssue": "{reason, select, limit{रेकॉर्डिंग खूप मोठे आहे. एका संभाषणात कमी ओळी निवडा.} partial{काही ओळी जतन झाल्या. उरलेल्या ओळी निवडून पुन्हा प्रयत्न करा.} other{काही ओळी जतन झाल्या. उरलेल्या ओळी निवडून पुन्हा प्रयत्न करा.}}",
+    "speakerRecordingCoverage": "{state, select, scope{या आवाजाच्या इतर ओळी (रेकॉर्डिंगची व्याप्ती अपुष्ट)} other{{count, plural, =1{फक्त उपलब्ध संभाषणांतील 1 ओळींची नावे बदलली.} other{फक्त उपलब्ध संभाषणांतील {count} ओळींची नावे बदलली.}}}}",
+    "episodeFinishingUp": "पूर्ण करत आहे…",
+    "buildAndShareApp": "आपले सुधारित अ‍ॅप तयार करा आणि शेयर करा",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ सदस्य आणि अधिक.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "Omi मध्ये, आम्ही आपल्या गोपनीयतेची संरक्षण करण्यासाठी प्रतिबद्ध आहोत. हे पृष्ठ आपल्याला आपल्या डेटा कसा संग्रहित आणि वापरला जातो याचे नियंत्रण करण्यास अनुमती देते.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "आपल्या डेटा मजबूत एन्क्रिप्शनद्वारे डिफॉल्टनुसार सुरक्षित आहेत. खालील आपल्या सेटिंग्ज आणि भविष्यातील गोपनीयता पर्याय पुनरावलोकन करा.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "STT प्रदाता कॉन्फिगर करा",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "इतर स्रोतांमधून डेटा आयात करा",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "आपल्या संभाषणांमधून समजलेले शब्द.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "आपल्यासाठी लक्षात ठेवलेले तथ्य आणि तपशील.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "समस्या निदान करण्यात मदत करते",
+    "deleteKnowledgeGraphMessage": "यामुळे सर्व व्युत्पन्न ज्ञान ग्राफ डेटा (नोड्स आणि कनेक्शन) हटवल्या जातील. आपल्या मूळ स्मृती सुरक्षित राहतील. ग्राफ कालांतराने किंवा पुढील विनंतीवर पुनर्निर्मित होईल.",
+    "deleteKnowledgeGraphDesc": "सर्व नोड्स आणि कनेक्शन साफ करा",
+    "enhanceTranscriptAccuracyDesc": "आमचा मॉडेल सुधारत असताना, आम्ही आपल्या रेकॉर्डिंगसाठी बेहतर प्रतिलेख परिणाम प्रदान करू शकतो.",
+    "bestInClassTranscription": "शून्य सेटअप सह सर्वोत्कृष्ट ट्रांसक्रिप्शन",
+    "optimizedForConversation": "संभाषणासाठी अनुकूलित",
+    "highAccuracy": "उच्च अचूकता",
+    "privacyFirst": "गोपनीयता प्रथम",
+    "keepGoing": "सुरू ठेवा, आप खूप चांगले आहात",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "आपल्या व्यक्तिगत वाढीचा प्रवास AI सह जो आपल्या प्रत्येक शब्दाऐका घेतो.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "firmwareBatteryAbove15": "बॅटरी १५% च्या वर",
+    "@firmwareBatteryAbove15": {
+        "description": "Firmware update step title about battery level"
+    },
+    "configureSttProvider": "STT प्रदाता संरचित करा",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "सर्व नोड्स आणि कनेक्शन साफ करा",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Omi मध्ये स्वागत आहे! आपला AI सहचर संभाषण, कार्य इत्यादी मध्ये आपल्याला मदत करण्यासाठी तयार आहे।",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "संभाषण स्वयंचलितपणे प्रक्रिया केली जाते",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "तुरंत अंतर्दृष्टी आणि सारांश मिळवा",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "अंमलबजावणीवर अधिक\nएकाग्र होण्यास मदत करण्यासाठी एक स्कोर।",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "एक संभाषण सुरू करा आणि जादू सुरू होऊ द्या",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "वेअरेबल AI सहचर",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "आपल्या स्मृती संघटित करा आणि नियंत्रण करा",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "सर्व स्मृती खाजगी दृश्यमानतेमध्ये सेट करा",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "सर्व स्मृती सार्वजनिक दृश्यमानतेमध्ये सेट करा",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "सर्वोत्तम Omi अनुभवासाठी आपली पसंदीची भाषा निवडा",
+    "enableFeaturesForBestExperience": "आपल्या डिव्हाइसवर सर्वोत्तम Omi अनुभवासाठी वैशिष्ट्य सक्षम करा.",
+    "deliveryTimeDescription": "आपल्या दैनिक सारांश कधी प्राप्त करायचा",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "STT प्रदाता कॉन्फिगर करा",
+    "setConversationEndDescription": "संभाषण कधी स्वयंचलितपणे समाप्त होतील हे सेट करा",
+    "clearNodesDescription": "सर्व नोड्स आणि कनेक्शन साफ करा",
+    "deleteKnowledgeGraphWarning": "हे सर्व व्युत्पन्न ज्ञान आलेख डेटा हटवेल. आपल्या मूळ आठवणी सुरक्षित राहतात.",
+    "createAndShareYourApp": "आपल्या अॅप तयार आणि शेअर करा",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "एंड-टू-एंड एन्क्रिप्शन गोपनीयताचा सोने मानक आहे. सक्षम होताना, आपल्या डेटा आपल्या डिव्हाइसवर एन्क्रिप्ट केली जाते त्याच्या आगे आमच्या सर्व्हरला पाठवले जाते. याचा अर्थ असा की कोणीही, Omi सारखेच नाही, आपल्या सामग्रीमध्ये प्रवेश करू शकत नाही.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "आपल्या डेटा आपल्यासाठी अद्वितीय की सह आमच्या सर्व्हरवर एन्क्रिप्ट केली जाते, Google Cloud वर होस्ट केली जाते. याचा अर्थ असा की आपल्या कच्ची सामग्री डेटाबेसकडून कोणीही, Omi कर्मचारी किंवा Google सारखेच, सरळ प्रवेशयोग्य नाही.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "अधिकतम सुरक्षा सक्षम करा जेथे केवळ आप आपल्या डेटामध्ये प्रवेश करू शकता. अधिक जाणून घेण्यासाठी टॅप करा.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "आपला Omi, मुक्त. अमर्याद शक्यतांसाठी अनलिमिटेड जा.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "Omi मध्ये, आम्ही आपली गोपनीयता अत्यंत गंभीरपणे घेतो. आम्ही आपल्याकरिता आमच्या उत्पादनाची सुधारणा करण्यासाठी आम्ही कोणता डेटा संकलित करतो आणि कसे वापरतो याबद्दल पारदर्शक असू इच्छितो. येथे आपल्याला जाणून घेणे आवश्यक आहे:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "आम्ही आमच्या द्वारा संकलित डेटा Omi ला आपल्यासाठी एक चांगले उत्पादन बनवण्यासाठी वापरण्यास प्रतिबद्ध आहे. आपली गोपनीयता आणि विश्वास आमच्यासाठी सर्वोच्च प्राधान्य आहे.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Omi चे मूल्यवान वापरकर्ता असल्याबद्दल धन्यवाद. आपल्याला कोणतीही प्रश्न किंवा चिंता असल्यास, आमच्याशी संपर्क करण्यास नेहमी स्वागत आहे team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "हे सर्व व्युत्पन्न ज्ञान ग्राफ डेटा (नोड्स आणि कनेक्शन) हटाईल. आपली मूळ स्मृती सुरक्षित राहील. ग्राफ समय मिळल्यावर किंवा पुढील विनंतीवर पुनर्निर्मित होईल.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "एकदा व्यक्ती तयार झाल्यानंतर, आप संभाषण लेखा मध्ये जाऊ शकता आणि त्यांना त्यांचे संबंधित खंड नियुक्त करू शकता, त्या प्रकारे Omi त्यांच्या भाषणाची देखील ओळख करू शकेल!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "आपल्या कस्टम अ‍ॅप्लिकेशन तयार करा आणि शेअर करा",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "@processingProgress": {
+        "description": "Progress label showing current/total items",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onboardingChooseYourPreference": "आपली पसंद निवडा",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "आवश्यक प्रवेश द्या",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "कोणता बॅकएंड जोडायचा ते निवडा",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "तुमच्या कॉल खाजगी आणि सुरक्षित राहतात",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "जेव्हा तुमचा Omi तुमच्या फोनशी जोडलेला नसतो तेव्हा ते त्याच्या अंतर्निर्मित स्मृतीमध्ये ऑडिओ स्थानिकपणे संचयित करतो. तू कधीही रेकॉर्डिंग हरावतोस नाही.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Omi त्याचा जादू करू शकेल म्हणून काही परवानगी सक्षम करा.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "पॉवर-यूजर AI — हजारो चॅट + एजेंटिक ऑटोमेशन",
+    "syncCardProgressOf": "{total} पैकी {current}",
+    "newestFirst": "नवीन आधी",
+    "backgroundModeNote": "सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे.",
+    "alwaysInContext": "नेहमी संदर्भात",
+    "conversationsNotCapturedCount": "रेकॉर्ड झाले नाही ({count})",
+    "memoryAllowUse": "वापर करू द्या",
+    "memoryDontUse": "वापरू नका",
+    "speakerTagPromptSubtitle": "गेल्या दोन दिवसांतील आवाजांची झटपट तपासणी",
+    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}",
+    "captureRecoveryBanner": "Omi ऑडिओ पाठवत नाही — पुन्हा जोडण्यासाठी टॅप करा",
+    "capturePendantDisconnectedDetail": "तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.",
+    "pinPersonSubtitle": "{name} ला ठेवा आणि तुमच्या संभाषणांत त्यांची अपेक्षा ठेवा",
+    "pinPersonHonestLine": "जवळपास सारखे आवाज जुळवण्यापूर्वी Omi विचारते.",
+    "speakerTagPromptHintConfirm": "होय म्हटल्याने {name} बद्दलची खात्री वाढते.",
+    "localCopiesSection": "स्थानिक प्रती",
+    "capturePendantDisconnectedShort": "Omi आपोआप पुन्हा कनेक्ट होईल",
+    "forYou": "तुमच्यासाठी",
+    "stopThese": "हे थांबवा",
+    "meetingActionItemsTitle": "करावयाच्या गोष्टी",
+    "addToTasks": "टास्कमध्ये जोडा",
+    "showInTranscript": "ट्रान्सक्रिप्टमध्ये दाखवा",
+    "tentativeTaskDueDate": "अंदाजे अंतिम तारीख {date}",
+    "tentativeTaskDueDateSemantics": "तात्पुरती अंतिम तारीख {date}",
+    "openTask": "टास्क उघडा",
+    "completeTask": "टास्क पूर्ण करा",
+    "reopenTask": "टास्क पुन्हा उघडा",
+    "addingToTasks": "टास्कमध्ये जोडत आहे",
+    "taskAddedToTasks": "कार्य तयार केले गेले",
+    "completedStatus": "पूर्ण",
+    "notCompletedStatus": "प्रलंबित",
+    "referralAffiliate": "अ‍ॅफिलिएट कार्यक्रम",
+    "referralCampaignTerms": "मित्रांना Omi उपकरणांवर 10% सूट. पहिल्या 2 वेगवेगळ्या मित्रांच्या खरेदींनी 2 महिने Pro, पुढील 3 वेगवेगळ्या मित्रांच्या खरेदींनी आणखी 3 महिने मिळतात. कमाल 5 मित्र आणि एकूण 5 महिने.",
+    "referralMilestone": "{months} महिने Pro · {count}/{target} खरेदी",
+    "referralClaim": "बक्षीस घ्या",
+    "referralClaimed": "{months} महिने Pro घेतले",
+    "referralRewardPending": "सशुल्क सदस्यत्व संपेपर्यंत बक्षीस जतन केले जाते.",
+    "referralCampaignTitle": "Omi ची शिफारस करा. मोफत Pro मिळवा.",
+    "referralCampaignSubtitle": "त्यांच्यासाठी Omi वर 10% सूट. तुमच्यासाठी 5 महिन्यांपर्यंत Pro.",
+    "referralShareInvite": "आमंत्रण शेअर करा",
+    "referralYourRewards": "तुमची बक्षिसे",
+    "referralRewardFirstTitle": "2 महिने Pro",
+    "referralRewardFirstDetail": "2 मित्रांनी Omi घेतल्यावर",
+    "referralRewardSecondTitle": "आणखी 3 महिने",
+    "referralRewardSecondDetail": "आणखी 3 मित्रांनी घेतल्यावर",
+    "referralClaimShort": "मिळवा",
+    "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
+    "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा",
+    "hasLinkedTasksLabel": "जोडलेली कार्ये आहेत",
+    "hasTasksFilter": "कार्ये असलेले",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

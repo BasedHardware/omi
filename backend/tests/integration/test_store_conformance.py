@@ -18,8 +18,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
+from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
 
 pytestmark = pytest.mark.integration
 
@@ -283,10 +286,100 @@ def test_control_candidate_picks_lowest_service_then_availability(h):
     assert h.store.control_candidate(1, 'batch', 60.0) == 'low'  # 'later' ties on service; availability breaks it
     assert h.store.control_candidate(0, 'batch', 10.0) is None
     assert h.store.control_candidate(1, 'live', 10.0) == 'later'  # live availability and service tie: key breaks it
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker') == ['low', 'high']
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker', fanout=1) == ['low']
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker', fanout=64) == ['low', 'high']
+
+    choices = h.store.control_candidates(1, 'batch', 60.0, worker_id='worker')
+    assert set(choices[:2]) == {'low', 'later'} and choices[-1] == 'high'
+    assert h.store.control_candidate(1, 'batch', 60.0, worker_id='worker', exclude=choices[:2]) == 'high'
     with pytest.raises(ValueError):
         h.store.control_candidate(3, 'batch', 1.0)
     with pytest.raises(ValueError):
         h.store.control_candidate(1, 'gpu', 1.0)
+
+
+@pytest.mark.parametrize('fanout', [1, 16, 64])
+def test_control_candidates_limit_query_order_before_worker_affinity(h, fanout):
+    import hashlib
+
+    rows = [
+        (
+            'control',
+            f'shard-{n:02}',
+            {'p1_active': True, 'p1_service': n // 10, 'p1_batch_available_at': float(29 - n)},
+        )
+        for n in range(30)
+    ]
+    put_all(h, rows)
+    # Firestore/SQL first limit by service, availability, then document key.
+    # Affinity only reorders equal-service rows inside that query prefix.
+    prefix = sorted(rows, key=lambda row: (row[2]['p1_service'], row[2]['p1_batch_available_at'], row[1]))[:fanout]
+    expected = sorted(
+        prefix, key=lambda row: (row[2]['p1_service'], hashlib.sha256(f'worker:{row[1]}'.encode()).digest())
+    )
+    assert h.store.control_candidates(1, 'batch', 30, worker_id='worker', fanout=fanout) == [row[1] for row in expected]
+
+
+def test_scheduler_refills_saturated_candidates_without_stranding_the_seventeenth_shard(h, monkeypatch):
+    from config.batch_pipeline import scheduler_control_key
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.scheduler import Scheduler, owner_key
+
+    monkeypatch.setenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16')
+    monkeypatch.setenv('BATCH_SHARD_SPREAD_ENABLED', 'true')
+    owners = {}
+    for n in range(10000):
+        uid = h.uid(f'refill-{n}')
+        owners.setdefault(scheduler_control_key(owner_key(uid)), uid)
+        if len(owners) == 17:
+            break
+    assert len(owners) == 17
+    queue = Scheduler(h.store, worker_id='worker')
+    for shard, uid in owners.items():
+        h.customer.add_user(uid)
+        assert queue.enqueue(WorkItem(shard, uid, 1, 'sim://audio', 30, Priority.FRESH), 1)
+    prefix = h.store.control_candidates(0, 'batch', 2, worker_id='worker')
+    assert len(prefix) == 16
+    for shard in prefix:
+        assert h.store.acquire_pull_claim(shard, 'busy', 2, 30)
+
+    leases = queue.pull(2)
+
+    assert [lease.item.segment_id for lease in leases] == list(set(owners) - set(prefix))
+    assert all(h.store.run(lambda tx, shard=shard: tx.get('jobs', shard))['state'] == 'ready' for shard in prefix)
+
+
+def test_purging_adjacent_jobs_rereads_repaired_links_before_next_admission(h):
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.scheduler import Scheduler
+
+    # Postgres mirrors the authoritative Firestore privacy purge; it has no
+    # standalone conversation-purge operation in this protocol.
+    need(h, 'postgres')
+    uid = h.uid('o')
+    h.customer.add_conversation(uid, 'gone')
+    queue = Scheduler(h.store)
+    # Purge walks IDs lexically: tail first, then the predecessor whose next
+    # pointer it repaired. A stale row snapshot would restore the deleted tail.
+    for segment in ('z-head', 'a-tail'):
+        assert queue.enqueue(WorkItem(segment, uid, 1, 'sim://audio', 30, Priority.FRESH, conversation_id='gone'), 1)
+    h.customer.delete_conversation(uid, 'gone')
+    if h.name == 'sim':
+        h.store.purge(uid, 'gone')
+    else:
+        from database.batch_pipeline_purge import purge_batch_owner
+
+        purge_batch_owner(
+            uid,
+            firestore_client=h.store.client,
+            namespaces=(h.namespace,),
+            conversation_id='gone',
+            delete_uri=lambda owner, uri: None,
+        )
+
+    assert queue.enqueue(WorkItem('survivor', uid, 2, 'sim://audio', 30, Priority.FRESH), 2)
+    assert [lease.item.segment_id for lease in queue.pull(3)] == ['survivor']
 
 
 def test_service_frontier_is_the_maximum_virtual_time_or_zero(h):
@@ -379,6 +472,30 @@ def test_quarantine_fenced_revokes_only_fenced_leases_and_retries(h):
     assert h.store.quarantine_fenced('other', 11.0) is False  # other owner unfenced
     assert h.store.quarantine_fenced('leased', 12.0) is False  # already revoked
     assert h.store.quarantine_fenced('missing', 12.0) is False
+
+
+def test_privacy_defer_moves_only_due_blocked_record_pending_available_at(h):
+    put_all(
+        h,
+        [
+            ('jobs', 'rp', job(h, 'rp', state='record_pending', available_at=5.0)),
+            ('jobs', 'later', job(h, 'later', state='record_pending', available_at=50.0)),
+            ('jobs', 'ready', job(h, 'ready', state='ready', available_at=5.0)),
+            ('jobs', 'other', job(h, 'other', owner='p', state='record_pending', available_at=5.0)),
+        ],
+    )
+    before = h.store.run(lambda tx: tx.get('jobs', 'rp'))
+    assert h.store.defer_privacy_blocked_record('rp', 910.0, 10.0) is False  # not blocked: the claim owns it
+    h.customer.block_privacy(h.uid('o'))
+    assert h.store.defer_privacy_blocked_record('rp', 910.0, 10.0) is True
+    after = h.store.run(lambda tx: tx.get('jobs', 'rp'))
+    assert after == {**before, 'available_at': 910.0}  # nothing but available_at changed
+    assert h.store.defer_privacy_blocked_record('rp', 1810.0, 20.0) is False  # no longer due
+    assert h.store.defer_privacy_blocked_record('later', 910.0, 10.0) is False  # not due yet
+    assert h.store.defer_privacy_blocked_record('ready', 910.0, 10.0) is False  # not record_pending
+    assert h.store.defer_privacy_blocked_record('other', 910.0, 10.0) is False  # other owner unblocked
+    assert h.store.defer_privacy_blocked_record('missing', 910.0, 10.0) is False  # purged: never created
+    assert h.store.run(lambda tx: tx.get('jobs', 'missing')) == {}
 
 
 # -- projection keyset scan -----------------------------------------------------------------------------
@@ -575,6 +692,141 @@ def test_concurrent_read_modify_write_never_loses_an_update(h):
     with ThreadPoolExecutor(max_workers=2) as pool:  # Firestore aborts after 5 attempts under heavier contention
         list(pool.map(bump, range(6)))
     assert h.store.run(lambda tx: tx.get('owners', 'ctr'))['n'] == 6
+
+
+# -- daily parity: fenced scheduler pulls (PL-141/142/143, source PR #23927) ---------------------------
+@pytest.fixture
+def pull_case(h, monkeypatch):
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    monkeypatch.setenv('BATCH_SHARD_SPREAD_ENABLED', 'true')
+    # All timestamps, including time spent between claim and commit, are explicit.
+    clock = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: clock[0])
+    queue = Scheduler(h.store)
+    for segment in ('a', 'b'):
+        assert queue.enqueue(WorkItem(segment, h.uid('o'), 1, f'gs://synthetic/{segment}', 30, Priority.FRESH), 1000)
+    key = scheduler_owner_key(h.uid('o'))
+    shard = scheduler_control_key(key)
+    keys = [('jobs', 'a'), ('jobs', 'b'), ('queues', f'0_{key}'), ('owners', key), ('control', shard)]
+
+    def snapshot():
+        return h.store.run(lambda tx: [tx.get(table, name) for table, name in keys])
+
+    return queue, shard, clock, snapshot
+
+
+def test_pl141_busy_pull_claim_leaves_queue_and_control_untouched(h, pull_case, monkeypatch):
+    queue, shard, _, snapshot = pull_case
+    assert h.store.acquire_pull_claim(shard, 'holder', 1000, 30)
+    before = snapshot()
+    run = h.store.run
+    reads, writes = [], []
+
+    class ObservedTransaction:
+        def __init__(self, tx):
+            self.tx = tx
+
+        def __getattr__(self, name):
+            return getattr(self.tx, name)
+
+        def get(self, table, key):
+            reads.append(table)
+            return self.tx.get(table, key)
+
+        def put(self, table, key, value):
+            writes.append(table)
+            return self.tx.put(table, key, value)
+
+        def delete(self, table, key):
+            writes.append(table)
+            return self.tx.delete(table, key)
+
+    def observed_run(body):
+        return run(lambda tx: body(ObservedTransaction(tx)))
+
+    monkeypatch.setattr(h.store, 'run', observed_run)
+    assert queue.pull(1001) == []
+    # Postgres acquires through a transaction; Firestore uses conditional CAS.
+    # Neither may enter the queue/control read set or write anything when busy.
+    assert set(reads) <= {'pull_claims'} and writes == []
+    monkeypatch.setattr(h.store, 'run', run)
+    assert snapshot() == before
+    assert run(lambda tx: tx.get('pull_claims', shard)) == {'token': 'holder', 'expires_at': 1030}
+    assert not h.store.acquire_pull_claim(shard, 'follower', 1029.999, 30)
+    assert run(lambda tx: tx.get('pull_claims', shard)) == {'token': 'holder', 'expires_at': 1030}
+
+
+@pytest.mark.parametrize('takeover', [False, True], ids=['expired', 'replaced'])
+def test_pl142_paused_holder_cannot_mutate_or_release_a_new_claim(h, pull_case, monkeypatch, takeover):
+    queue, shard, clock, snapshot = pull_case
+    before = snapshot()
+    acquire = h.store.acquire_pull_claim
+    issued = []
+
+    def pause_after_acquisition(key, token, now, ttl):
+        won = acquire(key, token, now, ttl)
+        assert won and key == shard
+        issued.append(token)
+        clock[0] += ttl  # expires exactly at the transaction's current time
+        if takeover:
+            assert acquire(key, 'replacement', now + ttl, ttl)
+        return won
+
+    monkeypatch.setattr(h.store, 'acquire_pull_claim', pause_after_acquisition)
+    assert queue.pull(1000) == []
+    assert len(issued) == 1
+    assert snapshot() == before
+    claim = h.store.run(lambda tx: tx.get('pull_claims', shard))
+    assert claim == {
+        'token': 'replacement' if takeover else issued[0],
+        'expires_at': 1060 if takeover else 1030,
+    }
+    monkeypatch.setattr(h.store, 'acquire_pull_claim', acquire)
+    # A reconstructed scheduler cannot renew/clear a live replacement either.
+    if takeover:
+        assert Scheduler(h.store).pull(1059) == []
+        assert h.store.run(lambda tx: tx.get('pull_claims', shard)) == claim
+    (lease,) = Scheduler(h.store).pull(1060 if takeover else 1030)
+    assert lease.item.segment_id == 'a' and lease.attempt == 1
+
+
+def test_pl143_failed_pull_rolls_back_release_and_restart_recovers_after_expiry(h, pull_case, monkeypatch):
+    queue, shard, _, snapshot = pull_case
+    before = snapshot()
+    run = h.store.run
+
+    class BeforeCommitFailure(RuntimeError):
+        pass
+
+    def abort_after_body(body):
+        def abort(tx):
+            result = body(tx)
+            if isinstance(result, bool):  # Postgres's separate claim-acquisition transaction
+                return result
+            assert result[0] is not None  # the real pull buffered a job lease and claim release
+            raise BeforeCommitFailure('synthetic abort after pull body, before commit')
+
+        return run(abort)
+
+    monkeypatch.setattr(h.store, 'run', abort_after_body)
+    with pytest.raises(BeforeCommitFailure, match='before commit'):
+        queue.pull(1000)
+    monkeypatch.setattr(h.store, 'run', run)
+    assert snapshot() == before
+    claim = run(lambda tx: tx.get('pull_claims', shard))
+    assert claim['token'] and claim['expires_at'] == 1030
+    restarted = Scheduler(h.store)
+    assert restarted.pull(1029.999) == []
+    assert snapshot() == before
+    first, second = restarted.pull(1030, 2)
+    assert [first.item.segment_id, second.item.segment_id] == ['a', 'b']
+    assert first.token != second.token and first.attempt == second.attempt == 1
+    assert run(lambda tx: tx.get('pull_claims', shard)) == {'token': '', 'expires_at': 0.0}
+    assert Scheduler(h.store).pull(1031) == []  # issued job leases remain exclusive
+    for lease in (first, second):
+        row = run(lambda tx: tx.get('jobs', lease.item.segment_id))
+        assert row['state'] == 'leased' and row['token'] == lease.token
 
 
 def test_reading_a_missing_document_fences_a_concurrent_create(h):

@@ -970,6 +970,186 @@ async def test_embedding_429_retry_sleeps_and_stays_on_the_same_provider(monkeyp
     assert result['data'][0]['embedding'] == [0.25]
 
 
+def test_flex_first_default_lanes_and_kill_switch(monkeypatch):
+    monkeypatch.delenv(executor.FLEX_FIRST_LANES_ENV_VAR, raising=False)
+    assert executor.flex_first_lanes() == {'omi:auto:conv-structure', 'omi:auto:memory-l1'}
+    for off in ('off', '', 'none', 'false', '0'):
+        monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, off)
+        assert executor.flex_first_lanes() == frozenset()
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, f' {LANE_ID} , omi:auto:goals ')
+    assert executor.flex_first_lanes() == {LANE_ID, 'omi:auto:goals'}
+
+
+def test_flex_first_timeout_leaves_standard_above_its_p99_inside_the_60s_caller(monkeypatch):
+    monkeypatch.delenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, raising=False)
+    # 7d Standard p99 (2026-11-01): conv-structure 35.9s, memory-l1 18.8s; callers time out at 60s.
+    caller_ms = 60_000
+    for lane_id, standard_p99_ms in (('omi:auto:conv-structure', 35_900), ('omi:auto:memory-l1', 18_800)):
+        assert caller_ms - executor.flex_first_timeout_ms(lane_id, 120_000) > standard_p99_ms + 5_000
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 15_000
+    assert executor.flex_first_timeout_ms('omi:auto:memory-l1', 120_000) == 10_000
+    assert executor.flex_first_timeout_ms(LANE_ID, 120_000) == executor.DEFAULT_FLEX_FIRST_TIMEOUT_MS
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 20_000) == 10_000
+    monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '5000')
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 5_000
+    monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, 'junk')
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 15_000
+
+
+@pytest.mark.asyncio
+async def test_flex_first_success_sends_flex_once(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+    trace = AttemptTrace()
+    _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), attempt_trace=trace
+    )
+
+    assert len(provider.calls) == 1
+    assert provider.calls[0].request['service_tier'] == 'flex'
+    assert provider.calls[0].timeout_ms == executor.DEFAULT_FLEX_FIRST_TIMEOUT_MS
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1]
+    assert not result.fallback_used
+
+
+@pytest.mark.parametrize(
+    'failure_class',
+    [
+        FailureClass.PROVIDER_429_OMI_PAID,
+        FailureClass.TIMEOUT_BEFORE_OUTPUT,
+        FailureClass.PROVIDER_5XX_OMI_PAID,
+        FailureClass.PROVIDER_INVALID_REQUEST,
+    ],
+)
+@pytest.mark.asyncio
+async def test_flex_first_failure_falls_back_to_standard_without_backoff(monkeypatch, failure_class):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(failure_class, retry_after_seconds=30),
+            fake_success_response(resolved.active_route.primary, content='{"answer":"standard"}'),
+        ]
+    )
+    trace = AttemptTrace()
+    slept = _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), attempt_trace=trace
+    )
+
+    assert slept == []
+    assert len(provider.calls) == 2
+    assert provider.calls[0].request['service_tier'] == 'flex'
+    assert 'service_tier' not in provider.calls[1].request
+    # Standard keeps the whole remaining route budget, not the Flex cap.
+    assert provider.calls[1].timeout_ms == 120_000
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
+    assert result.response['choices'][0]['message']['content'] == '{"answer":"standard"}'
+
+
+@pytest.mark.asyncio
+async def test_flex_first_keeps_every_configured_standard_attempt(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(2)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=3),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    # Flex 429: no pause. Standard attempt 1 of 2 429s: the normal Retry-After pause.
+    assert slept == [3]
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None, None]
+
+
+@pytest.mark.asyncio
+async def test_flex_first_standard_failure_still_surfaces(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider(
+        [ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID), ProviderFailure(FailureClass.PROVIDER_INVALID_REQUEST)]
+    )
+    _install_retry_clock(monkeypatch)
+
+    # The Standard error is what the caller sees (not the Flex 429), with no LKG fallback.
+    with pytest.raises(GatewayProviderRequestRejectedError):
+        await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+    assert len(provider.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_flex_first_not_repeated_on_lkg_fallback(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID),
+            fake_success_response(resolved.active_route.primary, content='{"answer":"lkg"}'),
+        ]
+    )
+    _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert result.used_lkg
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None, None]
+
+
+@pytest.mark.asyncio
+async def test_flex_first_skipped_when_off_or_lane_not_listed(monkeypatch):
+    resolved = _route_with_attempts(1)
+    for value in ('off', 'omi:auto:conv-structure'):
+        monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, value)
+        provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+        await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+        assert len(provider.calls) == 1
+        assert 'service_tier' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
+async def test_flex_first_skipped_for_byok_and_attempt_budgets(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    route = resolved.active_route
+    credentials = omi_credentials()
+    assert executor._flex_first_applies(resolved, route, route.primary, credentials, None)
+    assert not executor._flex_first_applies(resolved, route, route.primary, credentials, 1)
+    byok = credentials.model_copy(update={'mode': CredentialMode.BYOK})
+    assert not executor._flex_first_applies(resolved, route, route.primary, byok, None)
+    other_provider = route.primary.model_copy(update={'provider': 'gemini'})
+    assert not executor._flex_first_applies(resolved, route, other_provider, credentials, None)
+
+
+@pytest.mark.parametrize(
+    'extra',
+    [
+        {'tools': [{'type': 'function', 'function': {'name': 'lookup', 'parameters': {'type': 'object'}}}]},
+        {'service_tier': 'flex'},
+    ],
+)
+@pytest.mark.asyncio
+async def test_flex_first_skipped_for_tool_turns_and_caller_service_tier(monkeypatch, extra):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    request = resolved.validated_request
+    resolved = replace(
+        resolved, validated_request=replace(request, forwarded_params={**request.forwarded_params, **extra})
+    )
+    route = resolved.active_route
+    assert not executor._flex_first_applies(resolved, route, route.primary, omi_credentials(), None)
+
+
 def valid_request(**overrides):
     request = {
         'model': LANE_ID,

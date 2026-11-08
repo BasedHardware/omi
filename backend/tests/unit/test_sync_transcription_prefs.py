@@ -78,6 +78,15 @@ def _build_fakes() -> dict:
     database_pkg.__path__ = ['database']
     database_pkg.__package__ = 'database'
     fakes['database'] = database_pkg
+    directory_pkg = ModuleType('database.directory')
+    directory_pkg.__path__ = []
+    directory_router = ModuleType('database.directory.router')
+    directory_router.routing_active = lambda: False
+    directory_router.cached_plane = lambda _uid: 'firestore'
+    directory_router.DirectoryRoutingUnavailable = RuntimeError
+    fakes['database.directory'] = directory_pkg
+    fakes['database.directory.router'] = directory_router
+
     for _sub in [
         '_client',
         'action_items',

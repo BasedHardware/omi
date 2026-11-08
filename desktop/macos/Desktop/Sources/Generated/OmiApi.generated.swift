@@ -153,10 +153,13 @@ public enum OmiAPI {
     public let conversationId: String?
     public let createdAt: String?
     public let description_: String
+    public let due: TaskDue?
     public let dueAt: String?
     public let dueCertainty: String?
     public let ownerName: String?
     public let ownershipConfidence: Double?
+    public let reminderIntent: ReminderIntent?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSegmentIds: [String]?
     public let targetTaskId: String?
     public let updatedAt: String?
@@ -173,10 +176,13 @@ public enum OmiAPI {
       case conversationId = "conversation_id"
       case createdAt = "created_at"
       case description_ = "description"
+      case due
       case dueAt = "due_at"
       case dueCertainty = "due_certainty"
       case ownerName = "owner_name"
       case ownershipConfidence = "ownership_confidence"
+      case reminderIntent = "reminder_intent"
+      case reminderOrigin = "reminder_origin"
       case sourceSegmentIds = "source_segment_ids"
       case targetTaskId = "target_task_id"
       case updatedAt = "updated_at"
@@ -195,16 +201,19 @@ public enum OmiAPI {
       conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
       createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
       description_ = try c.decode(String.self, forKey: .description_)
+      due = try c.decodeIfPresent(TaskDue.self, forKey: .due)
       dueAt = try c.decodeIfPresent(String.self, forKey: .dueAt)
       dueCertainty = try c.decodeIfPresent(String.self, forKey: .dueCertainty)
       ownerName = try c.decodeIfPresent(String.self, forKey: .ownerName)
       ownershipConfidence = try c.decodeIfPresent(Double.self, forKey: .ownershipConfidence)
+      reminderIntent = try c.decodeIfPresent(ReminderIntent.self, forKey: .reminderIntent)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSegmentIds = try c.decodeIfPresent([String].self, forKey: .sourceSegmentIds)
       targetTaskId = try c.decodeIfPresent(String.self, forKey: .targetTaskId)
       updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
     }
 
-    public init(candidateAction: String? = nil, captureConfidence: Double? = nil, captureKind: String? = nil, captureOwner: String? = nil, completed: Bool? = nil, completedAt: String? = nil, concreteDeliverable: Bool? = nil, context: String? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, dueAt: String? = nil, dueCertainty: String? = nil, ownerName: String? = nil, ownershipConfidence: Double? = nil, sourceSegmentIds: [String]? = nil, targetTaskId: String? = nil, updatedAt: String? = nil) {
+    public init(candidateAction: String? = nil, captureConfidence: Double? = nil, captureKind: String? = nil, captureOwner: String? = nil, completed: Bool? = nil, completedAt: String? = nil, concreteDeliverable: Bool? = nil, context: String? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, due: TaskDue? = nil, dueAt: String? = nil, dueCertainty: String? = nil, ownerName: String? = nil, ownershipConfidence: Double? = nil, reminderIntent: ReminderIntent? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSegmentIds: [String]? = nil, targetTaskId: String? = nil, updatedAt: String? = nil) {
       self.candidateAction = candidateAction
       self.captureConfidence = captureConfidence
       self.captureKind = captureKind
@@ -216,10 +225,13 @@ public enum OmiAPI {
       self.conversationId = conversationId
       self.createdAt = createdAt
       self.description_ = description_
+      self.due = due
       self.dueAt = dueAt
       self.dueCertainty = dueCertainty
       self.ownerName = ownerName
       self.ownershipConfidence = ownershipConfidence
+      self.reminderIntent = reminderIntent
+      self.reminderOrigin = reminderOrigin
       self.sourceSegmentIds = sourceSegmentIds
       self.targetTaskId = targetTaskId
       self.updatedAt = updatedAt
@@ -232,6 +244,7 @@ public enum OmiAPI {
     public let completed: Bool?
     public let conversationId: String?
     public let description_: String
+    public let due: TaskDue?
     public let dueAt: String?
     public let dueConfidence: Double?
     public let exportDate: String?
@@ -255,6 +268,7 @@ public enum OmiAPI {
       case completed
       case conversationId = "conversation_id"
       case description_ = "description"
+      case due
       case dueAt = "due_at"
       case dueConfidence = "due_confidence"
       case exportDate = "export_date"
@@ -280,6 +294,7 @@ public enum OmiAPI {
       completed = try c.decodeIfPresent(Bool.self, forKey: .completed)
       conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
       description_ = try c.decode(String.self, forKey: .description_)
+      due = try c.decodeIfPresent(TaskDue.self, forKey: .due)
       dueAt = try c.decodeIfPresent(String.self, forKey: .dueAt)
       dueConfidence = try c.decodeIfPresent(Double.self, forKey: .dueConfidence)
       exportDate = try c.decodeIfPresent(String.self, forKey: .exportDate)
@@ -299,11 +314,12 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(appleReminderId: String? = nil, completed: Bool? = nil, conversationId: String? = nil, description_: String, dueAt: String? = nil, dueConfidence: Double? = nil, exportDate: String? = nil, exportPlatform: String? = nil, exported: Bool? = nil, goalId: String? = nil, indentLevel: Int? = nil, isLocked: Bool? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, provenance: [EvidenceRef]? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, sortOrder: Int? = nil, source: String? = nil, status: TaskStatus? = nil, workstreamId: String? = nil) {
+    public init(appleReminderId: String? = nil, completed: Bool? = nil, conversationId: String? = nil, description_: String, due: TaskDue? = nil, dueAt: String? = nil, dueConfidence: Double? = nil, exportDate: String? = nil, exportPlatform: String? = nil, exported: Bool? = nil, goalId: String? = nil, indentLevel: Int? = nil, isLocked: Bool? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, provenance: [EvidenceRef]? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, sortOrder: Int? = nil, source: String? = nil, status: TaskStatus? = nil, workstreamId: String? = nil) {
       self.appleReminderId = appleReminderId
       self.completed = completed
       self.conversationId = conversationId
       self.description_ = description_
+      self.due = due
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
       self.exportDate = exportDate
@@ -331,7 +347,9 @@ public enum OmiAPI {
     public let completedAt: String?
     public let conversationId: String?
     public let createdAt: String?
+    public let creationReceipt: [String: OmiAnyCodable]?
     public let description_: String
+    public let due: TaskDue?
     public let dueAt: String?
     public let dueConfidence: Double?
     public let exportDate: String?
@@ -346,6 +364,7 @@ public enum OmiAPI {
     public let provenance: [EvidenceRef]?
     public let recurrenceParentId: String?
     public let recurrenceRule: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sortOrder: Int?
     public let source: String?
     public let status: TaskStatus?
@@ -360,7 +379,9 @@ public enum OmiAPI {
       case completedAt = "completed_at"
       case conversationId = "conversation_id"
       case createdAt = "created_at"
+      case creationReceipt = "creation_receipt"
       case description_ = "description"
+      case due
       case dueAt = "due_at"
       case dueConfidence = "due_confidence"
       case exportDate = "export_date"
@@ -375,6 +396,7 @@ public enum OmiAPI {
       case provenance
       case recurrenceParentId = "recurrence_parent_id"
       case recurrenceRule = "recurrence_rule"
+      case reminderOrigin = "reminder_origin"
       case sortOrder = "sort_order"
       case source
       case status
@@ -391,7 +413,9 @@ public enum OmiAPI {
       completedAt = try c.decodeIfPresent(String.self, forKey: .completedAt)
       conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
       createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
+      creationReceipt = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .creationReceipt)
       description_ = try c.decode(String.self, forKey: .description_)
+      due = try c.decodeIfPresent(TaskDue.self, forKey: .due)
       dueAt = try c.decodeIfPresent(String.self, forKey: .dueAt)
       dueConfidence = try c.decodeIfPresent(Double.self, forKey: .dueConfidence)
       exportDate = try c.decodeIfPresent(String.self, forKey: .exportDate)
@@ -406,6 +430,7 @@ public enum OmiAPI {
       provenance = try c.decodeIfPresent([EvidenceRef].self, forKey: .provenance)
       recurrenceParentId = try c.decodeIfPresent(String.self, forKey: .recurrenceParentId)
       recurrenceRule = try c.decodeIfPresent(String.self, forKey: .recurrenceRule)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder)
       source = try c.decodeIfPresent(String.self, forKey: .source)
       status = try c.decodeIfPresent(TaskStatus.self, forKey: .status)
@@ -415,13 +440,15 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(appleReminderId: String? = nil, completed: Bool, completedAt: String? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, dueAt: String? = nil, dueConfidence: Double? = nil, exportDate: String? = nil, exportPlatform: String? = nil, exported: Bool? = nil, goalId: String? = nil, id: String, indentLevel: Int? = nil, isLocked: Bool? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, provenance: [EvidenceRef]? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, sortOrder: Int? = nil, source: String? = nil, status: TaskStatus? = nil, supersededBy: String? = nil, taskId: String? = nil, updatedAt: String? = nil, workstreamId: String? = nil) {
+    public init(appleReminderId: String? = nil, completed: Bool, completedAt: String? = nil, conversationId: String? = nil, createdAt: String? = nil, creationReceipt: [String: OmiAnyCodable]? = nil, description_: String, due: TaskDue? = nil, dueAt: String? = nil, dueConfidence: Double? = nil, exportDate: String? = nil, exportPlatform: String? = nil, exported: Bool? = nil, goalId: String? = nil, id: String, indentLevel: Int? = nil, isLocked: Bool? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, provenance: [EvidenceRef]? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, reminderOrigin: ReminderOrigin? = nil, sortOrder: Int? = nil, source: String? = nil, status: TaskStatus? = nil, supersededBy: String? = nil, taskId: String? = nil, updatedAt: String? = nil, workstreamId: String? = nil) {
       self.appleReminderId = appleReminderId
       self.completed = completed
       self.completedAt = completedAt
       self.conversationId = conversationId
       self.createdAt = createdAt
+      self.creationReceipt = creationReceipt
       self.description_ = description_
+      self.due = due
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
       self.exportDate = exportDate
@@ -436,6 +463,7 @@ public enum OmiAPI {
       self.provenance = provenance
       self.recurrenceParentId = recurrenceParentId
       self.recurrenceRule = recurrenceRule
+      self.reminderOrigin = reminderOrigin
       self.sortOrder = sortOrder
       self.source = source
       self.status = status
@@ -452,6 +480,7 @@ public enum OmiAPI {
     public let clearDueAt: OmiPatchField<Bool>
     public let completed: OmiPatchField<Bool>
     public let description_: OmiPatchField<String>
+    public let due: OmiPatchField<TaskDue>
     public let dueAt: OmiPatchField<String>
     public let dueConfidence: OmiPatchField<Double>
     public let exportDate: OmiPatchField<String>
@@ -475,6 +504,7 @@ public enum OmiAPI {
       case clearDueAt = "clear_due_at"
       case completed
       case description_ = "description"
+      case due
       case dueAt = "due_at"
       case dueConfidence = "due_confidence"
       case exportDate = "export_date"
@@ -508,6 +538,9 @@ public enum OmiAPI {
       if !c.contains(.description_) { description_ = .omitted }
       else if try c.decodeNil(forKey: .description_) { description_ = .null }
       else { description_ = .value(try c.decode(String.self, forKey: .description_)) }
+      if !c.contains(.due) { due = .omitted }
+      else if try c.decodeNil(forKey: .due) { due = .null }
+      else { due = .value(try c.decode(TaskDue.self, forKey: .due)) }
       if !c.contains(.dueAt) { dueAt = .omitted }
       else if try c.decodeNil(forKey: .dueAt) { dueAt = .null }
       else { dueAt = .value(try c.decode(String.self, forKey: .dueAt)) }
@@ -561,11 +594,12 @@ public enum OmiAPI {
       else { workstreamId = .value(try c.decode(String.self, forKey: .workstreamId)) }
     }
 
-    public init(appleReminderId: OmiPatchField<String> = .omitted, clearDueAt: OmiPatchField<Bool> = .omitted, completed: OmiPatchField<Bool> = .omitted, description_: OmiPatchField<String> = .omitted, dueAt: OmiPatchField<String> = .omitted, dueConfidence: OmiPatchField<Double> = .omitted, exportDate: OmiPatchField<String> = .omitted, exportPlatform: OmiPatchField<String> = .omitted, exported: OmiPatchField<Bool> = .omitted, goalId: OmiPatchField<String> = .omitted, indentLevel: OmiPatchField<Int> = .omitted, owner: OmiPatchField<TaskOwner> = .omitted, priority: OmiPatchField<TaskPriority> = .omitted, provenance: OmiPatchField<[EvidenceRef]> = .omitted, recurrenceParentId: OmiPatchField<String> = .omitted, recurrenceRule: OmiPatchField<String> = .omitted, sortOrder: OmiPatchField<Int> = .omitted, source: OmiPatchField<String> = .omitted, status: OmiPatchField<TaskStatus> = .omitted, supersededBy: OmiPatchField<String> = .omitted, workstreamId: OmiPatchField<String> = .omitted) {
+    public init(appleReminderId: OmiPatchField<String> = .omitted, clearDueAt: OmiPatchField<Bool> = .omitted, completed: OmiPatchField<Bool> = .omitted, description_: OmiPatchField<String> = .omitted, due: OmiPatchField<TaskDue> = .omitted, dueAt: OmiPatchField<String> = .omitted, dueConfidence: OmiPatchField<Double> = .omitted, exportDate: OmiPatchField<String> = .omitted, exportPlatform: OmiPatchField<String> = .omitted, exported: OmiPatchField<Bool> = .omitted, goalId: OmiPatchField<String> = .omitted, indentLevel: OmiPatchField<Int> = .omitted, owner: OmiPatchField<TaskOwner> = .omitted, priority: OmiPatchField<TaskPriority> = .omitted, provenance: OmiPatchField<[EvidenceRef]> = .omitted, recurrenceParentId: OmiPatchField<String> = .omitted, recurrenceRule: OmiPatchField<String> = .omitted, sortOrder: OmiPatchField<Int> = .omitted, source: OmiPatchField<String> = .omitted, status: OmiPatchField<TaskStatus> = .omitted, supersededBy: OmiPatchField<String> = .omitted, workstreamId: OmiPatchField<String> = .omitted) {
       self.appleReminderId = appleReminderId
       self.clearDueAt = clearDueAt
       self.completed = completed
       self.description_ = description_
+      self.due = due
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
       self.exportDate = exportDate
@@ -606,6 +640,11 @@ public enum OmiAPI {
       case .omitted: break
       case .value(let value): try c.encode(value, forKey: .description_)
       case .null: try c.encodeNil(forKey: .description_)
+      }
+      switch due {
+      case .omitted: break
+      case .value(let value): try c.encode(value, forKey: .due)
+      case .null: try c.encodeNil(forKey: .due)
       }
       switch dueAt {
       case .omitted: break
@@ -1191,12 +1230,14 @@ public enum OmiAPI {
     public let captureConfidence: Double
     public let compatibility: CandidateCompatibilityMetadata?
     public let createdAt: String
+    public let creationReceipt: [String: OmiAnyCodable]?
     public let evidenceRefs: [EvidenceRef]
     public let expiresAt: String?
     public let goalId: String?
     public let idempotencyKey: String
     public let ownershipConfidence: Double
     public let proposedAction: CandidateAction
+    public let reminderOrigin: ReminderOrigin?
     public let resolutionReason: String?
     public let resolvedAt: String?
     public let resultTaskId: String?
@@ -1215,12 +1256,14 @@ public enum OmiAPI {
       case captureConfidence = "capture_confidence"
       case compatibility
       case createdAt = "created_at"
+      case creationReceipt = "creation_receipt"
       case evidenceRefs = "evidence_refs"
       case expiresAt = "expires_at"
       case goalId = "goal_id"
       case idempotencyKey = "idempotency_key"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case resolutionReason = "resolution_reason"
       case resolvedAt = "resolved_at"
       case resultTaskId = "result_task_id"
@@ -1241,12 +1284,14 @@ public enum OmiAPI {
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
       compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       createdAt = try c.decode(String.self, forKey: .createdAt)
+      creationReceipt = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .creationReceipt)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       expiresAt = try c.decodeIfPresent(String.self, forKey: .expiresAt)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       idempotencyKey = try c.decode(String.self, forKey: .idempotencyKey)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decode(CandidateAction.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       resolutionReason = try c.decodeIfPresent(String.self, forKey: .resolutionReason)
       resolvedAt = try c.decodeIfPresent(String.self, forKey: .resolvedAt)
       resultTaskId = try c.decodeIfPresent(String.self, forKey: .resultTaskId)
@@ -1271,18 +1316,20 @@ public enum OmiAPI {
       workstreamProposal = try c.decodeIfPresent(WorkstreamProposalOutput.self, forKey: .workstreamProposal)
     }
 
-    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, createdAt: String, evidenceRefs: [EvidenceRef], expiresAt: String? = nil, goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
+    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, createdAt: String, creationReceipt: [String: OmiAnyCodable]? = nil, evidenceRefs: [EvidenceRef], expiresAt: String? = nil, goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, reminderOrigin: ReminderOrigin? = nil, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
       self.accountGeneration = accountGeneration
       self.candidateId = candidateId
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.createdAt = createdAt
+      self.creationReceipt = creationReceipt
       self.evidenceRefs = evidenceRefs
       self.expiresAt = expiresAt
       self.goalId = goalId
       self.idempotencyKey = idempotencyKey
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.resolutionReason = resolutionReason
       self.resolvedAt = resolvedAt
       self.resultTaskId = resultTaskId
@@ -1300,6 +1347,7 @@ public enum OmiAPI {
 
   public struct CandidateResolutionReceipt: Codable {
     public let candidateId: String
+    public let creationReceipt: [String: OmiAnyCodable]?
     public let newlyResolved: Bool
     public let receiptId: String
     public let resolvedAt: String
@@ -1309,6 +1357,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case candidateId = "candidate_id"
+      case creationReceipt = "creation_receipt"
       case newlyResolved = "newly_resolved"
       case receiptId = "receipt_id"
       case resolvedAt = "resolved_at"
@@ -1320,6 +1369,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       candidateId = try c.decode(String.self, forKey: .candidateId)
+      creationReceipt = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .creationReceipt)
       newlyResolved = try c.decode(Bool.self, forKey: .newlyResolved)
       receiptId = try c.decode(String.self, forKey: .receiptId)
       resolvedAt = try c.decode(String.self, forKey: .resolvedAt)
@@ -1328,8 +1378,9 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(candidateId: String, newlyResolved: Bool, receiptId: String, resolvedAt: String, status: CandidateStatus, taskId: String? = nil, workstreamId: String? = nil) {
+    public init(candidateId: String, creationReceipt: [String: OmiAnyCodable]? = nil, newlyResolved: Bool, receiptId: String, resolvedAt: String, status: CandidateStatus, taskId: String? = nil, workstreamId: String? = nil) {
       self.candidateId = candidateId
+      self.creationReceipt = creationReceipt
       self.newlyResolved = newlyResolved
       self.receiptId = receiptId
       self.resolvedAt = resolvedAt
@@ -1642,6 +1693,32 @@ public enum OmiAPI {
   }
 
 
+  public struct ConnectorAccess: Codable {
+    public let clientIds: [String]
+    public let defaultScopes: [String]
+    public let requiredScopes: [String]
+
+    private enum CodingKeys: String, CodingKey {
+      case clientIds = "client_ids"
+      case defaultScopes = "default_scopes"
+      case requiredScopes = "required_scopes"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      clientIds = try c.decode([String].self, forKey: .clientIds)
+      defaultScopes = try c.decode([String].self, forKey: .defaultScopes)
+      requiredScopes = try c.decode([String].self, forKey: .requiredScopes)
+    }
+
+    public init(clientIds: [String], defaultScopes: [String], requiredScopes: [String]) {
+      self.clientIds = clientIds
+      self.defaultScopes = defaultScopes
+      self.requiredScopes = requiredScopes
+    }
+  }
+
+
   public enum ContextMatchSignal: String, Codable, CaseIterable {
     case app
     case person
@@ -1748,6 +1825,7 @@ public enum OmiAPI {
     public let callPlatform: String?
     public let captureCoverage: String?
     public let captureGroup: CaptureGroup?
+    public let captureTimezone: String?
     public let clientDeviceId: String?
     public let clientPlatform: String?
     public let clientProcessing: ClientProcessing?
@@ -1759,6 +1837,7 @@ public enum OmiAPI {
     public let deferred: Bool?
     public let discarded: Bool?
     public let episodeId: String?
+    public let excludedSpeakers: [Int]?
     public let externalData: [String: OmiAnyCodable]?
     public let finishedAt: String?
     public let folderId: String?
@@ -1815,6 +1894,7 @@ public enum OmiAPI {
       case callPlatform = "call_platform"
       case captureCoverage = "capture_coverage"
       case captureGroup = "capture_group"
+      case captureTimezone = "capture_timezone"
       case clientDeviceId = "client_device_id"
       case clientPlatform = "client_platform"
       case clientProcessing = "client_processing"
@@ -1826,6 +1906,7 @@ public enum OmiAPI {
       case deferred
       case discarded
       case episodeId = "episode_id"
+      case excludedSpeakers = "excluded_speakers"
       case externalData = "external_data"
       case finishedAt = "finished_at"
       case folderId = "folder_id"
@@ -1884,6 +1965,7 @@ public enum OmiAPI {
       callPlatform = try c.decodeIfPresent(String.self, forKey: .callPlatform)
       captureCoverage = try c.decodeIfPresent(String.self, forKey: .captureCoverage)
       captureGroup = try c.decodeIfPresent(CaptureGroup.self, forKey: .captureGroup)
+      captureTimezone = try c.decodeIfPresent(String.self, forKey: .captureTimezone)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
       clientPlatform = try c.decodeIfPresent(String.self, forKey: .clientPlatform)
       clientProcessing = try c.decodeIfPresent(ClientProcessing.self, forKey: .clientProcessing)
@@ -1895,6 +1977,7 @@ public enum OmiAPI {
       deferred = try c.decodeIfPresent(Bool.self, forKey: .deferred)
       discarded = try c.decodeIfPresent(Bool.self, forKey: .discarded)
       episodeId = try c.decodeIfPresent(String.self, forKey: .episodeId)
+      excludedSpeakers = try c.decodeIfPresent([Int].self, forKey: .excludedSpeakers)
       externalData = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .externalData)
       finishedAt = try c.decodeIfPresent(String.self, forKey: .finishedAt)
       folderId = try c.decodeIfPresent(String.self, forKey: .folderId)
@@ -1940,7 +2023,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, excludedSpeakers: [Int]? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.arrivalAt = arrivalAt
@@ -1952,6 +2035,7 @@ public enum OmiAPI {
       self.callPlatform = callPlatform
       self.captureCoverage = captureCoverage
       self.captureGroup = captureGroup
+      self.captureTimezone = captureTimezone
       self.clientDeviceId = clientDeviceId
       self.clientPlatform = clientPlatform
       self.clientProcessing = clientProcessing
@@ -1963,6 +2047,7 @@ public enum OmiAPI {
       self.deferred = deferred
       self.discarded = discarded
       self.episodeId = episodeId
+      self.excludedSpeakers = excludedSpeakers
       self.externalData = externalData
       self.finishedAt = finishedAt
       self.folderId = folderId
@@ -3718,6 +3803,78 @@ public enum OmiAPI {
   }
 
 
+  public struct McpApiKeyCreated: Codable {
+    public let appId: String?
+    public let connectorAccess: ConnectorAccess?
+    public let createdAt: String
+    public let id: String
+    public let key: String
+    public let keyPrefix: String
+    public let lastUsedAt: String?
+    public let name: String
+    public let scopes: [String]?
+
+    private enum CodingKeys: String, CodingKey {
+      case appId = "app_id"
+      case connectorAccess = "connector_access"
+      case createdAt = "created_at"
+      case id
+      case key
+      case keyPrefix = "key_prefix"
+      case lastUsedAt = "last_used_at"
+      case name
+      case scopes
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      appId = try c.decodeIfPresent(String.self, forKey: .appId)
+      connectorAccess = try c.decodeIfPresent(ConnectorAccess.self, forKey: .connectorAccess)
+      createdAt = try c.decode(String.self, forKey: .createdAt)
+      id = try c.decode(String.self, forKey: .id)
+      key = try c.decode(String.self, forKey: .key)
+      keyPrefix = try c.decode(String.self, forKey: .keyPrefix)
+      lastUsedAt = try c.decodeIfPresent(String.self, forKey: .lastUsedAt)
+      name = try c.decode(String.self, forKey: .name)
+      scopes = try c.decodeIfPresent([String].self, forKey: .scopes)
+    }
+
+    public init(appId: String? = nil, connectorAccess: ConnectorAccess? = nil, createdAt: String, id: String, key: String, keyPrefix: String, lastUsedAt: String? = nil, name: String, scopes: [String]? = nil) {
+      self.appId = appId
+      self.connectorAccess = connectorAccess
+      self.createdAt = createdAt
+      self.id = id
+      self.key = key
+      self.keyPrefix = keyPrefix
+      self.lastUsedAt = lastUsedAt
+      self.name = name
+      self.scopes = scopes
+    }
+  }
+
+
+  public struct McpOauthGrantsResponse: Codable {
+    public let connectorAccess: [String: ConnectorAccess]?
+    public let grants: [[String: OmiAnyCodable]]?
+
+    private enum CodingKeys: String, CodingKey {
+      case connectorAccess = "connector_access"
+      case grants
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      connectorAccess = try c.decodeIfPresent([String: ConnectorAccess].self, forKey: .connectorAccess)
+      grants = try c.decodeIfPresent([[String: OmiAnyCodable]].self, forKey: .grants)
+    }
+
+    public init(connectorAccess: [String: ConnectorAccess]? = nil, grants: [[String: OmiAnyCodable]]? = nil) {
+      self.connectorAccess = connectorAccess
+      self.grants = grants
+    }
+  }
+
+
   public struct MemoryCaptureContext: Codable {
     public let attribution: String?
     public let capturedAt: String?
@@ -4480,6 +4637,7 @@ public enum OmiAPI {
 
 
   public struct Participant: Codable {
+    public let alias: String?
     public let email: String?
     public let evidence: String?
     public let isAiAgent: Bool?
@@ -4487,8 +4645,10 @@ public enum OmiAPI {
     public let organization: String?
     public let role: String?
     public let source: String
+    public let speakerBindings: [Int]?
 
     private enum CodingKeys: String, CodingKey {
+      case alias
       case email
       case evidence
       case isAiAgent = "is_ai_agent"
@@ -4496,10 +4656,12 @@ public enum OmiAPI {
       case organization
       case role
       case source
+      case speakerBindings = "speaker_bindings"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      alias = try c.decodeIfPresent(String.self, forKey: .alias)
       email = try c.decodeIfPresent(String.self, forKey: .email)
       evidence = try c.decodeIfPresent(String.self, forKey: .evidence)
       isAiAgent = try c.decodeIfPresent(Bool.self, forKey: .isAiAgent)
@@ -4507,9 +4669,11 @@ public enum OmiAPI {
       organization = try c.decodeIfPresent(String.self, forKey: .organization)
       role = try c.decodeIfPresent(String.self, forKey: .role)
       source = try c.decode(String.self, forKey: .source)
+      speakerBindings = try c.decodeIfPresent([Int].self, forKey: .speakerBindings)
     }
 
-    public init(email: String? = nil, evidence: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
+    public init(alias: String? = nil, email: String? = nil, evidence: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String, speakerBindings: [Int]? = nil) {
+      self.alias = alias
       self.email = email
       self.evidence = evidence
       self.isAiAgent = isAiAgent
@@ -4517,6 +4681,7 @@ public enum OmiAPI {
       self.organization = organization
       self.role = role
       self.source = source
+      self.speakerBindings = speakerBindings
     }
   }
 
@@ -4991,6 +5156,66 @@ public enum OmiAPI {
       }
       let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
       self = RecordedClock(rawValue: unqualified) ?? ._unknown
+    }
+  }
+
+
+  public struct ReminderIntent: Codable {
+    public let dueExpression: String?
+    public let kind: String
+
+    private enum CodingKeys: String, CodingKey {
+      case dueExpression = "due_expression"
+      case kind
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      dueExpression = try c.decodeIfPresent(String.self, forKey: .dueExpression)
+      kind = try c.decode(String.self, forKey: .kind)
+    }
+
+    public init(dueExpression: String? = nil, kind: String) {
+      self.dueExpression = dueExpression
+      self.kind = kind
+    }
+  }
+
+
+  public struct ReminderOrigin: Codable {
+    public let extractedAt: String
+    public let inputRevision: String
+    public let policyRevision: String?
+    public let reviewReason: String?
+    public let sourceAt: String?
+    public let speakerEvidenceRevision: String
+
+    private enum CodingKeys: String, CodingKey {
+      case extractedAt = "extracted_at"
+      case inputRevision = "input_revision"
+      case policyRevision = "policy_revision"
+      case reviewReason = "review_reason"
+      case sourceAt = "source_at"
+      case speakerEvidenceRevision = "speaker_evidence_revision"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      extractedAt = try c.decode(String.self, forKey: .extractedAt)
+      inputRevision = try c.decode(String.self, forKey: .inputRevision)
+      policyRevision = try c.decodeIfPresent(String.self, forKey: .policyRevision)
+      reviewReason = try c.decodeIfPresent(String.self, forKey: .reviewReason)
+      sourceAt = try c.decodeIfPresent(String.self, forKey: .sourceAt)
+      speakerEvidenceRevision = try c.decode(String.self, forKey: .speakerEvidenceRevision)
+    }
+
+    public init(extractedAt: String, inputRevision: String, policyRevision: String? = nil, reviewReason: String? = nil, sourceAt: String? = nil, speakerEvidenceRevision: String) {
+      self.extractedAt = extractedAt
+      self.inputRevision = inputRevision
+      self.policyRevision = policyRevision
+      self.reviewReason = reviewReason
+      self.sourceAt = sourceAt
+      self.speakerEvidenceRevision = speakerEvidenceRevision
     }
   }
 
@@ -5677,6 +5902,7 @@ public enum OmiAPI {
     public let goalId: String?
     public let ownershipConfidence: Double
     public let proposedAction: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSurface: String
     public let subjectKind: String?
     public let taskChange: TaskChangePayload
@@ -5690,6 +5916,7 @@ public enum OmiAPI {
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case sourceSurface = "source_surface"
       case subjectKind = "subject_kind"
       case taskChange = "task_change"
@@ -5705,6 +5932,7 @@ public enum OmiAPI {
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decodeIfPresent(String.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSurface = try c.decode(String.self, forKey: .sourceSurface)
       subjectKind = try c.decodeIfPresent(String.self, forKey: .subjectKind)
       taskChange = try c.decode(TaskChangePayload.self, forKey: .taskChange)
@@ -5712,13 +5940,14 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.sourceSurface = sourceSurface
       self.subjectKind = subjectKind
       self.taskChange = taskChange
@@ -5730,6 +5959,7 @@ public enum OmiAPI {
 
   public struct TaskChangePayload: Codable {
     public let description_: String?
+    public let due: TaskDue?
     public let dueAt: String?
     public let dueConfidence: Double?
     public let owner: TaskOwner?
@@ -5741,6 +5971,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case description_ = "description"
+      case due
       case dueAt = "due_at"
       case dueConfidence = "due_confidence"
       case owner
@@ -5754,6 +5985,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       description_ = try c.decodeIfPresent(String.self, forKey: .description_)
+      due = try c.decodeIfPresent(TaskDue.self, forKey: .due)
       dueAt = try c.decodeIfPresent(String.self, forKey: .dueAt)
       dueConfidence = try c.decodeIfPresent(Double.self, forKey: .dueConfidence)
       owner = try c.decodeIfPresent(TaskOwner.self, forKey: .owner)
@@ -5764,8 +5996,9 @@ public enum OmiAPI {
       supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
     }
 
-    public init(description_: String? = nil, dueAt: String? = nil, dueConfidence: Double? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, status: TaskStatus? = nil, supersededBy: String? = nil) {
+    public init(description_: String? = nil, due: TaskDue? = nil, dueAt: String? = nil, dueConfidence: Double? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, status: TaskStatus? = nil, supersededBy: String? = nil) {
       self.description_ = description_
+      self.due = due
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
       self.owner = owner
@@ -5785,6 +6018,7 @@ public enum OmiAPI {
     public let goalId: String?
     public let ownershipConfidence: Double
     public let proposedAction: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSurface: String
     public let subjectKind: String?
     public let taskChange: TaskChangePayload
@@ -5798,6 +6032,7 @@ public enum OmiAPI {
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case sourceSurface = "source_surface"
       case subjectKind = "subject_kind"
       case taskChange = "task_change"
@@ -5813,6 +6048,7 @@ public enum OmiAPI {
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decodeIfPresent(String.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSurface = try c.decode(String.self, forKey: .sourceSurface)
       subjectKind = try c.decodeIfPresent(String.self, forKey: .subjectKind)
       taskChange = try c.decode(TaskChangePayload.self, forKey: .taskChange)
@@ -5820,13 +6056,14 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.sourceSurface = sourceSurface
       self.subjectKind = subjectKind
       self.taskChange = taskChange
@@ -5843,6 +6080,7 @@ public enum OmiAPI {
     public let goalId: String?
     public let ownershipConfidence: Double
     public let proposedAction: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSurface: String
     public let subjectKind: String?
     public let taskChange: TaskCreatePayload
@@ -5855,6 +6093,7 @@ public enum OmiAPI {
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case sourceSurface = "source_surface"
       case subjectKind = "subject_kind"
       case taskChange = "task_change"
@@ -5869,19 +6108,21 @@ public enum OmiAPI {
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decodeIfPresent(String.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSurface = try c.decode(String.self, forKey: .sourceSurface)
       subjectKind = try c.decodeIfPresent(String.self, forKey: .subjectKind)
       taskChange = try c.decode(TaskCreatePayload.self, forKey: .taskChange)
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskCreatePayload, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskCreatePayload, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.sourceSurface = sourceSurface
       self.subjectKind = subjectKind
       self.taskChange = taskChange
@@ -5892,6 +6133,7 @@ public enum OmiAPI {
 
   public struct TaskCreatePayload: Codable {
     public let description_: String
+    public let due: TaskDue?
     public let dueAt: String?
     public let dueConfidence: Double?
     public let owner: TaskOwner?
@@ -5901,6 +6143,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case description_ = "description"
+      case due
       case dueAt = "due_at"
       case dueConfidence = "due_confidence"
       case owner
@@ -5912,6 +6155,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       description_ = try c.decode(String.self, forKey: .description_)
+      due = try c.decodeIfPresent(TaskDue.self, forKey: .due)
       dueAt = try c.decodeIfPresent(String.self, forKey: .dueAt)
       dueConfidence = try c.decodeIfPresent(Double.self, forKey: .dueConfidence)
       owner = try c.decodeIfPresent(TaskOwner.self, forKey: .owner)
@@ -5920,14 +6164,57 @@ public enum OmiAPI {
       recurrenceRule = try c.decodeIfPresent(String.self, forKey: .recurrenceRule)
     }
 
-    public init(description_: String, dueAt: String? = nil, dueConfidence: Double? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil) {
+    public init(description_: String, due: TaskDue? = nil, dueAt: String? = nil, dueConfidence: Double? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil) {
       self.description_ = description_
+      self.due = due
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
       self.owner = owner
       self.priority = priority
       self.recurrenceParentId = recurrenceParentId
       self.recurrenceRule = recurrenceRule
+    }
+  }
+
+
+  public struct TaskDue: Codable {
+    public let date: String?
+    public let expression: String?
+    public let instant: String?
+    public let kind: String
+    public let reason: String?
+    public let timezone: String?
+    public let yearBasis: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case date
+      case expression
+      case instant
+      case kind
+      case reason
+      case timezone
+      case yearBasis = "year_basis"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      date = try c.decodeIfPresent(String.self, forKey: .date)
+      expression = try c.decodeIfPresent(String.self, forKey: .expression)
+      instant = try c.decodeIfPresent(String.self, forKey: .instant)
+      kind = try c.decode(String.self, forKey: .kind)
+      reason = try c.decodeIfPresent(String.self, forKey: .reason)
+      timezone = try c.decodeIfPresent(String.self, forKey: .timezone)
+      yearBasis = try c.decodeIfPresent(String.self, forKey: .yearBasis)
+    }
+
+    public init(date: String? = nil, expression: String? = nil, instant: String? = nil, kind: String, reason: String? = nil, timezone: String? = nil, yearBasis: String? = nil) {
+      self.date = date
+      self.expression = expression
+      self.instant = instant
+      self.kind = kind
+      self.reason = reason
+      self.timezone = timezone
+      self.yearBasis = yearBasis
     }
   }
 
@@ -6084,6 +6371,7 @@ public enum OmiAPI {
     public let goalId: String?
     public let ownershipConfidence: Double
     public let proposedAction: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSurface: String
     public let subjectKind: String?
     public let taskChange: TaskChangePayload
@@ -6097,6 +6385,7 @@ public enum OmiAPI {
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case sourceSurface = "source_surface"
       case subjectKind = "subject_kind"
       case taskChange = "task_change"
@@ -6112,6 +6401,7 @@ public enum OmiAPI {
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decodeIfPresent(String.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSurface = try c.decode(String.self, forKey: .sourceSurface)
       subjectKind = try c.decodeIfPresent(String.self, forKey: .subjectKind)
       taskChange = try c.decode(TaskChangePayload.self, forKey: .taskChange)
@@ -6119,13 +6409,14 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.sourceSurface = sourceSurface
       self.subjectKind = subjectKind
       self.taskChange = taskChange
@@ -6142,6 +6433,7 @@ public enum OmiAPI {
     public let goalId: String?
     public let ownershipConfidence: Double
     public let proposedAction: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSurface: String
     public let subjectKind: String?
     public let taskChange: TaskChangePayload
@@ -6155,6 +6447,7 @@ public enum OmiAPI {
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case sourceSurface = "source_surface"
       case subjectKind = "subject_kind"
       case taskChange = "task_change"
@@ -6170,6 +6463,7 @@ public enum OmiAPI {
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decodeIfPresent(String.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSurface = try c.decode(String.self, forKey: .sourceSurface)
       subjectKind = try c.decodeIfPresent(String.self, forKey: .subjectKind)
       taskChange = try c.decode(TaskChangePayload.self, forKey: .taskChange)
@@ -6177,13 +6471,14 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.sourceSurface = sourceSurface
       self.subjectKind = subjectKind
       self.taskChange = taskChange
@@ -6242,6 +6537,7 @@ public enum OmiAPI {
     public let personId: String?
     public let speaker: String?
     public let speakerId: Int?
+    public let speakerIdScope: String?
     public let speakerLabelSource: String?
     public let speechProfileProcessed: Bool?
     public let start: Double
@@ -6257,6 +6553,7 @@ public enum OmiAPI {
       case personId = "person_id"
       case speaker
       case speakerId = "speaker_id"
+      case speakerIdScope = "speaker_id_scope"
       case speakerLabelSource = "speaker_label_source"
       case speechProfileProcessed = "speech_profile_processed"
       case start
@@ -6274,6 +6571,7 @@ public enum OmiAPI {
       personId = try c.decodeIfPresent(String.self, forKey: .personId)
       speaker = try c.decodeIfPresent(String.self, forKey: .speaker)
       speakerId = try c.decodeIfPresent(Int.self, forKey: .speakerId)
+      speakerIdScope = try c.decodeIfPresent(String.self, forKey: .speakerIdScope)
       speakerLabelSource = try c.decodeIfPresent(String.self, forKey: .speakerLabelSource)
       speechProfileProcessed = try c.decodeIfPresent(Bool.self, forKey: .speechProfileProcessed)
       start = try c.decode(Double.self, forKey: .start)
@@ -6282,7 +6580,7 @@ public enum OmiAPI {
       translations = try c.decodeIfPresent([Translation].self, forKey: .translations)
     }
 
-    public init(end: Double, id: String? = nil, isUser: Bool, originalText: String? = nil, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
+    public init(end: Double, id: String? = nil, isUser: Bool, originalText: String? = nil, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerIdScope: String? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
       self.end = end
       self.id = id
       self.isUser = isUser
@@ -6290,6 +6588,7 @@ public enum OmiAPI {
       self.personId = personId
       self.speaker = speaker
       self.speakerId = speakerId
+      self.speakerIdScope = speakerIdScope
       self.speakerLabelSource = speakerLabelSource
       self.speechProfileProcessed = speechProfileProcessed
       self.start = start
@@ -6462,6 +6761,7 @@ public enum OmiAPI {
     public let goalId: String?
     public let ownershipConfidence: Double
     public let proposedAction: String?
+    public let reminderOrigin: ReminderOrigin?
     public let sourceSurface: String
     public let subjectKind: String?
     public let workstreamId: String?
@@ -6474,6 +6774,7 @@ public enum OmiAPI {
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
       case proposedAction = "proposed_action"
+      case reminderOrigin = "reminder_origin"
       case sourceSurface = "source_surface"
       case subjectKind = "subject_kind"
       case workstreamId = "workstream_id"
@@ -6488,19 +6789,21 @@ public enum OmiAPI {
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
       proposedAction = try c.decodeIfPresent(String.self, forKey: .proposedAction)
+      reminderOrigin = try c.decodeIfPresent(ReminderOrigin.self, forKey: .reminderOrigin)
       sourceSurface = try c.decode(String.self, forKey: .sourceSurface)
       subjectKind = try c.decodeIfPresent(String.self, forKey: .subjectKind)
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
       workstreamProposal = try c.decode(WorkstreamProposal.self, forKey: .workstreamProposal)
     }
 
-    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposal) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, reminderOrigin: ReminderOrigin? = nil, sourceSurface: String, subjectKind: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposal) {
       self.captureConfidence = captureConfidence
       self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
       self.proposedAction = proposedAction
+      self.reminderOrigin = reminderOrigin
       self.sourceSurface = sourceSurface
       self.subjectKind = subjectKind
       self.workstreamId = workstreamId
@@ -9721,8 +10024,60 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func taskPresenceV1ConversationsTaskPresencePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/task-presence"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func generateConversationTopicEndpointV1ConversationsTopicPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/topic"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func conversationsWithTasksV1ConversationsWithTasksPagePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/with-tasks/page"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
@@ -10317,6 +10672,57 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getRecordingSpeakersV1ConversationsConversationIdRecordingSpeakersGet(client: OmiApiClient, conversationId: String, xOmiAppChannel: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/recording-speakers"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xOmiAppChannel { req.setValue(String(xOmiAppChannel), forHTTPHeaderField: "X-Omi-App-Channel") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func assignRecordingSpeakersV1ConversationsConversationIdRecordingSpeakersPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/recording-speakers"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -11989,6 +12395,33 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func assignEpisodeSpeakerV1EpisodesEpisodeIdAssignSpeakerPatch(client: OmiApiClient, episodeId: String, xOmiAppChannel: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/episodes/\(episodeId)/assign-speaker"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xOmiAppChannel { req.setValue(String(xOmiAppChannel), forHTTPHeaderField: "X-Omi-App-Channel") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -14124,7 +14557,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func createKeyV1McpKeysPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func createKeyV1McpKeysPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> McpApiKeyCreated {
     let _path = "/v1/mcp/keys"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14143,7 +14576,27 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(McpApiKeyCreated.self, from: data)
+  }
+
+  public static func getMcpKeyScopeContract(client: OmiApiClient) async throws -> ConnectorAccess {
+    let _path = "/v1/mcp/keys/scopes"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ConnectorAccess.self, from: data)
   }
 
   public static func deleteKeyV1McpKeysKeyIdDelete(client: OmiApiClient, keyId: String) async throws -> Void {
@@ -14312,7 +14765,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getOauthGrantsV1McpOauthGrantsGet(client: OmiApiClient) async throws -> OmiAnyCodable {
+  public static func getOauthGrantsV1McpOauthGrantsGet(client: OmiApiClient) async throws -> McpOauthGrantsResponse {
     let _path = "/v1/mcp/oauth/grants"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14329,7 +14782,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(McpOauthGrantsResponse.self, from: data)
   }
 
   public static func revokeOauthGrantV1McpOauthGrantsGrantIdDelete(client: OmiApiClient, grantId: String) async throws -> Void {
@@ -15100,7 +15553,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func pendingWorkV1PendingWorkGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func pendingWorkV1PendingWorkGet(client: OmiApiClient, xOmiAppChannel: String? = nil, xOmiHomeOwnership: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/pending-work"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -15112,6 +15565,8 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    if let xOmiAppChannel { req.setValue(String(xOmiAppChannel), forHTTPHeaderField: "X-Omi-App-Channel") }
+    if let xOmiHomeOwnership { req.setValue(String(xOmiHomeOwnership), forHTTPHeaderField: "X-Omi-Home-Ownership") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
@@ -19712,7 +20167,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func getLatestVersionV2FirmwareLatestGet(client: OmiApiClient, deviceModel: String, firmwareRevision: String, hardwareRevision: String, manufacturerName: String) async throws -> OmiAnyCodable {
+  public static func getLatestVersionV2FirmwareLatestGet(client: OmiApiClient, deviceModel: String, firmwareRevision: String, hardwareRevision: String, manufacturerName: String, deviceId: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/firmware/latest"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -19722,6 +20177,9 @@ public enum OmiAPI {
     queryItems.append(URLQueryItem(name: "firmware_revision", value: String(firmwareRevision)))
     queryItems.append(URLQueryItem(name: "hardware_revision", value: String(hardwareRevision)))
     queryItems.append(URLQueryItem(name: "manufacturer_name", value: String(manufacturerName)))
+    if let deviceId {
+      queryItems.append(URLQueryItem(name: "device_id", value: String(deviceId)))
+    }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
@@ -20164,7 +20622,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiFirmwareVersion: String? = nil, xOmiDeviceModel: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, repairJobId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiFirmwareVersion: String? = nil, xOmiDeviceModel: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20181,6 +20639,9 @@ public enum OmiAPI {
     }
     if let audioEndSeconds {
       queryItems.append(URLQueryItem(name: "audio_end_seconds", value: String(audioEndSeconds)))
+    }
+    if let repairJobId {
+      queryItems.append(URLQueryItem(name: "repair_job_id", value: String(repairJobId)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -20208,7 +20669,7 @@ public enum OmiAPI {
     return
   }
 
-  public static func getSyncJobStatusV2SyncLocalFilesJobIdGet(client: OmiApiClient, jobId: String, surfaceOpen: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func getSyncJobStatusV2SyncLocalFilesJobIdGet(client: OmiApiClient, jobId: String, surfaceOpen: Bool? = nil, xOmiCustodyRepairProtocol: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/sync-local-files/\(jobId)"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20225,10 +20686,76 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    if let xOmiCustodyRepairProtocol { req.setValue(String(xOmiCustodyRepairProtocol), forHTTPHeaderField: "X-Omi-Custody-Repair-Protocol") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getCampaignV2UsersMeReferralCampaignGet(client: OmiApiClient, authorization: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v2/users/me/referral/campaign"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func attributeCampaignV2UsersMeReferralCampaignAttributionPost(client: OmiApiClient, authorization: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v2/users/me/referral/campaign/attribution"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func claimCampaignV2UsersMeReferralCampaignClaimPost(client: OmiApiClient, authorization: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v2/users/me/referral/campaign/claim"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -20933,5 +21460,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 536 Swift client methods generated.
+  // Total: 545 Swift client methods generated.
 }

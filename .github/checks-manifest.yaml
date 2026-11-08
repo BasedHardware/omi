@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cv1-tested-release-contract-tests
+    command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
+    triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-03 CV1 bench finding: rebuilds change randomized signed bytes and the installed overwrite-only loader cannot undo a bad boot; reject untested promotion and unintended radio packaging"
   - id: pcloud-backup-contract-tests
     command: ["bash", "scripts/run-plugin-pcloud-tests.sh"]
     triggers: ["plugins/omi-pcloud-app/**", "plugins/omi-plugin-sdk/**", "backend/utils/plugin_transport.py", "backend/utils/plugin_backup_audio.py", "scripts/run-plugin-pcloud-tests.sh", ".github/checks-manifest.yaml"]
@@ -34,6 +39,11 @@ checks:
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-10-13 absent-rule audit: retired proactive metric and kube_endpoint_address_available could never evaluate; fingerprinted legacy debt cannot admit new dead selectors or edited rules"
+  - id: ui-author-approval-tests
+    command: ["node", "--test", ".github/scripts/tests/ui-author-approval.test.cjs"]
+    triggers: [".github/scripts/ui-author-approval.cjs", ".github/scripts/tests/ui-author-approval.test.cjs", ".github/workflows/ui-author-approval.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#24477: the generated Swift client exceeds the Contents API inline limit; immutable blob evidence must remain complete without exempting generated UI declarations or bypassing human approval"
   - id: ui-evidence
     command: ["python3", ".github/scripts/check_ui_evidence.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", "web/frontend/src/**", "web/admin/app/**", ".github/scripts/check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
@@ -57,7 +67,7 @@ checks:
     reason: "The 2026-09-24 inventory found an incorrect notes-v2 default and missing calendar, memory and JIT gates in the handwritten catalog; code reads and deploy declarations now require reviewed registry entries and a deterministic rendered doc"
   - id: feature-flag-registry-fixtures
     command: ["python3", "scripts/test_check_feature_flag_registry.py"]
-    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/git_test_env.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Registry extraction, uniqueness, date warnings, retirement and rendered-doc drift must remain covered by hermetic fixtures"
   - id: posthog-flag-sync-fixtures
@@ -273,7 +283,7 @@ checks:
     reason: "the Python SDK's Deepgram handshake uses the websockets 14 API; exercise the actual client at the minimum supported version so an incompatible dependency floor cannot silently disable transcription"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "scripts/git_test_env.py", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
@@ -286,6 +296,12 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: firmware-safe-mode-host
+    command: ["make", "-C", "omi/firmware/tests", "test"]
+    triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "CV1 safe-mode recovery must count failed boots without NVS wear, survive same-version DFU, and preserve the fielded OTA slot geometry"
   - id: pre-push-firmware-formatter-prerequisite
     command: ["bash", "scripts/test-pre-push-firmware-format-prerequisite.sh"]
     triggers: ["scripts/pre-push", "scripts/test-pre-push-firmware-format-prerequisite.sh", ".github/checks-manifest.yaml"]
@@ -306,6 +322,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/test-pre-push-backend-test-cap.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11018: the over-broad-selection fallback swapped in the diff's own changed backend test files without re-applying PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES, so a diff changing more than the cap ran unbounded while printing 'cap is 40'; the bounded push gate must never run more than the cap it advertises"
+  - id: pr-preflight-git-env
+    command: ["bash", "scripts/test-pr-preflight-git-env.sh"]
+    triggers: ["scripts/pr-preflight", "scripts/test-pr-preflight-git-env.sh", "scripts/git_test_env.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-04 00:10Z: preflight inherited a lane's GIT_DIR/GIT_WORK_TREE and nested git init wrote core.worktree into the shared config, redirecting every linked worktree; isolate children only after selecting the intended tree"
   - id: pre-push-hook-git-env
     command: ["bash", "scripts/test-pre-push-git-env.sh"]
     triggers: ["scripts/pre-push", "scripts/test-pre-push-git-env.sh", ".github/checks-manifest.yaml"]
@@ -364,12 +385,12 @@ checks:
     reason: "#11641: a self-signed developer build carrying the production bundle id wrote certificate-pinned TCC records that no re-grant could clear, breaking Screen Recording and Microphone on a user's Mac for days; a build not signed for release must never claim the production identifiers"
   - id: desktop-release-process-guards
     command: ["bash", "scripts/run-release-process-guards.sh"]
-    triggers: ["codemagic.yaml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/firmware_release.yml", "omi/firmware/scripts/ci/**", "codemagic.yaml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "normal Beta promotion must stay on Codemagic signed-smoke evidence and must not reintroduce a qualification-completion trigger"
   - id: desktop-release-process-guard-tests
     command: ["bash", "scripts/run-release-process-guard-tests.sh"]
-    triggers: [".github/scripts/check-release-process-guards.py", ".github/scripts/test_check_release_process_guards.py", ".github/scripts/git_bash.py", "codemagic.yaml", ".github/scripts/fixtures/codemagic_workflow_contract/**", "scripts/run-release-process-guard-tests.sh", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/firmware_release.yml", "omi/firmware/scripts/ci/**", ".github/scripts/check-release-process-guards.py", ".github/scripts/test_check_release_process_guards.py", ".github/scripts/git_bash.py", "codemagic.yaml", ".github/scripts/fixtures/codemagic_workflow_contract/**", "scripts/run-release-process-guard-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10351: the 94-test self-suite behind the release-process guard ran in no lane, so guard regressions accumulated silently until the suite itself was red on main"
   - id: failure-class-retirement-author
@@ -490,6 +511,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: new-file-headers
+    command: ["python3", ".github/scripts/check_new_file_headers.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/agent/src/**/*.ts", ".github/scripts/check_new_file_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14527 merged the 75-line headerless app/lib/backend/http/api_result.dart (the C3 typed-result contract) with no statement of what it owns; a new first-party source file must say what it owns and the constraint it upholds where the next reader looks first"
+  - id: new-file-headers-tests
+    command: ["python3", ".github/scripts/test_check_new_file_headers.py"]
+    triggers: [".github/scripts/check_new_file_headers.py", ".github/scripts/test_check_new_file_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "header detection must keep accepting top-of-file and after-import comment blocks while rejecting marker-only comments, parse failures, and wrongly exempting tests, generated files, __init__.py and small files"
 
   - id: twitter-app-callback-error-escaping-tests
     command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]
@@ -551,7 +582,7 @@ checks:
     reason: "the guard-artifact ratchet's counting window, threshold, allowlist shrink rule, and shallow-history skip must stay behaviorally covered"
   - id: failure-class-cli-tests
     command: ["python3", "scripts/test_failure_class.py"]
-    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", "scripts/git_test_env.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the failure-class CLI is the registry's only schema authority; its hermetic tests had no blocking lane and had silently gone stale"
   - id: desktop-changelog-data
@@ -754,6 +785,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT launch collision requires the Meta and mcumgr SwiftProtobuf copies to remain in mutually exclusive iOS pod graphs"
+  - id: ios-rayban-audio-capture
+    command: ["ruby", "app/ios/test/rayban_audio_capture_test.rb"]
+    triggers: ["app/ios/Runner/RayBanMeta/RayBanMetaAudioCapture.swift", "app/ios/test/rayban_audio_capture_test.rb", "app/ios/test/rayban_audio_capture_test.swift", "app/ios/test/fixtures/rayban_audio_avfoundation.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "FC-stopped-capture-retains-audio-session: failed Ray-Ban setup must release a partially acquired tap/engine/session before retry; execute the actual capture class with injected framework effects and type-check against the real iOS SDK"
   - id: rayban-dat-xcode-graph
     command: ["ruby", "app/ios/test/rayban_dat_xcode_graph_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Flutter/raybanDat*.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/Runner.xcodeproj/xcshareddata/xcschemes/raybanDat.xcscheme", "app/ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved", "app/ios/test/rayban_dat_xcode_graph_test.rb", ".github/checks-manifest.yaml"]
@@ -1099,6 +1136,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
     lanes: ["local", "ci"]
     reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
+  - id: backend-runtime-image-third-party-closure
+    command: ["python3", "backend/scripts/runtime_image_contracts.py", "check-third-party"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/**/pylock*.toml", "backend/**/requirements*.txt", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", "plugins/**/*.py", "plugins/Dockerfile", "plugins/requirements.txt", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#24490/#24366: the worker image shipped without deepgram-sdk and langdetect because only the full lock was tested; every reachable third-party import must map to a distribution its image's closed lock installs"
   - id: backend-logging-entrypoints
     command: ["python3", "backend/scripts/check_logging_entrypoints.py", "--base", "{base}"]
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/charts/**/*.yaml", "backend/charts/**/*.yml", "backend/runtime_images.json", "backend/logging_rollout_pending.json", ".github/checks-manifest.yaml"]
@@ -1228,7 +1270,7 @@ checks:
     command: ["python3", ".github/scripts/test_desktop_codemagic_failure_recovery.py"]
     triggers: [".github/scripts/desktop-codemagic-failure-recovery.py", ".github/scripts/desktop-codemagic-recovery-profiles.json", ".github/scripts/test_desktop_codemagic_failure_recovery.py", ".github/workflows/desktop_codemagic_failure_recovery.yml", "desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "failed desktop Codemagic builds must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
+    reason: "an operator-dispatched recovery run (build_id of a failed desktop Codemagic build) must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
   - id: desktop-release-rehearsal-contract
     command: ["bash", "desktop/macos/tests/test-desktop-release-rehearsal.sh"]
     triggers: ["desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/tests/test-desktop-release-rehearsal.sh", ".github/checks-manifest.yaml"]
@@ -1566,6 +1608,11 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
+  - id: hume-ai-route-auth-tests
+    command: ["python3", "plugins/hume-ai/test_hume_tools_auth.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hume-ai's /audio, /save-emotion-memory and /force-send-notification routes take uid from the query string with no caller authentication and write emotion memories into any user's Omi account with the app's integration key or push notifications to any user; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
   - id: dead-code-ratchet
     command: ["python3", ".github/scripts/check_dead_code.py"]
     triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
@@ -1853,12 +1900,12 @@ checks:
     reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations, the route registry and the adopted-file protections guard catalogued navigation and control keys without a changed-file no-growth debt ratchet"
   - id: app-addressability-check-tests
     command: ["python3", "scripts/test_check_app_addressability.py"]
-    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "scripts/git_test_env.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Token scan must reject unknown explicit route declarations without taxing helpers or dialogs; adopted-file removal stays blocked"
   - id: registry-conflict-resolver-tests
     command: ["python3", "scripts/test_resolve_registry_conflict.py"]
-    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", "scripts/git_test_env.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: mobile-event-registry

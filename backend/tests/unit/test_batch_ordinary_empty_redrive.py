@@ -180,8 +180,7 @@ def test_ordinary_route_does_not_bypass_funding(setup, monkeypatch, legacy_depen
     monkeypatch.setattr(speech_redrive, 'sync_allowed', lambda *a, **kw: False)
     assert dispatch(store, artifacts, binding, original) == 'allowance_held'
     marker = row(client)['speech_redrive']
-    assert marker['state'] == 'prepared' and not marker.get('started_at')
-    assert marker['prior_speech_redrive'] == previous
+    assert marker == previous
     soniox.assert_not_called()
     modulate.assert_not_called()
 
@@ -431,8 +430,8 @@ def test_canonical_cli_new_mode_dryrun_apply_and_same_plan_replay(
     assert client.rows == before and cohort.stat().st_mode & 0o777 == 0o600
     assert plan['provider'] == 'soniox' and plan['operation'] == 'ordinary-empty-independent-recovery-v2'
     assert plan['strict_vad'] == {'worker_vad_speech': 1}
-    assert plan['maximum_additional_paid_calls'] == 1 and plan['total_recorded_audio_seconds'] == 5
-    assert plan['maximum_possible_decoded_audio_seconds'] == pytest.approx(5.1)
+    assert plan['maximum_additional_paid_calls'] == 2 and plan['total_recorded_audio_seconds'] == 5
+    assert plan['maximum_possible_decoded_audio_seconds'] == pytest.approx(10.2)
     assert plan['paid_stt_calls'] == plan['firestore_writes'] == 0
     artifacts.fetch_audio.assert_not_called()
     soniox.assert_not_called()

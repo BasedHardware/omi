@@ -19,7 +19,6 @@ from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_desktop_trial_paywalled
 from utils.tts import (
     TtsConfigurationError,
     TtsRequestLog,
@@ -219,15 +218,6 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     elif not _is_valid_voice_name(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
     legacy_openai = provider == 'legacy'
-    if await run_blocking(
-        db_executor,
-        is_desktop_trial_paywalled,
-        uid,
-        "desktop",
-        required_byok_provider="openai" if legacy_openai else None,
-        byok_exempt=legacy_openai,
-    ):
-        raise HTTPException(status_code=403, detail="A paid subscription is required")
     if generated_compute_configured():
         await run_blocking(
             db_executor,

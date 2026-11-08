@@ -63,7 +63,7 @@ def saturated(inline_session, monkeypatch):
         return result
 
     async def run(executor, fn, *args, **kwargs):
-        if fn is pusher.read_pcm:
+        if fn is pusher.upload_audio_chunks_batch:
             entered.set()
             await release.wait()
         return await real_run(executor, fn, *args, **kwargs)
@@ -178,7 +178,7 @@ async def test_expiry_enters_drain_with_slot_intact_and_late_finish(saturated, r
 @pytest.mark.asyncio
 async def test_closed_owner_admission_failure_keeps_fence_and_durable_slot(saturated, monkeypatch, remote):
     state = saturated
-    monkeypatch.setattr(pusher, 'retain_closed_record_drain', lambda _: False)
+    monkeypatch.setattr(pusher, 'retain_closed_record_drain', lambda _, **kwargs: False)
     handler = asyncio.create_task(pusher._websocket_util_trigger(state.socket(), 'owner', 16000, audio_custody=1))
     try:
         await at_capacity(state)
@@ -448,7 +448,7 @@ async def test_seal_only_admission_retry_keeps_closed_drain_owner(inline_session
         owners.append(owner)
         return owner
 
-    def keep(task):
+    def keep(task, **kwargs):
         retained.append(task)
         return retain(task)
 

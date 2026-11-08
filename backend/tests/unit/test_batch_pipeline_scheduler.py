@@ -1,6 +1,7 @@
 """State-machine tests over an atomic snapshot store, not a Firestore emulator."""
 
 from copy import deepcopy
+from dataclasses import replace
 from threading import Event, RLock, Thread, current_thread
 from unittest.mock import Mock
 
@@ -105,17 +106,28 @@ class MemoryStore:
             return True
 
     def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
+        import hashlib
+        from config.batch_pipeline import control_candidate_fanout
         from utils.batch_pipeline.control import field
 
         candidates = [
             (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
             for (table, key), v in self.rows.items()
             if table == 'control'
-            and key not in exclude
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
-        return min(candidates)[2] if candidates else None
+        candidates.sort()
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
+        return [row[2] for row in candidates]
 
     def oldest_retry(self, priority):
         values = [
@@ -127,6 +139,20 @@ class MemoryStore:
 
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
+
+    # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.
+    def defer_privacy_blocked_record(self, segment_id, until, now):
+        with self.lock:
+            job = self.rows.get(('jobs', segment_id))
+            if (
+                not job
+                or job['state'] != 'record_pending'
+                or job['available_at'] > now
+                or not job.get('privacy_fenced')
+            ):
+                return False
+            job['available_at'] = float(until)
+            return True
 
     def longest_ready_pending(self, owner_key):
         jobs = [
@@ -168,14 +194,43 @@ def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP,
     return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority, unit_kind)
 
 
-def test_heavy_owner_does_not_starve_light_owner():
+@pytest.mark.parametrize('timing_store', [None, 'batch', 'sync'])
+def test_job_timing_store_is_optional_durable_and_immutable(timing_store):
+    store = MemoryStore()
+    queue = Scheduler(store)
+    work = replace(item('clock'), timing_store=timing_store)
+    assert queue.enqueue(work, 0)
+    row = store.rows['jobs', work.segment_id]
+    if timing_store is None:
+        assert 'timing_store' not in row
+    else:
+        assert row['timing_store'] == timing_store
+    assert not queue.enqueue(work, 0)
+    assert queue.pull(1)[0].item == work
+    if timing_store is None:
+        # Rows written before omission remain idempotent too.
+        store.rows['jobs', work.segment_id]['timing_store'] = None
+        assert not queue.enqueue(work, 0)
+    for other in {None, 'batch', 'sync'} - {timing_store}:
+        with pytest.raises(ValueError, match='different immutable work'):
+            queue.enqueue(replace(work, timing_store=other), 0)
+
+
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_heavy_owner_does_not_starve_light_owner(monkeypatch, multi_lease):
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
     queue = Scheduler(MemoryStore())
     for n in range(30):
         queue.enqueue(item(f'h{n}'), 0)
     queue.enqueue(item('light', owner='light'), 0)
     pulled = queue.pull(1, 3)
-    assert 'light' in [v.item.owner_id for v in pulled[:2]]
     assert len(pulled) == 3
+    if not multi_lease:
+        assert 'light' in [v.item.owner_id for v in pulled[:2]]
+        return
+    # One shard transaction may fill the batch, but the service it charged
+    # puts the light owner's shard first on the very next pull.
+    assert 'light' in [v.item.owner_id for v in pulled + queue.pull(1, 1)]
 
 
 def test_duration_deficit_round_robin():
@@ -225,6 +280,78 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 187)
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 999)
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
+
+
+def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
+    from utils.batch_pipeline.language_receipt import observation
+
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('receipt'), 0)
+    lease = queue.pull(0)[0]
+    receipt = observation('en', 'parakeet', [{'word': 'hello'}])
+    with_receipt = WorkResult('receipt', 'gs://results/receipt', language_receipt=receipt)
+    assert queue.complete(with_receipt, lease.token, 1)
+    assert store.rows['jobs', 'receipt']['result']['language_receipt'] == receipt
+    assert queue.complete(with_receipt, lease.token, 2)
+    changed = observation('en', 'parakeet', [{'word': 'Привет'}])
+    assert not queue.complete(WorkResult('receipt', 'gs://results/receipt', language_receipt=changed), lease.token, 3)
+
+    queue.enqueue(item('legacy'), 4)
+    legacy_lease = queue.pull(4)[0]
+    without_receipt = WorkResult('legacy', 'gs://results/legacy')
+    assert queue.complete(without_receipt, legacy_lease.token, 5)
+    assert 'language_receipt' not in store.rows['jobs', 'legacy']['result']
+    replay_with_receipt = WorkResult('legacy', 'gs://results/legacy', language_receipt=receipt)
+    assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
+
+
+def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=QueueMetrics(registry))
+    queue.enqueue(item('held'), 0)
+    first = queue.pull(1)[0]
+    assert first.attempt == 1
+    assert queue.defer(
+        'held',
+        first.token,
+        2,
+        retry_after=60,
+        held_reason='allowance_exhausted',
+        admission_refused=True,
+    )
+    due = store.rows['jobs', 'held']['available_at']
+    assert queue.recover(due) == 1
+    second = queue.pull(due)[0]
+    # defer() refunded the attempt, so the re-lease is a relet only through
+    # the recorded refusal streak.
+    assert second.attempt == 1 and second.token != first.token
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+
+
+def test_attempt_charged_re_lease_records_relet_true():
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=QueueMetrics(registry))
+    queue.enqueue(item('a'), 0)
+    first = queue.pull(0)[0]
+    assert first.attempt == 1
+    assert queue.recover(181) == 1
+    assert queue.recover(186) == 1
+    second = queue.pull(186)[0]
+    assert second.attempt == 2
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
@@ -313,7 +440,7 @@ def test_contention_backoff_returns_prior_leases_and_suppresses_hot_repull(monke
     monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
     queue = Scheduler(MemoryStore())
     lease = LeasedWork(item('leased'), 'synthetic-token', 1, 120.0)
-    pull_one = Mock(side_effect=[lease, FirestoreContentionExhausted('bounded'), None])
+    pull_one = Mock(side_effect=[[lease], FirestoreContentionExhausted('bounded'), []])
     monkeypatch.setattr(queue, '_pull_one', pull_one)
 
     assert queue.pull(0, 2) == [lease]
@@ -585,6 +712,45 @@ def test_per_pool_unit_ceiling_and_malformed_capacity_fail_closed():
         assert queue.pull(10, capacity=capacity) == []
 
 
+def test_frame_exact_hour_with_clock_noise_leases_at_hour_ceiling():
+    # Prod 2026-11-01: record units are end - start of epoch clocks, so a full
+    # hour admitted as 3600.0000005s parked four owners' FIFOs for up to 40h.
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('hour', duration=3600 + 4.76837158203125e-07), 0)
+    queue.enqueue(item('later', duration=30, capture=2), 0)
+    capacity = PoolCapacity(10, 1, max_item_seconds=3600)
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'hour'
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'later'
+
+
+def test_parked_heads_are_counted_by_bounded_reason(monkeypatch):
+    from dataclasses import replace
+    from prometheus_client import CollectorRegistry
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from utils.batch_pipeline.contracts import PoolCapacity
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    queue = Scheduler(MemoryStore(), metrics=QueueMetrics(registry))
+    queue.enqueue(item('long', duration=3601), 0)
+    queue.enqueue(replace(item('fenced', owner=colliding_owner('heavy')), conversation_id='deleted'), 0)
+    check = MemoryTransaction.check_privacy
+
+    def privacy(tx, uid, conversation_ids=(), expected_generation=None):
+        if 'deleted' in conversation_ids:
+            raise BatchPrivacyBlocked('synthetic deletion')
+        return check(tx, uid, conversation_ids, expected_generation)
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', privacy)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, max_item_seconds=3600)) == []
+    scope = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    sample = 'omi_batch_pipeline_head_parked_total'
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'pool_duration'}) == 1
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'privacy'}) == 1
+
+
 def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch):
     from utils.batch_pipeline.contracts import PoolCapacity
 
@@ -630,19 +796,32 @@ def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
     assert Scheduler(queue.store).pull(1)[0].item.unit_kind == 'conversation'
 
 
-def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority():
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority(monkeypatch, multi_lease):
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
     store = MemoryStore()
     queue = Scheduler(store)
     other = colliding_owner('heavy')
     assert scheduler_control_key(owner_key('light')) != scheduler_control_key(owner_key('heavy'))
     for owner in ('heavy', other, 'light'):
-        for n in range(12):
+        for n in range(24):
             queue.enqueue(item(f'{owner}-{n}', owner=owner), 0)
     queue.enqueue(item('fresh-across-shards', owner='fresh', priority=Priority.FRESH), 0)
     assert queue.pull(1)[0].item.segment_id == 'fresh-across-shards'
-    pulled = queue.pull(1, 18)
-    counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
-    assert set(counts.values()) == {6}
+    if not multi_lease:
+        pulled = queue.pull(1, 18)
+        counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
+        assert set(counts.values()) == {6}
+    else:
+        # Each transaction leases up to the batch from one shard and charges
+        # service per lease, so per-owner shares drift by at most one batch
+        # and the owner-count weighting restores them on the next shard turn.
+        counts = {uid: 0 for uid in ('heavy', other, 'light')}
+        for _ in range(4):
+            for lease in queue.pull(1, 9):
+                counts[lease.item.owner_id] += 1
+            assert max(counts.values()) - min(counts.values()) <= 9
+        assert min(counts.values()) >= 9
     assert ('control', 'scheduler') not in store.rows
     assert len([key for table, key in store.rows if table == 'control']) >= 2
 
@@ -979,3 +1158,67 @@ def test_release_expires_lease_now_with_expiry_semantics_and_fences_stale_tokens
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 8)
     assert not queue.release('a', second.token, 9)  # Published work is never released.
     assert store.rows['jobs', 'a']['state'] == 'result_ready'
+
+
+def _count_control_puts(monkeypatch):
+    puts = []
+    original = MemoryTransaction.put
+
+    def put(self, table, key, value):
+        if table == 'control':
+            puts.append(key)
+        return original(self, table, key, value)
+
+    monkeypatch.setattr(MemoryTransaction, 'put', put)
+    return puts
+
+
+def test_steady_state_admission_does_not_rewrite_its_control_shard(monkeypatch):
+    # Every admission and every pull wrote the same 64 shared shards; an identical rewrite
+    # only turned concurrent admissions and pulls into commit conflicts.
+    monkeypatch.delenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', raising=False)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    puts = _count_control_puts(monkeypatch)
+    shard = scheduler_control_key(owner_key('heavy'))
+
+    queue.enqueue(item('a', capture=1), now=10)
+    assert puts == [shard]  # joins the ring and activates the shard: a real change
+    before = deepcopy(store.rows['control', shard])
+
+    queue.enqueue(item('b', capture=2), now=11)
+    assert puts == [shard]  # already in the ring, shard active, no backoff to clear
+    assert store.rows['control', shard] == before
+    assert store.rows['jobs', 'b']['state'] == 'ready'
+    assert store.rows['jobs', 'a']['next'] == 'b'
+
+
+def test_admission_still_writes_control_when_the_shard_changes(monkeypatch):
+    monkeypatch.delenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', raising=False)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    puts = _count_control_puts(monkeypatch)
+    shard = scheduler_control_key(owner_key('heavy'))
+    queue.enqueue(item('a', capture=1), now=10)
+
+    # A second owner on the same shard joins its ring.
+    mate = colliding_owner('heavy')
+    queue.enqueue(item('m', owner=mate, capture=1), now=11)
+    assert puts == [shard, shard]
+    assert f"{int(Priority.DEEP)}_{owner_key(mate)}" in store.rows['control', shard]['rings'][str(int(Priority.DEEP))]
+
+    # A pull backoff on the shard is cleared by new work.
+    store.rows['control', shard][f'p{int(Priority.DEEP)}_batch_available_at'] = 1000.0
+    queue.enqueue(item('c', capture=3), now=12)
+    assert puts == [shard, shard, shard]
+    assert store.rows['control', shard][f'p{int(Priority.DEEP)}_batch_available_at'] == 12
+
+
+def test_control_write_kill_switch_restores_the_unconditional_write(monkeypatch):
+    monkeypatch.setenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', 'false')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    puts = _count_control_puts(monkeypatch)
+    queue.enqueue(item('a', capture=1), now=10)
+    queue.enqueue(item('b', capture=2), now=11)
+    assert len(puts) == 2

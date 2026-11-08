@@ -23,6 +23,24 @@ def verifier() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
 
 
+def test_batch_delivery_and_queue_safety_rules_use_the_existing_import_and_live_gate(verifier):
+    expected = {
+        'omi-batch-unit-unpublished-2h',
+        'omi-batch-timeliness-sample-stale',
+        'omi-batch-timeliness-scan-blind',
+        'omi-batch-queue-safety-blind',
+    }
+    imported = verifier.load_live_stt_import_rules(production=True)
+    gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
+    assert expected <= imported.keys()
+    assert expected <= gated
+    for uid in expected - {'omi-batch-timeliness-sample-stale', 'omi-batch-timeliness-scan-blind'}:
+        rule = imported[uid]
+        assert rule['labels']['tier'] == 'page'
+        assert rule['labels']['audience'] == 'human'
+        assert not rule['notification_settings'].get('mute_time_intervals')
+
+
 def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dict]]:
     rules = copy.deepcopy(verifier._committed_rules())
     datasource = {"status": "OK", "message": "Data source is working"}
@@ -1313,7 +1331,7 @@ def test_development_loader_restores_errors_without_mutating_sources(verifier, m
     monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: canonical)
     development = verifier.load_live_stt_import_rules(production=False)
     gated = verifier.load_gated_uids(canonical)
-    assert set(development) == set(gated)
+    assert set(development) == set(gated) - set(verifier.PRODUCTION_ONLY_IMPORT_UIDS)
     assert set(verifier.RULE_UIDS) <= set(development)
     assert set(verifier.DATASOURCE_CANARY_UIDS).isdisjoint(development)
     assert all(rule['execErrState'] != 'KeepLast' for rule in development.values())
@@ -1327,6 +1345,21 @@ def test_development_loader_restores_errors_without_mutating_sources(verifier, m
     production = verifier.load_live_stt_import_rules()
     assert set(verifier.DATASOURCE_CANARY_UIDS) <= set(production)
     assert any(rule['execErrState'] == 'KeepLast' for rule in production.values())
+
+
+def test_production_native_queries_never_cross_into_development(verifier):
+    production = verifier.load_live_stt_import_rules()
+    development = verifier.load_live_stt_import_rules(production=False)
+    for uid in verifier.PRODUCTION_ONLY_IMPORT_UIDS:
+        assert uid in production and uid not in development
+        model = production[uid]['data'][0]['model']
+        assert model['promQLQuery']['projectName'] == 'based-hardware'
+        assert model['timeSeriesList']['projectName'] == 'based-hardware'
+    # The production filter is a detached transformation, including when used
+    # by the read-back gate rather than the importer.
+    transformed = verifier._development_rules(production)
+    assert {uid: rule for uid, rule in transformed.items() if uid not in verifier.DATASOURCE_CANARY_UIDS} == development
+    assert set(verifier.PRODUCTION_ONLY_IMPORT_UIDS) <= set(production)
 
 
 @pytest.mark.parametrize('target', ['https://monitor.omiapi.com', 'https://custom.invalid'])
@@ -1355,7 +1388,7 @@ def test_nonproduction_import_never_installs_or_reads_production_canaries(verifi
     )
     assert verifier._run_live_stt_import(target, 'dummy-token') == []
     gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
-    assert set(writes) == gated
+    assert set(writes) == gated - set(verifier.PRODUCTION_ONLY_IMPORT_UIDS)
     assert set(verifier.RULE_UIDS) <= set(writes)
     assert all(rule['execErrState'] != 'KeepLast' for rule in writes.values())
     assert all(writes[uid]['execErrState'] == 'Error' for uid in verifier.RULE_UIDS)

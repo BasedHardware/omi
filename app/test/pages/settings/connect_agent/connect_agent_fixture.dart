@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/backend/schema/connector_access.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/services/agent_connect/agent_connections.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
@@ -48,7 +49,7 @@ class FakeAgentBackend {
         apiBase: 'https://api.omi.me/',
         loadGrants: () async {
           if (failLoad) throw Exception('offline');
-          return [
+          return McpOauthGrants(grants: [
             if (chatGptConnected)
               {
                 'id': 'grant-chatgpt',
@@ -56,7 +57,7 @@ class FakeAgentBackend {
                 'client_id': 'omi-chatgpt-prod',
                 if (chatGptScopes != null) 'scopes': chatGptScopes
               },
-          ];
+          ]);
         },
         revokeGrant: (id) async {
           revokedGrants.add(id);

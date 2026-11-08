@@ -5,7 +5,7 @@ import logging
 from datetime import timezone
 from typing import Any, Dict, Mapping, Sequence, Optional
 
-from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE, vendor_evidence_refused
 from models.transcript_segment import TranscriptSegment
 from models.conversation import Conversation
 from utils.speakers.provider_partition import provider_key
@@ -116,6 +116,8 @@ def batch_provider_keys(segments: list[TranscriptSegment]) -> dict[str, tuple[st
         )
     keys = {}
     for segment in segments:
+        if vendor_evidence_refused(segment):
+            continue  # Killed vendor turns: abstain instead of must-linking vendor labels.
         key = provider_key(segment)
         if segment.speaker_id_scope in snapshots:
             # Explicitly contradicted/redistributed text must still abstain.

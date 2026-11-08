@@ -38,6 +38,7 @@ import type {
   FairUseStatusResponse,
   StoreRecordingPermissionResponse,
   ClientFlagsResponse,
+  ConnectorAccess,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -495,10 +496,11 @@ export async function toggleActionItemCompleted(
 export async function updateActionItemDueDate(
   id: string,
   due_at: string | null,
+  due?: ActionItem['due'],
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ due_at }),
+    body: JSON.stringify({ due_at, ...(due === undefined ? {} : { due }) }),
   });
 }
 
@@ -2288,7 +2290,7 @@ export async function getMcpApiKeys(
   }
 }
 
-/** Default read-only scopes for newly minted MCP API keys. */
+/** Offline fallback for older/unavailable scope-contract endpoints. */
 export const MCP_READ_ONLY_SCOPES = [
   'memories.read',
   'conversations.read',
@@ -2296,14 +2298,38 @@ export const MCP_READ_ONLY_SCOPES = [
   'goals.read',
 ] as const;
 
+async function getMcpDefaultScopes(): Promise<readonly string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const contract = await fetchWithAuth<ConnectorAccess>('/v1/mcp/keys/scopes', {
+      signal: controller.signal,
+    });
+    if (
+      Array.isArray(contract.default_scopes) &&
+      contract.default_scopes.length > 0 &&
+      contract.default_scopes.every((scope) => typeof scope === 'string')
+    ) {
+      return contract.default_scopes;
+    }
+  } catch {
+    // Older/offline backends keep the existing explicit read-only request.
+  } finally {
+    clearTimeout(timeout);
+  }
+  console.warn('MCP scope contract unavailable; using read-only fallback');
+  return MCP_READ_ONLY_SCOPES;
+}
+
 /** Create a new MCP API key */
 export async function createMcpApiKey(
   name: string,
-  scopes: readonly string[] = MCP_READ_ONLY_SCOPES,
+  scopes?: readonly string[],
 ): Promise<McpApiKey> {
+  const requestedScopes = scopes ?? (await getMcpDefaultScopes());
   return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
     method: 'POST',
-    body: JSON.stringify({ name, scopes }),
+    body: JSON.stringify({ name, scopes: requestedScopes }),
   });
 }
 

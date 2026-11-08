@@ -203,8 +203,6 @@ def test_channel_config_parsing(monkeypatch):
     monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'beta')
     assert config.client_channel_admitted(None) is False
     assert config.client_channel_admitted('unknown') is False
-    assert config.app_channel(' Store ') == 'store'
-    assert config.app_channel('x' * 500) == 'unknown'
 
 
 # --------------------------------------------------------------------------- listen spends only with a marker

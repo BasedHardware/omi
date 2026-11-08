@@ -39,6 +39,11 @@ VENDOR_AUDIO_SECONDS = Counter(
     'Audio seconds sent to the prerecorded vendor per POST',
     ['provider', 'endpoint', 'outcome'],
 )
+VENDOR_PAYLOAD_BYTES = Counter(
+    'omi_prerecorded_vendor_payload_bytes_total',
+    'Audio payload bytes attempted per prerecorded POST, including retries; excludes HTTP/TLS overhead',
+    ['provider', 'endpoint'],
+)
 
 _clock = time.monotonic
 
@@ -151,6 +156,23 @@ def record_breaker_quota_error(endpoint: str, budget: bool = False) -> None:
         _set_gauge(endpoint, 1)
 
 
+def breaker_refuses(endpoint: str) -> bool:
+    """Pure read of what ``breaker_allows`` would answer, without acquiring the half-open trial.
+
+    Batch vendor health's kill-switch view (BATCH_VENDOR_HEALTH_ENABLED=false) reads this.
+    """
+    if not vendor_fail_fast_enabled():
+        return False
+    state = _breaker_for(endpoint)
+    with state.lock:
+        now = _clock()
+        if state.opened_at is None:
+            return False
+        if now - state.opened_at < BREAKER_OPEN_SECONDS:
+            return True
+        return state.trial_in_flight and now - state.trial_started_at < BREAKER_TRIAL_TIMEOUT_SECONDS
+
+
 def breaker_budget_exhausted(endpoint: str) -> bool:
     state = _breaker_for(endpoint)
     with state.lock:
@@ -185,6 +207,20 @@ def record_breaker_other_failure(endpoint: str) -> None:
 def record_vendor_burn(endpoint: str, outcome: str, seconds: float) -> None:
     try:
         VENDOR_AUDIO_SECONDS.labels(MODULATE_PROVIDER, endpoint, outcome).inc(max(0.0, float(seconds or 0.0)))
+    except Exception:
+        pass
+
+
+def record_vendor_payload(provider: str, endpoint: str, size: int) -> None:
+    """Count the unchanged audio body at the POST boundary, never content or identity.
+
+    This is attempted payload, not confirmed network delivery: a connection failure
+    can send fewer bytes. Fixed pairs bound cardinality independently of callers.
+    """
+    if (provider, endpoint) not in {('modulate', 'stt'), ('modulate', 'lid'), ('parakeet', 'v1'), ('parakeet', 'v2')}:
+        return
+    try:
+        VENDOR_PAYLOAD_BYTES.labels(provider, endpoint).inc(max(0, size))
     except Exception:
         pass
 

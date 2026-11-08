@@ -150,11 +150,19 @@ def enable(monkeypatch, *names):
 
 @pytest.mark.parametrize('enabled,expected', [(False, 6), (True, 1)])
 def test_deletion_negative_cache_read_count(env, monkeypatch, enabled, expected):
+    from database import privacy_check_metrics as metrics
+
+    calls = metrics.CALLS.labels('deletion_marker', 'live')._value.get()
+    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get()
+    reads = metrics.READS.labels('deletion_marker', 'live', 'miss')._value.get()
     if enabled:
         enable(monkeypatch, 'deletion_marker_cache')
     for _ in range(6):
         assert deletion.get_user_deletion_wipe_status('u') is None
     assert len(env[0].reads) == expected
+    assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get() == decisions + 6
+    assert metrics.READS.labels('deletion_marker', 'live', 'miss')._value.get() == reads + expected
 
 
 def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch):
@@ -173,6 +181,25 @@ def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch)
     assert deletion.get_user_deletion_wipe_status('u') == 'pending'  # Positive state stays durable.
     users.cancel_user_deletion_wipe('u')
     assert deletion.get_user_deletion_wipe_status('u') == 'cancelled'
+
+
+@pytest.mark.asyncio
+async def test_deletion_request_dedupe_counts_every_decision_but_only_issued_reads(env, monkeypatch):
+    from database import privacy_check_metrics as metrics
+
+    enable(monkeypatch, 'request_read_dedupe')
+    calls = metrics.CALLS.labels('deletion_marker', 'live')._value.get()
+    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get()
+    scope = cache.request_read_scope()
+    await anext(scope)
+    try:
+        for _ in range(6):
+            assert deletion.get_user_deletion_wipe_status('u') is None
+    finally:
+        await scope.aclose()
+    assert len(env[0].reads) == 6  # Deletion marker is not memoized in request scope (Issue #24647)
+    assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get() == decisions + 6
 
 
 def test_lever_off_writer_still_fences_enabled_readers(env, monkeypatch):
@@ -432,8 +459,8 @@ def test_serving_config_expires_and_does_not_serve_stale_after_error(env, monkey
 @pytest.mark.parametrize(
     'route,enabled,expected',
     [
-        ('trial', False, 6),
-        ('trial', True, 2),
+        ('trial', False, 2),
+        ('trial', True, 1),
         # +1 per request (this case issues two) for the trial-eligibility read of
         # stripe_customer_id; it joins the entitlement projection when request_read_dedupe
         # is on, so the deduped budget below is unchanged.
@@ -461,14 +488,8 @@ def test_real_users_endpoints_read_count_with_auth(env, monkeypatch, route, enab
     monkeypatch.setattr(auth, 'validate_byok_request', lambda uid: None)
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', lambda *args: None)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', lambda *args: None)
-    monkeypatch.setattr(subscription, 'TRIAL_PAYWALL_ENABLED', True)
-    monkeypatch.setattr(
-        subscription,
-        '_get_user',
-        lambda uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=(time.time() - 3600) * 1000)),
-    )
     monkeypatch.setattr(router, 'is_marketplace_reviewer', lambda uid: False)
-    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub: sub)
+    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub, **kwargs: sub)
     monkeypatch.setattr(router, 'get_paid_plan_definitions', lambda: [])
     monkeypatch.setattr(router, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(

@@ -455,10 +455,7 @@ async def extract_memory_log(
     # that stubs a minimal dependency graph, and utils.subscription pulls database.users
     # in at import time.
     from utils.llm import memories as memories_llm
-    from utils.subscription import is_trial_paywalled
 
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     source = (body.text_source or "memory_log").strip() or "memory_log"
     existing = [m.strip()[:MAX_EXISTING_MEMORY_CHARS] for m in body.existing_memories if m.strip()][:200]
     extraction = await run_blocking(

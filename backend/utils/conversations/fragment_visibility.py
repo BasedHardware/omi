@@ -14,7 +14,21 @@ relevance step (``utils/conversations/relevance.py``).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any
+from utils.conversations import phase_shadow
+
+BATCH_RECORD_OWNERS = frozenset({'batch_live_v1', 'batch_sync_v1'})
+SETTLING_ROW_MAX_SECONDS = 60
+# The batch timeliness alarm: a row still unsettled here is an incident to show, not a fragment to hide.
+SETTLING_MAX_HOLD_SECONDS = 2 * 60 * 60
+SETTLING_FIELDS = (
+    'summary_blocked_reason',
+    'record_lane_owner',
+    'record_projection_revision',
+    'record_upload_failed',
+    'record_audio_partial',
+)
 
 
 def _value(value: Any) -> Any:
@@ -83,6 +97,25 @@ def superseded_intake_discard(data: Mapping[str, Any], content_changed: bool) ->
     )
 
 
+def is_automatic_discard(data: Mapping[str, Any]) -> bool:
+    """Whether a stored discard is only the pipeline's verdict, never the user's.
+
+    An explicit discard writes ``sync_relevance_user_kept=False`` (or carries no
+    relevance receipt at all); a restore marks the row curated. Either one
+    leaves the discard to the user.
+    """
+    decision = data.get('relevance_decision')
+    return bool(
+        data.get('discarded')
+        and isinstance(decision, Mapping)
+        and decision.get('verdict') == 'discard'
+        and decision.get('decided_by') in {'rule', 'model', 'jev', 'deterministic'}
+        and 'sync_relevance_user_kept' not in data
+        and not data.get('jev_discard_restored')
+        and not is_user_curated(data)
+    )
+
+
 def is_completed_rule_discard(data: Mapping[str, Any] | None) -> bool:
     """Whether ``data`` is a finished, uncurated row the rules already discarded.
 
@@ -110,3 +143,52 @@ def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
     if data.get('sync_relevance') != 'review':
         return False
     return not is_user_curated(data)
+
+
+def is_completed_below_floor(data: Mapping[str, Any]) -> bool:
+    """A settled content verdict has no expiry; curation still releases it."""
+    decision = data.get('relevance_decision')
+    return bool(
+        _value(data.get('status')) == 'completed'
+        and not is_user_curated(data)
+        and (
+            data.get('summary_blocked_reason') == 'content_below_floor'
+            or (isinstance(decision, Mapping) and decision.get('reason') == 'content_below_floor')
+        )
+    )
+
+
+@phase_shadow.compare('settling_hold')
+def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """Hold minimum/floor rows across capture lanes, without discarding speech.
+
+    Batch-owned short provisional rows retain their existing hold too. User
+    curation releases every hold. Only unsettled rows expire after two hours;
+    a completed below-floor verdict stays off Home permanently.
+    """
+    from config.episodes import home_hide_below_floor_rows_enabled
+
+    if not home_hide_below_floor_rows_enabled():
+        return False
+    if is_completed_below_floor(data):
+        return True
+    if is_user_curated(data):
+        return False
+    if data.get('record_projection_revision') or data.get('record_upload_failed') or data.get('record_audio_partial'):
+        return False
+    if _value(data.get('status')) != 'completed':
+        return False
+    started, finished = data.get('started_at'), data.get('finished_at')
+    if not isinstance(finished, datetime):
+        return False
+    current = datetime.now(timezone.utc).timestamp() if now is None else now
+    if current - finished.timestamp() >= SETTLING_MAX_HOLD_SECONDS:
+        return False
+    structured = data.get('structured')
+    server_minimum = isinstance(structured, Mapping) and structured.get('title_provenance') == 'server_minimum'
+    batch_short = (
+        isinstance(started, datetime)
+        and data.get('record_lane_owner') in BATCH_RECORD_OWNERS
+        and (finished - started).total_seconds() < SETTLING_ROW_MAX_SECONDS
+    )
+    return server_minimum or batch_short

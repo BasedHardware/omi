@@ -71,6 +71,9 @@ cloud_run:
     # utils/other/storage.py defaults this to the PROD private-cloud-sync bucket when unset (P13b,
     # 2026-10-21 bridge 403); the fence now requires it in staging.
     BUCKET_PRIVATE_CLOUD_SYNC: based-hardware-dev-staging-sync
+    # The prod overlay sets this as-captured bucket and storage reads it first; empty keeps staging
+    # on its own sync bucket (2026-11-03 sync split window: 403 reading the prod bucket).
+    BUCKET_AUDIO_DERIVED: ''
     # Code defaults point at production (api.omi.me, mail.omi.me); the fence requires these in staging.
     # Staging has no RESEND_API_KEY, so email is no-send; the senders only keep the default out.
     MCP_AUTHORIZATION_SERVER_URL: '{run_url:backend}'
@@ -91,6 +94,10 @@ cloud_run:
     ENRICHMENT_TASKS_QUEUE: staging-enrichment
     ENRICHMENT_TASKS_HANDLER_URL: '{run_url:backend-sync}/v2/enrichment/run'
     ENRICHMENT_TASKS_OIDC_AUDIENCE: '{run_url:backend-sync}/v2/enrichment/run'
+    # Plan C8 provider-STT wakes: prod's handler is backend-integration; staging's own twin serves them here
+    # (the queue name maps through queue_map).
+    PROVIDER_STT_TASKS_HANDLER_URL: '{run_url:backend-integration}'
+    PROVIDER_STT_TASKS_OIDC_AUDIENCE: '{run_url:backend-integration}'
     FIREBASE_SIGNER_SERVICE_ACCOUNT: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
     # Vendor spend caps (staging uses dev's test keys).
     SONIOX_MONTHLY_CEILING_USD: '50'
@@ -116,6 +123,7 @@ cloud_run:
     sync-backfill-fresh: staging-sync-backfill-fresh
     batch-quarantine-recovery: staging-batch-quarantine-recovery
     enrichment: staging-enrichment
+    enrichment-fresh: staging-enrichment-fresh
     provider-stt: staging-provider-stt
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge
@@ -176,15 +184,29 @@ overlay:
     services:
       backend:
         env:
+          BUCKET_OBJECT_LAKE: {category: storage_retention, value: ''}
+          OBJECT_LAKE_KMS_KEY: {category: storage_retention, value: ''}
+          OBJECT_LAKE_WRITE_ENABLED: {category: rollout, value: 'false'}
+          OBJECT_LAKE_WRITE_PERCENT: {category: rollout, value: '0'}
+          OBJECT_LAKE_READ_ENABLED: {category: rollout, value: 'true'}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {category: rollout, value: '4096'}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync:
         env:
+          BUCKET_OBJECT_LAKE: {category: storage_retention, value: ''}
+          OBJECT_LAKE_KMS_KEY: {category: storage_retention, value: ''}
+          OBJECT_LAKE_WRITE_ENABLED: {category: rollout, value: 'false'}
+          OBJECT_LAKE_WRITE_PERCENT: {category: rollout, value: '0'}
+          OBJECT_LAKE_READ_ENABLED: {category: rollout, value: 'true'}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {category: rollout, value: '4096'}
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync-backfill:
@@ -192,10 +214,12 @@ overlay:
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-integration:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}

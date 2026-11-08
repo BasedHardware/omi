@@ -2,22 +2,36 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 /// A conversation or episode that just ended and is still processing, on Home under the live row:
-/// the same row in its middle state, a turning ring and "Writing notes… · 1h 36m". It opens the
-/// same page the finished row will. The placeholder the app adds the moment the person ends a
+/// the same row in its middle state, a turning ring and "Writing notes… · 1h 36m". When several
+/// recordings in a row are processing, the row says how many it stands for. It opens the same
+/// page the finished row will. The placeholder the app adds the moment the person ends a
 /// conversation is replaced by the server's row, then by the finished row.
 class ProcessingConversationRow extends StatelessWidget {
-  const ProcessingConversationRow({super.key, required this.conversation, this.episode});
+  const ProcessingConversationRow({
+    super.key,
+    required this.conversation,
+    this.episode,
+    this.step = HomeStep.writingNotes,
+    this.count = 1,
+  });
 
   final ServerConversation conversation;
 
   /// The episode this row stands for; a lone conversation has none yet.
   final Episode? episode;
+
+  /// The current processing step shown in the subtitle.
+  final HomeStep step;
+
+  /// How many recordings this row stands for; a count above one is shown in the subtitle.
+  final int count;
 
   void _open(BuildContext context) {
     OmiHaptics.selection();
@@ -42,11 +56,17 @@ class ProcessingConversationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final title = conversation.structured.title.trim();
     final started = conversation.startedAt ?? conversation.createdAt;
     final seconds = conversation.finishedAt?.difference(started).inSeconds ?? 0;
-    final meta = [l10n.episodeWritingNotes, if (seconds > 0) OmiDuration.compact(seconds, l10n)].join(' · ');
-    final shownTitle = title.isEmpty ? l10n.wrappedProcessingDefault : title;
+    // A run's span is wall-clock, not recording time, so a run shows its count instead.
+    final size =
+        count > 1 ? l10n.homeRecordingsCount(count) : (seconds > 0 ? OmiDuration.compact(seconds, l10n) : null);
+    final meta = [
+      if (step == HomeStep.transcribing) l10n.homeStepTranscribing,
+      if (step == HomeStep.writingNotes) l10n.episodeWritingNotes,
+      if (size != null) size,
+    ].join(' · ');
+    final shownTitle = l10n.wrappedProcessingDefault;
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Semantics(

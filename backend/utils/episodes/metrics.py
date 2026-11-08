@@ -14,8 +14,11 @@
   (``omi_episode_client_requests_total``)
 - closed-episode composer runs by outcome and their latency
   (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
+- Home attach-gap read observations (``omi_episode_home_attach_gap_total``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
+- closed-episode size by join-variant arm recorded when the episode opened, ``f`` or
+  ``control`` (``omi_episode_closed_members``, ``omi_episode_closed_span_seconds``)
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ from config.episodes import EST_INPUT_USD_PER_MTOK, EST_OUTPUT_USD_PER_MTOK
 disable_created_metrics()
 
 
-def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[str], **kwargs):
+def reuse_or_create(factory, name: str, documentation: str, labelnames: list[str], **kwargs):
     """Module-reload-safe collector: reuse only an identical registration, else raise."""
     registered = getattr(REGISTRY, '_names_to_collectors', {})
     existing = registered.get(name) if isinstance(registered, Mapping) else None
@@ -40,6 +43,21 @@ def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[st
             raise ValueError(f'metric {name} already registered with a different shape')
         return existing
     return factory(name, documentation, labelnames, **kwargs)
+
+
+EPISODE_HOME_ATTACH_GAP_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_home_attach_gap_total',
+    'Home reads observing an unlinked recording wholly inside a live ownership window; repeated reads count again.',
+    [],
+)
+
+
+def record_home_attach_gap() -> None:
+    try:
+        EPISODE_HOME_ATTACH_GAP_TOTAL.inc()
+    except Exception:
+        pass  # Telemetry must never fail a Home read.
 
 
 MOMENT_OUTCOMES = frozenset(
@@ -77,63 +95,94 @@ BOUNDARY_OUTCOMES = frozenset(
         'jev_no_answer',
         'sync_rejoin',
         'sync_rejoin_member',
+        # Variant F (config.episodes.f_join_enabled_for): a recorded-time join marked for F, its
+        # answer, its fallback (no answer keeps today's join), and a kill-switched settle.
+        'f_pending',
+        'f_pending_conflict',
+        'f_pending_error',
+        'f_continue',
+        'f_close',
+        'f_no_answer',
+        'f_disabled',
+        'f_later_member',
+        'f_orphan',
+        'f_orphan_check_error',
     }
 )
 
-EPISODE_MOMENT_UPDATES_TOTAL = _reuse_or_create(
+EPISODE_MOMENT_UPDATES_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_updates_total',
     'Per-moment incremental episode updates by trigger and outcome. Never labeled by uid.',
     ['trigger', 'outcome'],
 )
-EPISODE_MOMENT_TOKENS_TOTAL = _reuse_or_create(
+EPISODE_MOMENT_TOKENS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_tokens_total',
     'Tokens spent by the per-moment incremental update (kind=input|output).',
     ['kind'],
 )
-EPISODE_MOMENT_COST_USD_TOTAL = _reuse_or_create(
+EPISODE_MOMENT_COST_USD_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_cost_usd_total',
     'Estimated USD for per-moment updates at the gpt-5-nano rate card; the gateway ledger is authoritative.',
     [],
 )
-EPISODE_MOMENT_LATENCY_SECONDS = _reuse_or_create(
+EPISODE_MOMENT_LATENCY_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_moment_update_latency_seconds',
     'Model latency of the per-moment incremental update.',
     ['outcome'],
     buckets=(0.25, 0.5, 1, 2, 3, 5, 8, 13, 20),
 )
-EPISODE_CLOSED_TOTAL = _reuse_or_create(
+EPISODE_CLOSED_TOTAL = reuse_or_create(
     Counter, 'omi_episode_closed_total', 'Episodes closed, by close reason.', ['reason']
 )
-EPISODE_PROVISIONAL_ITEMS_TOTAL = _reuse_or_create(
+CLOSE_CONFLICT_REASONS = frozenset({'recorded_window_overlap', 'recorded_window_incomplete', 'state_version_changed'})
+F_JOIN_ARMS = frozenset({'f', 'control'})
+EPISODE_CLOSED_MEMBERS = reuse_or_create(
+    Histogram,
+    'omi_episode_closed_members',
+    'Member conversations per closed episode, by episode-join variant arm (f|control).',
+    ['arm'],
+    buckets=(1, 2, 3, 4, 6, 8, 12, 20, 40),
+)
+EPISODE_CLOSED_SPAN_SECONDS = reuse_or_create(
+    Histogram,
+    'omi_episode_closed_span_seconds',
+    'Recorded span of a closed episode in seconds, by episode-join variant arm (f|control).',
+    ['arm'],
+    buckets=(60, 300, 900, 1800, 3600, 5400, 7200, 10800, 14400),
+)
+EPISODE_CLOSE_CONFLICT_TOTAL = reuse_or_create(
+    Counter, 'omi_episode_close_conflict_total', 'Lazy episode closes deferred by a storage conflict.', ['reason']
+)
+EPISODE_PROVISIONAL_ITEMS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_provisional_items_total',
     'Provisional items at reconciliation: kept (became a saved task), dropped, dismissed by the user.',
     ['outcome'],
 )
-EPISODE_WRAPUP_LATENCY_SECONDS = _reuse_or_create(
+EPISODE_WRAPUP_LATENCY_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_wrapup_latency_seconds',
     'Seconds from the end of an episode-closing conversation to its finished notes.',
     ['reason'],
     buckets=(5, 15, 30, 60, 120, 300, 600, 1200, 3600),
 )
-EPISODE_BOUNDARY_TOTAL = _reuse_or_create(
+EPISODE_BOUNDARY_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_boundary_total',
     'Moment boundary decisions against the open episode.',
     ['outcome'],
 )
-EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = _reuse_or_create(
+EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moments_skipped_no_client_total',
     'Admitted moments, finalization tails and conversation attaches skipped because the user has no client that called /v1/episodes.',
     ['trigger'],
 )
-EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
+EPISODE_LIVE_SESSIONS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_live_sessions_total',
     'Admitted live conversations at their first speech, by whether a capable client was seen (true|false).',
@@ -141,6 +190,7 @@ EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
 )
 COMPOSE_OUTCOMES = frozenset(
     {
+        'settling',
         'composed',
         'unchanged',
         'leased',
@@ -156,21 +206,28 @@ COMPOSE_OUTCOMES = frozenset(
         'error',
     }
 )
-EPISODE_COMPOSE_TOTAL = _reuse_or_create(
+EPISODE_COMPOSE_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_total',
     'Closed-episode composer runs by outcome. Never labeled by uid.',
     ['outcome'],
 )
-EPISODE_COMPOSE_SECONDS = _reuse_or_create(
+EPISODE_COMPOSE_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_compose_seconds',
     'Wall time of a composer run, including its model call.',
     ['outcome'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
 )
+COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
+EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_trigger_skipped_total',
+    'Composer triggers skipped before scheduling or paying, by bounded reason. Never labeled by uid.',
+    ['reason'],
+)
 HOME_MEMBER_OUTCOMES = frozenset({'shown', 'hidden_below_floor'})
-EPISODE_HOME_MEMBERS_TOTAL = _reuse_or_create(
+EPISODE_HOME_MEMBERS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_home_members_total',
     'Conversations considered for Home list rows by outcome. Never labeled by uid.',
@@ -178,7 +235,7 @@ EPISODE_HOME_MEMBERS_TOTAL = _reuse_or_create(
 )
 CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
 CLIENT_REQUEST_OUTCOMES = frozenset({'admitted', 'channel_closed', 'not_admitted'})
-EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
+EPISODE_CLIENT_REQUESTS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_client_requests_total',
     'Episodes API calls by X-Omi-App-Channel (beta|store|unknown) and outcome (admitted|channel_closed|not_admitted).',
@@ -207,6 +264,8 @@ def _prime() -> None:
             EPISODE_MOMENT_TOKENS_TOTAL.labels(kind=kind)
         for reason in CLOSE_REASON_LABELS:
             EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS))
+        for reason in CLOSE_CONFLICT_REASONS | {'other'}:
+            EPISODE_CLOSE_CONFLICT_TOTAL.labels(reason=_label(reason, CLOSE_CONFLICT_REASONS))
         for outcome in PROVISIONAL_OUTCOMES:
             EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=_label(outcome, PROVISIONAL_OUTCOMES))
         for outcome in BOUNDARY_OUTCOMES:
@@ -217,9 +276,14 @@ def _prime() -> None:
             EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=_label(reason, CLOSE_REASON_LABELS))
         for seen in ('true', 'false'):
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
+        for arm in F_JOIN_ARMS:
+            EPISODE_CLOSED_MEMBERS.labels(arm=arm)
+            EPISODE_CLOSED_SPAN_SECONDS.labels(arm=arm)
         for outcome in COMPOSE_OUTCOMES:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+        for reason in COMPOSE_SKIP_REASONS:
+            EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
         for outcome in HOME_MEMBER_OUTCOMES:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label(outcome, HOME_MEMBER_OUTCOMES))
         for channel in CLIENT_CHANNELS:
@@ -260,6 +324,25 @@ def record_episode_closed(reason: str) -> None:
         EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS)).inc()
     except Exception:
         pass
+
+
+def record_closed_size(arm: str, members: int, span_seconds: float | None) -> None:
+    try:
+        label = _label(arm, F_JOIN_ARMS)
+        EPISODE_CLOSED_MEMBERS.labels(arm=label).observe(max(0, int(members)))
+        if span_seconds is not None and span_seconds >= 0:
+            EPISODE_CLOSED_SPAN_SECONDS.labels(arm=label).observe(span_seconds)
+    except Exception:
+        pass
+
+
+def record_close_conflict(reason: str) -> str:
+    label = _label(reason, CLOSE_CONFLICT_REASONS)
+    try:
+        EPISODE_CLOSE_CONFLICT_TOTAL.labels(reason=_label(reason, CLOSE_CONFLICT_REASONS)).inc()
+    except Exception:
+        pass
+    return label
 
 
 def record_provisional_outcomes(counts: Mapping[str, int]) -> None:
@@ -309,6 +392,13 @@ def record_client_request(channel: str, outcome: str) -> None:
         pass
 
 
+def record_compose_trigger_skipped(reason: str) -> None:
+    try:
+        EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS)).inc()
+    except Exception:
+        pass
+
+
 def record_compose(outcome: str, seconds: float) -> None:
     try:
         EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
@@ -324,5 +414,20 @@ def record_home_members(*, shown: int, hidden: int) -> None:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('shown', HOME_MEMBER_OUTCOMES)).inc(shown)
         if hidden:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('hidden_below_floor', HOME_MEMBER_OUTCOMES)).inc(hidden)
+    except Exception:
+        pass
+
+
+EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_batch_pending_overdue_reads_total',
+    'Home member observations without a batch projection past the stamped 2h deadline. Not unique members.',
+    [],
+)
+
+
+def record_batch_pending_overdue() -> None:
+    try:
+        EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL.inc()
     except Exception:
         pass

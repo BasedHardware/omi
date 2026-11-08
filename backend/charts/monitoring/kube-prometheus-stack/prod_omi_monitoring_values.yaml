@@ -338,7 +338,7 @@ prometheus:
               names: [prod-omi-backend]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
-            regex: prod-omi-diarizer-batch
+            regex: prod-omi-diarizer-batch(-fallback)?
             action: keep
           - source_labels: [__meta_kubernetes_pod_container_port_name]
             regex: http
@@ -369,6 +369,29 @@ prometheus:
             action: keep
           - source_labels: [__meta_kubernetes_pod_container_port_name]
             regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      # CPU seal slots use the same local Prometheus -> Adapter path as the
+      # batch HPA. PodMonitoring alone feeds managed monitoring, not this adapter.
+      - job_name: record-seal-worker-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: record-seal-worker
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
             action: keep
           - source_labels: [__meta_kubernetes_pod_phase]
             regex: Running
@@ -610,6 +633,23 @@ kube-state-metrics:
   enabled: true
   metricLabelsAllowlist:
     - namespaces=[{{ .Release.Namespace }}],deployments=[app]
+  # 2026-11-07: as a BestEffort pod on a monitoring-pool node at 99% CPU requests, KSM was
+  # CPU-starved, timed out its 5 s /livez probe and restarted 1,711 times from ~11-05 17Z. Most
+  # scrapes then returned 0 samples, which blinded every kube_* consumer (the backend-listen HPA
+  # custom metric, capacity alerts, the margin meter's GKE node-hours). A CPU request gives it a
+  # guaranteed share (working set peaks ~120 MiB); the probe slack keeps a slow /metrics write
+  # from looking like a dead process. Alert: omi-kube-state-metrics-empty (alerts/resilience.json).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 6
 
 nodeExporter:
   enabled: true

@@ -1,3 +1,11 @@
+"""App marketplace surface: catalog/search, personas, reviews, per-app usage
+and developer payouts (Stripe Connect), plus AI app generation.
+
+App definitions, tool names and URLs are external, untrusted content rendered
+back to clients, so HTML escaping and URL validation happen at this boundary
+rather than in the stored documents.
+"""
+
 from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import json
 import logging

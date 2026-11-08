@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 import sys
@@ -437,7 +439,9 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'ref: ${{ github.workflow_sha }}' in text
         assert 'path: .github/firestore-workflow' in text
         assert 'project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in text
-        assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
+        assert 'service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com' in text
+        assert 'workloadIdentityPools/omi-gha-deploy-' in text
+        assert 'GCP_FIRESTORE_READONLY_CREDENTIALS' not in text
         assert 'needs: firestore_readiness' in text
 
 
@@ -459,30 +463,6 @@ def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_
     assert composite.index('Verify read-only Firestore credentials target the runtime project') < composite.index(
         'Verify serving Firestore indexes'
     )
-
-
-def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_only_credentials_are_missing() -> None:
-    workflows = (
-        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
-        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
-    )
-
-    for workflow in workflows:
-        text = workflow.read_text(encoding='utf-8')
-        readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
-        checkout_marker = 'Checkout admitted Firestore source'
-
-        assert 'Require read-only Firestore credentials' in readiness
-        assert 'GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in readiness
-        assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
-        assert readiness.index('Require read-only Firestore credentials') < readiness.index(checkout_marker)
-        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
-            'Verify serving Firestore indexes'
-        )
-        if workflow.name == 'gcp_backend_auto_dev.yml':
-            assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
-                'Require read-only Firestore credentials'
-            )
 
 
 def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
@@ -1728,3 +1708,30 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
         f'progressDeadlineSeconds={progress_deadline}s is below the {required_seconds}s a roll at '
         f'the HPA floor needs ({waves} waves x {per_pod_startup_seconds}s startup budget)'
     )
+
+
+@pytest.mark.parametrize(
+    ('directory', 'pattern'),
+    [('backend/scripts', '*.py'), ('infra/rollout', '**/*.py'), ('.github/scripts', '**/*.py')],
+)
+def test_deploy_script_argparse_percent_escapes(directory, pattern):
+    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+    paths = sorted((REPOSITORY_ROOT / directory).glob(pattern))
+    for path in paths:
+        source = path.read_text(encoding='utf-8')
+        if '%' not in source:
+            continue
+        # Python can normalize Unicode identifiers to the keywords we scan for.
+        if source.isascii() and 'help' not in source and 'description' not in source:
+            continue
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg not in ('help', 'description'):
+                    continue
+                for value in ast.walk(keyword.value):
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        remainder = re.sub(r'%%|%\([^)]+\)s', '', value.value)
+                        assert '%' not in remainder, f'{path}:{value.lineno}: escape literal percent as %%'

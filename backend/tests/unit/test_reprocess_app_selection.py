@@ -285,9 +285,12 @@ def test_stored_derived_effects_digest_reaches_processing_unless_the_row_was_hid
 @pytest.mark.parametrize(
     'discarded,stored_keep,expected', [(True, False, True), (False, True, True), (False, False, False)]
 )
-def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classification(discarded, stored_keep, expected):
+@pytest.mark.parametrize('status', ['completed', 'failed'])
+def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classification(
+    discarded, stored_keep, expected, status
+):
     model, _p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
-    row = {'id': 'c1', 'status': 'completed', 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
+    row = {'id': 'c1', 'status': status, 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
     model.discarded = False
     model.sync_relevance = 'review'
     with (
@@ -403,3 +406,16 @@ def retry_ledger(monkeypatch):
             return fn(client.transaction(), *args, **kwargs)
 
     monkeypatch.setattr(attention, 'run_transactional', run)
+
+
+def test_builtin_default_needs_no_marketplace_install():
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    with patch('database.apps.get_app_by_id_db') as catalog, patch('utils.apps.is_user_app_enabled') as enabled:
+        app = conv_router._validate_reprocess_app_selection('new-user', DEFAULT_SUMMARY_APP_ID)
+    assert app.works_with_memories()
+    assert app.enabled
+    catalog.assert_not_called()
+    enabled.assert_not_called()
+    assert 'requested output language' in app.memory_prompt
+    assert 'Never add external quotations' in app.memory_prompt
