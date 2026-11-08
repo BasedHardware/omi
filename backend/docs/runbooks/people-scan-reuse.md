@@ -54,6 +54,21 @@ their new account-deletion fences and recurring cleanup add no unfenced writer.
 The inventory pins the reviewed bodies, with strict transaction tests and
 loopback binding/publication proofs that assert the generation increments.
 
+## Transcript-pointer scope audit 2026-11-07
+
+C2 changes nine pinned scopes in `review_changes`, `speaker_auto_enroll`,
+`speaker_learning_jobs`, `users` and `utils/person_evidence_backfill`. The changes
+add transcript preloading or narrow unavailable-content refusals. Re-audit found
+identical generation-helper and document-write calls before and after the change;
+the existing transaction still commits each People mutation and generation bump
+together. No new People writer or generation helper was added or removed.
+
+Regenerate the AST inventory with the backend Python 3.11 environment. The strict
+writer and inventory suites passed 17 tests, and
+`scripts/fsr_people_generation_emulator_test.py` passed 31 checks on an owned
+loopback emulator, including review apply/undo/redo, enrollment, evidence backfill,
+rollback and concurrent increments. The emulator was stopped after verification.
+
 ## Measure before enabling
 
 `people_scan_dedupe` remains **0**. The closed-label counter

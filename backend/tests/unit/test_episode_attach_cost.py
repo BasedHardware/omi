@@ -276,7 +276,11 @@ def test_walk_context_reuses_owner_but_guard_still_reads_current_visibility(lane
 def test_memo_read_failure_falls_through(lane, monkeypatch):
     store, _, _ = lane
     member = seed(store)
-    monkeypatch.setattr(episode_attach_memo, 'run_transactional', Mock(side_effect=RuntimeError('synthetic outage')))
+    monkeypatch.setattr(
+        episode_attach_memo,
+        'run_preloaded_transactional',
+        Mock(side_effect=RuntimeError('synthetic outage')),
+    )
     fallback = Mock()
     monkeypatch.setattr(episode_attach_memo, 'record_fallback', fallback)
     assert not episode_attach_memo.matches('u', 'same', member, firestore_client=store)

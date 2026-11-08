@@ -1,5 +1,7 @@
 """Atomic summary edits, immutable speech overlays, journal and overlay Undo."""
 
+from database import transcript_pointer
+
 from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -136,7 +138,12 @@ def record_change(
             'projection_writer': write,
         }
 
-    memory_ledger.append_commit_with_builder(uid, None, build, use_current_head=True, firestore_client=database)
+    try:
+        transcript_pointer.run_preloaded_operation(
+            memory_ledger.append_commit_with_builder, uid, None, build, use_current_head=True, firestore_client=database
+        )
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        raise store.ReviewConflict('Transcript unavailable') from None
     sync_conversations(
         uid, [{'collection': 'conversations', 'document_id': conversation_id}], firestore_client=database
     )
@@ -241,9 +248,17 @@ def set_undone(uid, change_id, undone):
         }
 
     try:
-        memory_ledger.append_commit_with_builder(
-            uid, None, build, use_current_head=True, firestore_client=store.client()
-        )
+        try:
+            transcript_pointer.run_preloaded_operation(
+                memory_ledger.append_commit_with_builder,
+                uid,
+                None,
+                build,
+                use_current_head=True,
+                firestore_client=store.client(),
+            )
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            raise store.ReviewConflict('Transcript unavailable') from None
     except _AlreadySettled:
         return parse_payload_strict(ReviewChange, result['change'], document_path=journal.path)
     sync_conversations(

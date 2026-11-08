@@ -1310,13 +1310,13 @@
       "budget_p50_minutes": 16,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50.",
+      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50. Expected runs set to 1 per day: one prod dispatch per monitoring release (lead2 ruling bf9efb, option a, no waiver).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1328,13 +1328,13 @@
       "budget_p50_minutes": 8,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0,
-      "if": "github.ref == 'refs/heads/main'",
+      "expected_runs_per_day": 1,
+      "if": "github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner.",
+      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner. Expected runs set to 1 per day: one import per prod dispatch that leaves import_grafana at its default (lead2 ruling bf9efb, option a, no waiver).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2166,12 +2166,13 @@
         "role_images",
         "runtime_image_contracts",
         "sdk-cpp",
+        "sdk-dart",
         "sdk-rust",
         "web-checks",
         "windows-preflight-portability"
       ],
       "owner": "CI maintainers",
-      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2230,6 +2231,24 @@
       "owner": "CI maintainers",
       "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
       "reusable": "./.github/workflows/sdk-cpp.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/sdk-dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "sdk-dart",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 nightly call of sdk-dart.yml against the pinned main SHA; sdk-dart.yml/dart keeps its own ubuntu-latest runner and 15-minute cap, adding one daily invocation of a ~5-minute Flutter test job",
+      "reusable": "./.github/workflows/sdk-dart.yml",
       "runner": "reusable",
       "runner_counts": {
         "reusable": 1
@@ -3077,6 +3096,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sdk-dart.yml/dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "dart",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19 new path-scoped job: two PRs touched sdks/device/dart since 2026-07-30; 5 minutes covers cached Flutter 3.44.5 setup, pub get and the package tests",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4737,7 +4774,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events.",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events. import_grafana (default true) lets an operator deploy the Helm and exporter changes with the Grafana import skipped; the provision-live-alerts row is gated on it.",
       "triggers": {
         "push": {
           "branches": [
@@ -4766,6 +4803,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "import_grafana": {
+              "default": "true",
+              "description": "Import the live-STT Grafana alert rules into the selected environment. Default true keeps the existing behavior; set false to deploy the Helm and exporter changes without touching Grafana.",
+              "required": "false",
+              "type": "boolean"
             }
           }
         }
@@ -6076,6 +6119,38 @@
           "paths": [
             "sdks/device/cpp/**",
             ".github/workflows/sdk-cpp.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "sdk-dart.yml": {
+      "name": "Dart Device SDK",
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19: path-scoped like sdk-cpp.yml; no workflow or manifest lane ran the Dart device SDK tests, and the Hygiene runner has no Flutter toolchain",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
           ]
         },
         "workflow_call": {

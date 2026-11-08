@@ -4,7 +4,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database import conversations
+from database import conversations, transcript_pointer
 from utils.speaker_tag_prompts.owner_confirmation import (
     FIELD as OWNER_CONFIRMATION_FIELD,
     StaleOwnerConfirmation,
@@ -51,7 +51,7 @@ def record(
             current['transcript_segments'] = conversations.decode_transcript_segments_verified(
                 uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
             )
-        except ValueError as error:
+        except (ValueError, transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded) as error:
             raise StaleOwnerConfirmation('Owner excerpt transcript is unreadable') from error
         current['manual_speaker_assignments'] = conversations.decode_manual_speaker_assignments(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
@@ -82,4 +82,4 @@ def record(
         transaction.update(ref, {OWNER_CONFIRMATION_FIELD: stored})
         return True
 
-    return conversations.run_transactional(client, record)
+    return conversations.run_preloaded_transactional(client, record)

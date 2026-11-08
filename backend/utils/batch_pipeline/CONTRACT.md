@@ -177,14 +177,14 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 
 | Machine:state | Entry writer | Exit writer | Deadline field | Dwell metric | Alert | Flag / kill switch | Rollback behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `batch:record_pending` | `utils/batch_pipeline/live.py:register_recording.commit` | `utils/batch_pipeline/live.py:admit_recording`, seal repair via B | Per-attempt admission lease only; no total dwell deadline | `omi_batch_record_pending_new_oldest_age_seconds` | `omi-record-pending-dwell` (page) | No held-specific switch | Keep custody; never infer sealed audio from age |
+| `batch:record_pending` | `utils/batch_pipeline/live.py:register_recording` | Normal record admission; `utils/batch_pipeline/live.py:drain_recordings` defer CAS → retained `dead` for aged barrier refusal | `record_dead_letter_deadline_at`, stamped on first literal barrier failure; 14 days, including old rows | `omi_batch_record_dead_letter_total`, `omi_batch_record_dead_letter_units`, `omi_batch_record_dead_letter_observed_at_seconds`; existing pending dwell | `omi-batch-record-dead-letter-volume` (agent); existing pending dwell page | `BATCH_HELD_DEAD_LETTER_ENABLED` (true) | False preserves ordinary defer; no custody/audio/conversation writes; private OIDC requeue-record |
 | `batch:ready` | `J:Scheduler.enqueue_in_transaction`, `J:Scheduler.requeue_quarantined_in_transaction` | `J:Scheduler._pull_shard.commit` | none | T | T | No held-specific switch | Existing queue/ownership fences |
 | `batch:leased` | `J:Scheduler._pull_shard.commit` | `J:Scheduler.complete`, `J:Scheduler.recover` | `lease_until` | T | T | No held-specific switch | Token-fenced lease expiry |
 | `batch:retry` | `utils/batch_pipeline/scheduler.py:_defer`, `J:Scheduler.defer` | `J:Scheduler.recover`, then `J:Scheduler._pull_shard.commit` | `available_at` retry schedule; no total dwell deadline | T | T | No held-specific switch | Retain attempts and custody |
 | `batch:result_ready` | `J:Scheduler.complete`, `R:RecoveryStore.settle`, `V:ProviderSttStore.settle` | `M:OrderedMerge.commit_next` | none | T | T | No held-specific switch | Retain result, ordered merge |
 | `batch:vendor_held` | `V:ProviderSttStore.hold` | `V:ProviderSttStore.redrive` via `V:ProviderSttStage._held` | `vendor_hold.redrive_at` retry schedule | T; `omi_batch_pipeline_vendor_held_oldest_age_seconds` | T | `BATCH_VENDOR_HELD_REDRIVE_ENABLED` | False parks holds; rollback past vendor failover requires route-table removal and drain (see provider module); never put provider work on GPU ring |
 | `batch:quarantined` | `Q:quarantine_job`; provider `V:ProviderSttStore.settle`, `V:ProviderSttStore.terminal` | `R:RecoveryStore.prepare/start/settle`; dormant GPU expiry `R:expire_held_in_transaction` via `H:HeldDeadLetter.tick` | `held_deadline_at` for enabled GPU path; provider entry paths remain unstamped | T | T | `BATCH_HELD_DEAD_LETTER_ENABLED` | False stops new stamps/automatic GPU maintenance; manual requeue survives |
-| `batch:dead` | `R:expire_held_in_transaction` for `dead_letter_reason=held_expired`; historical dead reasons predate this expiry writer | `R:RecoveryStore.requeue_quarantined` → `J:Scheduler.requeue_quarantined_in_transaction`; legacy `J:Scheduler.redrive_dead` | `held_deadline_at`, retained after expiry | `omi_batch_held_expired_units` (stock, not dwell) | `omi-batch-held-expired-volume` (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED` for new held expiry/nightly GPU requeue | `merge_pending=true` keeps pre-4a re-drive possible; unrelated dead reasons excluded |
+| `batch:dead` | `R:expire_held_in_transaction` for `dead_letter_reason=held_expired`; historical dead reasons predate this expiry writer | `R:RecoveryStore.requeue_quarantined` → `J:Scheduler.requeue_quarantined_in_transaction`; legacy `J:Scheduler.redrive_dead` | `held_deadline_at`, retained after expiry | `omi_batch_held_expired_units` (stock, not dwell) | `omi-batch-held-expired-volume` (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED` for new held expiry/nightly GPU requeue | `merge_pending=true` keeps pre-4a re-drive possible; unrelated dead reasons excluded. Record reason `record_barrier_aged` retains `merge_pending=false`; private OIDC requeue-record, separate record inflow/stock alert. |
 | `batch:privacy_blocked` | `database/batch_pipeline_recovery.py:quarantine_fenced.revoke`; `database/jobstore/postgres_store.py:PostgresStore.quarantine_fenced` privacy fence | Terminal; privacy owner only | none | none | none | No held switch bypasses privacy | Retain fence; no held requeue |
 | `batch:partial_retired` | `database/record_partial.py:update_run` | Terminal placeholder; replacement units own work | none | none | none | `RECORD_AUDIO_PARTIAL_ENABLED` | Retain partial inventory lineage |
 | `batch:committed` | `M:OrderedMerge.commit_next` | Job terminal; P/S still owe projection | none | none | none | No held-specific switch | Job commit is not conversation/finalization completion |
@@ -202,7 +202,7 @@ job; that does not turn it into a worker quarantine.
 | `batch_projection:pending` | `M:OrderedMerge.commit_next`; re-drive `U:ProjectionReleaseStore.release` | `S:ProjectionSession.persist` | none | T | T | `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` controls expanded release | Reassignment respects binding and watermark |
 | `batch_projection:persisted` | `S:ProjectionSession.persist` | `P:ProjectionStore.mark_enrichment`, `S:ProjectionSession.write_receipt` | none | T | T | Same release switch | Multipart suffixes still owe follow-ups; no age expiry |
 | `batch_projection:ready` | `S:ProjectionSession.write_receipt`, `P:ProjectionStore.mark_enrichment` | `P:ProjectionStore.complete`, then `P:ProjectionStore.acknowledge` | none | T | T | No held-specific switch | Existing accounting/receipt fences |
-| `batch_projection:quarantine_held` | `S:ProjectionSession.persist/write_receipt` | `U:ProjectionReleaseStore.release`; nightly `H:ProjectionHeldDeadLetter.tick` | `held_deadline_at` for assignment holds only | `omi_batch_held_oldest_age_seconds`; expired subset `omi_batch_held_expired_units` | `omi-pipeline-held-row-age` (page); expired volume (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED`; release expansion separately `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED`; ghost hint repair `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` (default OFF) | Physical state retained; capped attempt reset preserves pre-4b release eligibility |
+| `batch_projection:quarantine_held` | `S:ProjectionSession.persist/write_receipt` | `U:ProjectionReleaseStore.release`; nightly `H:ProjectionHeldDeadLetter.tick` | `held_deadline_at` for assignment holds only | `omi_batch_held_oldest_age_seconds`; expired subset `omi_batch_held_expired_units` | `omi-pipeline-held-row-age` (page); expired volume (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED`; release expansion separately `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED`; ghost hint repair `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` (default OFF) | Physical state retained; capped attempt reset preserves pre-4b release eligibility. Committed assignment gate failures also stamp/expire under the same window and privacy/operator guards. |
 | `batch_projection:completed` | `P:ProjectionStore.acknowledge.commit` | Terminal | none | none | none | No held-specific switch | Keep receipts; no automatic reopening |
 | `batch_projection:erased` | `database/batch_pipeline_purge.py:_write_erased_result` | Terminal privacy disposition | none | none | none | No held switch bypasses privacy | This is explicit privacy deletion, never dead-lettering |
 
@@ -304,12 +304,15 @@ part owes ordinary discovery, not held expiry. In the existing
 fails, recheck the hint, ready receipt, all parts, absence of a privacy refusal,
 segment/binding/owner identity, committed job with recovery state other than
 `held`, and finite `committed_at` at least 24 hours old. With
-`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, write
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, recheck the normal release
+`_target_restorable` fence inside the transaction; an absent or unrestorable
+target yields `target_not_restorable` with no writes. Only then write
 `projection_state=ready` and `ghost_settled_cohort=<label>` in a **single
 transaction.update**. The hint matches `hold_for_quarantine`'s ready-sibling write.
 Receipts, parts, jobs, audio, attempt counters and watermarks stay intact. The
 existing discovery/completion/publication/acknowledgement path rechecks its own
 fences. This is never `held_expired`; nightly expiry does not settle ghosts.
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED` (default true) hands settled ids to the existing bounded follow-up tail; false restores discovery-only scheduling, with completion privacy fences unchanged.
 
 | Result field | Rule |
 | --- | --- |
@@ -342,24 +345,30 @@ completed stock count compared with a windowed sync-publish proxy is information
 only. Settled rows cannot be un-completed: flag rollback stops future flips but
 cannot undo completed ledger/publication effects.
 
-`GHOST_SETTLE_MAX_PER_PASS=16` is shared across both release legs. Default OFF
+`GHOST_SETTLE_MAX_PER_PASS=16` is shared across both release legs. Default OFF in code
 is count-only: **no extra queries** or document reads, no ghost writes; classify
 using the job/result documents already read by the existing transaction. Existing
 real-hold writes and cursor progress remain unchanged. The release summary adds
 aggregate-only `ghost_settled`, `classified`, `skipped_by_class` and `age_buckets`.
-Classified counts held-gate failures (including stale hints); each gets exactly
-one skip class or a committed repair. Skip classes distinguish hint changes,
-non-ready receipts, quarantined parts, privacy, identity, held/non-committed jobs,
+Classified counts held-gate failures (including stale hints) not handled by
+assignment deadline backfill/expiry; those use waiting/expired instead. Each
+classified row gets exactly one skip class or a committed repair. Skip classes distinguish hint changes,
+non-ready receipts, quarantined parts, `target_not_restorable`, privacy, identity, held/non-committed jobs,
 invalid/young age, count-only, cap and nightly expiry. Age buckets for classified
 rows are disjoint: 1d to <7d, 7d to <30d, and 30d+. Younger/invalid ages have no
 bucket. Retry attempts never inflate counters. No row IDs or user data enter
 these aggregates.
 
-Rollout owner David: day 0 count-only, then **ONE train enable only with David's
-approval**, then review after 24h using these summaries and the existing
-`quarantine_held_rows`, `assignment_held`, `held_expired_rows` legs. Rollback false
-stops future repairs; already normalized hints and published sync results remain
-valid and publications are not undone. The selector PR does not enable prod.
+Rollout owner David approved one prod train in the 2026-11-07 16:24Z ruling
+(bus de6f03, addendum c5c481). Prod backend-integration and the prod listen
+serving chart declare true; dev remains count-only. Owner omi-pipeline reviews
+within 24h of deployment (registry review 2026-11-09) using these summaries and the existing
+`quarantine_held_rows`, `assignment_held`, `held_expired_rows` legs. Rollback:
+set `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=false` on both serving roles
+to stop future ghost hint repairs. Record dead-letter and assignment expiry
+remain controlled independently by `BATCH_HELD_DEAD_LETTER_ENABLED`. Already
+normalized hints and published sync results remain valid; publications are not
+undone. These declarations do not prove deployment.
 New atomic writers must keep the CI invariant: hint `quarantine_held` implies a
 quarantined summary/part; only pre-fix legacy rows may violate it. Runtime release
 also uses the 24h floor and authority checks, never an assumed epoch cutoff.
@@ -380,21 +389,108 @@ projection uses `batch_projection` with `action=release_held|redrive_expired`.
 stock >100 or >10 expirations/30 minutes for five minutes. These are initial
 thresholds, not production-calibrated values. No expiry metric proves recovery.
 
+### Record barrier settlement (2026-11-07)
+
+`utils/batch_pipeline/live.py:drain_recordings.admit_and_defer.defer` handles only the literal
+`ValueError('capture upload/finalization barrier not closed')`. Under
+`BATCH_HELD_DEAD_LETTER_ENABLED` (default true), the existing privacy-fenced
+defer transaction stamps `record_dead_letter_deadline_at=now+14*86400` on first
+failure. Missing/null deadlines, including legacy rows, receive the full window;
+malformed/nonfinite/bool deadlines never authorize expiry. Only the current
+admission lease may stamp or expire. At deadline it atomically writes
+`state=dead`, `dead_letter_reason=record_barrier_aged`,
+`record_dead_letter_at=now`, `merge_pending=false` in the existing job write.
+This composes with #24863: the same barrier classification retains age-based
+retry backoff; disabling shared settlement preserves that backoff. The barrier
+message is defined once in `config/record_audio.py`; bool, nonfinite or missing
+`enqueued_at` values are young/unknown, and future timestamps have zero age. Other
+refusals and privacy blocks keep their original defer behavior. No new
+loop, query, conversation/custody mutation or provider call is added to defer.
+
+`database/batch_pipeline_record_dead_letter.py:requeue_record` is the sanctioned
+CAS for this reason only: `dead` → `record_pending`, `available_at=now`,
+`merge_pending=false`, with reason, terminal stamp and deadline cleared to null.
+The normal store commit-boundary privacy fence rechecks owner, conversation and
+privacy generation. Private worker-OIDC `POST /v2/batch-pipeline/requeue-record`
+uses the existing stage-qualified `RedriveRequest`; it remains available with
+expiry disabled. No GPU queue append or paid replay is issued. Requeue permits
+ordinary admission after the cause is repaired. This pre-admission shape is
+excluded from GPU redrive and `_terminally_held`, so it cannot acknowledge phone
+custody as a successful/held transcript. Reverting the feature restores ordinary
+retry for pending rows; already dead rows require this reason-aware requeue
+before reverting if they must resume (older code does not recover this reason).
+
+`omi_batch_record_dead_letter_total` counts successful committed flips, outside
+retryable callbacks; stock `omi_batch_record_dead_letter_units` and freshness
+`omi_batch_record_dead_letter_observed_at_seconds` are sampled by the existing
+projection nightly helper on the maintenance leader at its five-minute cadence,
+via one reason-filtered aggregate count. Flag false stops new
+stamps, flips and stock queries, leaving previous gauge timestamps stale.
+`charts/monitoring/alerts/batch-record-dead-letter.json` alerts agents on fresh
+stock >100 or >10 new flips/30m for five minutes. All three metric families are
+admitted by `deploy/cloud_run_gmp_sync.yaml` and the dev/prod main and sync
+Stackdriver exporter prefix lists; the shared RunMonitoring profile already
+keeps `omi_.*`. The declared metric inventory and producer-to-alert ingestion
+contract test cover these names without claiming they were observed live.
+Initial thresholds are not
+production-calibrated. Record and held expiry share the existing held kill switch
+(lead2 bus 258db3); this change adds zero env flags and leaves the flag budget
+count unchanged.
+
+### Assignment gate-failure settlement (2026-11-07)
+
+In `U:ProjectionReleaseStore.release`, a real-held gate failure may still be a
+committed assignment hold. Recheck binding/owner/segment identity,
+`state=committed`, `recovery_state=held`, `projection_state=quarantine_held`, no
+privacy refusal and no open speech/terminal/silence operator intent. Completed
+receipts awaiting ghost discovery are excluded before stamping or expiry,
+including count-only, cap and age/recovery-fenced ghost skips. Under the
+existing `BATCH_HELD_DEAD_LETTER_ENABLED`, backfill `held_deadline_at` with a full
+seven-day window, then write the identical `held_expired_reason=held_expired`
+and `held_expired_at=now` markers (including the one-time attempt-cap reset).
+Malformed anchors never expire. Persisted multipart suffixes remain excluded.
+Physical result/receipt/parts, transcript, job, audio and watermark remain intact.
+Committed inflow feeds `omi_batch_held_expired_total`, existing stock/alert and
+nightly redrive selection. Markers alone never release through the original
+assignment gate; nightly recovery still requires its target and receipt fences.
+
+Cost per settled row, excluding transaction retries and existing scan/claim/
+privacy reads: record settlement adds **zero reads**, one existing defer write
+at stamp and one at flip (two writes across two observations, no extra write in
+either transaction); requeue reads one job plus the existing privacy authority
+and writes one job. Stock adds one aggregate query per five-minute leader maintenance tick, charged
+by index entries, independent of per-row settlement. Ghost settlement adds zero
+reads and one result update, capped at 16/pass; subsequent normal discovery,
+ledger/publication/ack writes are separate. Assignment gate-failure settlement
+uses the existing page document plus job/result reads (three per observation),
+zero new reads or target lookup, one result update for backfill and one for
+expiry; an already stamped row needs only the expiry update. None of these
+settlement transitions calls GPU/STT/LLM or deletes retained artifacts.
+
 ### Flags, rollback and ownership rules
 
 One flag per behavior: reuse the existing control for the same behavior, never
 add a second lane-specific expiry/held switch. The 4a/4b shared switch controls
-new held deadlines/expiry; it does not disable legacy recovery. Distinct
-release, presentation and custody behaviors retain their distinct controls.
+new held and record barrier deadlines/expiry and record stock sampling; it does
+not disable legacy recovery. Ghost settle has its own independent switch,
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED`: the held switch controls record
+dead-letter and assignment expiry, while the ghost switch controls only ghost
+hint settlement. Neither switch disables the other behavior. Distinct release,
+presentation and custody behaviors retain their distinct controls.
+
+- Record dead-letter rollback: set `BATCH_HELD_DEAD_LETTER_ENABLED=false` on record-serving roles to stop new record stamps, flips and stock sampling; ordinary retries and private requeue remain.
+- Assignment expiry rollback: set `BATCH_HELD_DEAD_LETTER_ENABLED=false` on serving and worker roles to stop new held deadlines/expiry and GPU automatic maintenance; existing projection recovery and manual requeue remain.
+- Ghost settle rollback: set `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=false` on both serving roles to stop ghost hint writes; count-only classification and already published results remain, and record/assignment expiry continues.
+
 The complete behavior-switch inventory for the machines above is below;
 capacity, retry intervals and unrelated product cohort flags are not switches
 for these retained shapes. Defaults are code defaults, not measured live values.
 
 | Flag | Default | Kill-switch location / behavior when disabled |
 | --- | --- | --- |
-| `BATCH_HELD_DEAD_LETTER_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read by `config/batch_pipeline.py:batch_held_dead_letter_enabled`; set false on serving and worker roles: no new deadlines/expiry or GPU nightly pass; manual GPU requeue and existing projection release/nightly recovery remain |
+| `BATCH_HELD_DEAD_LETTER_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read by `config/batch_pipeline.py:batch_held_dead_letter_enabled`; set false on serving and worker roles: no new held/record deadlines/expiry, record stock sampling or GPU nightly pass; private record and manual GPU requeue and existing projection release/nightly recovery remain; ghost settle uses its own switch |
 | `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` | true | `config/batch_pipeline.py:projection_hold_recovery_enabled`; false restores older release scope/attempt fences and conflict waiting policy |
-| `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` | false | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_ghost_settle_enabled`; false classifies existing reads only, no ghost writes or extra queries |
+| `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` | false | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_ghost_settle_enabled`; false classifies existing reads only, no ghost writes or extra queries; record dead-letter and assignment expiry use the held switch independently |
 | `PROJECTION_PRIVACY_REFUSAL_RESUME` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_privacy_refusal_resume_enabled`; off disables retry of stale privacy refusals; actual privacy fences remain unconditional |
 | `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:held_terminal_status_enabled`; false restores legacy status reading, never authorizes custody deletion |
 | `BATCH_PIPELINE_HELD_PARTIAL_ENABLED` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:held_partial_enabled`; false stops new partial-ledger settlement; healthy projected siblings stay visible |

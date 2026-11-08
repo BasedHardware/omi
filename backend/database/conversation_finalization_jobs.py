@@ -42,6 +42,7 @@ from database.conversation_terminal_title import (
     user_time_zone,
 )
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database import transcript_pointer
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     FINALIZATION_DEAD_LETTER_STOCK_QUERY,
@@ -835,7 +836,8 @@ def create_or_get_finalization_intent(
             require_expired_recording_lease=require_expired_recording_lease,
         )
 
-    intent = run_with_transaction_contention_retry(
+    intent = transcript_pointer.run_preloaded_operation(
+        run_with_transaction_contention_retry,
         client.transaction,
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
@@ -1494,8 +1496,8 @@ def _mark_finalization_retryable_txn(
     projection_collection: Any | None = None,
     count_attempt: bool = True,
 ) -> bool:
-    if not count_attempt and failure_code != 'record_owner_contention':
-        raise ValueError('only route contention may defer without a processing attempt')
+    if not count_attempt and failure_code not in {'record_owner_contention', 'live_episode_notes'}:
+        raise ValueError('only route contention or live episode settlement may defer without a processing attempt')
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
