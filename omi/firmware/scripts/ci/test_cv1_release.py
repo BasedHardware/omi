@@ -19,9 +19,14 @@ import zipfile
 
 import cv1_release as release
 
+REAL_SIM_CATALOG = release.sim_catalog
+
+
+CATALOG = {f'suite/scenario-{i}' for i in range(release.SIM_MIN_SCENARIOS)}
+
 
 def sim_report(sha, ver, **overrides):
-    rows = [{'id': f'suite/scenario-{i}', 'verdict': 'pass'} for i in range(release.SIM_MIN_SCENARIOS)]
+    rows = [{'id': name, 'verdict': 'pass'} for name in sorted(CATALOG)]
     report = {
         'kind': 'omi-cv1-sim-report',
         'schema_version': 1,
@@ -41,6 +46,9 @@ def sim_report(sha, ver, **overrides):
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
+        catalog = patch.object(release, 'sim_catalog', return_value=set(CATALOG))
+        catalog.start()
+        self.addCleanup(catalog.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -115,6 +123,12 @@ class ReleaseTests(unittest.TestCase):
             'fuzz-failed': sim_report('a' * 40, '3.0.21', fuzz={'verdict': 'fail', 'seeds': 50}),
             'fuzz-small': sim_report('a' * 40, '3.0.21', fuzz={'verdict': 'pass', 'seeds': 1}),
             'wrong-kind': sim_report('a' * 40, '3.0.21', kind='other'),
+            # Review finding: counts alone could be satisfied by invented rows.
+            'invented-ids': sim_report('a' * 40, '3.0.21', scenarios=[
+                {'id': f'made-up/{i}', 'verdict': 'pass'} for i in range(release.SIM_MIN_SCENARIOS)]),
+            'missing-scenario': sim_report('a' * 40, '3.0.21', scenarios=[
+                {'id': name, 'verdict': 'pass'} for name in sorted(CATALOG)[1:]] + [
+                {'id': 'extra/one', 'verdict': 'pass'}]),
         }.items():
             out = self.root / f'qa-{name}'
             path = self.root / f'sim-{name}.json'
@@ -148,6 +162,12 @@ class ReleaseTests(unittest.TestCase):
         # A report from a different source SHA cannot ride along with these bytes.
         with self.assertRaisesRegex(ValueError, 'source SHA'):
             release.validate_sim_report(json.loads(original), 'b' * 40, '3.0.21')
+
+    def test_real_scenario_catalog_is_read_from_the_checkout(self):
+        root = Path(__file__).resolve().parents[2] / 'omi' / 'sim' / 'scenarios'
+        ids = REAL_SIM_CATALOG(root)
+        self.assertGreaterEqual(len(ids), release.SIM_MIN_SCENARIOS)
+        self.assertIn('safe/poweron-hold-then-cold-boot', ids)
 
     def test_repackage_only_app_preserves_bytes_and_metadata(self):
         with zipfile.ZipFile(self.assets / release.asset_names('3.0.21')[0]) as archive:

@@ -1209,6 +1209,10 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
         spec = importlib.util.spec_from_file_location("cv1_release_guard_smoke", helper)
         release = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(release)
+        # The smoke exercises packaging, not the simulator: pin a synthetic
+        # scenario catalog that the staged report below matches exactly.
+        catalog = {f"suite/s{i}" for i in range(release.SIM_MIN_SCENARIOS)}
+        release.sim_catalog = lambda root=None: catalog
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build, out = root / "build", root / "assets"
@@ -1233,7 +1237,7 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
                 "repository": "BasedHardware/omi",
             }
             # Staging fails closed without a passing simulator report for this SHA/version.
-            rows = [{"id": f"suite/s{i}", "verdict": "pass"} for i in range(release.SIM_MIN_SCENARIOS)]
+            rows = [{"id": name, "verdict": "pass"} for name in sorted(catalog)]
             report = root / "sim-report.json"
             report.write_text(
                 json.dumps(

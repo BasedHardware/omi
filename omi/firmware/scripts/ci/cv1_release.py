@@ -88,8 +88,26 @@ def validate_signed_version(archive, ver):
     )
 
 
-def validate_sim_report(data, sha, ver):
-    """Fail closed unless the simulator gate passed in full for exactly this source and version."""
+SIM_SCENARIOS = Path('omi/firmware/omi/sim/scenarios')
+
+
+def sim_catalog(root=SIM_SCENARIOS):
+    """Scenario ids in this checkout (the `id:` line of each scenario YAML)."""
+    ids = set()
+    for path in sorted(Path(root).rglob('*.yaml')):
+        match = re.search(r'^id:\s*(\S+)\s*$', path.read_text(), re.M)
+        require(match is not None, f'Scenario without id: {path}')
+        ids.add(match.group(1))
+    return ids
+
+
+def validate_sim_report(data, sha, ver, catalog=None):
+    """Fail closed unless the simulator gate passed in full for exactly this source and version.
+
+    The report must list exactly the scenario catalog of this checkout (the
+    tested SHA), so a report with invented or missing rows is refused.
+    """
+    catalog = sim_catalog() if catalog is None else catalog
     require(isinstance(data, dict), 'Simulator report is not an object')
     require(data.get('kind') == 'omi-cv1-sim-report' and data.get('schema_version') == 1, 'Unknown simulator report')
     require(data.get('mode') == 'current', 'Simulator report must check current expectations, not --baseline')
@@ -100,6 +118,7 @@ def validate_sim_report(data, sha, ver):
     require(isinstance(rows, list) and len(rows) >= SIM_MIN_SCENARIOS, 'Simulator report has too few scenarios')
     require(all(isinstance(r, dict) and r.get('verdict') == 'pass' for r in rows), 'Simulator scenario failed')
     require(len({r.get('id') for r in rows}) == len(rows), 'Simulator report repeats a scenario')
+    require(catalog and {r.get('id') for r in rows} == set(catalog), 'Simulator report does not match the scenario catalog')
     counts = data.get('counts') or {}
     require(counts.get('failed') == 0 and counts.get('passed') == len(rows), 'Simulator report counts mismatch')
     fuzz = data.get('fuzz') or {}
