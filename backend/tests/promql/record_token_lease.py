@@ -49,6 +49,11 @@ def scenarios():
 
     return [
         case('flat backlog survives pod gaps and idle NaN', series([86400] * 3), True),
+        # A positive legacy epoch-pinned sample is indistinguishable from a
+        # real stalled backlog here. Reject invalid clocks at the producer.
+        case('legacy epoch-pinned sample demonstrates producer validation requirement', series([1794191453] * 3), True),
+        case('corrected producer clears a legacy epoch-pinned series', series([1794191453, 0, 0]), False),
+        case('all invalid enqueue clocks export zero and stay quiet', series([0] * 3), False),
         case('falling backlog across replacement pods stays quiet', series([86400, 82000, 78000]), False),
         case('no recent lease release stays quiet', series([86400] * 3, releases=False), False),
         case(

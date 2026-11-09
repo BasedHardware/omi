@@ -16,8 +16,10 @@ import pytest
 import re
 
 from config import record_seal_repair as config
+from database import _client
 from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_cluster_repair as cluster
 from utils.batch_pipeline import record_producer_proof as producer
+from utils.batch_pipeline import record_seal_sweeper
 from utils.batch_pipeline.record_seal_budget import SweepBudget
 from utils.batch_pipeline.record_seal_reasons import TAIL_GAP_BUCKETS
 from tests.unit.test_record_seal_nojob import source, SCOPE, SERVER, PATH, JOB_PATH
@@ -1423,6 +1425,96 @@ def pending_job(index, enqueued=0, **extra):
     return SimpleNamespace(
         id=segment, reference=SimpleNamespace(path=f'batch_pipeline_prod_jobs/{segment}'), to_dict=lambda: dict(data)
     )
+
+
+@pytest.mark.parametrize('order', ['on', 'off'])
+@pytest.mark.parametrize('page', ['mixed', 'all_zero', 'implausible', 'valid_floor'])
+def test_run_gauge_excludes_invalid_enqueue_clocks_without_changing_discovery(source, proof, monkeypatch, order, page):
+    horizon = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    stamp = horizon.timestamp()
+    floor = cluster.MIN_METRIC_ENQUEUED_AT
+    enqueued, expected = {
+        'mixed': ([0, stamp - 7200, stamp - 3600], 7200),
+        'all_zero': ([0, 0], 0),
+        'implausible': ([-1, 1, floor - 1], 0),
+        'valid_floor': ([floor, stamp - 3600], stamp - floor),
+    }[page]
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return horizon
+
+    monkeypatch.setattr(cluster, 'datetime', FrozenDatetime)
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', order)
+    jobs = OrderedJobsClient([pending_job(i, clock) for i, clock in enumerate(enqueued)])
+    # The metric-free call remains the discovery/repair selection oracle.
+    expected_rows, expected_saturated, expected_cursor = cluster.discover_jobs(jobs, budget=SweepBudget(60))
+    samples = []
+    assert cluster.discover_jobs(jobs, budget=SweepBudget(60), metric_ages=samples) == (
+        expected_rows,
+        expected_saturated,
+        expected_cursor,
+    )
+    assert len(expected_rows) == len(enqueued)
+    assert max(samples, default=0) == expected
+    assert dict(expected_rows) == {
+        f'users/synthetic/conversations/capture-{i}': None if clock <= 0 else max(0, int(stamp - clock))
+        for i, clock in enumerate(enqueued)
+    }  # Invalid rows are still repaired with upstream's metrics-only age representation.
+
+    cursor_state = CursorClient()
+    client = SimpleNamespace(
+        collection=lambda name: (
+            SimpleNamespace(document=lambda _: cursor_state)
+            if name == 'batch_pipeline_prod_maintenance'
+            else jobs.collection(name)
+        ),
+        document=jobs.document,
+    )
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: True)
+    monkeypatch.setattr(config, 'settings', lambda: (16, 240, 1500, 'plan'))
+    monkeypatch.setattr(cluster, 'discover', lambda *args, **kwargs: ([], False, None))
+
+    def work(rows, **kwargs):
+        assert rows == expected_rows
+        assert cluster.REPAIR_OLDEST._value.get() == expected
+        return {'rows': len(rows), 'dispositions': {}}
+
+    monkeypatch.setattr(cluster, 'coordinate', work)
+    previous = cluster.REPAIR_OLDEST._value.get()
+    try:
+        assert cluster.run()['outcome'] == 'ok'
+    finally:
+        cluster.REPAIR_OLDEST.set(previous)
+
+
+@pytest.mark.parametrize('ages,expected', [([None, 1000], 1000), ([None], 0)])
+def test_run_gauge_excludes_absent_conversation_ages(source, proof, monkeypatch, ages, expected):
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: CursorClient())
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
+    monkeypatch.setattr(config, 'settings', lambda: (16, 240, 1500, 'plan'))
+    rows = [(f'users/synthetic/conversations/capture-{i}', age) for i, age in enumerate(ages)]
+    monkeypatch.setattr(cluster, 'discover', lambda *args, **kwargs: (rows, False, None))
+
+    def work(selected, **kwargs):
+        assert selected == rows
+        assert cluster.REPAIR_OLDEST._value.get() == expected
+        return {'rows': len(selected), 'dispositions': {}}
+
+    monkeypatch.setattr(cluster, 'coordinate', work)
+    previous = cluster.REPAIR_OLDEST._value.get()
+    try:
+        assert cluster.run()['outcome'] == 'ok'
+    finally:
+        cluster.REPAIR_OLDEST.set(previous)
 
 
 @pytest.mark.parametrize('setting', [None, 'on', 'typo'])

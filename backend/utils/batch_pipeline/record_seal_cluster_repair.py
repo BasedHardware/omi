@@ -37,6 +37,9 @@ from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
+# Telemetry only: the record pipeline did not exist before 2020. Reject
+# sentinel/implausible enqueue clocks without changing discovery or repairs.
+MIN_METRIC_ENQUEUED_AT = datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp()
 _age_order_index_warned = False
 DISPOSITIONS = frozenset(
     {
@@ -361,7 +364,15 @@ def pending_blocker(row):
 
 @read_origin('job:record_seal_cluster_repair:discover_jobs')
 def discover_jobs(
-    client, *, budget, after=None, max_rows=8, max_scan=128, selected_cursors=None, progress=lambda _: None
+    client,
+    *,
+    budget,
+    after=None,
+    max_rows=8,
+    max_scan=128,
+    selected_cursors=None,
+    progress=lambda _: None,
+    metric_ages=None,
 ):
     """Oldest pending jobs first, with a frozen horizon and wrapping frontier.
 
@@ -445,6 +456,11 @@ def discover_jobs(
         path = f'users/{uid}/conversations/{cid}'
         # Preserve selection/cursors even for zero or negative clocks. Only the metric is absent.
         rows.append((path, max(0, int(age)) if valid_metric_clock(enqueued) else None))
+        # Keep invalid-clock jobs eligible and preserve their exact cursor.
+        # Only the exported gauge excludes them; future clocks already fail
+        # the unchanged minimum-age check above.
+        if metric_ages is not None and enqueued >= MIN_METRIC_ENQUEUED_AT:
+            metric_ages.append(max(0, int(age)))
         if selected_cursors is not None:
             selected_cursors[path] = cursor
         if len(rows) >= max_rows:
@@ -757,6 +773,7 @@ def run(*, progress=lambda _: None):
             frontier = RepairCursor(client, config.cursor_secret())
             selected_cursors, job_cursors = {}, {}
             job_rows, jobs_saturated, jobs_cursor = [], False, None
+            job_metric_ages = []
             jobs_frontier = None
             if config.jobs_enabled():
                 jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
@@ -767,6 +784,7 @@ def run(*, progress=lambda _: None):
                     max_rows=max(1, workers // 2),
                     selected_cursors=job_cursors,
                     progress=progress,
+                    metric_ages=job_metric_ages,
                 )
             rows, saturated, cursor = discover(
                 client,
@@ -784,11 +802,12 @@ def run(*, progress=lambda _: None):
                 frontier.write(cursor, budget)
                 if jobs_frontier:
                     jobs_frontier.write(jobs_cursor, budget)
+            metric_ages = job_metric_ages + [age for path, age in rows if age is not None and path not in job_cursors]
             rows = job_rows + [(path, age) for path, age in rows if path not in job_cursors]
             saturated = saturated or jobs_saturated
     # Reuse discovery's bounded, content-free age sample. No additional query
     # and no activation of the idle seal worker's scanner are needed.
-    REPAIR_OLDEST.set(max((age for _, age in rows), default=0))
+    REPAIR_OLDEST.set(max(metric_ages, default=0))
     last_attempted, last_job_attempted = None, None
 
     def attempted(path):

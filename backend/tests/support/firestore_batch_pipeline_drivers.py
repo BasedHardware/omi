@@ -84,6 +84,7 @@ def entries():
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
+                'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
             },
         ),
         DriverEntry(
