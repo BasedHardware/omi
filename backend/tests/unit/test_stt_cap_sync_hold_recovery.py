@@ -48,7 +48,7 @@ def test_sync_holds_enter_recovery_scope_with_live_only_lanes(prod_scope):
     [
         ({'STT_CAP_OFFLINE_ENFORCEMENT': 'false'}, False),  # kill switch is the rollback
         ({'STT_CAP_DISPATCH_ENFORCEMENT': 'false'}, False),  # no execution admission configured
-        ({'STT_CAP_DISPATCH_ENFORCEMENT': 'false', 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED': 'true'}, True),
+        ({'STT_CAP_DISPATCH_ENFORCEMENT': 'false', 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED': 'true'}, False),
         ({'STT_CAP_RECOVERY_COHORT': 'uid:someone-else'}, False),
         ({'STT_CAP_RECOVERY_COHORT': 'uid:owner,typo'}, False),  # malformed denies all recovery
         ({'STT_CAP_DISPATCH_LANES': 'live,sync'}, True),  # explicit selection still works

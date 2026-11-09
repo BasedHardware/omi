@@ -153,3 +153,18 @@ def test_matrix_stops_after_failure_without_retry(monkeypatch, tmp_path, capsys)
     with pytest.raises(RuntimeError, match='matrix aborted'):
         asyncio.run(bench.run(args))
     assert len(calls) == 1
+
+
+def test_shadow_request_does_not_hide_a_transport_error_with_retry(monkeypatch):
+    calls = []
+
+    def fail(url, **kwargs):
+        calls.append(url)
+        raise httpx.ReadTimeout('private error body')
+
+    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://replica:8080')
+    monkeypatch.setattr(httpx, 'post', fail)
+    result = bench.request(b'\0\0' * 16000, 5, single_attempt=True)
+    assert len(calls) == 1
+    assert result['outcome'] == 'failed'
+    assert 'private error body' not in json.dumps(result)

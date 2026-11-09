@@ -174,6 +174,11 @@ class QueueMetrics:
             'Unix timestamp of the last completed projection pump tick, including failed ticks; zero before first tick',
             registry=registry,
         )
+        self.projection_pump_last_success = Gauge(
+            'omi_batch_projection_pump_last_success_seconds',
+            'Unix timestamp of the last successful projection pump tick; zero before first success',
+            registry=registry,
+        )
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
             'Oldest unfinished committed projection age, including held content; alarm above 900s',

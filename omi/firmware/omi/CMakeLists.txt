@@ -41,6 +41,7 @@ file(GLOB core_sources
     src/lib/core/codec.c
     src/lib/core/custody.c
     src/lib/core/transport.c
+    src/lib/core/battery_guard.c
     src/lib/core/button.c
     src/lib/core/capture_mute.c
     src/lib/core/monitor.c

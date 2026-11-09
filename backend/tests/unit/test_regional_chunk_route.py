@@ -73,7 +73,6 @@ def buckets(monkeypatch):
     by_name = {PRIVATE: _Bucket(PRIVATE), DERIVED: _Bucket(DERIVED)}
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: by_name[name]))
     monkeypatch.setattr(storage, 'owner_storage_write_gate', lambda uid, bucket=None: nullcontext())
-    monkeypatch.setattr(storage, '_archive_pusher_capture', lambda *args, **kwargs: None)
     for name in (
         'AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED',
         'AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT',

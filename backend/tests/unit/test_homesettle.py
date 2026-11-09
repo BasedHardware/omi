@@ -350,6 +350,7 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
     routes = conversation_routes
     # All independent time-dependent Home projections must be off for writer-version caching.
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
     monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
     monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'false')
     request = Request(

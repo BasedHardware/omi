@@ -9,7 +9,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 import pytest
 
-from utils.batch_pipeline import source_audio as source, record_seal_profile
+from utils.batch_pipeline import live, source_audio as source, record_seal_profile
+from utils.other import storage
 
 
 def reader(raw, *, path='chunks/u/c/100.batch.bin', metadata=None):
@@ -92,9 +93,6 @@ def test_listed_metadata_keeps_decrypt_authentication_and_raw_sha256(monkeypatch
 
 
 def test_listing_to_walk_keeps_identical_references_without_reload(monkeypatch):
-    from utils.other import storage
-    from utils.batch_pipeline import live
-
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'synthetic')
     monkeypatch.setattr(live, 'private_cloud_sync_bucket', 'synthetic')

@@ -17,6 +17,7 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
@@ -36,12 +37,6 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 )
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
-)
-
-OMI_FLAG_DUAL_READ_TOTAL = Counter(
-    'omi_flag_dual_read_total',
-    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
-    ['flag', 'outcome'],
 )
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(

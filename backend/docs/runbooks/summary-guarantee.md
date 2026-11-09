@@ -169,10 +169,10 @@ coverage before all processing hosts run the instrumentation.
    present and READY; shipping the image first is not a valid order.
 2. Ship the normal backend train dark to all producers/workers after index readiness.
    Then set `FIRST_SUMMARY_DEADLINE_ENABLED=true`,
-   `FIRST_SUMMARY_UID_ALLOWLIST=<canary uid>`,
+   `FIRST_SUMMARY_DEADLINE_PERCENT=<qualification percent>`,
    `FIRST_SUMMARY_DEADLINE_SECONDS=120` on backend-sync, backend-sync-backfill,
    backend-integration and batch projection/enrichment hosts. Keep
-   `SUMMARY_DEBT_REPAIR_ENABLED=false` initially. The UID selection is enforced
+   `SUMMARY_DEBT_REPAIR_ENABLED=false` initially. The stable percentage selection is enforced
    at writes, mark/claims and repair. Keep demand/lazy/tool and repeat-work flags
    unchanged during this qualification.
 3. For the same canary set `SUMMARY_DEBT_REPAIR_ENABLED=true` on existing repair

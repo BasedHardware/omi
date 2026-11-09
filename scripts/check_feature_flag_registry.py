@@ -30,41 +30,6 @@ from feature_flag_registry import (
 
 AS_OF = re.compile(r"<!-- feature-flag-registry as-of: (\d{4}-\d{2}-\d{2}) -->")
 
-# Existing duplicate declarations are assigned to workstream B, which is
-# consolidating runtime_env and Helm values to one source per service. This
-# reviewed 2026-10-20 allowlist expires 2026-11-20; newly introduced duplicates
-# fail immediately and entries must be removed when their source overlap ends.
-DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES = date(2026, 11, 20)
-DUPLICATE_DECLARATION_ALLOWLIST = {
-    "AUDIO_ARCHIVE_PERCENT",
-    "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT",
-    "AUDIO_ARCHIVE_STOP_PCM_PERCENT",
-    "AUDIO_ARCHIVE_UID_ALLOWLIST",
-    "BATCH_LIVE_STT_RETIRE_PERCENT",
-    "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST",
-    "BATCH_PIPELINE_SHADOW_PERCENT",
-    "BATCH_PIPELINE_UID_ALLOWLIST",
-    "CONVERSATION_RELEVANCE_JEV_PERCENT",
-    "DEMAND_PROCESSING_PERCENT",
-    "DEMAND_PROCESSING_UID_ALLOWLIST",
-    "DREAM_AGENT_UID_ALLOWLIST",
-    "FIRST_SUMMARY_DEADLINE_PERCENT",
-    "MOBILE_STANDARD_BATCH_PERCENT",
-    "OBJECT_LAKE_WRITE_PERCENT",
-    "PARAKEET_STREAM_ALLOCATION_PERCENT",
-    "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-    "SPEAKER_GROUPING_SHADOW_PERCENT",
-    "SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST",
-    "STT_LIVE_DEMAND_PERCENT",
-    "STT_LIVE_DEMAND_UID_ALLOWLIST",
-    "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
-    "STT_ROUTING_ON_PERCENT",
-    "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
-    "TRANSCRIPTION_FINAL_PASS_PERCENT",
-    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST",
-    "TRANSCRIPTION_SHADOW_PERCENT",
-    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
-}
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
 ACCOUNT_OWNERS = {"dazheng"}
@@ -253,24 +218,11 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
             errors.append(f"{declared.path}:{declared.line}: retired name redeclared: {declared.key}")
 
     duplicate_sources = duplicate_declaration_sources(declarations)
-    for key, sources in duplicate_sources.items():
-        source_list = ", ".join(sources)
-        if key not in DUPLICATE_DECLARATION_ALLOWLIST:
-            errors.append(f"duplicate ramp/allowlist declaration: {key} appears in {source_list}")
-        elif current_date > DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES:
-            errors.append(
-                f"duplicate declaration exception expired {DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES}: "
-                f"{key} still appears in {source_list}"
-            )
-        else:
-            warnings.append(
-                f"WARNING: duplicate declaration allowlisted until {DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES}: "
-                f"{key} appears in {source_list} (workstream B source consolidation)"
-            )
-    if root.resolve() == ROOT.resolve():
-        stale_allowlist = sorted(DUPLICATE_DECLARATION_ALLOWLIST - set(duplicate_sources))
-        if stale_allowlist:
-            errors.append("remove stale duplicate declaration allowlist entries: " + ", ".join(stale_allowlist))
+    for (key, _platform, workload, environment), sources in duplicate_sources.items():
+        errors.append(
+            f"duplicate declaration: {key} for {workload}/{environment} appears in {', '.join(sources)}: keep one source, "
+            "or declare it in the manifest gke section that validates this chart"
+        )
 
     doc = root / "backend/docs/feature-flag-registry.md"
     if check_render:

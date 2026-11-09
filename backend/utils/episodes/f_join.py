@@ -47,6 +47,8 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 ARM_FIELD = 'f_join_arm'
+# Marking a join re-reads the live episode after a lost compare-and-swap: one try plus two retries.
+MARK_PENDING_ATTEMPTS = 3
 
 
 def admitted(uid: str) -> bool:
@@ -145,22 +147,50 @@ def mark_pending(
         'variant': F_JOIN_VARIANT,
         'previous': latest_member(owner, conversation_id),
     }
-    try:
-        episodes_db.commit_moment(
-            uid,
-            expected_episode_id=str(placed['id']),
-            expected_version=placed.get('state_version'),
-            updates={'pending_boundary': {**pending, conversation_id: marker}},
-            firestore_client=firestore_client,
-        )
-        metrics.record_boundary('f_pending')
-    except EpisodeConflict:
-        metrics.record_boundary('f_pending_conflict')
-        _fallback('other')
-    except Exception as error:
-        metrics.record_boundary('f_pending_error')
-        _fallback('other')
-        logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+    episode_id = str(placed['id'])
+    version = placed.get('state_version')
+    for attempt in range(MARK_PENDING_ATTEMPTS):
+        try:
+            episodes_db.commit_moment(
+                uid,
+                expected_episode_id=episode_id,
+                expected_version=version,
+                updates={'pending_boundary': {**pending, conversation_id: marker}},
+                firestore_client=firestore_client,
+            )
+            metrics.record_boundary('f_pending')
+            return
+        except EpisodeConflict as conflict:
+            # A live episode takes a write on every moment, so the version read at attach is often stale
+            # by now. Re-read and retry while the join still stands; otherwise today's join is kept.
+            reason = str(conflict) or 'conflict'
+            fresh = None
+            if attempt + 1 < MARK_PENDING_ATTEMPTS:
+                try:
+                    fresh = episodes_db.get_episode(
+                        uid, episode_id, firestore_client=firestore_client, follow_redirects=False
+                    )
+                except Exception:
+                    fresh = None
+            if (
+                fresh is None
+                or not policy.is_live(fresh)
+                or conversation_id not in (fresh.get('conversation_ids') or [])
+                or conversation_id in (fresh.get('pending_boundary') or {})
+            ):
+                metrics.record_boundary('f_pending_conflict')
+                _fallback('other')
+                logger.warning(
+                    'event=episode_f_join outcome=pending_conflict reason=%s attempts=%d', reason, attempt + 1
+                )
+                return
+            version = fresh.get('state_version')
+            pending = fresh.get('pending_boundary') or {}
+        except Exception as error:
+            metrics.record_boundary('f_pending_error')
+            _fallback('other')
+            logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+            return
 
 
 def synced_failed(error: BaseException) -> None:
@@ -310,7 +340,7 @@ def _candidate_may_feed(uid: str, conversation_id: str, row: Optional[Mapping[st
 
 
 def _user_consent_allows(uid: str, c: Any) -> bool:
-    """The user's current private cloud sync consent, read at the last step before Jev.
+    """The user's current private cloud sync consent, checked just before Jev.
 
     The conversation row carries a snapshot of the consent, so a toggle after the row was written is seen here.
     A missing user document or field is not permission (fail closed).
@@ -403,7 +433,7 @@ def settle(
         metrics.record_boundary('f_later_member')
         return keep
     try:
-        # Predecessor and name reads come first. The candidate's stored privacy is the last read before Jev,
+        # Predecessor and name reads come first. The candidate's stored privacy is checked just before Jev,
         # so a lock, deletion, discard or consent change during those reads still keeps today's join.
         previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
     except Exception as error:
@@ -412,7 +442,7 @@ def settle(
         _fallback('other')
         return keep
     try:
-        # The candidate's stored privacy, then the user's current consent: the last reads before the question.
+        # The candidate's stored privacy, then the user's current consent, before the ownership recheck.
         allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c) and _user_consent_allows(uid, c)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
@@ -427,8 +457,20 @@ def settle(
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
         return keep
-    # No read between the candidate gate above and this Jev question.
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
+    if not member:
+        # Sync/late candidates must still be unplaced after predecessor, name and privacy reads.
+        # This narrows the race window; another request can still attach after this snapshot.
+        try:
+            owner = episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+        except Exception as error:
+            logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
+            metrics.record_boundary('f_no_answer')
+            _fallback('other')
+            return keep
+        if owner is not None:
+            metrics.record_boundary('f_no_answer')
+            return keep
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
     if p_same is None:
         metrics.record_boundary('f_no_answer')
