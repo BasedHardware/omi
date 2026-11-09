@@ -155,6 +155,15 @@ class OracleTests(unittest.TestCase):
         with self.assertRaises(pm.ScenarioError):
             pm.parse_boot_log('SIM EXIT: stop\nSIMSTATE: {"exit":"watchdog","uptime_ms":1}\n')
 
+    def test_mute_is_judged_only_after_settings_applied(self):
+        early = {"index": 0, "exit": "fatal", "log": "", "state": {"safe": False, "muted": 1, "sd_paused": False}}
+        late = {"index": 1, "exit": "stop", "log": "Settings initialized. muted=1",
+                "state": {"safe": False, "muted": 1, "sd_paused": False}}
+        self.assertEqual(pm.inv_mute_follows_app([early], {}), [])
+        self.assertEqual(pm.inv_mute_blocks_capture([dict(early, exit="stop")], {}), [])
+        self.assertEqual(len(pm.inv_mute_follows_app([late], {})), 1)
+        self.assertEqual(len(pm.inv_mute_blocks_capture([late], {})), 1)
+
     def test_no_stuck_safe(self):
         boots = [{"index": 0, "reset": "power-on", "exit": "stop", "state": {"safe": True, "latch_reason": 1}},
                  {"index": 1, "reset": "watchdog", "exit": "stop", "state": {"safe": True, "latch_reason": 1}},

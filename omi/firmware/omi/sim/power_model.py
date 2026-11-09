@@ -389,6 +389,15 @@ def inv_manual_entry_needs_10s_hold(boots, outcome):
 APP_MUTE_LINE = re.compile(r"^SIM: app writes mute=(\d) \(rc=(-?\d+)\)", re.M)
 
 
+# app_settings_init() ran (or failed and fell back to muted). Before this the
+# RAM mute is the fail-closed default and nothing captures or stores yet.
+SETTINGS_APPLIED = ("Settings initialized", "Failed to initialize settings subsystem")
+
+
+def _settings_applied(boot):
+    return any(token in boot.get("log", "") for token in SETTINGS_APPLIED)
+
+
 def inv_mute_follows_app(boots, outcome):
     """The app's last delivered mute write wins: nothing else (taps, power,
     faults) may clear a mute, and nothing but a settings fault may set one."""
@@ -399,7 +408,7 @@ def inv_mute_follows_app(boots, outcome):
         for value, _rc in APP_MUTE_LINE.findall(boot.get("log", "")):
             last = int(value)
         state = boot["state"]
-        if state.get("safe") or "muted" not in state:
+        if state.get("safe") or "muted" not in state or not _settings_applied(boot):
             continue
         if last == 1 and state["muted"] != 1:
             out.append(f"boot {boot['index']}: app muted but pendant unmuted")
@@ -419,7 +428,8 @@ def inv_mute_blocks_capture(boots, outcome):
         state = boot["state"]
         if state.get("muted") and state.get("should_capture"):
             out.append(f"boot {boot['index']}: muted but capture allowed")
-        if not state.get("safe") and state.get("muted") and not state.get("sd_paused") and boot["exit"] == "stop":
+        if (not state.get("safe") and state.get("muted") and not state.get("sd_paused") and boot["exit"] == "stop"
+                and _settings_applied(boot)):
             out.append(f"boot {boot['index']}: muted but SD writes not paused")
     return out
 
