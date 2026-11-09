@@ -637,7 +637,10 @@ def reconcile_uid(
             kick(uid, retire_limit=retire_limit, progress=progress)
             return 'budget_chain_exhausted'
         return 'raced'
-    replacement = registry.redrive_job(uid, job_id, epoch, now=current, crashed=not pending_deferral)
+    # Only a lease expiry with no pending replacement is a worker crash; terminal
+    # or vanished-job cleanup never counts toward running_expiries.
+    crashed = outcome == 'lease_expired' and not pending_deferral
+    replacement = registry.redrive_job(uid, job_id, epoch, now=current, crashed=crashed)
     if replacement is None:
         return 'raced'
     if outcome == 'lease_expired' and not pending_deferral:

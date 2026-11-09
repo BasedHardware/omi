@@ -64,6 +64,16 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     if name not in KILL_SWITCHES:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
+    if name in BACKLOG_STATE_MACHINE_SWITCHES:
+        # Exact literal: only the raw value "true" enables; any other set value
+        # is off, unset is the registered default. No case folding or trimming.
+        raw = env.get(name)
+        enabled = KILL_SWITCHES[name] if raw is None else raw == 'true'
+        if log:
+            logger.info(
+                'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled
+            )
+        return enabled
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
     if name in {
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -84,7 +94,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
-    if name not in BACKLOG_STATE_MACHINE_SWITCHES and name not in {
+    if name not in {
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',

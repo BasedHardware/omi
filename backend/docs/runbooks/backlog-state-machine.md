@@ -12,8 +12,8 @@ deletes audio, results, custody tokens or privacy fences.
 
 ## Switches
 
-Parsed literally: `true` is on, anything else is off, and unset means the
-default below. Defaults follow lead2's rule (64b2fa): ON only where a class just
+Parsed literally: only the exact value `true` is on (`TRUE`, ` true`, `1` and
+`yes` are off), any other set value is off, and unset means the default below. Defaults follow lead2's rule (64b2fa): ON only where a class just
 cuts wasted work or retries, OFF where it changes custody, settle or expiry
 semantics. Each switch is read per decision; turning it off restores the old
 transition with no restart or migration, and fields written while it was on are
@@ -43,7 +43,12 @@ failure. Alert: `omi-backlog-retry-cap-quarantine-rate`.
 A running lease expiry keeps the epoch bump that fences the dead worker, carries
 `dispatch_attempt` as the task identity, and counts the crash in
 `running_expiries` (reset at claim). An expiry while a budget deferral's
-`deferred_until` marker is live is not a crash. `dispatch_attempt_base` restarts
+`deferred_until` marker is still on the job is not a crash, even past the
+marker's horizon: the replacement retires the marker when it starts, so a
+marker that outlives its horizon is a late delivery, not a finished one, and
+the running cap never fails the job or releases its owner while it is
+pending. Terminal or vanished-job cleanup never counts as a crash. The cap
+outcome is recorded only after the fenced terminal handoff succeeds. `dispatch_attempt_base` restarts
 the legacy dispatching-deadline budget at each new epoch, exactly as main's reset
 did, so the carry never spends that budget. Alert: `omi-backlog-sync-running-cap-rate`
 (fires only with class 1 on). With class 1 off, every running-lease expiry at or
@@ -57,7 +62,10 @@ Every held re-drive (nightly re-drive, operator requeue, operator
 `/redrive-dead` or status poll of a `held_expired` dead letter) goes through one
 helper:
 the counter increments `held_redrives`, and class 3 resets `attempt` to 0 and keeps
-the prior value in `held_redrive_last_attempt`. The nightly scan and committed
+the prior value in `held_redrive_last_attempt`. Class 3 takes effect only with
+the counter on and only for a unit's first 3 re-drives; after that the unit
+keeps main's retained held loop (attempt at the cap) and the spent-budget
+signal, so a fresh budget never sustains an unbounded loop. The nightly scan and committed
 poll and `/redrive-dead` re-drives record `held_redrive_budget_spent` at or over 3 re-drives.
 Alert: `omi-backlog-held-redrive-budget-spent`. There is no terminal stop in core;
 it ships in the follow-up branch behind its own default-off switch.

@@ -98,11 +98,19 @@ def running_attempt_carry(owner: dict[str, Any]) -> bool:
 
 
 def deferral_pending(job: Any, now_seconds: float) -> bool:
-    """A budget deferral's delayed replacement has not run yet (live marker)."""
+    """A budget deferral's delayed replacement has not been confirmed to run.
+
+    The replacement retires deferred_until when it starts (mark processing).
+    A marker still on the job past its horizon means a late delivery (the
+    backfill lane is concurrency-capped), never that the replacement ran, so
+    marker expiry is not confirmation: the expiry is not a crash and the
+    running cap must not fail the job or release its owner while it is pending.
+    ``now_seconds`` is kept for callers; expiry does not change the answer.
+    """
     if not isinstance(job, dict):
         return False
     marker = job.get('deferred_until')
-    return isinstance(marker, (int, float)) and not isinstance(marker, bool) and now_seconds < marker
+    return isinstance(marker, (int, float)) and not isinstance(marker, bool)
 
 
 def reconcile_dispatch_cap(
@@ -125,8 +133,8 @@ def reconcile_dispatch_cap(
         check, decision = 'sequencer_running', running_cap(uid, owner)
     else:
         return None
-    observe(check, decision)
     if decision is None or not decision.reached or not decision.serving:
+        observe(check, decision)
         return None
     logger.error('event=sync_uid_sequencer action=sweep outcome=dispatch_retry_cap_reached')
     if not finalize(
@@ -140,6 +148,9 @@ def reconcile_dispatch_cap(
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'finalize_deferred'
     if registry.finish_expired_job(uid, owner['active_job_id'], epoch, 'dispatch_retry_cap_reached', now=current):
+        # Recorded only after the fenced terminal handoff: a deferred or raced
+        # finalization leaves the work active and is not a quarantine.
+        observe(check, decision)
         if owner.get('active_state') != 'dispatching':
             from utils.backlog_metrics import record_transition
 

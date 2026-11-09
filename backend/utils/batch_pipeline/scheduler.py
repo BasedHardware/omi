@@ -1069,9 +1069,15 @@ def account_held_redrive(job: dict) -> None:
     keeping attempt at the cap made the first failure re-quarantine. History
     moves to held_redrive_last_attempt.
     """
-    if held_redrive_counter_enabled():
-        job['held_redrives'] = held_redrives(job) + 1
-    if held_redrive_budget_enabled():
+    counted = held_redrive_counter_enabled()
+    prior = held_redrives(job)
+    if counted:
+        job['held_redrives'] = prior + 1
+    # Class 3 takes effect only while it is bounded and alerted: with the class 6
+    # counter on, and only while the unit's re-drive budget is unspent. The
+    # terminal stop is not in core, so an uncounted or spent unit keeps main's
+    # retained held loop (attempt at the cap) and the spent-budget signal.
+    if held_redrive_budget_enabled() and counted and prior < MAX_HELD_REDRIVES:
         job['held_redrive_last_attempt'] = job.get('attempt', 0)
         job['attempt'] = 0
 

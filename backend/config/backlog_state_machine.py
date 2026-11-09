@@ -1,8 +1,8 @@
 """Owners, counters and attempt budgets for the batch and sync backlog paths.
 
 Each class has its own switch in config/policy/kill_switches.py, parsed
-literally (``true`` is on, anything else is off, unset is the registered
-default). Defaults follow the lead2 rule (64b2fa): ON only where a class just
+literally: only the exact raw value ``true`` is on (no case folding or
+trimming), any other set value is off, unset is the registered default. Defaults follow the lead2 rule (64b2fa): ON only where a class just
 cuts wasted work or retries, OFF where it changes custody, settle or expiry
 semantics. Turning a switch off restores the exact pre-change transition.
 
@@ -20,7 +20,10 @@ semantics. Turning a switch off restores the exact pre-change transition.
 - ``BATCH_HELD_REDRIVE_BUDGET_ENABLED`` (class 3, default OFF): a
   held/dead-letter requeue resets ``attempt`` to 0 (history in
   ``held_redrive_last_attempt``), so one re-drive gets a real attempt. Moving
-  held rows back into processing with a fresh budget is a custody change.
+  held rows back into processing with a fresh budget is a custody change. It
+  takes effect only with the class 6 counter on and only while the unit has
+  fewer than MAX_HELD_REDRIVES re-drives, so fresh budgets are bounded and a
+  spent unit is alerted; the terminal stop is not in core.
 
 None of these transitions deletes audio, results, custody tokens or privacy
 fences. See backend/docs/runbooks/backlog-state-machine.md.

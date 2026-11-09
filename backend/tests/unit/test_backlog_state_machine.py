@@ -610,7 +610,8 @@ def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, 
     job = store.rows['jobs', 'segment']
     assert job['state'] == 'ready'
     assert job['held_redrives'] == (2 if counter == 'true' else 1)
-    assert job['attempt'] == (0 if budget == 'true' else 5)
+    # Class 3 takes effect only with the counter on (bounded and alerted).
+    assert job['attempt'] == (0 if budget == 'true' and counter == 'true' else 5)
 
 
 def operator_redrive_app(store, monkeypatch):
@@ -666,7 +667,8 @@ def test_operator_redrive_dead_route_keeps_the_switched_accounting(setup, monkey
         assert job['held_redrives'] == prior + 1
     else:
         assert job.get('held_redrives', 0) == prior
-    if budget == 'true':
+    # Class 3 takes effect only with the counter on and an unspent budget.
+    if budget == 'true' and counter == 'true' and prior < sm.MAX_HELD_REDRIVES:
         assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 5
     else:
         assert job['attempt'] == 5 and 'held_redrive_last_attempt' not in job
@@ -816,3 +818,118 @@ def test_nightly_requeue_is_not_double_counted(setup, monkeypatch):
     before = transitions('held_redrive_budget_spent')
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
     assert transitions('held_redrive_budget_spent') == before
+
+
+# Custody review on 53a692de1d1d -------------------------------------------------
+
+
+def test_late_budget_deferred_delivery_after_the_marker_expires_is_kept(db, monkeypatch):
+    """A (luna-core-1): an expired deferred_until marker is not proof the replacement ran.
+
+    The replacement retires the marker when it starts (mark processing). A
+    marker still on the job after its horizon means the delivery is late, not
+    done: the running cap must not fail the job or release the owner, and the
+    expiry is not a crash.
+    """
+    import time as _time
+
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    account, expired = at_cap_running_owner(db, monkeypatch)
+    failure = finalizer_mocks(monkeypatch)
+    dispatch = Mock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    monkeypatch.setattr(
+        uid_sequencer, 'get_sync_job', lambda _: {'status': 'queued', 'deferred_until': _time.time() - 60}
+    )
+    before = registry.get_owner(account)['running_expiries']
+    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
+    assert outcome != 'dispatch_retry_cap_reached'
+    failure.assert_not_called()
+    owner = registry.get_owner(account)
+    assert owner['active_job_id'] == 'crashy'
+    assert owner['running_expiries'] == before
+    dispatch.assert_called_once()  # the delivery obligation is kept
+
+
+def held_cycles(client, store, cycles, max_attempts=3):
+    """Nightly loop: re-drive a held_expired unit, fail every attempt, expire, repeat.
+
+    Returns how many re-drives granted a fresh attempt budget.
+    """
+    fresh = 0
+    for night in range(1, cycles + 1):
+        # Every attempt the previous re-drive granted failed; the unit expired again.
+        held_dead(bad(client), attempt=max_attempts, expired_at=night * 86400 - 10)
+        assert RecoveryStore(store).requeue_quarantined('bad', night * 86400 + 60, dead_before=night * 86400) is True
+        fresh += bad(client)['attempt'] == 0
+    return fresh
+
+
+@pytest.mark.parametrize(
+    'budget,counter,expected_fresh',
+    [
+        ('true', 'false', 0),  # no count, no alert: the reset must not take effect
+        ('true', 'true', sm.MAX_HELD_REDRIVES),  # stop is excluded from core: bounded by the counter
+        (None, None, 0),  # defaults: budget off, counter on
+    ],
+)
+def test_held_budget_reset_is_bounded_and_alerted(setup, monkeypatch, budget, counter, expected_fresh):
+    """B (luna-core-1, luna-core-2): class 3 never sustains an unbounded fresh-budget loop.
+
+    The reset takes effect only with the class 6 counter on and only while the
+    unit's re-drive budget is unspent; after that the unit keeps main's
+    retained held loop and the spent-budget signal (unit-looping alert).
+    """
+    from utils.batch_pipeline.scheduler import held_redrive_budget_spent
+
+    if budget is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
+    if counter is not None:
+        monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    fresh = held_cycles(client, store, cycles=10)
+    assert fresh == expected_fresh
+    job = bad(client)
+    assert job['audio_uri'] == 'gs://synthetic/audio'  # retained
+    if counter != 'false':
+        assert job['held_redrives'] == 10
+        assert held_redrive_budget_spent(job)  # the nightly scan reports it: alerted
+
+
+@pytest.mark.parametrize('name', sorted(EXPECTED_DEFAULTS))
+@pytest.mark.parametrize('raw', ['TRUE', 'True', ' true', 'true ', '1', 'yes', 'on', ''])
+def test_backlog_switches_enable_only_on_exact_true(monkeypatch, name, raw):
+    """C (luna-core-2): only the exact value true enables; anything else set is off."""
+    monkeypatch.setenv(name, raw)
+    assert READERS[name]() is False
+    monkeypatch.setenv(name, 'true')
+    assert READERS[name]() is True
+    monkeypatch.delenv(name)
+    assert READERS[name]() is EXPECTED_DEFAULTS[name]
+
+
+@pytest.mark.parametrize('status,outcome', [('completed', 'terminal_cleanup'), (None, 'expired_job_cleanup')])
+def test_job_cleanup_is_not_counted_as_a_crash(db, monkeypatch, status, outcome):
+    """D (luna-core-1): terminal or vanished-job cleanup is not a worker crash."""
+    account, epoch = running_owner(db, monkeypatch)
+    finalizer_mocks(monkeypatch)
+    assert registry.begin_job(account, 'crashy', epoch, now=NOW)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _: None if status is None else {'status': status})
+    expired = NOW + timedelta(seconds=registry.LEASE_SECONDS + 1)
+    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == outcome
+    assert registry.get_owner(account).get('running_expiries', 0) == 0
+
+
+def test_deferred_finalizer_does_not_record_a_quarantine(db, monkeypatch):
+    """E (luna-core-2): the cap outcome is recorded only after the fenced terminal handoff."""
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    account, expired = at_cap_running_owner(db, monkeypatch)
+    finalizer_mocks(monkeypatch)
+    monkeypatch.setattr(uid_sequencer, '_finalize_abandoned_budget_chain_job', lambda *a, **k: False)
+    quarantines = decisions('sequencer_running', 'quarantine')
+    reached = transitions('sync_running_cap_reached')
+    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'finalize_deferred'
+    assert decisions('sequencer_running', 'quarantine') == quarantines
+    assert transitions('sync_running_cap_reached') == reached
+    assert registry.get_owner(account)['active_job_id'] == 'crashy'
