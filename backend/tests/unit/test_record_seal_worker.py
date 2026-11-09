@@ -363,6 +363,9 @@ def test_invalid_seal_clock_keeps_success_count_without_histogram_sample():
     metrics.outcome('sealed', None)
     assert metrics.sealed._value.get() == 1
     assert metrics.age._sum.get() == 0
+    labels = {'worker_release': 'r', 'namespace': 'n'}
+    assert metrics.registry.get_sample_value('omi_record_seal_age_seconds_count', labels) == 0
     metrics.outcome('sealed', 1000)
     assert metrics.sealed._value.get() == 2
     assert metrics.age._sum.get() == 1000
+    assert metrics.registry.get_sample_value('omi_record_seal_age_seconds_count', labels) == 1
