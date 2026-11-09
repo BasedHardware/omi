@@ -130,6 +130,8 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     cursor = claim(client.transaction())
     if cursor is None:
         return counts
+    # Scan/account only after the claim commits: Firestore may replay its
+    # callback. Keep counts and gauge publication outside retryable callbacks.
     page = due_conversations(now=current, limit=REPAIR_SCAN_LIMIT, after=cursor, firestore_client=client)
     attempts = 0
     overdue = 0

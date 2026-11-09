@@ -145,6 +145,69 @@ def test_repair_tick_global_lease_and_bounded_cursor(debt_store):
     assert len(tasks) == 1
 
 
+@pytest.mark.parametrize('retry_transaction', [0, 1], ids=['claim', 'finish'])
+def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_store, monkeypatch, retry_transaction):
+    from unittest.mock import Mock
+    from google.api_core.exceptions import Aborted
+    from google.cloud.firestore_v1.transaction import Transaction
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    pending = now - 100
+    ref.update({'summary_first_pending_at': pending, 'summary_due_at': now - 1})
+    expired_ref = ref.parent.document('created-old')
+    expired_row = {
+        **row,
+        'summary_first_pending_at': pending,
+        'summary_due_at': now - 1,
+        'created_at': now - max_age_seconds() - 1,
+    }
+    expired_ref.set(expired_row)
+    commit = Transaction._commit
+    cursor_transactions = []
+    commit_attempts = []
+
+    def abort_once(transaction):
+        # Exercise the SDK's actual transactional retry loop against the
+        # emulator, rejecting one cursor commit before it reaches storage.
+        if any(write.update.name.endswith('/' + repair.CURSOR) for write in transaction._write_pbs):
+            if transaction not in cursor_transactions:
+                cursor_transactions.append(transaction)
+                commit_attempts.append(0)
+            index = cursor_transactions.index(transaction)
+            commit_attempts[index] += 1
+            if index == retry_transaction and commit_attempts[index] == 1:
+                # A server abort releases read locks. A client-only exception
+                # would leave the emulator transaction open across the retry.
+                transaction._rollback()
+                raise Aborted('synthetic cursor contention')
+        return commit(transaction)
+
+    monkeypatch.setattr(Transaction, '_commit', abort_once)
+    query = Mock(wraps=repair.due_conversations)
+    monkeypatch.setattr(repair, 'due_conversations', query)
+    gauge = Mock(wraps=delivery.EXPIRED_SEEN)
+    monkeypatch.setattr(delivery, 'EXPIRED_SEEN', gauge)
+    try:
+        assert repair.tick(now=now, client=client) == {
+            'scanned': 2,
+            'admitted': 1,
+            'errors': 0,
+            'expired_seen': 1,
+        }
+        assert commit_attempts == ([2, 1] if retry_transaction == 0 else [1, 2])
+        query.assert_called_once()
+        gauge.set.assert_called_once_with(1)
+        assert gauge._mock_wraps._value.get() == 1
+        assert len(tasks) == 1
+        assert expired_ref.get().to_dict() == expired_row
+        assert not client.collection(reprocess.COLLECTION).document(reprocess.key(uid, expired_ref.id)).get().exists
+    finally:
+        expired_ref.delete()
+
+
 def test_short_lease_replaced_owner_cannot_durably_write(debt_store, monkeypatch):
     import time
     from database import conversations as conversations_db
