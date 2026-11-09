@@ -405,26 +405,18 @@ void turnoff_all()
         return;
     }
 
-    /* Arm the level wake only after release. Armed while the button is still
-     * held, System OFF wakes at once, and that wake begins with a held button
-     * (committee item 5). A stuck button gives up after a bounded wait and then
-     * wakes on release instead, so a jammed button can never start a boot with
-     * the button held (on a charger that would be the manual SAFE gesture). */
+    /* Wait for release before arming the level wake. Armed while the button is
+     * still held, System OFF wakes at once, and that wake begins with a held
+     * button (committee item 5). A stuck button gives up after a bounded wait
+     * and then wakes on release instead, so a jammed button can never start a
+     * boot with the button held (on a charger that would be the manual SAFE
+     * gesture). */
     for (int waited = 0; gpio_pin_get_dt(&usr_btn) > 0 && waited < POWEROFF_RELEASE_WAIT_MS;
          waited += POWEROFF_RELEASE_POLL_MS) {
         watchdog_feed();
         k_msleep(POWEROFF_RELEASE_POLL_MS);
     }
-    bool still_held = gpio_pin_get_dt(&usr_btn) > 0;
-    if (still_held) {
-        LOG_WRN("usr_btn still held at power-off: waking on release instead");
-    }
 
-    rc = gpio_pin_interrupt_configure_dt(&usr_btn, still_held ? GPIO_INT_LEVEL_HIGH : GPIO_INT_LEVEL_LOW);
-    if (rc < 0) {
-        LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
-        return;
-    }
     rc = watchdog_deinit();
     if (rc < 0) {
         LOG_WRN("Watchdog cannot stop (%d); proceeding to System OFF", rc);
@@ -433,6 +425,22 @@ void turnoff_all()
     /* Persist an IMU timestamp base so we can estimate time across system_off. */
     lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);
+
+    /* Arm the wake as the very last step. A level interrupt keeps firing while
+     * its level holds; armed before the sleep above (3.0.23), a press in that
+     * window re-ran the runtime callback continuously, starving this thread so
+     * System OFF never came and the unstoppable watchdog reset the pendant.
+     * The runtime callback is removed first; sys_poweroff() locks interrupts. */
+    bool still_held = gpio_pin_get_dt(&usr_btn) > 0;
+    if (still_held) {
+        LOG_WRN("usr_btn still held at power-off: waking on release instead");
+    }
+    (void) gpio_remove_callback(usr_btn.port, &button_cb_data);
+    rc = gpio_pin_interrupt_configure_dt(&usr_btn, still_held ? GPIO_INT_LEVEL_HIGH : GPIO_INT_LEVEL_LOW);
+    if (rc < 0) {
+        LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
+        return;
+    }
     LOG_INF("Entering system off; press usr_btn to restart");
 
     // Power off the system using sys_poweroff
