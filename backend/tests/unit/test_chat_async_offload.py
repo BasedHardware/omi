@@ -290,6 +290,7 @@ async def test_bare_continue_reaches_chat_agent_with_resume_contract():
         _full_response,
         _safety_guard,
         _configurable,
+        **_kwargs,
     ):
         received['messages'] = provider_messages
         await callback.end()
@@ -425,6 +426,7 @@ async def test_agentic_setup_reads_run_off_loop():
         full_response,
         safety_guard,
         configurable,
+        **_kwargs,
     ):
         # End the stream immediately so the generator's queue loop breaks.
         await callback.queue.put(None)
