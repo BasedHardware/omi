@@ -9,6 +9,7 @@ OMI_FLAG_DUAL_READ_TOTAL = Counter(
 )
 # Export idle zeros at startup for the bounded set of dual-read evaluator keys.
 # Missing series then indicate missing runtime/scrape coverage, not no comparisons.
-for _flag in ('proactivity_v2',):
-    for _outcome in ('match', 'mismatch', 'omi_absent', 'omi_error'):
-        OMI_FLAG_DUAL_READ_TOTAL.labels(flag=_flag, outcome=_outcome)
+OMI_FLAG_DUAL_READ_TOTAL.labels(flag='proactivity_v2', outcome='match')
+OMI_FLAG_DUAL_READ_TOTAL.labels(flag='proactivity_v2', outcome='mismatch')
+OMI_FLAG_DUAL_READ_TOTAL.labels(flag='proactivity_v2', outcome='omi_absent')
+OMI_FLAG_DUAL_READ_TOTAL.labels(flag='proactivity_v2', outcome='omi_error')
