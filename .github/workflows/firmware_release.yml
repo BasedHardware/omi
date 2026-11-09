@@ -140,13 +140,22 @@ jobs:
             --cache "$RUNNER_TEMP/cv1-sim" --jobs 4 --fuzz-seeds 40 \
             --firmware-version "$VER" --report "$RUNNER_TEMP/sim-report.json"
 
+      # The simulator runs in Docker as root; its per-scenario flash images are
+      # root-owned and unreadable to upload-artifact (EACCES) without this.
+      - name: Fix simulator evidence ownership
+        if: ${{ always() && inputs.publish != 'publish' }}
+        run: |
+          if [ -d "$RUNNER_TEMP/cv1-sim" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/cv1-sim"
+          fi
+
       - name: Upload simulator evidence
         if: ${{ always() && inputs.publish != 'publish' }}
         uses: actions/upload-artifact@v7
         with:
           name: cv1-sim-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/cv1-sim/sim-report.json
+            ${{ runner.temp }}/sim-report.json
             ${{ runner.temp }}/cv1-sim/runs/**
             ${{ runner.temp }}/cv1-sim/fuzz-failures/**
             !${{ runner.temp }}/cv1-sim/runs/**/sd.img
