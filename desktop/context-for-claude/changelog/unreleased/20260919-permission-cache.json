@@ -1,0 +1,3 @@
+{
+  "change": "Signed updates keep remembered call-audio permission when the app's signing identity is unchanged"
+}

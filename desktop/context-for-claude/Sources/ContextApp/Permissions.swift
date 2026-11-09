@@ -732,8 +732,8 @@ enum Permissions {
     /// **What was rejected, and why**, since both alternatives look reasonable until they are
     /// measured:
     ///
-    /// - *Compare a stored cdhash against this build's*, the way `reconcileSystemAudioRecords`
-    ///   already does for its own cached grant. Measured on the affected install:
+    /// - *Compare a stored cdhash against this build's*, as `reconcileSystemAudioRecords`
+    ///   originally did for its own cached grant. Measured on the affected install:
     ///   `context.permission.systemAudio.signature` is `708e9a67…` and the installed bundle's
     ///   `CDHash` is `708e9a67…` — the same. The re-sign that poisoned the TCC record happened
     ///   *before* that key was ever written, so the comparison reports "unchanged" for precisely the
@@ -1237,26 +1237,23 @@ enum Permissions {
         return granted
     }
 
-    // MARK: - System audio: records that must not outlive the signature that earned them
+    // MARK: - System audio: records belong to a signing identity, not a particular build
 
     /// **Whether persisted system-audio answers written under `stored` still describe a build
     /// signed as `current`.**
     ///
-    /// System audio is the one capability with no preflight, so `check` answers it from
-    /// `UserDefaults` — and that cache is the only capability answer in the app that nothing can
-    /// falsify. `refreshSystemAudioGrant`, `materialiseSettingsRow` and `requestSystemAudio` all
-    /// return at their first guard once it reads `true`, so a `true` written by a previous build is
-    /// permanent: `check(.systemAudio)` says granted, the menu bar's Microphone row ANDs it in and
-    /// reads "Granted", the onboarding card counts it answered and never offers it, and the capture
-    /// path is the only thing that ever finds out — as an opaque device error, with no route to the
-    /// switch.
+    /// System audio has no passive preflight, so `check` uses `UserDefaults` unless this process's
+    /// tap was refused. Before reconciliation and refusal handling, a cached `true` from an older
+    /// signing identity was effectively permanent: refresh and request returned at their first
+    /// guard, onboarding counted the row answered, and only capture discovered the stale grant.
     ///
     /// That is not a hypothetical. Measured on this machine on 15 August 2026, having just installed
     /// the notarized 1.0.4 over an ad-hoc-signed build: `context.permission.systemAudio.granted = 1`,
     /// written under a signature macOS has since dropped the TCC record for. Every existing install
     /// that updates across a signing-identity change arrives in exactly this state.
     ///
-    /// TCC keys its records to the code signature, so this scopes ours the same way. Two deliberate
+    /// Signed updates with the same designated requirement keep their cache. A cdhash identifies
+    /// one build, not the app across releases (Apple TN2206, "Code Requirements"). Two deliberate
     /// asymmetries, both toward keeping less:
     ///
     /// - **An absent stamp does not survive.** A build that predates this reconciliation wrote
@@ -1270,19 +1267,31 @@ enum Permissions {
         return stored == current
     }
 
-    /// Spends every persisted system-audio answer that a different build wrote, and stamps this one.
-    ///
-    /// Takes its `defaults` and its `signature` rather than reading both, because the interesting
-    /// behaviour is the mutation — which keys go, which stay, and that a second call with the same
-    /// signature is a no-op — and none of that is assertable against a live keychain-signed bundle
-    /// and the real standard domain.
-    ///
-    /// - Returns: whether records were spent.
+    enum SystemAudioRecordOutcome: String, Sendable, CaseIterable {
+        case unchanged
+        case initialized
+        case identityChanged = "identity_changed"
+        case legacyMigrated = "legacy_migrated"
+        case identityUnavailable = "identity_unavailable"
+    }
+
+    /// Reconciles the persisted cache without asking macOS for a new grant. A legacy cdhash is
+    /// migratable only when it matches this binary; a hash from an older binary does not tell us
+    /// who signed it. Actual tap refusals still override retained answers in this process.
     @discardableResult
-    nonisolated static func reconcileSystemAudioRecords(defaults: UserDefaults, signature: String?) -> Bool {
+    nonisolated static func reconcileSystemAudioRecords(
+        defaults: UserDefaults, signature: String?, legacySignature: String? = nil
+    ) -> SystemAudioRecordOutcome {
         let stored = defaults.string(forKey: Key.systemAudioSignature)
-        guard !systemAudioRecordsSurvive(stored: stored, current: signature) else { return false }
-        guard let signature else { return false }
+        guard let signature else { return .identityUnavailable }
+        if systemAudioRecordsSurvive(stored: stored, current: signature) { return .unchanged }
+        if let stored, stored == legacySignature {
+            defaults.set(signature, forKey: Key.systemAudioSignature)
+            return .legacyMigrated
+        }
+        let hadRecords = stored != nil || [
+            Key.systemAudioGranted, Key.systemAudioProbedAt, Key.prompted(.systemAudio),
+        ].contains { defaults.object(forKey: $0) != nil }
         // The prompt record goes with the grant. It claims macOS has spent this app's consent
         // dialog, which is the same claim about the same dropped TCC record — and left behind it
         // would send the row's first click down the "the prompt is spent, open the pane" branch for
@@ -1291,35 +1300,57 @@ enum Permissions {
         defaults.removeObject(forKey: Key.systemAudioProbedAt)
         defaults.removeObject(forKey: Key.prompted(.systemAudio))
         defaults.set(signature, forKey: Key.systemAudioSignature)
-        // `milestone`: this is the line that explains why a user who had system audio working was
-        // asked for it again, and `info` is evicted from the unified log within minutes.
-        ContextLog.milestone(
-            "System audio consent was recorded under a different code signature — the answer has "
-                + "been dropped and will be asked for again",
-            "permissions")
-        return true
+        if hadRecords {
+            ContextLog.milestone(
+                "System audio consent belongs to a different or unknown signing identity — "
+                    + "cached answers were cleared", "permissions")
+        }
+        return hadRecords ? .identityChanged : .initialized
     }
 
-    /// Runs the reconciliation once, on the live records.
-    private static let systemAudioRecordsReconciled: Void = {
-        reconcileSystemAudioRecords(defaults: .standard, signature: codeSignature)
+    /// Runs once on the live records; observers can read the outcome without another mutation.
+    static let systemAudioRecordsReconciled: SystemAudioRecordOutcome = {
+        reconcileSystemAudioRecords(
+            defaults: .standard, signature: codeIdentity?.stamp, legacySignature: codeIdentity?.cdhash)
     }()
 
-    /// **This bundle's code signature, in the same terms TCC keys a grant to.**
-    ///
-    /// The cdhash rather than the team identifier, because an ad-hoc-signed build has no team and
-    /// two consecutive ad-hoc builds are exactly the pair between which a grant disappears. It is
-    /// stable across launches of a shipped build, so nothing in the field pays for it twice.
-    private static let codeSignature: String? = {
+    /// Certificate-backed releases keep a designated requirement across builds. Ad-hoc builds
+    /// have no such continuity, even if they supplied an explicit requirement: keep their cdhash.
+    /// A missing requirement for a certificate-signed app is unknown, not an identity change.
+    nonisolated static func systemAudioIdentity(
+        cdhash: String, certificateSigned: Bool, designatedRequirement: Data?
+    ) -> String? {
+        guard certificateSigned else { return cdhash }
+        guard let designatedRequirement else { return nil }
+        return "requirement:v1:" + designatedRequirement.base64EncodedString()
+    }
+
+    private static let codeIdentity: (stamp: String, cdhash: String)? = {
         var code: SecCode?
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
         var information: CFDictionary?
         guard SecCodeCopySigningInformation(staticCode, [], &information) == errSecSuccess,
-            let unique = (information as? [String: Any])?[kSecCodeInfoUnique as String] as? Data
+            let info = information as? [String: Any],
+            let unique = info[kSecCodeInfoUnique as String] as? Data,
+            let flags = info[kSecCodeInfoFlags as String] as? UInt32
         else { return nil }
-        return unique.map { String(format: "%02x", $0) }.joined()
+        let cdhash = unique.map { String(format: "%02x", $0) }.joined()
+        let certificateSigned = !SecCodeSignatureFlags(rawValue: flags).contains(.adhoc)
+        var requirement: SecRequirement?
+        var requirementData: CFData?
+        if certificateSigned {
+            guard SecCodeCopyDesignatedRequirement(staticCode, [], &requirement) == errSecSuccess,
+                let requirement,
+                SecRequirementCopyData(requirement, [], &requirementData) == errSecSuccess
+            else { return nil }
+        }
+        guard let stamp = systemAudioIdentity(
+            cdhash: cdhash, certificateSigned: certificateSigned,
+            designatedRequirement: requirementData.map { $0 as Data })
+        else { return nil }
+        return (stamp, cdhash)
     }()
 
     private static let systemAudioProbeLock = NSLock()
@@ -1402,7 +1433,7 @@ enum Permissions {
     private enum Key {
         static let systemAudioGranted = "context.permission.systemAudio.granted"
         static let systemAudioProbedAt = "context.permission.systemAudio.probedAt"
-        /// The code signature the two records above were written under. See
+        /// The designated-requirement stamp (legacy/ad-hoc records use a cdhash). See
         /// `Permissions.systemAudioRecordsSurvive(stored:current:)`.
         static let systemAudioSignature = "context.permission.systemAudio.signature"
         static let screenPendingRelaunch = "context.permission.screen.pendingRelaunch"
