@@ -156,8 +156,10 @@ def test_flags_default_on_for_fleet_phases_and_off_for_staged(monkeypatch):
     # default-on for everyone, without a percent cohort.
     assert audio_archive.admitted('owner', 'LIVE')
     assert audio_archive.admitted('other', 'READ')
+    # COALESCE graduated on 2026-11-09 and is admitted unconditionally.
+    assert audio_archive.admitted('owner', 'COALESCE')
     # Staged phases stay default-off.
-    for phase in ('STOP_PCM', 'SYNC', 'REGIONAL_CACHE', 'COALESCE'):
+    for phase in ('STOP_PCM', 'SYNC', 'REGIONAL_CACHE'):
         monkeypatch.delenv(f'AUDIO_ARCHIVE_{phase}_ENABLED', raising=False)
         assert not audio_archive.admitted('owner', phase)
     # Kill switches.
