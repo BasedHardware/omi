@@ -884,6 +884,7 @@ def delete_empty_recording_conversation(
     require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
     allow_empty_server_batch: bool = False,
+    transaction_guard: Any = None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
     deleted_conversation: dict[str, Any] = {}
@@ -892,6 +893,8 @@ def delete_empty_recording_conversation(
         recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
     if firestore_client is not None:
         recovery_guards['firestore_client'] = firestore_client
+    if transaction_guard is not None:
+        recovery_guards['transaction_guard'] = transaction_guard
     if allow_empty_server_batch:
         recovery_guards['allow_empty_server_batch'] = True
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
