@@ -2,31 +2,26 @@
 
 Classes from the 2026-11-07 backlog root-cause review:
 
-1. the retry cap enforces for every uid only with CAPTURE_RETRY_CAP_ENFORCED on;
-2. a running sync lease expiry carries dispatch_attempt instead of resetting it;
+1. the batch lease-expiry retry cap enforces for every uid only with
+   CAPTURE_RETRY_CAP_ENFORCED on (the sync path is main's, unchanged);
 3. a held/dead-letter requeue grants a fresh attempt budget;
 6. (counter) held re-drives are counted and a spent budget is reported.
 """
 
 from copy import deepcopy
-from datetime import timedelta
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
 
 from config import backlog_state_machine as sm
-from database import sync_backfill_sequencer as registry, sync_jobs
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
-from tests.unit.test_sync_backfill_uid_sequencer import db, NOW, _register  # noqa: F401
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.sync import uid_sequencer
 
 SWITCHES = (
     sm.RETRY_CAP_SWITCH,
-    sm.SYNC_ATTEMPT_CARRY_SWITCH,
     sm.HELD_REDRIVE_COUNTER_SWITCH,
     sm.HELD_REDRIVE_BUDGET_SWITCH,
 )
@@ -54,13 +49,11 @@ def transitions(name):
 # work or retries; OFF where it changes custody, settle or expiry semantics.
 EXPECTED_DEFAULTS = {
     sm.RETRY_CAP_SWITCH: False,
-    sm.SYNC_ATTEMPT_CARRY_SWITCH: True,
     sm.HELD_REDRIVE_COUNTER_SWITCH: True,
     sm.HELD_REDRIVE_BUDGET_SWITCH: False,
 }
 READERS = {
     sm.RETRY_CAP_SWITCH: sm.retry_cap_enforced,
-    sm.SYNC_ATTEMPT_CARRY_SWITCH: sm.sync_attempt_carry_enabled,
     sm.HELD_REDRIVE_COUNTER_SWITCH: sm.held_redrive_counter_enabled,
     sm.HELD_REDRIVE_BUDGET_SWITCH: sm.held_redrive_budget_enabled,
 }
@@ -115,325 +108,33 @@ def test_retry_cap_serves_without_capture_coverage_cohort(monkeypatch, switch, s
 
     if switch is not None:
         monkeypatch.setenv(sm.RETRY_CAP_SWITCH, switch)
-    decision = retry_cap(uuid4().hex, 5, 5)
+    decision = retry_cap(uuid4().hex, 5, 5, enforce=True)
     assert decision.reached and decision.serving is serving
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'off')
-    decision = retry_cap(uuid4().hex, 5, 5)
+    decision = retry_cap(uuid4().hex, 5, 5, enforce=True)
     # Coverage mode off no longer disables the cap; only the cap's own switch does.
     assert (decision is not None) is serving
 
 
-# 2. Sync lease expiry carries dispatch_attempt (SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED, default ON)
+@pytest.mark.parametrize('switch', ['true', None, 'false'])
+@pytest.mark.parametrize('coverage', ['off', 'shadow'])
+def test_class_1_never_changes_the_sync_dispatch_cap(monkeypatch, switch, coverage):
+    """Class 2 and the sync budget-deferral chain are not in core: main's sync cap is unchanged.
 
-
-def running_owner(db, monkeypatch, attempts='5'):
-    account = uuid4().hex
-    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', attempts)
-    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _: False)
-    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _: {'status': 'processing'})
-    _register(account, 'crashy', 0, db=db)
-    claim = registry.claim_next(account, now=NOW)
-    return account, claim['epoch']
-
-
-def crash_once(account, epoch, now):
-    """The worker begins, then dies: the running lease expires without a run lock."""
-    assert registry.begin_job(account, 'crashy', epoch, now=now)
-    expired = now + timedelta(seconds=registry.LEASE_SECONDS + 1)
-    return registry.redrive_job(account, 'crashy', epoch, now=expired), expired
-
-
-@pytest.mark.parametrize('switch,expected', [('true', [1, 2, 3]), (None, [1, 2, 3]), ('false', [0, 0, 0])])
-def test_running_lease_expiry_keeps_the_attempt_budget(db, monkeypatch, switch, expected):
-    if switch is not None:
-        monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, switch)
-    account, epoch = running_owner(db, monkeypatch)
-    seen, now = [], NOW
-    for _ in expected:
-        replacement, now = crash_once(account, epoch, now)
-        # Epoch still fences the expired worker; only the count changed.
-        assert replacement['epoch'] == epoch + 1
-        epoch = replacement['epoch']
-        seen.append(registry.get_owner(account)['dispatch_attempt'])
-    assert seen == expected
-
-
-def test_running_lease_expiry_at_the_cap_terminalizes_instead_of_redriving(db, monkeypatch):
-    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # finalization needs class 1 on
-    account, epoch = running_owner(db, monkeypatch, attempts='2')
-    replacement, now = crash_once(account, epoch, NOW)
-    assert replacement['dispatch_attempt'] == 1
-    assert registry.get_owner(account)['running_expiries'] == 1
-    epoch = replacement['epoch']
-    assert registry.begin_job(account, 'crashy', epoch, now=now)
-    expired = now + timedelta(seconds=registry.LEASE_SECONDS + 1)
-    dispatch = Mock(side_effect=AssertionError('a capped job must not be redriven'))
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
-    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _: 'lock')
-    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', Mock())
-    failure = Mock(
-        return_value=sync_jobs.FencedSyncJobMutation(
-            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED, job={'status': 'failed'}
-        )
-    )
-    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', failure)
-    monkeypatch.setattr(uid_sequencer, '_cleanup_capped_chain_job_side_effects', Mock(return_value=True))
-    monkeypatch.setattr(uid_sequencer, 'kick', Mock())
-    before = transitions('sync_running_cap_reached')
-    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
-    assert outcome == 'dispatch_retry_cap_reached'
-    assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
-    assert not registry.get_owner(account).get('active_job_id')
-    assert transitions('sync_running_cap_reached') == before + 1
-
-
-def test_delayed_queue_dispatch_retries_are_not_terminalized_by_default(db, monkeypatch):
-    """A passed dispatch retry deadline is not failure: a backlogged queue delivers late.
-
-    Only a running lease expiry (the job began and died) is capped by default;
-    the dispatching-state cap keeps its CAPTURE_COVERAGE_MODE cohort gate.
+    The sync dispatch cap keeps the CAPTURE_COVERAGE_MODE cohort decision with
+    class 1 on or off: never served outside the cohort, never on with coverage off.
     """
     from utils.sync import retry_hygiene
 
-    account, epoch = running_owner(db, monkeypatch, attempts='2')
-    owner = registry.get_owner(account)
-    for minute in range(6, 61, 6):
-        current = NOW + timedelta(minutes=minute)
-        replacement = registry.redrive_job(account, 'crashy', epoch, now=current)
-        assert replacement is not None and replacement['epoch'] == epoch
-        owner = registry.get_owner(account)
-    assert owner['dispatch_attempt'] == 10 and owner['running_expiries'] == 0
-    decision = retry_hygiene.dispatch_cap(account, owner)
-    assert decision.reached and not decision.serving
-
-
-def finalizer_mocks(monkeypatch):
-    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _: 'lock')
-    monkeypatch.setattr(uid_sequencer, 'try_acquire_sync_job_run_lock', lambda _: 'lock')
-    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', Mock())
-    failure = Mock(
-        return_value=sync_jobs.FencedSyncJobMutation(
-            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED, job={'status': 'failed'}
-        )
-    )
-    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', failure)
-    monkeypatch.setattr(uid_sequencer, '_cleanup_capped_chain_job_side_effects', Mock(return_value=True))
-    monkeypatch.setattr(uid_sequencer, 'kick', Mock())
-    monkeypatch.setattr(uid_sequencer, '_dispatch', Mock())
-    return failure
-
-
-@pytest.mark.parametrize('class1', ['false', None])
-def test_crash_carry_does_not_spend_the_legacy_dispatch_budget_while_class_1_is_off(db, monkeypatch, class1):
-    """Review wave 5 (finding 1): crash -> redrive -> dispatch timeout in a serve cohort, max 2.
-
-    Main reset dispatch_attempt on a running expiry, so the next dispatch
-    deadline started a fresh legacy budget. The carried task identity must not
-    spend that budget: the delayed replacement is redriven, not failed.
-    """
-    if class1 is not None:
-        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    account, epoch = running_owner(db, monkeypatch, attempts='2')
-    replacement, expired = crash_once(account, epoch, NOW)
-    owner = registry.get_owner(account)
-    assert owner['active_state'] == 'dispatching' and owner['dispatch_attempt'] == 1  # carried identity
-    failure = finalizer_mocks(monkeypatch)
-    dispatch = Mock()
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
-    deadline = expired + timedelta(seconds=registry.DISPATCH_RETRY_SECONDS + 1)
-    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=deadline)
-    assert outcome != 'dispatch_retry_cap_reached'
-    failure.assert_not_called()
-    dispatch.assert_called_once()
-    owner = registry.get_owner(account)
-    assert owner['active_job_id'] == 'crashy' and owner['dispatch_attempt'] == 2
-
-
-def test_budget_deferred_owner_that_keeps_crashing_reaches_a_terminal_outcome(db, monkeypatch):
-    """Review wave 1 (finding 2): one budget deferral must not disable crash accounting.
-
-    The chain deferred once, then every replacement crashed (lease expired, no
-    run lock, no live deferred_until marker). The UID lane must terminate.
-    """
-    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # finalization needs class 1 on
-    account, epoch = running_owner(db, monkeypatch, attempts='5')
-    failure = finalizer_mocks(monkeypatch)
-    now, outcomes = NOW, []
-    for _ in range(8):
-        owner = registry.get_owner(account)
-        if not owner.get('active_job_id'):
-            break
-        epoch = owner['active_epoch']
-        assert registry.begin_job(account, 'crashy', epoch, now=now)
-        assert registry.note_budget_deferral(account, 'crashy', epoch, 1, now=now)
-        now += timedelta(seconds=registry.LEASE_SECONDS + 1)
-        outcomes.append(uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=now))
-    assert outcomes[-1] == 'dispatch_retry_cap_reached', outcomes
-    assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
-    assert not registry.get_owner(account).get('active_job_id')
-
-
-def test_expiry_during_a_live_budget_deferral_is_not_counted_as_a_crash(db, monkeypatch):
-    import time as _time
-
-    account, epoch = running_owner(db, monkeypatch, attempts='5')
-    finalizer_mocks(monkeypatch)
-    monkeypatch.setattr(
-        uid_sequencer, 'get_sync_job', lambda _: {'status': 'processing', 'deferred_until': _time.time() + 3600}
-    )
-    now = NOW
-    for _ in range(4):
-        epoch = registry.get_owner(account)['active_epoch']
-        assert registry.begin_job(account, 'crashy', epoch, now=now)
-        assert registry.note_budget_deferral(account, 'crashy', epoch, 1, now=now)
-        now += timedelta(seconds=registry.LEASE_SECONDS + 1)
-        assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=now) == 'lease_expired'
-    assert registry.get_owner(account)['running_expiries'] == 0
-
-
-def test_running_owner_at_cap_with_terminal_job_is_not_stranded(db, monkeypatch):
-    """The cap lives in the reconciler only; redrive_job never refuses a running owner."""
-    account, epoch = running_owner(db, monkeypatch, attempts='2')
-    replacement, now = crash_once(account, epoch, NOW)
-    epoch = replacement['epoch']
-    assert registry.begin_job(account, 'crashy', epoch, now=now)
-    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _: {'status': 'completed'})
-    dispatch = Mock()
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
-    expired = now + timedelta(seconds=registry.LEASE_SECONDS + 1)
-    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'terminal_cleanup'
-    dispatch.assert_called_once()
-
-
-def at_cap_running_owner(db, monkeypatch):
-    """Two crashes with the carry switch ON: running_expiries is 1 of a cap of 2."""
-    account, epoch = running_owner(db, monkeypatch, attempts='2')
-    replacement, now = crash_once(account, epoch, NOW)
-    owner = registry.get_owner(account)
-    assert owner['running_expiries'] == 1 and owner['dispatch_attempt'] == 1
-    epoch = replacement['epoch']
-    assert registry.begin_job(account, 'crashy', epoch, now=now)
-    return account, now + timedelta(seconds=registry.LEASE_SECONDS + 1)
-
-
-@pytest.mark.parametrize('switch', ['false', 'true', None])
-def test_running_cap_kill_switch_through_the_sweep(db, monkeypatch, switch):
-    """Review wave 2: drive reconcile_uid, not redrive_job.
-
-    The next crash puts a running owner at its cap. With the switch OFF the
-    sweep must redrive it (replacement dispatched, counters reset, nothing
-    finalized). The switch-ON control finalizes the same owner.
-    """
-    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')  # finalization needs class 1 on
-    account, expired = at_cap_running_owner(db, monkeypatch)
-    failure = finalizer_mocks(monkeypatch)
-    dispatch = Mock()
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
     if switch is not None:
-        monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, switch)
-    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
-    owner = registry.get_owner(account)
-    if switch == 'false':
-        assert outcome == 'lease_expired'
-        dispatch.assert_called_once()
-        assert owner['active_job_id'] == 'crashy'
-        assert owner['dispatch_attempt'] == 0 and owner['running_expiries'] == 0
-        failure.assert_not_called()
+        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, switch)
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', coverage)
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '2')
+    decision = retry_hygiene.dispatch_cap(uuid4().hex, {'dispatch_attempt': 5})
+    if coverage == 'off':
+        assert decision is None
     else:
-        assert outcome == 'dispatch_retry_cap_reached'
-        dispatch.assert_not_called()
-        assert not owner.get('active_job_id')
-        assert failure.call_args.kwargs['reason_code'] == 'sync_dispatch_exhausted'
-
-
-@pytest.mark.parametrize('class1', ['false', None])
-@pytest.mark.parametrize('coverage', [None, 'serve_mode', 'serve_cohort'])
-def test_running_cap_only_observes_while_class_1_is_off(db, monkeypatch, class1, coverage):
-    """CAPTURE_RETRY_CAP_ENFORCED off (explicit or default): the carried count never finalizes.
-
-    Review wave 4 (finding 1): this holds for capture-coverage serving users
-    too (CAPTURE_COVERAGE_MODE=serve, or a uid in the serve cohort). Main never
-    capped running owners, so only class 1 may turn the running cap on.
-    """
-    from config.refactor_modes import uid_digest
-
-    if class1 is not None:
-        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
-    account, expired = at_cap_running_owner(db, monkeypatch)
-    if coverage == 'serve_mode':
-        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    elif coverage == 'serve_cohort':
-        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'shadow')
-        monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S', uid_digest(account))
-    failure = finalizer_mocks(monkeypatch)
-    dispatch = Mock()
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
-    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'lease_expired'
-    dispatch.assert_called_once()
-    failure.assert_not_called()
-    assert registry.get_owner(account)['running_expiries'] == 2
-
-
-def decisions(check, outcome):
-    from utils.capture.retry_cap import DECISIONS
-
-    return DECISIONS.labels(check, outcome)._value.get()
-
-
-@pytest.mark.parametrize('class1', [None, 'false', 'true'])
-def test_unenforced_running_cap_is_observed_and_alertable(db, monkeypatch, class1):
-    """Custody review (luna-core-2): class 1 unset and CAPTURE_COVERAGE_MODE off.
-
-    A running lease that expires at the cap is redriven, never terminalized,
-    and every such expiry records sync_running_cap_observed (alert
-    omi-backlog-sync-running-cap-unenforced) plus a would_quarantine decision.
-    Class 1 on is the control: the same expiry finalizes and is not "observed".
-    """
-    if class1 is not None:
-        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
-    account, expired = at_cap_running_owner(db, monkeypatch)
-    failure = finalizer_mocks(monkeypatch)
-    dispatch = Mock()
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
-    observed = transitions('sync_running_cap_observed')
-    would = decisions('sequencer_running', 'would_quarantine')
-    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
-    if class1 == 'true':
-        assert outcome == 'dispatch_retry_cap_reached'
-        failure.assert_called_once()
-        assert transitions('sync_running_cap_observed') == observed
-        return
-    assert outcome == 'lease_expired'
-    dispatch.assert_called_once()
-    failure.assert_not_called()
-    owner = registry.get_owner(account)
-    assert owner['active_job_id'] == 'crashy' and owner['running_expiries'] == 2
-    assert transitions('sync_running_cap_observed') == observed + 1
-    assert decisions('sequencer_running', 'would_quarantine') == would + 1
-    # Over the cap: the next expiry is observed again, still never terminalized.
-    replacement_epoch = owner['active_epoch']
-    assert registry.begin_job(account, 'crashy', replacement_epoch, now=expired)
-    again = expired + timedelta(seconds=registry.LEASE_SECONDS + 1)
-    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=again) == 'lease_expired'
-    failure.assert_not_called()
-    assert transitions('sync_running_cap_observed') == observed + 2
-
-
-@pytest.mark.parametrize('case', ['below_cap', 'carry_off'])
-def test_running_cap_observation_needs_a_carried_count_at_the_cap(db, monkeypatch, case):
-    # carry_off: a cap of 1 is reached on the first expiry, but with class 2 off
-    # there is no carried count to observe (main's reset).
-    if case == 'carry_off':
-        monkeypatch.setenv(sm.SYNC_ATTEMPT_CARRY_SWITCH, 'false')
-    account, epoch = running_owner(db, monkeypatch, attempts='1' if case == 'carry_off' else '5')
-    assert registry.begin_job(account, 'crashy', epoch, now=NOW)
-    expired = NOW + timedelta(seconds=registry.LEASE_SECONDS + 1)
-    finalizer_mocks(monkeypatch)
-    monkeypatch.setattr(uid_sequencer, '_dispatch', Mock())
-    observed = transitions('sync_running_cap_observed')
-    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'lease_expired'
-    assert transitions('sync_running_cap_observed') == observed
+        assert decision.reached and not decision.serving
 
 
 # 6. Held re-drive counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON) ----------
@@ -823,34 +524,6 @@ def test_nightly_requeue_is_not_double_counted(setup, monkeypatch):
 # Custody review on 53a692de1d1d -------------------------------------------------
 
 
-def test_late_budget_deferred_delivery_after_the_marker_expires_is_kept(db, monkeypatch):
-    """A (luna-core-1): an expired deferred_until marker is not proof the replacement ran.
-
-    The replacement retires the marker when it starts (mark processing). A
-    marker still on the job after its horizon means the delivery is late, not
-    done: the running cap must not fail the job or release the owner, and the
-    expiry is not a crash.
-    """
-    import time as _time
-
-    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
-    account, expired = at_cap_running_owner(db, monkeypatch)
-    failure = finalizer_mocks(monkeypatch)
-    dispatch = Mock()
-    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
-    monkeypatch.setattr(
-        uid_sequencer, 'get_sync_job', lambda _: {'status': 'queued', 'deferred_until': _time.time() - 60}
-    )
-    before = registry.get_owner(account)['running_expiries']
-    outcome = uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired)
-    assert outcome != 'dispatch_retry_cap_reached'
-    failure.assert_not_called()
-    owner = registry.get_owner(account)
-    assert owner['active_job_id'] == 'crashy'
-    assert owner['running_expiries'] == before
-    dispatch.assert_called_once()  # the delivery obligation is kept
-
-
 def held_cycles(client, store, cycles, max_attempts=3):
     """Nightly loop: re-drive a held_expired unit, fail every attempt, expire, repeat.
 
@@ -907,29 +580,3 @@ def test_backlog_switches_enable_only_on_exact_true(monkeypatch, name, raw):
     assert READERS[name]() is True
     monkeypatch.delenv(name)
     assert READERS[name]() is EXPECTED_DEFAULTS[name]
-
-
-@pytest.mark.parametrize('status,outcome', [('completed', 'terminal_cleanup'), (None, 'expired_job_cleanup')])
-def test_job_cleanup_is_not_counted_as_a_crash(db, monkeypatch, status, outcome):
-    """D (luna-core-1): terminal or vanished-job cleanup is not a worker crash."""
-    account, epoch = running_owner(db, monkeypatch)
-    finalizer_mocks(monkeypatch)
-    assert registry.begin_job(account, 'crashy', epoch, now=NOW)
-    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _: None if status is None else {'status': status})
-    expired = NOW + timedelta(seconds=registry.LEASE_SECONDS + 1)
-    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == outcome
-    assert registry.get_owner(account).get('running_expiries', 0) == 0
-
-
-def test_deferred_finalizer_does_not_record_a_quarantine(db, monkeypatch):
-    """E (luna-core-2): the cap outcome is recorded only after the fenced terminal handoff."""
-    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
-    account, expired = at_cap_running_owner(db, monkeypatch)
-    finalizer_mocks(monkeypatch)
-    monkeypatch.setattr(uid_sequencer, '_finalize_abandoned_budget_chain_job', lambda *a, **k: False)
-    quarantines = decisions('sequencer_running', 'quarantine')
-    reached = transitions('sync_running_cap_reached')
-    assert uid_sequencer.reconcile_uid(account, registry.get_owner(account), now=expired) == 'finalize_deferred'
-    assert decisions('sequencer_running', 'quarantine') == quarantines
-    assert transitions('sync_running_cap_reached') == reached
-    assert registry.get_owner(account)['active_job_id'] == 'crashy'

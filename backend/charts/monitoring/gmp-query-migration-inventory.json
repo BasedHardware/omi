@@ -132,32 +132,6 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"sync_running_cap_reached\"}[30m])) or vector(0)",
-      "file": "alerts/backlog-state-machine.json",
-      "issues": [],
-      "metrics": [
-        "omi_backlog_state_transitions_total"
-      ],
-      "owner_title": "Sync running-job attempt cap reached",
-      "owner_uid": "omi-backlog-sync-running-cap-rate",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"sync_running_cap_observed\"}[1h])) or vector(0)",
-      "file": "alerts/backlog-state-machine.json",
-      "issues": [],
-      "metrics": [
-        "omi_backlog_state_transitions_total"
-      ],
-      "owner_title": "Sync running job kept redriving past the attempt cap (cap not enforced)",
-      "owner_uid": "omi-backlog-sync-running-cap-unenforced",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
       "expression": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
       "file": "alerts/backlog-state-machine.json",
       "issues": [],
@@ -4055,7 +4029,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 272
+    "query_consumers": 270
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

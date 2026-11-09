@@ -1,13 +1,15 @@
-# Backlog state machine (core: classes 1, 2, 3 and the class 6 counter)
+# Backlog state machine (core: classes 1, 3 and the class 6 counter)
 
 Code: `config/backlog_state_machine.py`, `utils/backlog_metrics.py`.
 Tests: `tests/unit/test_backlog_state_machine.py`.
 Alerts: `charts/monitoring/alerts/backlog-state-machine.json`.
 
 Backlogs recurred because retry state machines lost their counters or never
-ended work: a retry cap that only observed, a sync attempt budget reset on every
-lease expiry, held re-drives that kept the attempt count at the cap, and held
-re-drive loops nobody counted. Each class has its own switch. Nothing here
+ended work: a retry cap that only observed, held re-drives that kept the attempt
+count at the cap, and held re-drive loops nobody counted. Each class has its own
+switch. The sync path (class 2, the running-lease attempt carry and the
+budget-deferral chain) is not in core; it ships on the follow-up branch, and
+core leaves main's sync behavior unchanged. Nothing here
 deletes audio, results, custody tokens or privacy fences.
 
 ## Switches
@@ -21,8 +23,7 @@ inert.
 
 | Switch | Default | Class | Turning it off |
 | --- | --- | --- | --- |
-| `CAPTURE_RETRY_CAP_ENFORCED` | OFF | 1: the cap only observed outside the serve cohort | Batch lease-expiry and sync running caps return to the `CAPTURE_COVERAGE_MODE` cohort decision |
-| `SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED` | ON | 2: running lease expiry reset `dispatch_attempt` | Running expiry resets `dispatch_attempt` to 0 again and stops counting `running_expiries` |
+| `CAPTURE_RETRY_CAP_ENFORCED` | OFF | 1: the cap only observed outside the serve cohort | The batch lease-expiry cap returns to the `CAPTURE_COVERAGE_MODE` cohort decision |
 | `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | OFF | 3: requeue kept `attempt` at the cap | Requeue keeps `attempt`, so the first failure after a re-drive re-quarantines |
 | `BATCH_HELD_REDRIVE_COUNTER_ENABLED` | ON | 6 (counter): held re-drives were not counted | No `held_redrives` increments and no spent-budget observation |
 
@@ -31,30 +32,9 @@ inert.
 With the switch on, a batch unit whose lease expires at
 `BATCH_PIPELINE_MAX_ATTEMPTS` is quarantined (`quarantine_reason=worker_failed`,
 `recovery_state=held`), the transition explicit worker failures already take.
-A sync running owner whose `running_expiries + 1` reaches
-`SYNC_TASKS_MAX_ATTEMPTS` is finalized by the existing fenced finalizer. That
-running cap serves only with this switch on; the `CAPTURE_COVERAGE_MODE` serve
-mode or cohort never turns it on. The sync dispatching-state cap keeps the
-cohort decision because a passed dispatch retry deadline is queue delay, not
-failure. Alert: `omi-backlog-retry-cap-quarantine-rate`.
-
-## Class 2: running-lease attempt carry
-
-A running lease expiry keeps the epoch bump that fences the dead worker, carries
-`dispatch_attempt` as the task identity, and counts the crash in
-`running_expiries` (reset at claim). An expiry while a budget deferral's
-`deferred_until` marker is still on the job is not a crash, even past the
-marker's horizon: the replacement retires the marker when it starts, so a
-marker that outlives its horizon is a late delivery, not a finished one, and
-the running cap never fails the job or releases its owner while it is
-pending. Terminal or vanished-job cleanup never counts as a crash. The cap
-outcome is recorded only after the fenced terminal handoff succeeds. `dispatch_attempt_base` restarts
-the legacy dispatching-deadline budget at each new epoch, exactly as main's reset
-did, so the carry never spends that budget. Alert: `omi-backlog-sync-running-cap-rate`
-(fires only with class 1 on). With class 1 off, every running-lease expiry at or
-over the cap is still redriven, never terminalized, and records
-`sync_running_cap_observed` after the redrive commits. Alert:
-`omi-backlog-sync-running-cap-unenforced`.
+The cap applies only to the batch lease-expiry cap; every other caller of
+`retry_cap`, including main's sync dispatch cap, keeps the `CAPTURE_COVERAGE_MODE`
+cohort decision, so this switch never changes the sync path. Alert: `omi-backlog-retry-cap-quarantine-rate`.
 
 ## Classes 3 and 6 (counter): held re-drives
 
@@ -67,13 +47,14 @@ the counter on and only for a unit's first 3 re-drives; after that the unit
 keeps main's retained held loop (attempt at the cap) and the spent-budget
 signal, so a fresh budget never sustains an unbounded loop. The nightly scan and committed
 poll and `/redrive-dead` re-drives record `held_redrive_budget_spent` at or over 3 re-drives.
-Alert: `omi-backlog-held-redrive-budget-spent`. There is no terminal stop in core;
+Alerts: `omi-backlog-held-redrive-unit-looping` (one unit, last 8 days) and
+`omi-backlog-held-redrive-budget-spent` (volume). There is no terminal stop in core;
 it ships in the follow-up branch behind its own default-off switch.
 
 ## Metrics
 
-`omi_backlog_state_transitions_total{transition}`: `sync_running_cap_reached`,
-`sync_running_cap_observed`, `held_redrive_budget_spent`. Batch and sync cap decisions are in
+`omi_backlog_state_transitions_total{transition}`: `held_redrive_budget_spent`.
+Batch and sync cap decisions are in
 `omi_capture_retry_cap_total{check,outcome}`. Counted once per committed
 transaction, never inside a retryable callback.
 

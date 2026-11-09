@@ -26,9 +26,10 @@ class RetryCap:
     serving: bool
 
 
-def retry_cap(uid: str, attempts: int, maximum: int, *, enforce: bool = True) -> RetryCap | None:
-    """``enforce=False`` keeps the legacy cohort decision for a cap whose count
-    is not evidence of failed work (a sync dispatch retry deadline)."""
+def retry_cap(uid: str, attempts: int, maximum: int, *, enforce: bool = False) -> RetryCap | None:
+    """``enforce=True`` (the batch lease-expiry cap) lets CAPTURE_RETRY_CAP_ENFORCED
+    serve it for every uid. Every other caller, including main's sync dispatch
+    cap, keeps the legacy CAPTURE_COVERAGE_MODE cohort decision unchanged."""
     enforced = enforce and retry_cap_enforced()
     if not enforced and not refactor_modes.shadow_or_serve(MODE):
         return None

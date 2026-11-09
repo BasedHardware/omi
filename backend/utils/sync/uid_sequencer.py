@@ -597,9 +597,7 @@ def reconcile_uid(
         outcome = 'expired_job_cleanup'
     else:
         outcome = 'lease_expired'
-    from utils.sync.retry_hygiene import deferral_pending, reconcile_dispatch_cap
-
-    pending_deferral = deferral_pending(job, time.time())
+    from utils.sync.retry_hygiene import reconcile_dispatch_cap
 
     capped = reconcile_dispatch_cap(
         uid,
@@ -609,7 +607,6 @@ def reconcile_uid(
         registry=registry,
         finalize=_finalize_abandoned_budget_chain_job,
         kick=lambda: kick(uid, retire_limit=retire_limit, progress=progress),
-        lease_expired=outcome == 'lease_expired' and not pending_deferral,
     )
     if capped is not None:
         return capped
@@ -637,16 +634,9 @@ def reconcile_uid(
             kick(uid, retire_limit=retire_limit, progress=progress)
             return 'budget_chain_exhausted'
         return 'raced'
-    # Only a lease expiry with no pending replacement is a worker crash; terminal
-    # or vanished-job cleanup never counts toward running_expiries.
-    crashed = outcome == 'lease_expired' and not pending_deferral
-    replacement = registry.redrive_job(uid, job_id, epoch, now=current, crashed=crashed)
+    replacement = registry.redrive_job(uid, job_id, epoch, now=current)
     if replacement is None:
         return 'raced'
-    if outcome == 'lease_expired' and not pending_deferral:
-        from utils.sync.retry_hygiene import running_cap_observed
-
-        running_cap_observed(owner)
     logger.warning(
         'event=sync_uid_sequencer action=sweep outcome=%s job_id=%s uid_hash=%s',
         outcome,

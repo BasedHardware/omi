@@ -42,7 +42,6 @@ KILL_SWITCHES = {
     # lead2 rule: ON only where the change just cuts wasted work or retries, OFF
     # where it changes custody, settle or expiry semantics.
     'CAPTURE_RETRY_CAP_ENFORCED': False,
-    'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED': True,
     'BATCH_HELD_REDRIVE_COUNTER_ENABLED': True,
     'BATCH_HELD_REDRIVE_BUDGET_ENABLED': False,
 }
@@ -52,7 +51,6 @@ DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
     {
         'CAPTURE_RETRY_CAP_ENFORCED',
-        'SYNC_DISPATCH_ATTEMPT_CARRY_ENABLED',
         'BATCH_HELD_REDRIVE_COUNTER_ENABLED',
         'BATCH_HELD_REDRIVE_BUDGET_ENABLED',
     }
