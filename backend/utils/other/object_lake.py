@@ -254,6 +254,9 @@ def put_space_object(
             try:
                 _UploadSession.put_all(blob.bucket.client, session, payload, deadline, blob=blob)
             except PreconditionFailed:
+                # Settlement drops the session URI, so first prove this session
+                # terminal; a non-terminal status raises and keeps it discoverable.
+                _fence_upload_attempt({'session': session, 'size': len(payload)}, blob.bucket.client)
                 ref = _replay_object(blob, stamp, digest, data_class, deadline)
                 _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline, attempt=attempt)
                 return ref
@@ -532,16 +535,18 @@ def _candidate_pending(row: dict) -> dict:
 
 
 # Allowlist, measured against GCS (dev bucket, 2026-11-09): finalize -> 200 on
-# status and on cancel; cancel -> 499 on every later status/cancel/upload. 404
-# and 410 mean the service no longer knows the session, so it cannot finalize.
+# status and on cancel; cancel -> 499 on every later status/cancel/upload; a
+# generation-0 finalize refusal -> 412 on every later status/cancel/upload, and
+# the session cannot create the object even after it is deleted. 404 and 410
+# mean the service no longer knows the session, so it cannot finalize.
 # Everything else (400 request errors, auth, throttling, 308 open, 5xx) is not
 # proof and fails closed.
 _FINALIZED_SESSION_STATUSES = frozenset({200, 201})
-_TERMINAL_SESSION_STATUSES = _FINALIZED_SESSION_STATUSES | {404, 410, 499}
+_TERMINAL_SESSION_STATUSES = _FINALIZED_SESSION_STATUSES | {404, 410, 412, 499}
 
 
-def _fence_upload_attempt(attempt: dict) -> None:
-    client = create_storage_client()
+def _fence_upload_attempt(attempt: dict, client: Any = None) -> None:
+    client = client if client is not None else create_storage_client()
     _UploadSession.cancel(client, attempt['session'])
     status = _UploadSession.status(client, attempt['session'], attempt['size'])
     if status not in _TERMINAL_SESSION_STATUSES:

@@ -913,7 +913,7 @@ def test_expired_creator_preserves_concurrently_published_pointer(storage, monke
 
 
 @pytest.mark.parametrize(
-    'status', [200, 201, 404, 410, 499, 400, 401, 403, 407, 408, 409, 412, 425, 429, 308, 503, 302, 202, 0]
+    'status', [200, 201, 404, 410, 412, 499, 400, 401, 403, 407, 408, 409, 425, 429, 308, 503, 302, 202, 0]
 )
 def test_fence_requires_terminal_storage_status(storage, monkeypatch, status):
     bucket, store = storage
@@ -923,9 +923,9 @@ def test_fence_requires_terminal_storage_status(storage, monkeypatch, status):
     monkeypatch.setattr(
         lake._UploadSession, 'status', lambda client, uri, size: calls.append(('status', uri, size)) or status
     )
-    # Allowlist only: finalized, cancelled (499) or unknown to the service (404/410).
-    # A 400 request error, auth, throttling or any other code is not proof.
-    if status in (200, 201, 404, 410, 499):
+    # Allowlist only: finalized, cancelled (499), sticky finalize refusal (412) or
+    # unknown to the service (404/410). A 400, auth, throttling or other code is not proof.
+    if status in (200, 201, 404, 410, 412, 499):
         lake._fence_upload_attempt({'session': session, 'size': 7})
     else:
         with pytest.raises(lake.LakeFetchError):
@@ -944,3 +944,35 @@ def test_status_query_names_the_declared_size(storage):
     lake._UploadSession.cancel(client, session)
     assert lake._UploadSession.status(client, session, 7) == 499
     assert seen[0] == ('PUT', {'Content-Length': '0', 'Content-Range': 'bytes */7'})
+
+
+def _candidate_rows(store):
+    return [row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates']
+
+
+def test_finalize_412_replay_fences_its_session_before_settling(storage, monkeypatch):
+    bucket, store = storage
+    first = put()
+    calls = []
+    status = lake._UploadSession.status
+    monkeypatch.setattr(
+        lake._UploadSession,
+        'status',
+        lambda client, uri, size: calls.append(size) or status(client, uri, size),
+    )
+    # Same plaintext, same key: GCS evaluates generation 0 at finalize and refuses.
+    assert put() == first
+    assert calls and all(size > 0 for size in calls)
+    [row] = _candidate_rows(store)
+    assert row['settled'] is True and row['in_flight'] == {}
+
+
+def test_finalize_412_with_unproven_session_keeps_it_discoverable(storage, monkeypatch):
+    bucket, store = storage
+    put()
+    monkeypatch.setattr(lake._UploadSession, 'status', lambda client, uri, size: 503)
+    with pytest.raises(lake.LakeFetchError):
+        put()
+    [row] = _candidate_rows(store)
+    [attempt] = row['in_flight'].values()
+    assert row['settled'] is False and attempt['session'] and attempt['size'] > 0

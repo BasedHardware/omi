@@ -6,7 +6,8 @@ metadata set at initiation. Initiation sends no payload bytes. A candidate
 transaction reads the owner and conversation deletion fences before persisting
 `lake_upload_candidates/{sha256(bucket + '/' + object_key)}` in the customer
 Firestore plane. The row records `bucket`, `key`, server UTC `created_at` and
-`admitted_at`, `settled`, and `in_flight[attempt] = {admitted_at, session}`.
+`admitted_at`, `settled`, and `in_flight[attempt] = {admitted_at, session, size}`,
+where `size` is the session's declared payload length (0 < size <= 8 MiB).
 The session URI is a capability: it stays only in candidate state, never in
 pointers, logs, metrics or raised error messages. A refused admission cancels
 the empty session best-effort. No storage or KMS call runs inside a transaction.
@@ -21,10 +22,16 @@ fences. A successful settlement removes only its own attempt and session URI;
 ambiguous results and worker loss retain durable discovery without a TTL.
 
 Deletion uses a storage-enforced fence, with no age-based erasure. For every
-pending session it sends DELETE, then a zero-byte PUT status query with
-`Content-Range: bytes */*`. Status 200/201 proves finalization; another 4xx proves
-cancellation or expiry. Status 308, 5xx, transport errors and unexpected responses
-fail closed. Retries cancel and query again. Only after all sessions are terminal
+pending session it sends DELETE, then the documented zero-byte PUT status query
+with `Content-Range: bytes */<size>`. Terminal statuses are an allowlist measured
+against GCS (dev bucket, 2026-11-09): 200/201 (finalized; also returned by a
+cancel after finalization), 499 (cancelled; sticky for every later status, cancel
+or upload), 412 (generation-0 finalize refused; sticky, and the session cannot
+create the object even after it is deleted), and 404/410 (the service no longer
+knows the session). Every other response fails closed: 308 (open), 400 (request
+error; it proves nothing about the session), auth, throttling, 5xx and transport
+errors. A writer whose finalize returns 412 runs the same fence on its own
+session before settling it, so settlement never drops an unproven session. Retries cancel and query again. Only after all sessions are terminal
 does deletion delete the object in the row's recorded bucket, verify absence,
 and compare-and-delete the unchanged row transactionally. Former buckets and
 an unset current bucket are covered. No later commit through a cancelled session
