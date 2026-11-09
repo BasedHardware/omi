@@ -276,6 +276,12 @@ def _quarantine_records(caplog):
     return [r for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
 
 
+def _disposition_records(caplog):
+    return [
+        r for r in caplog.records if 'event=batch_validation_disposition outcome=held_for_disposition' in r.getMessage()
+    ]
+
+
 def test_terminal_log_names_the_evidence_stage_and_reason(caplog):
     store = MemoryStore()
     with caplog.at_level(logging.ERROR, logger='utils.batch_pipeline.scheduler'):
@@ -289,9 +295,9 @@ def test_terminal_log_names_the_evidence_stage_and_reason(caplog):
 
 def test_terminal_log_names_a_closed_evidence_reason(caplog):
     store = MemoryStore()
-    with caplog.at_level(logging.ERROR, logger='utils.batch_pipeline.scheduler'):
+    with caplog.at_level(logging.INFO, logger='utils.batch_pipeline.scheduler'):
         _ladder(store, attempts=5, evidence=CLOSED_EVIDENCE)
-    assert _quarantine_records(caplog)[-1].getMessage().endswith('stage=word_clocks worker_reason=word_clock')
+    assert _disposition_records(caplog)[-1].getMessage().endswith('stage=word_clocks worker_reason=word_clock')
 
 
 def test_terminal_log_prefers_the_typed_worker_failure_over_evidence(caplog):
@@ -301,7 +307,7 @@ def test_terminal_log_prefers_the_typed_worker_failure_over_evidence(caplog):
     now = 1000
     queue.recover(now)
     lease = queue.pull(now)[0]
-    with caplog.at_level(logging.ERROR, logger='utils.batch_pipeline.scheduler'):
+    with caplog.at_level(logging.INFO, logger='utils.batch_pipeline.scheduler'):
         queue.fail(
             'a',
             lease.token,
@@ -309,7 +315,7 @@ def test_terminal_log_prefers_the_typed_worker_failure_over_evidence(caplog):
             worker_failure={'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'},
             worker_failure_evidence=CLOSED_EVIDENCE,
         )
-    message = _quarantine_records(caplog)[-1].getMessage()
+    message = _disposition_records(caplog)[-1].getMessage()
     assert 'stage=fetch_decode worker_reason=staged_audio_invalid' in message
 
 

@@ -135,8 +135,9 @@ def test_disposition_fetch_decode_word_shape_disp_on_safety_off(monkeypatch, cap
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='false'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=word_shape' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_shape' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -165,8 +166,9 @@ def test_disposition_fetch_decode_word_shape_disp_on_safety_on(monkeypatch, capl
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='true'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=word_shape' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_shape' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -195,8 +197,9 @@ def test_disposition_fetch_decode_word_clock_disp_on_safety_off(monkeypatch, cap
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='false'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=word_clock' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_clock' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -225,8 +228,9 @@ def test_disposition_fetch_decode_word_clock_disp_on_safety_on(monkeypatch, capl
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='true'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=word_clock' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_clock' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -255,8 +259,9 @@ def test_disposition_fetch_decode_word_sequence_disp_on_safety_off(monkeypatch, 
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='false'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=word_sequence' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_sequence' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -285,8 +290,9 @@ def test_disposition_fetch_decode_word_sequence_disp_on_safety_on(monkeypatch, c
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='true'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=word_sequence' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_sequence' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -315,8 +321,9 @@ def test_disposition_fetch_decode_vad_nonfinite_disp_on_safety_off(monkeypatch, 
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='false'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_nonfinite' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_nonfinite' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -345,8 +352,9 @@ def test_disposition_fetch_decode_vad_nonfinite_disp_on_safety_on(monkeypatch, c
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='true'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_nonfinite' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_nonfinite' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -375,8 +383,9 @@ def test_disposition_fetch_decode_vad_order_disp_on_safety_off(monkeypatch, capl
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='false'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_order' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_order' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -405,8 +414,9 @@ def test_disposition_fetch_decode_vad_order_disp_on_safety_on(monkeypatch, caplo
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='true'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_order' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_order' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -435,8 +445,9 @@ def test_disposition_fetch_decode_vad_bounds_disp_on_safety_off(monkeypatch, cap
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='false'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_bounds' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_bounds' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -465,8 +476,9 @@ def test_disposition_fetch_decode_vad_bounds_disp_on_safety_on(monkeypatch, capl
     worker, results, words, saved, guard, fault = _run(
         monkeypatch, caplog, decode=decode, disposition='true', safety='true'
     )
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_bounds' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_bounds' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -667,8 +679,9 @@ def test_disposition_vad_windows_word_shape_disp_on_safety_off(monkeypatch, capl
         raise BatchValidationError(ValidationReason.WORD_SHAPE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='false')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_shape' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_shape' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -695,8 +708,9 @@ def test_disposition_vad_windows_word_shape_disp_on_safety_on(monkeypatch, caplo
         raise BatchValidationError(ValidationReason.WORD_SHAPE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_shape' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_shape' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -721,8 +735,9 @@ def test_disposition_vad_windows_word_clock_disp_on_safety_off(monkeypatch, capl
         raise BatchValidationError(ValidationReason.WORD_CLOCK)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='false')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_clock' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_clock' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -749,8 +764,9 @@ def test_disposition_vad_windows_word_clock_disp_on_safety_on(monkeypatch, caplo
         raise BatchValidationError(ValidationReason.WORD_CLOCK)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_clock' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_clock' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -775,8 +791,9 @@ def test_disposition_vad_windows_word_sequence_disp_on_safety_off(monkeypatch, c
         raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='false')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_sequence' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_sequence' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -803,8 +820,9 @@ def test_disposition_vad_windows_word_sequence_disp_on_safety_on(monkeypatch, ca
         raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_sequence' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_sequence' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -829,8 +847,9 @@ def test_disposition_vad_windows_vad_nonfinite_disp_on_safety_off(monkeypatch, c
         raise BatchValidationError(ValidationReason.VAD_NONFINITE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='false')
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_nonfinite' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_nonfinite' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -857,8 +876,9 @@ def test_disposition_vad_windows_vad_nonfinite_disp_on_safety_on(monkeypatch, ca
         raise BatchValidationError(ValidationReason.VAD_NONFINITE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_nonfinite' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_nonfinite' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -883,8 +903,9 @@ def test_disposition_vad_windows_vad_order_disp_on_safety_off(monkeypatch, caplo
         raise BatchValidationError(ValidationReason.VAD_ORDER)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='false')
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_order' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_order' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -911,8 +932,9 @@ def test_disposition_vad_windows_vad_order_disp_on_safety_on(monkeypatch, caplog
         raise BatchValidationError(ValidationReason.VAD_ORDER)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true', safety='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_order' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_order' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 

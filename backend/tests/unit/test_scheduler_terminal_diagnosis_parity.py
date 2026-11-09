@@ -67,6 +67,14 @@ def quarantine_lines(caplog):
     return [line for line in caplog.text.splitlines() if 'event=batch_quarantined reason=worker_failed' in line]
 
 
+def disposition_lines(caplog):
+    return [
+        line
+        for line in caplog.text.splitlines()
+        if 'event=batch_validation_disposition outcome=held_for_disposition' in line
+    ]
+
+
 def pull_due(queue, now, advance=10.0, limit=12):
     """Pull with the recovery sweep re-appending due retries (the ladder's re-entry)."""
     for _ in range(limit):
@@ -99,9 +107,11 @@ def test_terminal_record_names_the_preserved_diagnosis_at_attempt_five(caplog):
 
 def test_terminal_record_names_the_preserved_bytes_diagnosis(caplog):
     store, queue = store_with_job()
-    with caplog.at_level(logging.ERROR, logger=LOGGER):
+    with caplog.at_level(logging.INFO, logger=LOGGER):
         walk(queue, store, evidence_plan={1: BYTES, 2: BYTES})
-    record = quarantine_lines(caplog)[-1]
+    # The typed retained-bytes diagnosis is the terminal disposition handoff;
+    # it names the hold on the disposition channel, not the quarantine ERROR.
+    record = disposition_lines(caplog)[-1]
     assert 'worker_reason=retained_audio_invalid' in record
 
 
@@ -119,9 +129,9 @@ def test_terminal_record_prefers_the_structured_worker_failure_over_all_evidence
     queue.enqueue(item(), time.time())
     now = time.time()
     lease = queue.pull(now)[0]
-    with caplog.at_level(logging.ERROR, logger=LOGGER):
+    with caplog.at_level(logging.INFO, logger=LOGGER):
         queue.fail('a', lease.token, now, worker_failure=BYTES, worker_failure_evidence=NAMED)
-    record = quarantine_lines(caplog)[-1]
+    record = disposition_lines(caplog)[-1]
     assert 'worker_reason=retained_audio_invalid' in record
 
 
@@ -457,29 +467,31 @@ def test_worker_failure_beats_preserved_diagnosis_without_current_evidence(caplo
     queue.fail('a', lease.token, now, worker_failure_evidence=BYTES)
     now += 30
     lease, now = pull_due(queue, now)
-    with caplog.at_level(logging.ERROR, logger=LOGGER):
+    with caplog.at_level(logging.INFO, logger=LOGGER):
         queue.fail('a', lease.token, now, worker_failure={'stage': 'assemble_words', 'reason': 'word_clock'})
-    record = quarantine_lines(caplog)[-1]
+    record = disposition_lines(caplog)[-1]
     assert 'stage=assemble_words' in record
     assert 'worker_reason=word_clock' in record
 
 
 def test_current_evidence_beats_preserved_diagnosis(caplog):
     store, queue = store_with_job()
+    # The disposition hold reports at INFO; capture the whole ladder, whose
+    # exhausting attempts run after the current-evidence attempt below.
+    caplog.set_level(logging.INFO, logger=LOGGER)
     now = time.time()
     lease = queue.pull(now)[0]
     queue.fail('a', lease.token, now, worker_failure_evidence=BYTES)
     now += 30
     lease, now = pull_due(queue, now)
-    with caplog.at_level(logging.ERROR, logger=LOGGER):
-        queue.fail('a', lease.token, now, worker_failure_evidence={'stage': 'vad_windows', 'reason': 'vad_bounds'})
+    queue.fail('a', lease.token, now, worker_failure_evidence={'stage': 'vad_windows', 'reason': 'vad_bounds'})
     # attempt 2 < max: this defers; walk the rest evidence-less.
     for _ in range(4):
         lease, now = pull_due(queue, now)
         queue.fail('a', lease.token, now)
         if store.rows['jobs', 'a']['state'] == 'quarantined':
             break
-    record = quarantine_lines(caplog)[-1]
+    record = disposition_lines(caplog)[-1]
     assert 'worker_reason=vad_bounds' in record
 
 

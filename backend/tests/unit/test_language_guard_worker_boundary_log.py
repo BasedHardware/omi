@@ -267,16 +267,17 @@ def test_reason_word_shape_at_vad_flag_off_stays_error(monkeypatch, caplog):
     assert results == []
 
 
-def test_reason_word_shape_at_vad_flag_on_terminal_but_error(monkeypatch, caplog):
-    """word_shape under the disposition flag terminates — and still faults, never demotes."""
+def test_reason_word_shape_at_vad_flag_on_terminal_and_demotes(monkeypatch, caplog):
+    """word_shape under the disposition flag terminates and demotes to the disposition channel."""
     caplog.set_level(logging.INFO)
 
     def vad(_samples):
         raise BatchValidationError(ValidationReason.WORD_SHAPE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_shape' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_shape' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -294,16 +295,17 @@ def test_reason_word_clock_at_vad_flag_off_stays_error(monkeypatch, caplog):
     assert results == []
 
 
-def test_reason_word_clock_at_vad_flag_on_terminal_but_error(monkeypatch, caplog):
-    """word_clock under the disposition flag terminates — and still faults, never demotes."""
+def test_reason_word_clock_at_vad_flag_on_terminal_and_demotes(monkeypatch, caplog):
+    """word_clock under the disposition flag terminates and demotes to the disposition channel."""
     caplog.set_level(logging.INFO)
 
     def vad(_samples):
         raise BatchValidationError(ValidationReason.WORD_CLOCK)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_clock' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_clock' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -321,16 +323,17 @@ def test_reason_word_sequence_at_vad_flag_off_stays_error(monkeypatch, caplog):
     assert results == []
 
 
-def test_reason_word_sequence_at_vad_flag_on_terminal_but_error(monkeypatch, caplog):
-    """word_sequence under the disposition flag terminates — and still faults, never demotes."""
+def test_reason_word_sequence_at_vad_flag_on_terminal_and_demotes(monkeypatch, caplog):
+    """word_sequence under the disposition flag terminates and demotes to the disposition channel."""
     caplog.set_level(logging.INFO)
 
     def vad(_samples):
         raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=word_sequence' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=word_sequence' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -348,16 +351,17 @@ def test_reason_vad_nonfinite_at_vad_flag_off_stays_error(monkeypatch, caplog):
     assert results == []
 
 
-def test_reason_vad_nonfinite_at_vad_flag_on_terminal_but_error(monkeypatch, caplog):
-    """vad_nonfinite under the disposition flag terminates — and still faults, never demotes."""
+def test_reason_vad_nonfinite_at_vad_flag_on_terminal_and_demotes(monkeypatch, caplog):
+    """vad_nonfinite under the disposition flag terminates and demotes to the disposition channel."""
     caplog.set_level(logging.INFO)
 
     def vad(_samples):
         raise BatchValidationError(ValidationReason.VAD_NONFINITE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_nonfinite' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_nonfinite' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -375,16 +379,17 @@ def test_reason_vad_order_at_vad_flag_off_stays_error(monkeypatch, caplog):
     assert results == []
 
 
-def test_reason_vad_order_at_vad_flag_on_terminal_but_error(monkeypatch, caplog):
-    """vad_order under the disposition flag terminates — and still faults, never demotes."""
+def test_reason_vad_order_at_vad_flag_on_terminal_and_demotes(monkeypatch, caplog):
+    """vad_order under the disposition flag terminates and demotes to the disposition channel."""
     caplog.set_level(logging.INFO)
 
     def vad(_samples):
         raise BatchValidationError(ValidationReason.VAD_ORDER)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, vad=vad, disposition='true')
-    assert not guard and len(fault) == 1
-    assert 'reason=vad_order' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=vad_order' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
@@ -456,82 +461,88 @@ def test_reason_no_owned_words_at_vad_flag_on_terminal_but_error(monkeypatch, ca
     assert isinstance(results[0], ValidationFailureWork)
 
 
-def test_reason_word_shape_at_decode_stays_error(monkeypatch, caplog):
-    """word_shape at the decode boundary keeps the fault channel."""
+def test_reason_word_shape_at_decode_reports_disposition_handoff(monkeypatch, caplog):
+    """word_shape at the decode boundary reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise BatchValidationError(ValidationReason.WORD_SHAPE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'stage=fetch_decode' in fault[0].getMessage()
-    assert 'reason=word_shape' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'stage=fetch_decode' in disposition[0].getMessage()
+    assert 'reason=word_shape' in disposition[0].getMessage()
 
 
-def test_reason_word_clock_at_decode_stays_error(monkeypatch, caplog):
-    """word_clock at the decode boundary keeps the fault channel."""
+def test_reason_word_clock_at_decode_reports_disposition_handoff(monkeypatch, caplog):
+    """word_clock at the decode boundary reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise BatchValidationError(ValidationReason.WORD_CLOCK)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'stage=fetch_decode' in fault[0].getMessage()
-    assert 'reason=word_clock' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'stage=fetch_decode' in disposition[0].getMessage()
+    assert 'reason=word_clock' in disposition[0].getMessage()
 
 
-def test_reason_word_sequence_at_decode_stays_error(monkeypatch, caplog):
-    """word_sequence at the decode boundary keeps the fault channel."""
+def test_reason_word_sequence_at_decode_reports_disposition_handoff(monkeypatch, caplog):
+    """word_sequence at the decode boundary reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'stage=fetch_decode' in fault[0].getMessage()
-    assert 'reason=word_sequence' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'stage=fetch_decode' in disposition[0].getMessage()
+    assert 'reason=word_sequence' in disposition[0].getMessage()
 
 
-def test_reason_vad_nonfinite_at_decode_stays_error(monkeypatch, caplog):
-    """vad_nonfinite at the decode boundary keeps the fault channel."""
+def test_reason_vad_nonfinite_at_decode_reports_disposition_handoff(monkeypatch, caplog):
+    """vad_nonfinite at the decode boundary reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise BatchValidationError(ValidationReason.VAD_NONFINITE)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'stage=fetch_decode' in fault[0].getMessage()
-    assert 'reason=vad_nonfinite' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'stage=fetch_decode' in disposition[0].getMessage()
+    assert 'reason=vad_nonfinite' in disposition[0].getMessage()
 
 
-def test_reason_vad_order_at_decode_stays_error(monkeypatch, caplog):
-    """vad_order at the decode boundary keeps the fault channel."""
+def test_reason_vad_order_at_decode_reports_disposition_handoff(monkeypatch, caplog):
+    """vad_order at the decode boundary reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise BatchValidationError(ValidationReason.VAD_ORDER)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'stage=fetch_decode' in fault[0].getMessage()
-    assert 'reason=vad_order' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'stage=fetch_decode' in disposition[0].getMessage()
+    assert 'reason=vad_order' in disposition[0].getMessage()
 
 
-def test_reason_vad_bounds_at_decode_stays_error(monkeypatch, caplog):
-    """vad_bounds at the decode boundary keeps the fault channel."""
+def test_reason_vad_bounds_at_decode_reports_disposition_handoff(monkeypatch, caplog):
+    """vad_bounds at the decode boundary reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise BatchValidationError(ValidationReason.VAD_BOUNDS)
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'stage=fetch_decode' in fault[0].getMessage()
-    assert 'reason=vad_bounds' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'stage=fetch_decode' in disposition[0].getMessage()
+    assert 'reason=vad_bounds' in disposition[0].getMessage()
 
 
 def test_reason_empty_asr_at_decode_stays_error(monkeypatch, caplog):
@@ -560,55 +571,59 @@ def test_reason_no_owned_words_at_decode_stays_error(monkeypatch, caplog):
     assert 'reason=no_owned_words' in fault[0].getMessage()
 
 
-def test_typed_staged_audio_invalid_stays_error(monkeypatch, caplog):
-    """The typed staged_audio_invalid terminal keeps its fault classification."""
+def test_typed_staged_audio_invalid_reports_disposition_handoff(monkeypatch, caplog):
+    """The typed staged_audio_invalid terminal reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise StagedAudioInvalid("staged bytes")
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'reason=staged_audio_invalid' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=staged_audio_invalid' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
-def test_typed_staged_artifact_invalid_stays_error(monkeypatch, caplog):
-    """The typed staged_artifact_invalid terminal keeps its fault classification."""
+def test_typed_staged_artifact_invalid_reports_disposition_handoff(monkeypatch, caplog):
+    """The typed staged_artifact_invalid terminal reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise StagedArtifactInvalid("artifact bytes")
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'reason=staged_audio_invalid' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=staged_audio_invalid' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
-def test_typed_retained_audio_invalid_stays_error(monkeypatch, caplog):
-    """The typed retained_audio_invalid terminal keeps its fault classification."""
+def test_typed_retained_audio_invalid_reports_disposition_handoff(monkeypatch, caplog):
+    """The typed retained_audio_invalid terminal reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise RetainedAudioInvalid("retained bytes")
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'reason=retained_audio_invalid' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=retained_audio_invalid' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 
-def test_typed_decoded_duration_mismatch_stays_error(monkeypatch, caplog):
-    """The typed decoded_duration_mismatch terminal keeps its fault classification."""
+def test_typed_decoded_duration_mismatch_reports_disposition_handoff(monkeypatch, caplog):
+    """The typed decoded_duration_mismatch terminal reports the disposition handoff at INFO."""
     caplog.set_level(logging.INFO)
 
     def decode(work):
         raise DecodedDurationMismatch("extent")
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'reason=decoded_duration_mismatch' in fault[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not fault and len(disposition) == 1
+    assert 'reason=decoded_duration_mismatch' in disposition[0].getMessage()
     assert isinstance(results[0], ValidationFailureWork)
 
 

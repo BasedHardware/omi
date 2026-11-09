@@ -1182,16 +1182,17 @@ def test_shadow_unit_is_terminal_without_an_error_log(monkeypatch, caplog, messa
 
 @pytest.mark.parametrize('message', BOUNDARY_MESSAGES)
 def test_failure_log_carries_the_typed_error_class(caplog, message):
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
     worker, _, _, _ = terminal(Mock(), typed_decode(message))
     worker.process_batch([item()])
+    assert 'event=batch_validation_disposition outcome=recovery_handoff' in caplog.text
     assert 'error_class=StagedArtifactInvalid' in caplog.text
     assert 'error_class=ValueError' not in caplog.text
 
 
 @pytest.mark.parametrize('message', BOUNDARY_MESSAGES)
 def test_failure_log_carries_the_closed_reason(caplog, message):
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
     worker, *_ = terminal(Mock(), typed_decode(message))
     worker.process_batch([item()])
     assert 'reason=staged_audio_invalid' in caplog.text and 'stage=fetch_decode' in caplog.text

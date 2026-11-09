@@ -63,6 +63,7 @@ from utils.batch_pipeline.errors import (
     EMPTY_LADDER_RECOVERY_STAGE,
     FatalGpuError,
     LANGUAGE_GUARD_REDRIVE_REASONS,
+    validation_disposition_failure,
 )
 from utils.batch_pipeline.word_validation import (
     BatchValidationError,
@@ -1504,6 +1505,30 @@ class PipelineWorker:
                         # of booking a worker fault per guarded unit.
                         logger.info(
                             'event=batch_language_guard outcome=redrive_held error_class=%s stage=%s segment_id=%s '
+                            'reason=%s samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
+                            error_class,
+                            failure_stage,
+                            segment_id,
+                            reason,
+                            samples,
+                            spans,
+                            clips,
+                            asr_words,
+                            owned,
+                        )
+                    elif validation_disposition_failure(
+                        {'stage': failure_stage, 'reason': reason},
+                        disposition_enabled=worker_validation_disposition_enabled(),
+                    ):
+                        # The terminal worker-validation disposition is the
+                        # designed custody handoff: typed deterministic faults
+                        # and closed vad/word verdicts no GPU retry can
+                        # repair, settled by the fenced recovery lane below.
+                        # Keep every diagnostic field the fault channel
+                        # carried, but report the transition instead of
+                        # booking a worker fault per settled unit.
+                        logger.info(
+                            'event=batch_validation_disposition outcome=recovery_handoff error_class=%s stage=%s segment_id=%s '
                             'reason=%s samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
                             error_class,
                             failure_stage,

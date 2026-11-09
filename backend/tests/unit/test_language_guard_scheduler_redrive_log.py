@@ -163,97 +163,120 @@ def test_guard_terminal_asr_recovery_demotes_to_held_for_redrive(caplog):
     assert job['worker_failure'] == shape
 
 
-def test_reason_word_shape_at_fetch_decode_keeps_quarantine_error(caplog):
-    """word_shape at fetch_decode keeps the terminal quarantine ERROR."""
+def test_reason_word_shape_at_fetch_decode_reports_disposition_hold(caplog):
+    """word_shape at fetch_decode reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "word_shape"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=fetch_decode' in quar[0].getMessage() and 'worker_reason=word_shape' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=fetch_decode' in disposition[0].getMessage()
+        and 'worker_reason=word_shape' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_clock_at_fetch_decode_keeps_quarantine_error(caplog):
-    """word_clock at fetch_decode keeps the terminal quarantine ERROR."""
+def test_reason_word_clock_at_fetch_decode_reports_disposition_hold(caplog):
+    """word_clock at fetch_decode reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "word_clock"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=fetch_decode' in quar[0].getMessage() and 'worker_reason=word_clock' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=fetch_decode' in disposition[0].getMessage()
+        and 'worker_reason=word_clock' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_sequence_at_fetch_decode_keeps_quarantine_error(caplog):
-    """word_sequence at fetch_decode keeps the terminal quarantine ERROR."""
+def test_reason_word_sequence_at_fetch_decode_reports_disposition_hold(caplog):
+    """word_sequence at fetch_decode reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "word_sequence"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=fetch_decode' in quar[0].getMessage() and 'worker_reason=word_sequence' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=fetch_decode' in disposition[0].getMessage()
+        and 'worker_reason=word_sequence' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_nonfinite_at_fetch_decode_keeps_quarantine_error(caplog):
-    """vad_nonfinite at fetch_decode keeps the terminal quarantine ERROR."""
+def test_reason_vad_nonfinite_at_fetch_decode_reports_disposition_hold(caplog):
+    """vad_nonfinite at fetch_decode reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "vad_nonfinite"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=fetch_decode' in quar[0].getMessage() and 'worker_reason=vad_nonfinite' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=fetch_decode' in disposition[0].getMessage()
+        and 'worker_reason=vad_nonfinite' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_order_at_fetch_decode_keeps_quarantine_error(caplog):
-    """vad_order at fetch_decode keeps the terminal quarantine ERROR."""
+def test_reason_vad_order_at_fetch_decode_reports_disposition_hold(caplog):
+    """vad_order at fetch_decode reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "vad_order"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=fetch_decode' in quar[0].getMessage() and 'worker_reason=vad_order' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=fetch_decode' in disposition[0].getMessage() and 'worker_reason=vad_order' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_bounds_at_fetch_decode_keeps_quarantine_error(caplog):
-    """vad_bounds at fetch_decode keeps the terminal quarantine ERROR."""
+def test_reason_vad_bounds_at_fetch_decode_reports_disposition_hold(caplog):
+    """vad_bounds at fetch_decode reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=fetch_decode' in quar[0].getMessage() and 'worker_reason=vad_bounds' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=fetch_decode' in disposition[0].getMessage()
+        and 'worker_reason=vad_bounds' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
@@ -291,97 +314,117 @@ def test_reason_no_owned_words_at_fetch_decode_keeps_quarantine_error(caplog):
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_shape_at_vad_windows_keeps_quarantine_error(caplog):
-    """word_shape at vad_windows keeps the terminal quarantine ERROR."""
+def test_reason_word_shape_at_vad_windows_reports_disposition_hold(caplog):
+    """word_shape at vad_windows reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "word_shape"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=vad_windows' in quar[0].getMessage() and 'worker_reason=word_shape' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=vad_windows' in disposition[0].getMessage() and 'worker_reason=word_shape' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_clock_at_vad_windows_keeps_quarantine_error(caplog):
-    """word_clock at vad_windows keeps the terminal quarantine ERROR."""
+def test_reason_word_clock_at_vad_windows_reports_disposition_hold(caplog):
+    """word_clock at vad_windows reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "word_clock"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=vad_windows' in quar[0].getMessage() and 'worker_reason=word_clock' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=vad_windows' in disposition[0].getMessage() and 'worker_reason=word_clock' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_sequence_at_vad_windows_keeps_quarantine_error(caplog):
-    """word_sequence at vad_windows keeps the terminal quarantine ERROR."""
+def test_reason_word_sequence_at_vad_windows_reports_disposition_hold(caplog):
+    """word_sequence at vad_windows reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "word_sequence"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=vad_windows' in quar[0].getMessage() and 'worker_reason=word_sequence' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=vad_windows' in disposition[0].getMessage()
+        and 'worker_reason=word_sequence' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_nonfinite_at_vad_windows_keeps_quarantine_error(caplog):
-    """vad_nonfinite at vad_windows keeps the terminal quarantine ERROR."""
+def test_reason_vad_nonfinite_at_vad_windows_reports_disposition_hold(caplog):
+    """vad_nonfinite at vad_windows reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "vad_nonfinite"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=vad_windows' in quar[0].getMessage() and 'worker_reason=vad_nonfinite' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=vad_windows' in disposition[0].getMessage()
+        and 'worker_reason=vad_nonfinite' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_order_at_vad_windows_keeps_quarantine_error(caplog):
-    """vad_order at vad_windows keeps the terminal quarantine ERROR."""
+def test_reason_vad_order_at_vad_windows_reports_disposition_hold(caplog):
+    """vad_order at vad_windows reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "vad_order"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=vad_windows' in quar[0].getMessage() and 'worker_reason=vad_order' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=vad_windows' in disposition[0].getMessage() and 'worker_reason=vad_order' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_bounds_at_vad_windows_keeps_quarantine_error(caplog):
-    """vad_bounds at vad_windows keeps the terminal quarantine ERROR."""
+def test_reason_vad_bounds_at_vad_windows_reports_disposition_hold(caplog):
+    """vad_bounds at vad_windows reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=vad_windows' in quar[0].getMessage() and 'worker_reason=vad_bounds' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=vad_windows' in disposition[0].getMessage() and 'worker_reason=vad_bounds' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
@@ -419,97 +462,117 @@ def test_reason_no_owned_words_at_vad_windows_keeps_quarantine_error(caplog):
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_shape_at_word_clocks_keeps_quarantine_error(caplog):
-    """word_shape at word_clocks keeps the terminal quarantine ERROR."""
+def test_reason_word_shape_at_word_clocks_reports_disposition_hold(caplog):
+    """word_shape at word_clocks reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "word_shape"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=word_clocks' in quar[0].getMessage() and 'worker_reason=word_shape' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=word_clocks' in disposition[0].getMessage() and 'worker_reason=word_shape' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_clock_at_word_clocks_keeps_quarantine_error(caplog):
-    """word_clock at word_clocks keeps the terminal quarantine ERROR."""
+def test_reason_word_clock_at_word_clocks_reports_disposition_hold(caplog):
+    """word_clock at word_clocks reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "word_clock"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=word_clocks' in quar[0].getMessage() and 'worker_reason=word_clock' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=word_clocks' in disposition[0].getMessage() and 'worker_reason=word_clock' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_sequence_at_word_clocks_keeps_quarantine_error(caplog):
-    """word_sequence at word_clocks keeps the terminal quarantine ERROR."""
+def test_reason_word_sequence_at_word_clocks_reports_disposition_hold(caplog):
+    """word_sequence at word_clocks reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "word_sequence"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=word_clocks' in quar[0].getMessage() and 'worker_reason=word_sequence' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=word_clocks' in disposition[0].getMessage()
+        and 'worker_reason=word_sequence' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_nonfinite_at_word_clocks_keeps_quarantine_error(caplog):
-    """vad_nonfinite at word_clocks keeps the terminal quarantine ERROR."""
+def test_reason_vad_nonfinite_at_word_clocks_reports_disposition_hold(caplog):
+    """vad_nonfinite at word_clocks reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "vad_nonfinite"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=word_clocks' in quar[0].getMessage() and 'worker_reason=vad_nonfinite' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=word_clocks' in disposition[0].getMessage()
+        and 'worker_reason=vad_nonfinite' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_order_at_word_clocks_keeps_quarantine_error(caplog):
-    """vad_order at word_clocks keeps the terminal quarantine ERROR."""
+def test_reason_vad_order_at_word_clocks_reports_disposition_hold(caplog):
+    """vad_order at word_clocks reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "vad_order"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=word_clocks' in quar[0].getMessage() and 'worker_reason=vad_order' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=word_clocks' in disposition[0].getMessage() and 'worker_reason=vad_order' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_bounds_at_word_clocks_keeps_quarantine_error(caplog):
-    """vad_bounds at word_clocks keeps the terminal quarantine ERROR."""
+def test_reason_vad_bounds_at_word_clocks_reports_disposition_hold(caplog):
+    """vad_bounds at word_clocks reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=word_clocks' in quar[0].getMessage() and 'worker_reason=vad_bounds' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=word_clocks' in disposition[0].getMessage() and 'worker_reason=vad_bounds' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
@@ -547,97 +610,121 @@ def test_reason_no_owned_words_at_word_clocks_keeps_quarantine_error(caplog):
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_shape_at_assemble_words_keeps_quarantine_error(caplog):
-    """word_shape at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_word_shape_at_assemble_words_reports_disposition_hold(caplog):
+    """word_shape at assemble_words reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "word_shape"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=word_shape' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=assemble_words' in disposition[0].getMessage()
+        and 'worker_reason=word_shape' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_clock_at_assemble_words_keeps_quarantine_error(caplog):
-    """word_clock at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_word_clock_at_assemble_words_reports_disposition_hold(caplog):
+    """word_clock at assemble_words reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "word_clock"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=word_clock' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=assemble_words' in disposition[0].getMessage()
+        and 'worker_reason=word_clock' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_sequence_at_assemble_words_keeps_quarantine_error(caplog):
-    """word_sequence at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_word_sequence_at_assemble_words_reports_disposition_hold(caplog):
+    """word_sequence at assemble_words reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "word_sequence"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=word_sequence' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=assemble_words' in disposition[0].getMessage()
+        and 'worker_reason=word_sequence' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_nonfinite_at_assemble_words_keeps_quarantine_error(caplog):
-    """vad_nonfinite at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_vad_nonfinite_at_assemble_words_reports_disposition_hold(caplog):
+    """vad_nonfinite at assemble_words reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "vad_nonfinite"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=vad_nonfinite' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=assemble_words' in disposition[0].getMessage()
+        and 'worker_reason=vad_nonfinite' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_order_at_assemble_words_keeps_quarantine_error(caplog):
-    """vad_order at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_vad_order_at_assemble_words_reports_disposition_hold(caplog):
+    """vad_order at assemble_words reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "vad_order"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=vad_order' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=assemble_words' in disposition[0].getMessage()
+        and 'worker_reason=vad_order' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_bounds_at_assemble_words_keeps_quarantine_error(caplog):
-    """vad_bounds at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_vad_bounds_at_assemble_words_reports_disposition_hold(caplog):
+    """vad_bounds at assemble_words reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=vad_bounds' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=assemble_words' in disposition[0].getMessage()
+        and 'worker_reason=vad_bounds' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
@@ -679,97 +766,120 @@ def test_reason_no_owned_words_at_assemble_words_holds_for_recovery(caplog):
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_shape_at_asr_recovery_keeps_quarantine_error(caplog):
-    """word_shape at asr_recovery keeps the terminal quarantine ERROR."""
+def test_reason_word_shape_at_asr_recovery_reports_disposition_hold(caplog):
+    """word_shape at asr_recovery reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "word_shape"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=asr_recovery' in quar[0].getMessage() and 'worker_reason=word_shape' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=asr_recovery' in disposition[0].getMessage()
+        and 'worker_reason=word_shape' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_clock_at_asr_recovery_keeps_quarantine_error(caplog):
-    """word_clock at asr_recovery keeps the terminal quarantine ERROR."""
+def test_reason_word_clock_at_asr_recovery_reports_disposition_hold(caplog):
+    """word_clock at asr_recovery reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "word_clock"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=asr_recovery' in quar[0].getMessage() and 'worker_reason=word_clock' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=asr_recovery' in disposition[0].getMessage()
+        and 'worker_reason=word_clock' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_word_sequence_at_asr_recovery_keeps_quarantine_error(caplog):
-    """word_sequence at asr_recovery keeps the terminal quarantine ERROR."""
+def test_reason_word_sequence_at_asr_recovery_reports_disposition_hold(caplog):
+    """word_sequence at asr_recovery reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "word_sequence"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=asr_recovery' in quar[0].getMessage() and 'worker_reason=word_sequence' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=asr_recovery' in disposition[0].getMessage()
+        and 'worker_reason=word_sequence' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_nonfinite_at_asr_recovery_keeps_quarantine_error(caplog):
-    """vad_nonfinite at asr_recovery keeps the terminal quarantine ERROR."""
+def test_reason_vad_nonfinite_at_asr_recovery_reports_disposition_hold(caplog):
+    """vad_nonfinite at asr_recovery reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "vad_nonfinite"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=asr_recovery' in quar[0].getMessage() and 'worker_reason=vad_nonfinite' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=asr_recovery' in disposition[0].getMessage()
+        and 'worker_reason=vad_nonfinite' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_order_at_asr_recovery_keeps_quarantine_error(caplog):
-    """vad_order at asr_recovery keeps the terminal quarantine ERROR."""
+def test_reason_vad_order_at_asr_recovery_reports_disposition_hold(caplog):
+    """vad_order at asr_recovery reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "vad_order"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=asr_recovery' in quar[0].getMessage() and 'worker_reason=vad_order' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=asr_recovery' in disposition[0].getMessage() and 'worker_reason=vad_order' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_vad_bounds_at_asr_recovery_keeps_quarantine_error(caplog):
-    """vad_bounds at asr_recovery keeps the terminal quarantine ERROR."""
+def test_reason_vad_bounds_at_asr_recovery_reports_disposition_hold(caplog):
+    """vad_bounds at asr_recovery reports the terminal disposition hold at INFO."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=asr_recovery' in quar[0].getMessage() and 'worker_reason=vad_bounds' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'outcome=held_for_disposition' in disposition[0].getMessage()
+    assert (
+        'stage=asr_recovery' in disposition[0].getMessage()
+        and 'worker_reason=vad_bounds' in disposition[0].getMessage()
+    )
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
@@ -1573,7 +1683,7 @@ def test_guard_hold_rides_the_scheduler_logger(caplog):
 def test_quarantine_error_rides_the_scheduler_logger(caplog):
     caplog.set_level(logging.INFO)
     store, queue, lease = _queued()
-    shape = {"stage": "vad_windows", "reason": "vad_bounds"}
+    shape = {"stage": "fetch_decode", "reason": "outside_admitted_source"}
     _fail(queue, lease, worker_failure=shape)
     guard, quar, warn = _split(caplog)
     assert quar[0].name == "utils.batch_pipeline.scheduler"

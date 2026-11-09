@@ -22,6 +22,7 @@ from config.batch_pipeline import (
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
+    worker_validation_disposition_enabled,
 )
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -41,6 +42,7 @@ from utils.batch_pipeline.errors import (
     language_guard_redrive_failure,
     validate_worker_failure,
     validate_worker_failure_evidence,
+    validation_disposition_failure,
 )
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
@@ -1054,6 +1056,27 @@ class Scheduler:
                         # channel to faults.
                         logger.info(
                             'event=batch_empty_ladder outcome=held_for_recovery attempt=%d recovery=held stage=%s worker_reason=%s',
+                            attempt,
+                            terminal_stage,
+                            terminal_reason,
+                        )
+                    elif validation_disposition_failure(
+                        diagnosis, disposition_enabled=worker_validation_disposition_enabled()
+                    ):
+                        # The terminal worker-validation disposition is the
+                        # designed recovery hold: typed deterministic faults
+                        # and closed vad/word verdicts no GPU retry can
+                        # repair, booked with this commit's evidence and the
+                        # fenced quarantine-recovery lane waiting below. It
+                        # keeps the same durable state and the
+                        # awaiting-recovery warning below, but it is not a
+                        # worker fault, so it leaves the ERROR quarantine
+                        # channel to faults. The flagged verdicts demote only
+                        # under the same disposition switch that decided the
+                        # durable chain end; a ladder still walking its
+                        # retries keeps its ERROR line.
+                        logger.info(
+                            'event=batch_validation_disposition outcome=held_for_disposition attempt=%d recovery=held stage=%s worker_reason=%s',
                             attempt,
                             terminal_stage,
                             terminal_reason,

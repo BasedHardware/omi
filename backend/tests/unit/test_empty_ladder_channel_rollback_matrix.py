@@ -297,7 +297,11 @@ def test_scheduler_fault_channel_unchanged_under_safety_off(monkeypatch, caplog)
     lease = queue.pull(1000.0)[0]
     assert (
         queue.fail(
-            "a", lease.token, 1100.0, quarantine=True, worker_failure={"stage": "vad_windows", "reason": "vad_bounds"}
+            "a",
+            lease.token,
+            1100.0,
+            quarantine=True,
+            worker_failure={"stage": "fetch_decode", "reason": "outside_admitted_source"},
         )
         is True
     )

@@ -431,10 +431,10 @@ def test_worker_terminal_for_typed_conversation_requirement(monkeypatch):
 
 
 def test_worker_log_carries_closed_reason_and_error_class(caplog):
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
     worker, *_ = setup_worker(decode=typed_decode())
     worker.process_batch([item()])
-    assert 'event=batch_worker_failed' in caplog.text
+    assert 'event=batch_validation_disposition outcome=recovery_handoff' in caplog.text
     assert 'error_class=RetainedAudioInvalid' in caplog.text
     assert 'stage=fetch_decode' in caplog.text
     assert 'reason=retained_audio_invalid' in caplog.text

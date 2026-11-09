@@ -120,6 +120,81 @@ def empty_ladder_recovery_failure(failure: object) -> bool:
     )
 
 
+# The terminal worker-validation disposition is the bounded GPU chain's
+# designed custody handoff for input no retry can repair. Two arms decide it
+# at the worker boundary: the typed staged/retained/decoded-extent trio fails
+# identically on the pinned bytes on every attempt and ends the chain
+# unconditionally, and under the worker-validation disposition switch every
+# closed vad/word validation verdict ends it the same way. Each hands the
+# unit to the fenced independent-recognizer recovery lane with its measured
+# VAD evidence and receipt intact. Nothing about the unit is faulted and no
+# GPU retry can change the verdict, so booking each disposition on the ERROR
+# fault channels misbooks a designed platform outcome as a production error:
+# the vad_windows vad_bounds family and the word_clocks word_* family are top
+# sensor signatures purely because the disposition handoff reuses the ERROR
+# worker-fault lines (the worker's ``batch_worker_failed
+# error_class=BatchValidationError stage=word_clocks`` and the scheduler's
+# ``batch_quarantined reason=worker_failed ... recovery=held
+# stage=word_clocks worker_reason=word_sequence`` fire for the same settled
+# unit). Both logging sites consult this family so the disposition demotes
+# together and nothing else does; the flagged arm demotes only while the
+# same ``worker_validation_disposition_enabled`` switch that decided the
+# durable disposition is on — a ladder still walking its retries keeps its
+# fault lines — while the fetch_decode trio's chain end is unconditional on
+# pinned bytes, so its demotion is too. The deliberately-retryable
+# ``outside_admitted_source`` and every unclassified fault keep their ERROR
+# lines. The demotion rechannels the report only: durable state, evidence,
+# metrics, custody and the awaiting-fenced-recovery warning are unchanged.
+#
+# Failure-Class: FC-terminal-validation-disposition-misbooked-as-worker-fault
+VALIDATION_DISPOSITION_UNCONDITIONAL_STAGE = WorkerValidationStage.FETCH_DECODE.value
+VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS = frozenset(
+    {
+        WorkerValidationReason.STAGED_AUDIO_INVALID.value,
+        WorkerValidationReason.RETAINED_AUDIO_INVALID.value,
+        WorkerValidationReason.DECODED_DURATION_MISMATCH.value,
+    }
+)
+VALIDATION_DISPOSITION_FLAGGED_REASONS = frozenset(
+    {
+        WorkerValidationReason.VAD_NONFINITE.value,
+        WorkerValidationReason.VAD_ORDER.value,
+        WorkerValidationReason.VAD_BOUNDS.value,
+        WorkerValidationReason.WORD_SHAPE.value,
+        WorkerValidationReason.WORD_CLOCK.value,
+        WorkerValidationReason.WORD_SEQUENCE.value,
+    }
+)
+VALIDATION_DISPOSITION_REASONS = VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS | VALIDATION_DISPOSITION_FLAGGED_REASONS
+
+
+def validation_disposition_failure(failure: object, *, disposition_enabled: bool) -> bool:
+    """True for a closed terminal diagnosis that is the disposition handoff.
+
+    Accepts exactly the closed shapes the scheduler stores on a job: the
+    two-key ``{'stage', 'reason'}`` dicts the store validators admit. The
+    unconditional trio answers only at the fetch_decode stage the typed
+    classes raise nowhere else; the flagged verdicts answer at any closed
+    worker stage, mirroring the boundary's stage-agnostic flag-gated arm,
+    and only while ``disposition_enabled`` carries the same switch the
+    durable path read. Anything anonymous (empty diagnosis, extra fields,
+    foreign reason, off-vocabulary stage, non-string tokens, non-dict
+    input) is not the disposition and keeps its fault classification. Never
+    raises on hostile input.
+    """
+
+    if not isinstance(failure, dict) or set(failure) != {'stage', 'reason'}:
+        return False
+    stage, reason = failure['stage'], failure['reason']
+    if not isinstance(stage, str) or not isinstance(reason, str):
+        return False
+    if stage == VALIDATION_DISPOSITION_UNCONDITIONAL_STAGE and reason in VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS:
+        return True
+    return (
+        disposition_enabled and stage in WORKER_VALIDATION_STAGES and reason in VALIDATION_DISPOSITION_FLAGGED_REASONS
+    )
+
+
 def validate_worker_failure_evidence(failure):
     """Evidence-only diagnostics from an ordinary retryable failure.
 

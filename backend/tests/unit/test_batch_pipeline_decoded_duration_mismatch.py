@@ -138,9 +138,10 @@ def test_batch_validation_error_is_never_duration_mismatch(monkeypatch):
 
 
 def test_samples_are_recorded_in_the_failure_log(caplog):
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
     worker, *_ = setup_worker(decode=mismatched_decode(99))
     worker.process_batch([item()])
+    assert 'event=batch_validation_disposition outcome=recovery_handoff' in caplog.text
     assert 'reason=decoded_duration_mismatch' in caplog.text
     assert 'samples=1584000' in caplog.text
 
@@ -229,14 +230,14 @@ def test_both_new_reasons_share_the_fetch_decode_stage_token():
 
 
 def test_typed_batch_logs_one_record_per_failing_item(caplog):
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
 
     def decode(work):
         return Samples(99) if work.segment_id == 'bad' else Samples(2)
 
     worker, *_ = setup_worker(decode=decode)
     worker.process_batch([item('bad'), item('ok')])
-    records = {r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.message}
+    records = {r.getMessage() for r in caplog.records if 'event=batch_validation_disposition' in r.message}
     assert len(records) == 1
     assert 'segment_id=bad' in next(iter(records))
 

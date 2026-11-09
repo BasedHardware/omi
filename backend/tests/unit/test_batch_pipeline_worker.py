@@ -206,8 +206,11 @@ async def test_invalid_staged_audio_quarantines_first_attempt(monkeypatch, caplo
     with pytest.raises(ValueError, match=f'^{message}$'):
         decode_pcm16_wav(staged)
     worker, words, saved, _, diarized, _ = setup_worker(decode=lambda _: decode_pcm16_wav(staged))
+    caplog.set_level(logging.INFO)
     results = worker.process_batch([item()])
     assert results == [ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')]
+    # The typed staged-bytes terminal reports the disposition handoff at INFO.
+    assert 'event=batch_validation_disposition outcome=recovery_handoff' in caplog.text
     assert 'reason=staged_audio_invalid samples=-1' in caplog.text
     assert message not in caplog.text
     store = MemoryStore()
@@ -298,7 +301,11 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
     results = worker.process_batch([item(duration=60)])
     expected_reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage)
     assert results == ([ValidationFailureWork('a', stage, expected_reason)] if expected_reason else [])
-    events = 'event=batch_empty_ladder' if stage == 'assemble_words' else 'event=batch_worker_failed'
+    events = (
+        'event=batch_empty_ladder'
+        if stage == 'assemble_words'
+        else ('event=batch_validation_disposition' if stage == 'word_clocks' else 'event=batch_worker_failed')
+    )
     records = [record for record in caplog.records if events in record.getMessage()]
     assert len(records) == worker.counts['failed'] == 1
     reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage, 'unclassified')
@@ -310,6 +317,15 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
             .getMessage()
             .startswith(
                 f'event=batch_empty_ladder outcome=recovery_handoff error_class={error_class} stage={stage} segment_id=a reason={reason} '
+            )
+        )
+    elif stage == 'word_clocks':
+        assert records[0].levelno == logging.INFO
+        assert (
+            records[0]
+            .getMessage()
+            .startswith(
+                f'event=batch_validation_disposition outcome=recovery_handoff error_class={error_class} stage={stage} segment_id=a reason={reason} '
             )
         )
     else:
@@ -635,6 +651,7 @@ def test_noncanonical_headers_fail_before_vad_or_assembly(channels, rate, caplog
         vad=lambda _: pytest.fail('header failure must precede VAD'),
         on_failure=None,
     )
+    caplog.set_level(logging.INFO)
     assert worker.process_batch([item(duration=1)]) == [
         ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')
     ]

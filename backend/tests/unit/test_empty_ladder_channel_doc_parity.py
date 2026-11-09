@@ -32,8 +32,13 @@ def test_doc_token_event_batch_empty_ladder_scheduler_source_count():
 
 
 def test_doc_token_outcome_recovery_handoff_worker_source_count():
-    """outcome=recovery_handoff appears 1 time in WORKER_SOURCE."""
-    assert WORKER_SOURCE.count("outcome=recovery_handoff") == 1
+    """outcome=recovery_handoff appears 2 times in WORKER_SOURCE.
+
+    One for the empty ladder's handoff, one for the terminal
+    worker-validation disposition's handoff — siblings on the same
+    rechannel-only pattern.
+    """
+    assert WORKER_SOURCE.count("outcome=recovery_handoff") == 2
 
 
 def test_doc_token_outcome_held_for_recovery_scheduler_source_count():

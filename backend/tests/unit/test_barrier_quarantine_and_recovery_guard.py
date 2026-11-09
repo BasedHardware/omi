@@ -362,14 +362,16 @@ def test_a_quarantined_barrier_unit_awaits_the_fenced_recovery_lane():
 def test_terminal_quarantine_logs_the_documented_shape(
     caplog,
 ):
-    """A fault terminal keeps the documented ERROR shape; a guard hold demotes.
+    """A fault terminal keeps the documented ERROR shape; the disposition and the guard demote.
 
     The unsupported_language family is the designed redrive handoff: it holds
     on the exact same durable state but reports
     event=batch_language_guard outcome=held_for_redrive at INFO instead of the
     ERROR quarantine line (see docs/batch-language-guard-redrive-classification.md).
-    vad_bounds — a real validation fault — keeps the ERROR line this test
-    originally pinned.
+    vad_bounds — a terminal worker-validation disposition — reports
+    event=batch_validation_disposition outcome=held_for_disposition at INFO;
+    the admitted-source refusal keeps the ERROR line this test originally
+    pinned.
     """
     store, queue = queue_with_job()
     lease = lease_of(queue)
@@ -382,7 +384,7 @@ def test_terminal_quarantine_logs_the_documented_shape(
         )
         messages = [r.message for r in caplog.records]
     assert any(
-        'event=batch_quarantined reason=worker_failed attempt=1 recovery=held stage=vad_windows worker_reason=vad_bounds'
+        'event=batch_validation_disposition outcome=held_for_disposition attempt=1 recovery=held stage=vad_windows worker_reason=vad_bounds'
         in message
         for message in messages
     )

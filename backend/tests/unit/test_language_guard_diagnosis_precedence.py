@@ -71,15 +71,16 @@ def test_exhausted_guard_evidence_fetch_decode_demotes(caplog):
     assert 'worker_reason=unsupported_language' in guard[0].getMessage()
 
 
-def test_exhausted_vad_bounds_evidence_fetch_decode_keeps_error(caplog):
-    """Exhausted with fetch_decode vad_bounds evidence keeps the ERROR."""
+def test_exhausted_vad_bounds_evidence_fetch_decode_reports_disposition_hold(caplog):
+    """Exhausted with fetch_decode vad_bounds evidence demotes to the disposition hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "fetch_decode", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     _exhaust(store, lease)
     assert _fail(queue, lease, worker_failure_evidence=shape) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_exhausted_guard_evidence_vad_windows_demotes(caplog):
@@ -95,15 +96,16 @@ def test_exhausted_guard_evidence_vad_windows_demotes(caplog):
     assert 'worker_reason=unsupported_language' in guard[0].getMessage()
 
 
-def test_exhausted_vad_bounds_evidence_vad_windows_keeps_error(caplog):
-    """Exhausted with vad_windows vad_bounds evidence keeps the ERROR."""
+def test_exhausted_vad_bounds_evidence_vad_windows_reports_disposition_hold(caplog):
+    """Exhausted with vad_windows vad_bounds evidence demotes to the disposition hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "vad_windows", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     _exhaust(store, lease)
     assert _fail(queue, lease, worker_failure_evidence=shape) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_exhausted_guard_evidence_word_clocks_demotes(caplog):
@@ -119,15 +121,16 @@ def test_exhausted_guard_evidence_word_clocks_demotes(caplog):
     assert 'worker_reason=unsupported_language' in guard[0].getMessage()
 
 
-def test_exhausted_vad_bounds_evidence_word_clocks_keeps_error(caplog):
-    """Exhausted with word_clocks vad_bounds evidence keeps the ERROR."""
+def test_exhausted_vad_bounds_evidence_word_clocks_reports_disposition_hold(caplog):
+    """Exhausted with word_clocks vad_bounds evidence demotes to the disposition hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "word_clocks", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     _exhaust(store, lease)
     assert _fail(queue, lease, worker_failure_evidence=shape) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_exhausted_guard_evidence_assemble_words_demotes(caplog):
@@ -143,15 +146,16 @@ def test_exhausted_guard_evidence_assemble_words_demotes(caplog):
     assert 'worker_reason=unsupported_language' in guard[0].getMessage()
 
 
-def test_exhausted_vad_bounds_evidence_assemble_words_keeps_error(caplog):
-    """Exhausted with assemble_words vad_bounds evidence keeps the ERROR."""
+def test_exhausted_vad_bounds_evidence_assemble_words_reports_disposition_hold(caplog):
+    """Exhausted with assemble_words vad_bounds evidence demotes to the disposition hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     _exhaust(store, lease)
     assert _fail(queue, lease, worker_failure_evidence=shape) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_exhausted_guard_evidence_asr_recovery_demotes(caplog):
@@ -167,15 +171,16 @@ def test_exhausted_guard_evidence_asr_recovery_demotes(caplog):
     assert 'worker_reason=unsupported_language' in guard[0].getMessage()
 
 
-def test_exhausted_vad_bounds_evidence_asr_recovery_keeps_error(caplog):
-    """Exhausted with asr_recovery vad_bounds evidence keeps the ERROR."""
+def test_exhausted_vad_bounds_evidence_asr_recovery_reports_disposition_hold(caplog):
+    """Exhausted with asr_recovery vad_bounds evidence demotes to the disposition hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "asr_recovery", "reason": "vad_bounds"}
     store, queue, lease = _queued()
     _exhaust(store, lease)
     assert _fail(queue, lease, worker_failure_evidence=shape) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_preserved_guard_evidence_fetch_decode_demotes_on_exhaustion(caplog):
@@ -192,7 +197,7 @@ def test_preserved_guard_evidence_fetch_decode_demotes_on_exhaustion(caplog):
     assert job['worker_failure_evidence'] == seed
 
 
-def test_preserved_vad_bounds_evidence_fetch_decode_keeps_error(caplog):
+def test_preserved_vad_bounds_evidence_fetch_decode_reports_disposition_hold(caplog):
     caplog.set_level(logging.INFO)
     seed = {"stage": "fetch_decode", "reason": "vad_bounds"}
     store, queue, lease = _queued()
@@ -200,7 +205,8 @@ def test_preserved_vad_bounds_evidence_fetch_decode_keeps_error(caplog):
     _exhaust(store, lease)
     assert _fail(queue, lease) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_preserved_guard_evidence_vad_windows_demotes_on_exhaustion(caplog):
@@ -217,7 +223,7 @@ def test_preserved_guard_evidence_vad_windows_demotes_on_exhaustion(caplog):
     assert job['worker_failure_evidence'] == seed
 
 
-def test_preserved_vad_bounds_evidence_vad_windows_keeps_error(caplog):
+def test_preserved_vad_bounds_evidence_vad_windows_reports_disposition_hold(caplog):
     caplog.set_level(logging.INFO)
     seed = {"stage": "vad_windows", "reason": "vad_bounds"}
     store, queue, lease = _queued()
@@ -225,7 +231,8 @@ def test_preserved_vad_bounds_evidence_vad_windows_keeps_error(caplog):
     _exhaust(store, lease)
     assert _fail(queue, lease) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_preserved_guard_evidence_word_clocks_demotes_on_exhaustion(caplog):
@@ -242,7 +249,7 @@ def test_preserved_guard_evidence_word_clocks_demotes_on_exhaustion(caplog):
     assert job['worker_failure_evidence'] == seed
 
 
-def test_preserved_vad_bounds_evidence_word_clocks_keeps_error(caplog):
+def test_preserved_vad_bounds_evidence_word_clocks_reports_disposition_hold(caplog):
     caplog.set_level(logging.INFO)
     seed = {"stage": "word_clocks", "reason": "vad_bounds"}
     store, queue, lease = _queued()
@@ -250,7 +257,8 @@ def test_preserved_vad_bounds_evidence_word_clocks_keeps_error(caplog):
     _exhaust(store, lease)
     assert _fail(queue, lease) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_preserved_guard_evidence_assemble_words_demotes_on_exhaustion(caplog):
@@ -267,7 +275,7 @@ def test_preserved_guard_evidence_assemble_words_demotes_on_exhaustion(caplog):
     assert job['worker_failure_evidence'] == seed
 
 
-def test_preserved_vad_bounds_evidence_assemble_words_keeps_error(caplog):
+def test_preserved_vad_bounds_evidence_assemble_words_reports_disposition_hold(caplog):
     caplog.set_level(logging.INFO)
     seed = {"stage": "assemble_words", "reason": "vad_bounds"}
     store, queue, lease = _queued()
@@ -275,7 +283,8 @@ def test_preserved_vad_bounds_evidence_assemble_words_keeps_error(caplog):
     _exhaust(store, lease)
     assert _fail(queue, lease) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_preserved_guard_evidence_asr_recovery_demotes_on_exhaustion(caplog):
@@ -292,7 +301,7 @@ def test_preserved_guard_evidence_asr_recovery_demotes_on_exhaustion(caplog):
     assert job['worker_failure_evidence'] == seed
 
 
-def test_preserved_vad_bounds_evidence_asr_recovery_keeps_error(caplog):
+def test_preserved_vad_bounds_evidence_asr_recovery_reports_disposition_hold(caplog):
     caplog.set_level(logging.INFO)
     seed = {"stage": "asr_recovery", "reason": "vad_bounds"}
     store, queue, lease = _queued()
@@ -300,7 +309,8 @@ def test_preserved_vad_bounds_evidence_asr_recovery_keeps_error(caplog):
     _exhaust(store, lease)
     assert _fail(queue, lease) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
 
 
 def test_worker_failure_guard_beats_vad_bounds_evidence_fetch_decode(caplog):
@@ -380,8 +390,9 @@ def test_worker_failure_vad_bounds_beats_guard_evidence(caplog):
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=failure_shape, worker_failure_evidence=evidence_shape) is True
     guard, quar, retry, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert 'worker_reason=vad_bounds' in quar[0].getMessage()
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert not guard and not quar and len(disposition) == 1
+    assert 'worker_reason=vad_bounds' in disposition[0].getMessage()
 
 
 def test_guard_hold_fetch_decode_is_not_retry_due():

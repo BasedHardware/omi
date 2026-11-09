@@ -480,7 +480,7 @@ async def test_completed_evidenced_job_publishes_clean_metadata(monkeypatch):
 @pytest.mark.asyncio
 async def test_pump_typed_failure_quarantines_and_writes_no_evidence_key(monkeypatch, caplog):
     queue, store, lease, _ = _leased_queue(monkeypatch)
-    with caplog.at_level(logging.ERROR, logger='utils.batch_pipeline.scheduler'):
+    with caplog.at_level(logging.INFO, logger='utils.batch_pipeline.scheduler'):
         assert (
             await _published(queue, lease, ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')) is True
         )
@@ -488,17 +488,17 @@ async def test_pump_typed_failure_quarantines_and_writes_no_evidence_key(monkeyp
     assert job['state'] == 'quarantined' and job['attempt'] == 1
     assert job['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
     assert 'worker_failure_evidence' not in job
-    quarantined = [r for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
-    assert quarantined[-1].getMessage().endswith('stage=fetch_decode worker_reason=staged_audio_invalid')
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert disposition[-1].getMessage().endswith('stage=fetch_decode worker_reason=staged_audio_invalid')
 
 
 @pytest.mark.asyncio
 async def test_pump_typed_duration_mismatch_quarantine_log_keeps_its_reason(monkeypatch, caplog):
     queue, store, lease, _ = _leased_queue(monkeypatch)
-    with caplog.at_level(logging.ERROR, logger='utils.batch_pipeline.scheduler'):
+    with caplog.at_level(logging.INFO, logger='utils.batch_pipeline.scheduler'):
         await _published(queue, lease, ValidationFailureWork('a', 'fetch_decode', 'decoded_duration_mismatch'))
-    quarantined = [r for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
-    assert quarantined[-1].getMessage().endswith('worker_reason=decoded_duration_mismatch')
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert disposition[-1].getMessage().endswith('worker_reason=decoded_duration_mismatch')
     assert 'worker_failure_evidence' not in store.rows['jobs', 'a']
 
 

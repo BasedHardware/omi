@@ -131,7 +131,7 @@ async def test_terminal_quarantine_log_names_stage_and_reason(caplog):
     results = worker.process_batch([lease.item])
     with caplog.at_level(logging.DEBUG, logger='utils.batch_pipeline.scheduler'):
         await run_publish(queue, worker, lease, results[0])
-    assert 'event=batch_quarantined' in caplog.text
+    assert 'event=batch_validation_disposition outcome=held_for_disposition' in caplog.text
     assert 'stage=fetch_decode' in caplog.text
     assert 'worker_reason=staged_audio_invalid' in caplog.text
     assert 'stage=unknown' not in caplog.text
@@ -708,7 +708,7 @@ async def test_typed_quarantine_does_not_log_a_deferred_retry(caplog):
     with caplog.at_level(logging.DEBUG, logger='utils.batch_pipeline.scheduler'):
         await run_publish(queue, worker, lease, results[0])
     assert 'event=batch_retry' not in caplog.text
-    assert 'event=batch_quarantined' in caplog.text
+    assert 'event=batch_validation_disposition outcome=held_for_disposition' in caplog.text
 
 
 @pytest.mark.asyncio

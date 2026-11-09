@@ -166,14 +166,19 @@ def test_terminal_record_names_the_preserved_diagnosis_when_the_call_has_none(ca
     store, queue, lease = leased()
     queue.fail('a', lease.token, 10.0, worker_failure_evidence={'stage': 'vad_windows', 'reason': 'vad_bounds'})
     store.rows['jobs', 'a'].update(state='leased', token='t2', lease_until=100.0, attempt=99)
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.INFO):
         queue.fail('a', 't2', 60.0)
-    record = next(r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage())
+    record = next(
+        r.getMessage()
+        for r in caplog.records
+        if 'event=batch_validation_disposition outcome=held_for_disposition' in r.getMessage()
+    )
     # The terminal naming prefers the current call's diagnosis, then the
     # diagnosis earlier ladder attempts preserved on the job (an exhausting
     # attempt may arrive evidence-less), and only a never-diagnosed unit
     # records the historical anonymous shape. The job row keeps the retained
-    # ladder evidence for the fenced recovery lane either way.
+    # ladder evidence for the fenced recovery lane either way. A preserved
+    # family diagnosis names the disposition hold instead of the quarantine.
     assert 'stage=vad_windows worker_reason=vad_bounds' in record
     assert store.rows['jobs', 'a']['worker_failure_evidence'] == {
         'stage': 'vad_windows',
@@ -185,9 +190,13 @@ def test_terminal_record_prefers_the_current_call_diagnosis_over_the_preserved_o
     store, queue, lease = leased()
     queue.fail('a', lease.token, 10.0, worker_failure_evidence={'stage': 'vad_windows', 'reason': 'vad_bounds'})
     store.rows['jobs', 'a'].update(state='leased', token='t2', lease_until=100.0, attempt=99)
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.INFO):
         queue.fail('a', 't2', 60.0, worker_failure_evidence={'stage': 'fetch_decode', 'reason': 'word_clock'})
-    record = next(r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage())
+    record = next(
+        r.getMessage()
+        for r in caplog.records
+        if 'event=batch_validation_disposition outcome=held_for_disposition' in r.getMessage()
+    )
     assert 'stage=fetch_decode worker_reason=word_clock' in record
 
 

@@ -131,7 +131,7 @@ def test_mixed_3_guard_1_success_batch(monkeypatch, caplog):
 
 
 def test_mixed_guard_and_generic_fault_batch(monkeypatch, caplog):
-    """A vad_bounds fault and a guard transition keep their own channels."""
+    """A vad_bounds disposition and a guard transition keep their own channels."""
     caplog.set_level(logging.INFO)
     from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
 
@@ -144,7 +144,10 @@ def test_mixed_guard_and_generic_fault_batch(monkeypatch, caplog):
     results = worker.process_batch([item("g", 2)])
     worker.vad = lambda s: [(0.1, 0.9)]
     results2 = worker.process_batch([item("h", 2)])
-    assert len(_fault_lines(caplog)) == 1 and len(_guard_lines(caplog)) == 1
+    assert len(_guard_lines(caplog)) == 1
+    assert len(_fault_lines(caplog)) == 0
+    disposition = [r for r in caplog.records if "event=batch_validation_disposition" in r.getMessage()]
+    assert len(disposition) == 1
     assert isinstance(results[0], ValidationFailureWork)
     assert isinstance(results2[0], ValidationFailureWork)
 
