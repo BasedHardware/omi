@@ -47,7 +47,7 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
     _memories.removeWhere((row) => row.id == memory.id);
     _setCategories();
     SiriIntegration.current.queueDelete('memory', memory.id);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> _commitMemoryDeletion(String? id) {
@@ -112,7 +112,7 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
       SiriIntegration.current.queueUpsertMemories([deletedMemory], restoreDeleted: true);
     }
     _setCategories();
-    notifyListeners();
+    _notify();
     if (!succeeded || persistenceFailed) deletion.onFailure?.call();
   }
 
@@ -127,7 +127,7 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
     if (!_memories.any((row) => row.id == restored.id)) _memories.add(restored);
     _setCategories();
     SiriIntegration.current.queueUpsertMemories([restored], restoreDeleted: true);
-    notifyListeners();
+    _notify();
     return true;
   }
 

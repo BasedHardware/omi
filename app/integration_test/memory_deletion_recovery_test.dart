@@ -32,7 +32,7 @@ void main() {
     final row = provider.memories.single;
     final path = '/v3/memories/${row.id}';
 
-    await JourneyHermeticBoot.pump(tester,
+    await JourneyHermeticBoot.pumpPage(tester,
         page: Scaffold(
           appBar: AppBar(title: const Text('Memories')),
           body: AnimatedBuilder(
