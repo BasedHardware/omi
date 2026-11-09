@@ -343,6 +343,9 @@ static void apply(const struct omi_sim_event *ev)
             printk("SIM: app writes mute=%d (rc=%d)\n", ev->value, capture_mute_set(ev->value != 0));
         }
         break;
+    case OMI_SIM_EV_DFU:
+        omi_sim_dfu(ev->value);
+        break;
     case OMI_SIM_EV_PANIC:
         printk("SIM: injected kernel panic\n");
         k_panic();

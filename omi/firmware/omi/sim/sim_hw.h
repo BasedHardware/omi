@@ -20,4 +20,7 @@ unsigned int omi_sim_sd_gated(void);
 unsigned int omi_sim_sd_io_errors(void);
 /* True once main() started the (stub) BLE transport. */
 bool omi_sim_transport_up(void);
+/* stubs.c: deliver one image-management event to the registered mcumgr callback. */
+void omi_sim_dfu(int op);
+
 #endif

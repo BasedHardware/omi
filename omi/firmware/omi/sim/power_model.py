@@ -33,7 +33,9 @@ RESET_BITS = {
     "off-wake": 1 << 5,
 }
 
-EV_BUTTON, EV_CHARGER, EV_BATTERY, EV_PANIC, EV_CONNECTED, EV_SD, EV_APP_MUTE = 1, 2, 3, 4, 5, 6, 7
+EV_BUTTON, EV_CHARGER, EV_BATTERY, EV_PANIC, EV_CONNECTED, EV_SD, EV_APP_MUTE, EV_DFU = 1, 2, 3, 4, 5, 6, 7, 8
+# Image-management events an SMP client can cause (sim_plan.h enum omi_sim_dfu_op).
+DFU_OPS = {"chunk": 1, "chunk-image1": 2, "chunk-net": 3, "stopped": 4, "pending": 5}
 SD_STATES = {"ok": 0, "absent": 1, "slow": 2, "dead": 3}
 FAULT_OPS = {"settings_init": 1, "settings_load": 2, "settings_save": 3}
 LEVELS = ("button", "charger", "battery_mv", "connected", "sd")
@@ -95,6 +97,10 @@ def normalize_timeline(raw):
             events.append((t, key, _bool(value, key), index))
         elif key == "panic":
             events.append((t, "panic", True, index))
+        elif key == "dfu":
+            if value not in DFU_OPS:
+                raise ScenarioError(f"timeline[{index}]: dfu must be one of {sorted(DFU_OPS)}")
+            events.append((t, "dfu", value, index))
         elif key == "power":
             if value not in POWER_ACTIONS:
                 raise ScenarioError(f"timeline[{index}]: power must be one of {POWER_ACTIONS}")
@@ -163,7 +169,7 @@ def boot_config(scenario, start, stop_ms, reset, boot_index):
              f"sd {SD_STATES[level_at(events, initial, 'sd', start)]} {int(initial.get('sd_ready_ms', 0))}"]
     codes = {"button": EV_BUTTON, "charger": EV_CHARGER, "battery_mv": EV_BATTERY,
              "connected": EV_CONNECTED, "sd": EV_SD, "panic": EV_PANIC,
-             "app_mute": EV_APP_MUTE}
+             "app_mute": EV_APP_MUTE, "dfu": EV_DFU}
     for t, kind, value in events:
         if kind == "power" or not start <= t < start + stop_ms:
             continue
@@ -173,6 +179,8 @@ def boot_config(scenario, start, stop_ms, reset, boot_index):
             continue  # a pulse at the reboot instant was consumed by the boot it ended
         if kind == "sd":
             value = SD_STATES[value]
+        if kind == "dfu":
+            value = DFU_OPS[value]
         lines.append(f"event {t - start} {codes[kind]} {int(value)}")
     for fault in scenario.get("faults", []):
         boots = fault.get("boots")

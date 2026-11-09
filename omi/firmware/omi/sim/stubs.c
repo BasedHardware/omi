@@ -24,6 +24,7 @@
 #include "safe_mode.h"
 #include "safe_mode_sim_mgmt.h"
 #include "sim_hw.h"
+#include "sim_plan.h"
 #include "spi_flash.h"
 
 LOG_MODULE_REGISTER(sim_stubs, CONFIG_LOG_DEFAULT_LEVEL);
@@ -364,6 +365,41 @@ static struct mgmt_callback *sim_dfu_callback;
 void mgmt_callback_register(struct mgmt_callback *callback)
 {
     sim_dfu_callback = callback;
+}
+
+void omi_sim_dfu(int op)
+{
+    static const char *const names[] = {"?", "chunk image 0", "chunk image 1", "chunk net area", "stopped", "pending"};
+    if (!sim_dfu_callback) {
+        printk("SIM: dfu event dropped (no mcumgr callback)\n");
+        return;
+    }
+    struct img_mgmt_upload_req req = {.image = op == OMI_SIM_DFU_CHUNK_IMAGE1 ? 1 : 0};
+    struct img_mgmt_upload_action action = {
+        .area_id = op == OMI_SIM_DFU_CHUNK_APP ? FIXED_PARTITION_ID(slot1_partition) : -1,
+    };
+    struct img_mgmt_upload_check check = {.req = &req, .action = &action};
+    int32_t rc = 0;
+    bool abort_more = false;
+    enum mgmt_cb_return ret = MGMT_CB_OK;
+    switch (op) {
+    case OMI_SIM_DFU_CHUNK_APP:
+    case OMI_SIM_DFU_CHUNK_IMAGE1:
+    case OMI_SIM_DFU_CHUNK_NET:
+        ret = sim_dfu_callback->callback(
+            MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK, MGMT_CB_OK, &rc, NULL, &abort_more, &check, sizeof(check));
+        break;
+    case OMI_SIM_DFU_STOPPED:
+        ret = sim_dfu_callback->callback(MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED, MGMT_CB_OK, NULL, NULL, NULL, NULL, 0);
+        break;
+    case OMI_SIM_DFU_PENDING:
+        ret = sim_dfu_callback->callback(MGMT_EVT_OP_IMG_MGMT_DFU_PENDING, MGMT_CB_OK, NULL, NULL, NULL, NULL, 0);
+        break;
+    default:
+        printk("SIM: unknown dfu op %d\n", op);
+        return;
+    }
+    printk("SIM: dfu %s -> %s (rc=%d)\n", names[op], ret == MGMT_CB_OK ? "accepted" : "rejected", (int) rc);
 }
 
 #ifdef CONFIG_OMI_SIM_FINISH_DFU

@@ -19,6 +19,16 @@ enum omi_sim_event_kind {
     OMI_SIM_EV_CONNECTED = 5, /* value: 1 a central is connected, 0 not */
     OMI_SIM_EV_SD = 6,        /* value: omi_sim_sd_state */
     OMI_SIM_EV_APP_MUTE = 7,  /* capture_mute_set(value): the app's mute GATT write */
+    OMI_SIM_EV_DFU = 8,       /* value: enum omi_sim_dfu_op, delivered to the mcumgr callback */
+};
+
+/* Image-management events an SMP client can cause (no SMP or radio is simulated). */
+enum omi_sim_dfu_op {
+    OMI_SIM_DFU_CHUNK_APP = 1,    /* chunk for image 0 into the application secondary slot */
+    OMI_SIM_DFU_CHUNK_IMAGE1 = 2, /* chunk for image 1 (network core) */
+    OMI_SIM_DFU_CHUNK_NET = 3,    /* continuation with image omitted (0) but a non-app area */
+    OMI_SIM_DFU_STOPPED = 4,      /* upload aborted */
+    OMI_SIM_DFU_PENDING = 5,      /* upload finished writing */
 };
 
 enum omi_sim_sd_state {

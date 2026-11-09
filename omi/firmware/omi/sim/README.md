@@ -170,7 +170,8 @@ faults: [{op: settings_save, key: omi/muted, rc: -5, boots: [0]}]
 timeline:                                  # absolute ms from first power-on
   - {t: 0, hold: 3500}                     # also tap: [press, gap, press...], button: true
   - {t: 8000, power: cycle}                # cycle | pin_reset | soft_reset
-  - {t: 9000, charger: "on"}               # connected, battery_mv, sd, app_mute, panic
+  - {t: 9000, charger: "on"}               # connected, battery_mv, sd, app_mute, panic,
+                                           # dfu: chunk | chunk-image1 | chunk-net | stopped | pending
 end: 30000
 expect:
   boot_count: 2
@@ -188,6 +189,12 @@ Tags: `guard` holds on both 3.0.23 and the fixed sources; `fix` is new
 behaviour with no 3.0.23 counterpart (skipped by `--baseline`);
 `baseline-bug` reproduces a field bug, its `baseline_bug.expect` passing on
 the 3.0.23 sources and `expect` passing on the fixed ones.
+
+**OTA, app level.** A `dfu` event delivers one image-management callback
+(chunk, stop, completion) to the production `dfu_event()` handler, as mcumgr
+would after an SMP request. `ota/*` covers recovery by upload, image-1 and
+network-slot rejection in SAFE, and interrupted uploads. SMP framing, the
+radio, MCUboot and the signed image are not simulated.
 
 **Invariants** (`power_model.INVARIANTS`) are checked over the whole chain:
 `no-stuck-safe` (a cold boot never comes up in SAFE except by the deliberate
@@ -209,8 +216,8 @@ not covered. `firmware_release.yml` runs the full suite plus 40 fuzz seeds
 before staging; `cv1_release.py stage` refuses to package without a passing
 report for the same SHA and version (at least 40 scenarios, 20 seeds), the
 report travels in the QA artifact with its checksum in `qa-provenance.json`,
-and promotion revalidates it. `repo-checks.yml` runs the suite on firmware
-PRs and a larger rotating fuzz batch nightly.
+and promotion revalidates it. The suite does not yet run on every firmware PR
+(that needs a CI budget decision); run it locally before opening one.
 
 **Production isolation.** Simulator code lives here or behind
 `CONFIG_OMI_NATIVE_SIM`/`OMI_SAFE_MODE_HOST`/dev fault configs.
@@ -218,7 +225,10 @@ PRs and a larger rotating fuzz batch nightly.
 production view (sim branches removed with `unifdef`, comments and whitespace
 ignored) changed; a simulator-only change lists nothing.
 
-**Not covered.** RF/PHY and the BLE controller, SMP transport, MCUboot and
+**Not covered.** BLE: there is no BLE lane yet (the plan's BabbleSim
+two-image lane is future work), so GATT writes are modelled at the handler
+(`app_mute`) and committee items that live in the BLE TX path (storage INFO
+flush cadence, TX stall) are jig checks for now. Also RF/PHY, SMP transport, MCUboot and
 signing, the network core, real SD timing and wear, current draw, codec and
 microphone paths, 32-bit layout. Those stay bench/jig checks
 (`tools/cv1/jig_gestures.py` replays the physical subset of these scenarios
