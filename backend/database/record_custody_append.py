@@ -82,7 +82,11 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
         if accepted and eligible:
             revision = int(row.get('record_upload_revision') or 0) + 1
             patch['record_upload_revision'] = revision
-            if late and lease.token_lease_serving(uid):
+            if (
+                late
+                and lease.token_lease_serving(uid)
+                and (row.get('record_audio_closed') or row.get('record_audio_partial'))
+            ):
                 from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
                 recovered, recovery = prepare_recovery(client, tx, uid, cid, row, revision, time.time())

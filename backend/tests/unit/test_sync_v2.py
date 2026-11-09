@@ -3970,7 +3970,7 @@ class TestV2EndpointExecution:
         _, _, module = sync_endpoint_module
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-        waiting = JSONResponse(status_code=503, content={'code': 'record_jobs_missing'})
+        waiting = module.JSONResponse(status_code=503, content={'code': 'record_jobs_missing'})
         monkeypatch.setattr(module, 'memoized_record_wait', AsyncMock(return_value=waiting))
         monkeypatch.setattr(module, 'prepare_sync_uploads', lambda files, uid: files)
         acquire = AsyncMock(side_effect=AssertionError('memoized retry acquired custody'))

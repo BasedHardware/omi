@@ -43,11 +43,17 @@ def test_enabled_mode_cannot_silently_reanchor_stock_per_process(mode):
     assert render('--set', f'recordTokenLease.mode={mode}').returncode != 0
 
 
-def test_alerts_use_exported_counters_and_no_combined_file_edit():
+def test_alerts_use_exported_counters_and_match_the_approved_combined_entries():
     path = Path(__file__).resolve().parents[2] / 'charts/monitoring/alerts/record-token-lease.json'
     rules = json.loads(path.read_text())
     assert {r['uid'] for r in rules} == {'omi-record-token-lease-late-append', 'omi-record-token-lease-backlog'}
-    assert 'rate(omi_record_token_late_append_total[5m])' in rules[0]['data'][0]['model']['expr']
+    assert (
+        rules[0]['data'][0]['model']['expr'] == 'sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)'
+    )
+    combined = {rule['uid']: rule for rule in json.loads((path.parent.parent / 'alert-rules.json').read_text())}
+    assert all(combined[rule['uid']] == rule for rule in rules)
+    assert not rules[0]['isPaused']
+    assert rules[1]['isPaused'] or rules[1]['labels']['severity'] == 'warning'
     assert rules[0]['labels']['tier'] == 'page'
     assert rules[0]['for'] == '0s'
 
