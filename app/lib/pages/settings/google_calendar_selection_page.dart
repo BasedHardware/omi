@@ -1,3 +1,5 @@
+// Edit the connected Google account's read selection without changing event writes.
+// Unsaved choices remain local; unavailable saved calendars can be removed safely.
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/google_calendars.dart';

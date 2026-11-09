@@ -1,7 +1,8 @@
 import OmiTheme
 import SwiftUI
 
-/// The same owner/account-scoped selection used by mobile, imports and chat.
+/// Edit the same owner/account-scoped selection used by mobile, imports and chat.
+/// Keep drafts local until Save, preserving unavailable choices for explicit removal.
 struct GoogleCalendarSelectionEditor: View {
   @State private var data: GoogleCalendarSelection?
   @State private var selectedIDs: Set<String> = []

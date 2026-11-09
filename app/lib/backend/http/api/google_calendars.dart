@@ -1,3 +1,5 @@
+// Owner-fenced calendar catalog and selection requests using the typed HTTP client.
+// Saved choices invalidate cached meeting hints only after a confirmed server write.
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
