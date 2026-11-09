@@ -82,6 +82,9 @@ def test_list_processing_status_and_page_scoped_pending_count(monkeypatch, field
             ('failed', 'transcription_deadline_exceeded'),
         ),
         ({'status': 'processing'}, ('pending', None)),
+        ({'status': 'in_progress'}, ('pending', None)),
+        ({'status': 'merging'}, ('pending', None)),
+        ({'status': 'completed', 'structured': {'title': 'Finished'}}, ('done', None)),
         ({'record_projection_revision': 1}, ('done', None)),
     ],
 )

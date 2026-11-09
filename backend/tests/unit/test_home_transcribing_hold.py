@@ -88,8 +88,10 @@ def test_deadline_decay_and_raw_state(elapsed, title, status):
             ('failed', 'dead_letter'),
         ),
         ({'status': 'processing'}, ('pending', None)),
+        ({'status': 'in_progress'}, ('pending', None)),
+        ({'status': 'merging'}, ('pending', None)),
         ({'record_projection_revision': 1}, ('done', None)),
-        ({'structured': {'title': 'Finished'}}, ('done', None)),
+        ({'status': 'completed', 'structured': {'title': 'Finished'}}, ('done', None)),
         ({'transcript_segments': [{'text': 'landed'}]}, ('done', None)),
     ],
 )
@@ -106,7 +108,10 @@ def test_presentation_state_matches_title_without_mutating_storage(monkeypatch, 
     assert row == before
 
 
-@pytest.mark.parametrize('status,expected', [('completed', 'done'), ('processing', 'pending')])
+@pytest.mark.parametrize(
+    'status,expected',
+    [('completed', 'done'), ('processing', 'pending'), ('in_progress', 'pending'), ('merging', 'pending')],
+)
 def test_presentation_state_gate_off_uses_stored_status(monkeypatch, status, expected):
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     row = capture(status=status, record_upload_failed=True, home_transcription_deadline_at=NOW)

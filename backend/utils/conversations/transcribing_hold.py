@@ -70,7 +70,7 @@ def presentation_state(row: Mapping[str, Any], *, now: datetime | None = None) -
         if (now or datetime.now(timezone.utc)) >= deadline(row):
             return 'failed', 'transcription_deadline_exceeded'
         return 'transcribing', None
-    if getattr(row.get('status'), 'value', row.get('status')) == 'processing':
+    if getattr(row.get('status'), 'value', row.get('status')) in ('processing', 'in_progress', 'merging'):
         return 'pending', None
     return 'done', None
 

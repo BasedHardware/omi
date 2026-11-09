@@ -84,7 +84,7 @@ _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
     'processing_status': {
         'type': 'string',
         'enum': ['pending', 'transcribing', 'failed', 'done'],
-        'description': 'User-facing processing state. Stored processing rows are pending; the list tool includes completed rows only.',
+        'description': 'User-facing processing state. Active lifecycle states (processing, in_progress, merging) are pending; the list tool includes completed rows only.',
     },
     'failure_reason': {
         'type': ['string', 'null'],
