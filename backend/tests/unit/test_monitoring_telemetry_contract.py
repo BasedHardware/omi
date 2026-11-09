@@ -10,11 +10,15 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+import subprocess
 from typing import Any
 
 import pytest
 
 import yaml
+
+from scripts.alert_backtest import metric_names, prometheus
+from tests.unit.test_record_seal_cluster_repair_deploy import documents as repair_documents
 
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / 'backend/charts/monitoring'
@@ -37,6 +41,86 @@ CLOUD_RUN_SYNC_EXPORTER_DEV = (
 def _cpu_millicores(value: object) -> float:
     text = str(value)
     return float(text[:-1]) if text.endswith('m') else float(text) * 1000
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_every_record_token_alert_metric_survives_its_producer_scrape_filters(env):
+    rules = json.loads((MONITORING / 'alerts/record-token-lease.json').read_text())
+    queried = set().union(
+        *(metric_names(node['model']['expr']) for rule in rules for node in rule['data'] if prometheus(node))
+    )
+    producers = {
+        'omi_record_token_late_append_total': {'sync', 'pusher'},
+        'omi_record_token_lease_expired_sealed_total': {'repair'},
+        'omi_record_seal_oldest_age_seconds': {'repair'},
+    }
+    assert queried == set(producers), 'new alert metrics require their actual producer ingestion path'
+
+    def passes(name, relabels):
+        labels = {'__name__': name}
+        for rule in relabels:
+            value = ';'.join(labels.get(key, '') for key in rule['sourceLabels'])
+            matched = re.fullmatch(rule['regex'], value)
+            if rule['action'] == 'keep' and not matched or rule['action'] == 'drop' and matched:
+                return False
+        return True
+
+    sync = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    sync_relabels = sync['spec']['endpoints'][0]['metricRelabeling']
+    shared = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
+    shared_relabels = shared['spec']['endpoints'][0]['metricRelabeling']
+    # Keep the entire requested lease family, including histogram samples.
+    for metric in (
+        'omi_record_token_late_append_total',
+        'omi_record_token_lease_renewals_total',
+        'omi_record_token_lease_signal_gap_seconds_bucket',
+        'omi_record_token_lease_signal_gap_seconds_sum',
+        'omi_record_token_lease_signal_gap_seconds_count',
+        'omi_record_token_lease_active',
+        'omi_record_token_lease_expired_would_total',
+        'omi_record_token_lease_expired_sealed_total',
+    ):
+        assert passes(metric, sync_relabels), metric
+    pusher = REPO / 'backend/charts/pusher'
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            'prod-omi-pusher',
+            str(pusher),
+            '-n',
+            'prod-omi-backend',
+            '-f',
+            str(pusher / 'prod_omi_pusher_values.yaml'),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set',
+            'image.pullPolicy=IfNotPresent',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    pusher_monitors = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'PodMonitoring']
+    assert len(pusher_monitors) == 1
+    repair = repair_documents()['PodMonitoring', 'record-seal-repair']
+    paths = {
+        'sync': sync_relabels,
+        'pusher': pusher_monitors[0]['spec']['endpoints'][0].get('metricRelabeling', []),
+        'repair': repair['spec']['endpoints'][0].get('metricRelabeling', []),
+    }
+    for metric in queried:
+        for producer in producers[metric]:
+            assert passes(metric, paths[producer]), (producer, metric)
+        if 'sync' in producers[metric]:
+            assert passes(metric, shared_relabels)
+            for profile in ('', 'sync_'):
+                path = (
+                    MONITORING / f'prometheus-stackdriver-exporter/{env}_{profile}omi_cloud_run_metrics_exporter.yaml'
+                )
+                prefixes = yaml.safe_load(path.read_text())['stackdriver']['metrics']['prefixes']
+                assert f'prometheus.googleapis.com/{metric}/' in prefixes, (path.name, metric)
 
 
 def _memory_mebibytes(value: object) -> float:

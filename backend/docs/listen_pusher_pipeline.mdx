@@ -192,13 +192,20 @@ without changing seal decisions. Serve honors `RECORD_TOKEN_LEASE_MODE_SERVE_PER
 (default 0) with salt `record-token-lease`. Only observed custody appends and
 frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` inside
 the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
+Exact custody tokens additionally cover the backend-sync request timeout from
+`config/cloud_run_request_timeouts.json` plus `CUSTODY_REQUEST_MARGIN_SECONDS`
+(300s), giving a 3900s minimum; frame leases keep the configured duration.
 Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` serve-enable epoch. Stock lapses by enable + lease; retry wakes and refusal
 stamps cannot extend it. Only explicit server-observed activity renews it. Lease lapse never substitutes for retained-tail
 proof. Custody uploads first acquire an exact fence and bump revision only after
 durable acceptance; failed/refused uploads clear only that fence. Intentionally
 disabled archives do no custody writes. A serve-created
 podless custody fence retains its own lease exit in off/shadow; accepted bytes
-still schedule recovery after a mode rollback. Captured native input pins
+still schedule recovery after a mode rollback.
+An accepted durable append whose exact fence was lost records a revision bump
+and partial continuation transactionally, with an idempotent per-request receipt
+under the conversation's `record_custody_recoveries` subcollection. Privacy gates
+remain authoritative. Captured native input pins
 `record_input_upload_revision` on its jobs while lease observation is enabled.
 A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.

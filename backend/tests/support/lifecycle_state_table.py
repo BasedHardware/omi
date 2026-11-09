@@ -413,6 +413,7 @@ STATES = (
             alert=Alert('omi-record-token-lease-late-append', 'page'),
             deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
             note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal); '
+            'custody lease covers the configured sync request timeout plus a named margin. '
             'abandon attestation; or computed lease lapse. Off preserves original producer proof.',
         ),
         row(
@@ -439,7 +440,9 @@ STATES = (
             note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
             'clears token map and re-arms hourly inventory; late frames re-activate via renew_record_token_lease. '
             'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
-            'only after durable acceptance in finish, including after rollback. Recovery is independent of '
+            'only after durable acceptance in finish, including after rollback. A lost accepted fence recovers via '
+            'record_custody_append.recover_committed with an exact-request durable receipt and partial continuation. '
+            'Recovery is independent of '
             'conversation status; uncaptured input reopens for normal admission of the newer revision. Never deletes audio.',
         ),
         row(

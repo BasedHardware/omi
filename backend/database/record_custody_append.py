@@ -1,5 +1,6 @@
 """Exact upload fences: acquire before storage, revise only after acceptance."""
 
+import hashlib
 import time
 
 from google.cloud import firestore
@@ -8,6 +9,7 @@ from config import record_seal_rules as lease
 from database._client import get_firestore_client, run_transactional
 from database import record_token_lease_metrics as metrics
 from database.record_audio import RecordUploadCapacityExceeded
+from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
 
 class RecordCustodyFenceLost(RuntimeError):
@@ -52,7 +54,7 @@ def begin(uid, cid, session, *, firestore_client=None):
             'pod': '',
             'process_started_at': now,
             'last_signal_at': now,
-            'lease_expires_at': now + lease.token_lease_seconds(),
+            'lease_expires_at': now + lease.custody_token_lease_seconds(),
             'signal_source': 'custody_append',
             'append_late': late,
         }
@@ -87,8 +89,6 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
             patch['record_upload_revision'] = revision
             # Begin already acquired serve custody. A rollback cannot cancel
             # recovery of bytes accepted under that durable obligation.
-            from database.batch_pipeline_record_lease_recovery import prepare_recovery
-
             recovered, recovery = prepare_recovery(client, tx, uid, cid, row, revision, time.time())
             patch.update(recovered)
             late |= bool(recovery)
@@ -101,6 +101,48 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
     if late:
         metrics.LATE_APPEND.inc()
     return late
+
+
+def recover_committed(uid, cid, session, *, firestore_client=None):
+    """Finalize accepted bytes after a lost fence; persist an exact-request receipt.
+
+    Only the request that acquired serve custody calls this after durable storage
+    and an accepted response. The receipt makes retries of this recovery no-ops.
+    It contains metadata only; original audio and work remain immutable.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    receipt = ref.collection('record_custody_recoveries').document(hashlib.sha256(session.encode()).hexdigest())
+
+    @firestore.transactional
+    def commit(tx):
+        if receipt.get(transaction=tx).exists:
+            return False
+        row = ref.get(transaction=tx).to_dict() or {}
+        if (
+            not row
+            or row.get('deleted')
+            or row.get('record_lane_owner') not in {None, 'batch_live_v1', 'batch_sync_v1'}
+        ):
+            raise RecordCustodyFenceLost('accepted custody cannot revise a missing or ineligible conversation')
+        sessions = dict(row.get('record_upload_sessions') or {})
+        token = sessions.get(session)
+        if isinstance(token, dict) and token.get('signal_source') == 'custody_append':
+            sessions.pop(session)
+        now = time.time()
+        revision = int(row.get('record_upload_revision') or 0) + 1
+        recovered, recovery = prepare_recovery(client, tx, uid, cid, row, revision, now)
+        patch = {'record_upload_sessions': sessions, 'record_upload_revision': revision, **recovered}
+        if recovery:
+            tx.set(*recovery)
+        tx.update(ref, patch)
+        tx.set(receipt, {'upload_revision': revision, 'recorded_at': now})
+        return True
+
+    recovered = run_transactional(client, commit, transient=True)
+    if recovered:
+        metrics.LATE_APPEND.inc()
+    return recovered
 
 
 def late_snapshot(uid, cid, *, firestore_client=None):

@@ -1866,6 +1866,12 @@ FIELD_SITES = {
     'database/record_custody_append.py': [
         ('begin.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         ('finish.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
+        (
+            'recover_committed.commit',
+            'record_upload_sessions',
+            'sessions',
+            ('record_upload_revision', 'record_upload_sessions'),
+        ),
     ],
     'database/batch_pipeline_record_lease_recovery.py': [
         ('prepare_recovery', 'record_audio_closed', 'False', ('record_audio_closed',)),

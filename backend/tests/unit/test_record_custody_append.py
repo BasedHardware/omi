@@ -1,6 +1,7 @@
 """Real custody metadata transactions around accepted/refused storage requests."""
 
 from copy import deepcopy
+import hashlib
 from unittest.mock import Mock
 
 import pytest
@@ -10,10 +11,12 @@ from starlette.responses import JSONResponse
 from database import record_custody_append as database
 from database import record_token_lease_metrics as metrics
 from config.record_audio import record_identity
+from config import record_seal_rules as lease
 from database.batch_pipeline_record_lease_recovery import recovery_segment
 from utils.sync import record_token_lease as request
 from tests.unit.test_record_token_lease import PATH, ROW, NOW
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 
 
 @pytest.mark.parametrize('status,durable', [(202, True), (409, True), (503, True), (202, False)])
@@ -169,3 +172,79 @@ async def test_disabled_archive_preserves_original_response_without_append(monke
     assert client.rows[PATH] == before
     assert metrics.LATE_APPEND._value.get() == counter
     assert not any(row.get('partial_coordinator') for row in client.rows.values())
+
+
+@pytest.mark.parametrize('lose_fence', [False, True])
+@pytest.mark.parametrize('final_mode', ['serve', 'off'])
+async def test_durable_archive_outlives_old_lease_and_recovers_a_lost_fence(monkeypatch, lose_fence, final_mode):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_SECONDS', '3600')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    clock = [NOW]
+    monkeypatch.setattr(database.time, 'time', lambda: clock[0])
+    content, original = record_identity('synthetic', 'record')
+    client = StrictFirestore(
+        {
+            PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': False},
+            ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
+            ('batch_pipeline_dev_jobs', original): {
+                'segment_id': original,
+                'owner_id': 'synthetic',
+                'conversation_id': 'record',
+                'record_content_id': content,
+                'record_input_upload_revision': 7,
+                'state': 'ready',
+            },
+        }
+    )
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(request.record_audio, 'get_firestore_client', lambda: client)
+    session = 'custody:long-archive'
+    committed = {}
+    counter = metrics.LATE_APPEND._value.get()
+    response = JSONResponse(status_code=202, content={'status': 'queued'})
+
+    def archive(uid, paths, metadata):
+        # One operation cannot heartbeat while blocked. Repair still sees a
+        # live uploader past the old default lease, including after rollback.
+        clock[0] = NOW + lease.token_lease_seconds() + 1
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', final_mode)
+        row = client.rows[PATH]
+        assert row['record_upload_sessions'][session]['lease_expires_at'] > clock[0]
+        assert not producer_tokens_dead(row['record_upload_sessions'], None, uid=uid, row=row)
+        committed['object'] = b'new interior audio'
+        if lose_fence:
+            # Simulate a competing repair/old pod clearing custody and sealing
+            # old input immediately before the successful object commit returns.
+            row['record_upload_sessions'].pop(session)
+            row['record_audio_closed'] = True
+        return ['committed-object']
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'long-archive')
+        token = client.rows[PATH]['record_upload_sessions'][session]
+        assert token['lease_expires_at'] - token['last_signal_at'] == lease.custody_token_lease_seconds()
+        archived = await request.archive(archive, 'synthetic', ['local-audio'], {})
+        request.stored(['local-audio'], archived)
+        return response
+
+    assert await upload() is response
+    row = client.rows[PATH]
+    assert row['record_upload_revision'] == 8
+    assert not row['record_audio_closed'] and not row['record_upload_sessions']
+    assert row['record_audio_partial']['upload_revision'] == 8
+    recovery = client.rows['batch_pipeline_dev_jobs', recovery_segment('synthetic', 'record')]
+    assert recovery['partial_coordinator'] and recovery['state'] == 'record_pending'
+    assert committed == {'object': b'new interior audio'}
+    assert metrics.LATE_APPEND._value.get() == counter + 1
+    if lose_fence:
+        receipt = (*PATH, 'record_custody_recoveries', hashlib.sha256(session.encode()).hexdigest())
+        assert client.rows[receipt]['upload_revision'] == 8
+        before = deepcopy(client.rows)
+        assert not database.recover_committed('synthetic', 'record', session, firestore_client=client)
+        assert client.rows == before
+        assert not client.transactions[-1].updates
+        assert metrics.LATE_APPEND._value.get() == counter + 1
+    assert request._upload.get() is None

@@ -400,10 +400,11 @@ def test_crashed_custody_token_keeps_own_lease_exit_after_rollback(enabled, monk
     token = row['record_upload_sessions']['custody:crashed']
     assert token['pod'] == ''
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    for elapsed in (0, 3599, 3600):
+    duration = lease.custody_token_lease_seconds()
+    for elapsed in (0, duration - 1, duration):
         monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + elapsed)
         assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
-    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + 3601)
+    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + duration + 1)
     assert producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
     if mode == 'off':
         assert not producer_tokens_dead({'frame': TOKEN}, None, uid='synthetic', row=row)

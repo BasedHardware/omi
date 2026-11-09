@@ -1,10 +1,36 @@
 """Independent default-on rollback switches for approved seal proof rules."""
 
 from datetime import datetime
+from functools import lru_cache
+import json
 import math
 import os
+from pathlib import Path
 
 from config.refactor_modes import RECORD_TOKEN_LEASE_MODE_ENV, mode, serving_for
+
+# Cover request teardown and final custody metadata after the Cloud Run timeout.
+# This floor applies only to the exact, podless custody token, never frame leases.
+CUSTODY_REQUEST_MARGIN_SECONDS = 300
+
+
+@lru_cache(maxsize=1)
+def custody_request_timeout_seconds():
+    """Packaged deployment config; read lazily, with no credentials or env override."""
+    value = json.loads(Path(__file__).with_name('cloud_run_request_timeouts.json').read_text())['backend-sync']
+    if type(value) is not int or value <= 0:
+        raise ValueError('positive backend-sync request timeout required')
+    return value
+
+
+def custody_token_lease_seconds():
+    return max(token_lease_seconds(), custody_request_timeout_seconds() + CUSTODY_REQUEST_MARGIN_SECONDS)
+
+
+def producer_token_lease_seconds(token):
+    if token.get('pod') == '' and token.get('signal_source') == 'custody_append':
+        return custody_token_lease_seconds()
+    return token_lease_seconds()
 
 
 def overlap_trim_enabled():

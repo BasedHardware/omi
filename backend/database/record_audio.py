@@ -223,7 +223,7 @@ def renew_record_token_lease(
             and identified
             and all(
                 (signal := record_seal_rules.lease_timestamp(token.get('last_signal_at')))
-                and now - signal < record_seal_rules.token_lease_seconds() / 2
+                and now - signal < record_seal_rules.producer_token_lease_seconds(token) / 2
                 for token in identified
             )
         ):
@@ -262,7 +262,9 @@ def renew_record_token_lease(
             sessions[key] = {
                 **token,
                 'last_signal_at': signal,
-                'lease_expires_at': max(signal + record_seal_rules.token_lease_seconds(), clocks[1] if clocks else 0),
+                'lease_expires_at': max(
+                    signal + record_seal_rules.producer_token_lease_seconds(token), clocks[1] if clocks else 0
+                ),
                 'signal_source': source,
             }
             sessions[key].pop('abandoned_at', None)

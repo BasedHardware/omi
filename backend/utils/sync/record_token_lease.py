@@ -38,14 +38,26 @@ def custody_upload(fn):
             try:
                 accepted = bool(state.get('durable') and accepted_response(response))
                 if state.get('session'):
-                    await run_blocking(
-                        db_executor,
-                        record_custody_append.finish,
-                        state['uid'],
-                        state['cid'],
-                        state['session'],
-                        accepted=accepted,
-                    )
+                    try:
+                        await run_blocking(
+                            db_executor,
+                            record_custody_append.finish,
+                            state['uid'],
+                            state['cid'],
+                            state['session'],
+                            accepted=accepted,
+                        )
+                    except record_custody_append.RecordCustodyFenceLost:
+                        if not accepted:
+                            raise
+                        await run_blocking(
+                            db_executor,
+                            record_custody_append.recover_committed,
+                            state['uid'],
+                            state['cid'],
+                            state['session'],
+                        )
+                        logger.warning('event=record_token_lease_completion outcome=recovered_lost_fence')
                     if accepted_response(response) and not state.get('durable') and not state.get('no_append'):
                         raise HTTPException(
                             status_code=503, detail='Retain local audio until durable custody is available'
