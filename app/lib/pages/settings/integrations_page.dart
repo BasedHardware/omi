@@ -30,12 +30,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 enum IntegrationApp { appleHealth, googleCalendar, gmail }
 
-enum _IntegrationAuthOutcome {
-  alreadyAuthenticated,
-  cancelled,
-  started,
-  failed,
-}
+enum _IntegrationAuthOutcome { alreadyAuthenticated, cancelled, started, failed }
 
 extension IntegrationAppExtension on IntegrationApp {
   String get displayName {
@@ -100,17 +95,11 @@ extension IntegrationAppExtension on IntegrationApp {
   Color get iconColor {
     switch (this) {
       case IntegrationApp.googleCalendar:
-        return const Color(
-          0xFF4285F4,
-        ); // omi-ux-allow: color-literal -- third-party brand colour
+        return const Color(0xFF4285F4); // omi-ux-allow: color-literal -- third-party brand colour
       case IntegrationApp.gmail:
-        return const Color(
-          0xFFEA4335,
-        ); // omi-ux-allow: color-literal -- third-party brand colour
+        return const Color(0xFFEA4335); // omi-ux-allow: color-literal -- third-party brand colour
       case IntegrationApp.appleHealth:
-        return const Color(
-          0xFFFF2D55,
-        ); // omi-ux-allow: color-literal -- third-party brand colour
+        return const Color(0xFFFF2D55); // omi-ux-allow: color-literal -- third-party brand colour
     }
   }
 
@@ -149,21 +138,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     try {
       await context.read<AppProvider>().ensureCatalogLoaded();
     } catch (e, s) {
-      Logger.handle(
-        e,
-        s,
-        message: 'Error loading the app catalog on Integrations',
-      );
+      Logger.handle(e, s, message: 'Error loading the app catalog on Integrations');
     }
   }
 
   @override
   void dispose() {
     for (final attempt in _pendingIntegrationAttempts.values) {
-      attempt.complete(
-        ProductOutcome.unobserved,
-        failure: ProductFailure.incomplete,
-      );
+      attempt.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
     }
     _pendingIntegrationAttempts.clear();
     for (final wait in _connectionWaits.values) {
@@ -190,9 +172,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     unawaited(context.read<MessagingChannelsProvider>().load());
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
-    await context.read<IntegrationProvider>().loadFromBackend(
-          forceRefresh: forceRefresh,
-        );
+    await context.read<IntegrationProvider>().loadFromBackend(forceRefresh: forceRefresh);
     _resolvePendingIntegrationAttempts();
   }
 
@@ -222,31 +202,22 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       },
     );
     _connectionWaits[app] = wait;
-    unawaited(
-      wait.start().then((outcome) {
-        if (!mounted || !identical(_connectionWaits[app], wait)) return;
-        _connectionWaits.remove(app);
-        _pendingIntegrationAttempts.remove(app);
-        if (outcome == ConnectionWaitOutcome.connected) {
-          attempt.complete(ProductOutcome.success);
-          PlatformManager.instance.analytics.integrationConnectSucceeded(
-            integrationName: app.displayName,
-          );
-          OmiFeedback.confirm(
-            context,
-            context.l10n.connectedToApp(app.displayName),
-          );
-        } else if (outcome == ConnectionWaitOutcome.cancelled) {
-          attempt.complete(ProductOutcome.superseded);
-        } else {
-          attempt.complete(
-            ProductOutcome.failure,
-            failure: outcome == ConnectionWaitOutcome.timedOut ? ProductFailure.timeout : ProductFailure.network,
-          );
-          OmiFeedback.error(context, context.l10n.connectionErrorDesc);
-        }
-      }),
-    );
+    unawaited(wait.start().then((outcome) {
+      if (!mounted || !identical(_connectionWaits[app], wait)) return;
+      _connectionWaits.remove(app);
+      _pendingIntegrationAttempts.remove(app);
+      if (outcome == ConnectionWaitOutcome.connected) {
+        attempt.complete(ProductOutcome.success);
+        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
+        OmiFeedback.confirm(context, context.l10n.connectedToApp(app.displayName));
+      } else if (outcome == ConnectionWaitOutcome.cancelled) {
+        attempt.complete(ProductOutcome.superseded);
+      } else {
+        attempt.complete(ProductOutcome.failure,
+            failure: outcome == ConnectionWaitOutcome.timedOut ? ProductFailure.timeout : ProductFailure.network);
+        OmiFeedback.error(context, context.l10n.connectionErrorDesc);
+      }
+    }));
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
@@ -260,20 +231,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         ProductJourney.integrationConnect,
         surface: ProductSurface.integration,
       );
-      PlatformManager.instance.analytics.integrationConnectAttempted(
-        integrationName: app.displayName,
-      );
+      PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: app.displayName);
 
       if (app == IntegrationApp.googleCalendar) {
         final service = GoogleCalendarService();
         final uid = SharedPreferencesUtil().uid;
-        final outcome = await _handleAuthFlow(
-          app,
-          service.isAuthenticated,
-          () => service.authenticate(
-            isCurrent: () => mounted && SharedPreferencesUtil().uid == uid,
-          ),
-        );
+        final outcome = await _handleAuthFlow(app, service.isAuthenticated,
+            () => service.authenticate(isCurrent: () => mounted && SharedPreferencesUtil().uid == uid));
         _completeIntegrationAttempt(attempt, app, outcome);
         return;
       }
@@ -281,13 +245,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       if (app == IntegrationApp.gmail) {
         final service = GmailService();
         final uid = SharedPreferencesUtil().uid;
-        final outcome = await _handleAuthFlow(
-          app,
-          service.isAuthenticated,
-          () => service.authenticate(
-            isCurrent: () => mounted && SharedPreferencesUtil().uid == uid,
-          ),
-        );
+        final outcome = await _handleAuthFlow(app, service.isAuthenticated,
+            () => service.authenticate(isCurrent: () => mounted && SharedPreferencesUtil().uid == uid));
         _completeIntegrationAttempt(attempt, app, outcome);
         return;
       }
@@ -297,10 +256,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         if (mounted && context.read<IntegrationProvider>().isAppConnected(app)) {
           attempt.complete(ProductOutcome.success);
         } else {
-          attempt.complete(
-            ProductOutcome.failure,
-            failure: ProductFailure.permissionDenied,
-          );
+          attempt.complete(ProductOutcome.failure, failure: ProductFailure.permissionDenied);
         }
         return;
       }
@@ -310,11 +266,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     }
   }
 
-  void _completeIntegrationAttempt(
-    ProductAttempt attempt,
-    IntegrationApp app,
-    _IntegrationAuthOutcome outcome,
-  ) {
+  void _completeIntegrationAttempt(ProductAttempt attempt, IntegrationApp app, _IntegrationAuthOutcome outcome) {
     switch (outcome) {
       case _IntegrationAuthOutcome.alreadyAuthenticated:
         attempt.complete(ProductOutcome.success);
@@ -322,18 +274,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         if (mounted) {
           _waitForIntegration(app, attempt);
         } else {
-          attempt.complete(
-            ProductOutcome.unobserved,
-            failure: ProductFailure.incomplete,
-          );
+          attempt.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
         }
       case _IntegrationAuthOutcome.cancelled:
         attempt.complete(ProductOutcome.cancelled);
       case _IntegrationAuthOutcome.failed:
-        attempt.complete(
-          ProductOutcome.failure,
-          failure: ProductFailure.network,
-        );
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
     }
   }
 
@@ -362,20 +308,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final success = await authenticate();
     if (success) {
       if (mounted) OmiFeedback.info(context, context.l10n.completeAuthInBrowser);
-      Logger.debug(
-        '✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress',
-      );
+      Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       return _IntegrationAuthOutcome.started;
     } else {
-      PlatformManager.instance.analytics.integrationConnectFailed(
-        integrationName: app.displayName,
-      );
-      if (mounted) {
-        OmiFeedback.error(
-          context,
-          context.l10n.failedToStartAuth(app.displayName),
-        );
-      }
+      PlatformManager.instance.analytics.integrationConnectFailed(integrationName: app.displayName);
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToStartAuth(app.displayName));
       return _IntegrationAuthOutcome.failed;
     }
   }
@@ -396,46 +333,29 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       await _handleDisconnect(app, GmailService().disconnect);
     } else if (app == IntegrationApp.appleHealth) {
       final success = await context.read<IntegrationProvider>().deleteConnection(IntegrationApp.appleHealth.key);
-      if (success) {
-        PlatformManager.instance.analytics.integrationDisconnected(
-          integrationName: 'Apple Health',
-        );
-      }
+      if (success) PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
       if (!mounted) return;
       if (success) {
-        OmiFeedback.confirm(
-          context,
-          context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName),
-        );
+        OmiFeedback.confirm(context, context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName));
       } else {
         OmiFeedback.error(context, context.l10n.failedToDisconnect);
       }
     }
   }
 
-  Future<void> _handleDisconnect(
-    IntegrationApp app,
-    Future<bool> Function() disconnect,
-  ) async {
+  Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
     // Capture the provider before the async gap to avoid use_build_context_synchronously
     final integrationProvider = context.read<IntegrationProvider>();
 
     final success = await disconnect();
     if (success) {
-      PlatformManager.instance.analytics.integrationDisconnected(
-        integrationName: app.displayName,
-      );
+      PlatformManager.instance.analytics.integrationDisconnected(integrationName: app.displayName);
       // Re-read every row: Gmail and Google Calendar share one grant, so dropping
       // either one also disconnects the other.
       if (mounted) {
         await integrationProvider.loadFromBackend();
       }
-      if (mounted) {
-        OmiFeedback.confirm(
-          context,
-          context.l10n.disconnectedFrom(app.displayName),
-        );
-      }
+      if (mounted) OmiFeedback.confirm(context, context.l10n.disconnectedFrom(app.displayName));
     } else {
       if (mounted) OmiFeedback.error(context, context.l10n.failedToDisconnect);
     }
@@ -462,10 +382,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       child: Container(
         width: 80,
         height: 32,
-        decoration: BoxDecoration(
-          color: OmiColors.surface2,
-          borderRadius: OmiRadius.pillAll,
-        ),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
       ),
     );
   }
@@ -476,21 +393,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : OmiColors.surface2,
         borderRadius: OmiRadius.smAll,
       ),
-      child: Icon(
-        app.icon,
-        color: isAvailable ? app.iconColor : OmiColors.textTertiary,
-        size: 24,
-      ),
+      child: Icon(app.icon, color: isAvailable ? app.iconColor : OmiColors.textTertiary, size: 24),
     );
   }
 
   /// One tappable row: the whole row is the button, announced with its trailing action.
-  Widget _buildRow({
-    required Widget leading,
-    required String title,
-    required Widget trailing,
-    VoidCallback? onTap,
-  }) {
+  Widget _buildRow({required Widget leading, required String title, required Widget trailing, VoidCallback? onTap}) {
     return MergeSemantics(
       child: Semantics(
         button: true,
@@ -500,9 +408,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
             child: Row(
               children: [
-                ExcludeSemantics(
-                  child: SizedBox(width: 40, height: 40, child: leading),
-                ),
+                ExcludeSemantics(child: SizedBox(width: 40, height: 40, child: leading)),
                 const SizedBox(width: OmiSpacing.md),
                 Expanded(child: Text(title, style: OmiType.body)),
                 trailing,
@@ -523,22 +429,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (isLoading) {
       trailing = _buildShimmerButton();
     } else if (statusError) {
-      trailing = IntegrationStatusChip(
-        context.l10n.tryAgain,
-        tone: IntegrationChipTone.muted,
-      );
+      trailing = IntegrationStatusChip(context.l10n.tryAgain, tone: IntegrationChipTone.muted);
     } else if (!isAvailable) {
-      trailing = IntegrationStatusChip(
-        context.l10n.comingSoon,
-        tone: IntegrationChipTone.muted,
-      );
+      trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
     } else if (!isConnected) {
       trailing = IntegrationStatusChip(context.l10n.connect);
     } else {
-      trailing = IntegrationStatusChip(
-        context.l10n.disconnect,
-        tone: IntegrationChipTone.danger,
-      );
+      trailing = IntegrationStatusChip(context.l10n.disconnect, tone: IntegrationChipTone.danger);
     }
 
     return _buildRow(
@@ -583,48 +480,23 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   Widget _buildCreateYourOwnAppTile() {
     return _buildRow(
       leading: Container(
-        decoration: BoxDecoration(
-          color: OmiColors.surface2,
-          borderRadius: OmiRadius.smAll,
-        ),
-        child: Icon(
-          Icons.add_circle_outline,
-          color: OmiColors.textPrimary,
-          size: 24,
-        ),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        child: Icon(Icons.add_circle_outline, color: OmiColors.textPrimary, size: 24),
       ),
       title: context.l10n.createYourOwnApp,
-      trailing: Icon(
-        Icons.chevron_right,
-        color: OmiColors.textTertiary,
-        size: 20,
-      ),
-      onTap: () => routeToPage(
-        context,
-        const AddAppPage(presetExternalIntegration: true),
-      ),
+      trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
+      onTap: () => routeToPage(context, const AddAppPage(presetExternalIntegration: true)),
     );
   }
 
   Widget _buildAddMcpServerTile() {
     return _buildRow(
       leading: Container(
-        decoration: BoxDecoration(
-          color: OmiColors.surface2,
-          borderRadius: OmiRadius.smAll,
-        ),
-        child: Icon(
-          Icons.cable_rounded,
-          color: OmiColors.textPrimary,
-          size: 22,
-        ),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        child: Icon(Icons.cable_rounded, color: OmiColors.textPrimary, size: 22),
       ),
       title: context.l10n.addMcpServer,
-      trailing: Icon(
-        Icons.chevron_right,
-        color: OmiColors.textTertiary,
-        size: 20,
-      ),
+      trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
       onTap: () {
         PlatformManager.instance.analytics.pageOpened('Add MCP Server');
         routeToPage(context, const AddMcpServerPage());
@@ -640,10 +512,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.integrations),
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
       body: SafeArea(
         bottom: false,
         child: ExploreInstallPage(
@@ -655,49 +524,29 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 children: [
                   if (provider.hasLoadError)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-                      child: Semantics(
-                        liveRegion: true,
-                        child: Text(
-                          context.l10n.connectionErrorDesc,
-                          style: OmiType.subhead,
-                        ),
-                      ),
-                    ),
+                        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                        child: Semantics(
+                            liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
                   const ChatAppsIntegrationsEntry(),
-                  OmiSettingsGroup(
-                    children: [
-                      if (!isLoading &&
-                          provider.isAppConnected(
-                            IntegrationApp.googleCalendar,
-                          ))
-                        OmiSettingsRow(
-                          key: const ValueKey(
-                            'google_calendar_selection_entry',
-                          ),
-                          leading: const Icon(Icons.calendar_today),
-                          title: context.l10n.calendarSettings,
-                          onTap: () => routeToPage(
-                            context,
-                            const GoogleCalendarSelectionPage(),
-                          ),
-                        ),
+                  OmiSettingsGroup(children: [
+                    if (!isLoading && provider.isAppConnected(IntegrationApp.googleCalendar))
                       OmiSettingsRow(
-                        key: const ValueKey('task_integrations_entry'),
-                        leading: const Icon(Icons.checklist_rounded),
-                        title: context.l10n.taskIntegrations,
-                        onTap: () => routeToPage(context, const TaskIntegrationsPage()),
+                        key: const ValueKey('google_calendar_selection_entry'),
+                        leading: const Icon(Icons.calendar_today),
+                        title: context.l10n.calendarSettings,
+                        onTap: () => routeToPage(context, const GoogleCalendarSelectionPage()),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: OmiSpacing.md),
-                  ...IntegrationApp.values.map(
-                    (app) => _buildAppTile(app, isLoading),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: OmiSpacing.xs,
+                    OmiSettingsRow(
+                      key: const ValueKey('task_integrations_entry'),
+                      leading: const Icon(Icons.checklist_rounded),
+                      title: context.l10n.taskIntegrations,
+                      onTap: () => routeToPage(context, const TaskIntegrationsPage()),
                     ),
+                  ]),
+                  const SizedBox(height: OmiSpacing.md),
+                  ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
                     child: Divider(color: OmiColors.border, thickness: 1),
                   ),
                   _buildCreateYourOwnAppTile(),

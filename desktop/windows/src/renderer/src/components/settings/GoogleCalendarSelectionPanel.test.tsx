@@ -7,7 +7,10 @@ const h = vi.hoisted(() => ({
   auth: { currentUser: { uid: 'owner' } as { uid: string } | null },
   changed: undefined as undefined | (() => void),
   load: vi.fn(),
-  save: vi.fn()
+  save: vi.fn(),
+  oauth: vi.fn(),
+  poll: vi.fn(),
+  open: vi.fn()
 }))
 vi.mock('../../lib/firebase', () => ({ auth: h.auth }))
 vi.mock('firebase/auth', () => ({
@@ -21,6 +24,11 @@ vi.mock('firebase/auth', () => ({
 vi.mock('../../lib/googleCalendarSelection', () => ({
   loadGoogleCalendarSelection: h.load,
   saveGoogleCalendarSelection: h.save
+}))
+vi.mock('../../lib/calendarConnect', () => ({
+  getCalendarOAuthUrl: h.oauth,
+  getCalendarStatus: vi.fn(),
+  pollUntilConnected: h.poll
 }))
 const catalog = () => ({
   account_id: 'personal@example.test',
@@ -39,6 +47,10 @@ beforeEach(() => {
   h.save
     .mockReset()
     .mockImplementation(async (_data, selected_ids) => ({ ...catalog(), selected_ids }))
+  h.oauth.mockReset().mockResolvedValue('https://accounts.google.com/test-consent')
+  h.poll.mockReset().mockResolvedValue(true)
+  h.open.mockReset().mockResolvedValue(true)
+  ;(window as unknown as { omi: unknown }).omi = { openExternalUrl: h.open }
 })
 afterEach(cleanup)
 async function open(): Promise<void> {
@@ -113,4 +125,62 @@ it('an old load completing after an account replacement cannot publish names', a
     release(old)
   })
   expect(screen.queryByLabelText('Personal')).toBeNull()
+})
+
+it('Settings can connect Google Calendar and discover choices without returning to onboarding', async () => {
+  render(<GoogleCalendarSelectionPanel />)
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Google Calendar' }))
+  await screen.findByLabelText('Personal')
+  expect(h.open).toHaveBeenCalledWith('https://accounts.google.com/test-consent')
+  expect(h.poll).toHaveBeenCalledTimes(1)
+  expect(h.load).toHaveBeenCalledTimes(1)
+})
+
+it('a late OAuth URL cannot open a browser for a replacement account', async () => {
+  let release!: (value: string) => void
+  h.oauth.mockReturnValue(
+    new Promise((resolve) => {
+      release = resolve
+    })
+  )
+  render(<GoogleCalendarSelectionPanel />)
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Google Calendar' }))
+  act(() => {
+    h.auth.currentUser = { uid: 'replacement' }
+    h.changed!()
+  })
+  await act(async () => {
+    release('https://accounts.google.com/old-consent')
+  })
+  expect(h.open).not.toHaveBeenCalled()
+  expect(h.load).not.toHaveBeenCalled()
+})
+
+it('canceling the connection ignores a late poll result', async () => {
+  let release!: (value: boolean) => void
+  h.poll.mockReturnValue(
+    new Promise((resolve) => {
+      release = resolve
+    })
+  )
+  render(<GoogleCalendarSelectionPanel />)
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Google Calendar' }))
+  await waitFor(() => expect(h.poll).toHaveBeenCalledTimes(1))
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel connection' }))
+  await act(async () => {
+    release(true)
+  })
+  expect(h.load).not.toHaveBeenCalled()
+  expect(
+    (screen.getByRole('button', { name: 'Connect Google Calendar' }) as HTMLButtonElement).disabled
+  ).toBe(false)
+})
+
+it('a refused browser launch surfaces a retryable error without polling or claiming connection', async () => {
+  h.open.mockResolvedValue(false)
+  render(<GoogleCalendarSelectionPanel />)
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Google Calendar' }))
+  await screen.findByRole('alert')
+  expect(h.poll).not.toHaveBeenCalled()
+  expect(h.load).not.toHaveBeenCalled()
 })

@@ -61,7 +61,7 @@ this same authority rather than reintroducing a primary-only source.
       primary default → multiple calendars → persisted reopen → secondary-only reads
 - [x] macOS compile and 13 production transport/auth/reader tests
 - [ ] macOS named QA app picker journey
-- [x] Windows/Linux typecheck, 21 UI/transport/owner-fence tests and changed-file ESLint
+- [x] Windows/Linux typecheck, 30 UI/transport/owner-fence tests and changed-file ESLint
 - [ ] Generated API/schema consumers and repository preflight
 - [ ] Final diff review and exact-head CI; remain draft until required gates pass
 

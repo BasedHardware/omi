@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
+import {
+  getCalendarOAuthUrl,
+  getCalendarStatus,
+  pollUntilConnected
+} from '../../lib/calendarConnect'
 import {
   loadGoogleCalendarSelection,
   saveGoogleCalendarSelection,
@@ -13,18 +18,62 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const mounted = useRef(true)
+  const connectionSerial = useRef(0)
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, () => {
-        setData(null)
-        setSelected([])
+  useEffect(() => {
+    mounted.current = true
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      connectionSerial.current++
+      setData(null)
+      setSelected([])
+      setBusy(false)
+      setFailed(false)
+      setSaved(false)
+      setConnecting(false)
+    })
+    return () => {
+      mounted.current = false
+      connectionSerial.current++
+      unsubscribe()
+    }
+  }, [])
+
+  const connect = async (): Promise<void> => {
+    const owner = auth.currentUser
+    if (!owner || busy) return
+    const attempt = ++connectionSerial.current
+    const current = (): boolean =>
+      mounted.current && auth.currentUser === owner && attempt === connectionSerial.current
+    setBusy(true)
+    setConnecting(true)
+    setFailed(false)
+    try {
+      const url = await getCalendarOAuthUrl(current)
+      if (!current()) return
+      if (!(await window.omi.openExternalUrl(url))) throw new Error('Browser did not open')
+      if (!current()) return
+      const connected = await pollUntilConnected(() => getCalendarStatus(current), {
+        intervalMs: 2000,
+        maxAttempts: 60,
+        canceled: () => !current()
+      })
+      if (!current()) return
+      if (!connected) throw new Error('Calendar connection not completed')
+      const result = await loadGoogleCalendarSelection()
+      if (!current()) return
+      setData(result)
+      setSelected(result.selected_ids)
+    } catch {
+      if (current()) setFailed(true)
+    } finally {
+      if (current()) {
         setBusy(false)
-        setFailed(false)
-        setSaved(false)
-      }),
-    []
-  )
+        setConnecting(false)
+      }
+    }
+  }
 
   const load = async (): Promise<void> => {
     const owner = auth.currentUser
@@ -34,13 +83,13 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
     setData(null)
     try {
       const result = await loadGoogleCalendarSelection()
-      if (auth.currentUser !== owner) return
+      if (!mounted.current || auth.currentUser !== owner) return
       setData(result)
       setSelected(result.selected_ids)
     } catch {
-      if (auth.currentUser === owner) setFailed(true)
+      if (mounted.current && auth.currentUser === owner) setFailed(true)
     } finally {
-      if (auth.currentUser === owner) setBusy(false)
+      if (mounted.current && auth.currentUser === owner) setBusy(false)
     }
   }
 
@@ -51,14 +100,14 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
     setSaved(false)
     try {
       const result = await saveGoogleCalendarSelection(data, selected)
-      if (auth.currentUser !== data.owner) return
+      if (!mounted.current || auth.currentUser !== data.owner) return
       setData(result)
       setSelected(result.selected_ids)
       setSaved(true)
     } catch {
-      if (auth.currentUser === data.owner) setFailed(true)
+      if (mounted.current && auth.currentUser === data.owner) setFailed(true)
     } finally {
-      if (auth.currentUser === data.owner) setBusy(false)
+      if (mounted.current && auth.currentUser === data.owner) setBusy(false)
     }
   }
 
@@ -67,6 +116,26 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
       <button className="btn-ghost disabled:opacity-40" disabled={busy} onClick={load}>
         {busy ? 'Working…' : 'Choose Calendars'}
       </button>
+      {!data && (
+        <button className="btn-ghost disabled:opacity-40" disabled={busy} onClick={connect}>
+          Connect Google Calendar
+        </button>
+      )}
+      {connecting && (
+        <div>
+          <p role="status">Finish Google sign-in in your browser.</p>
+          <button
+            className="btn-ghost"
+            onClick={() => {
+              connectionSerial.current++
+              setConnecting(false)
+              setBusy(false)
+            }}
+          >
+            Cancel connection
+          </button>
+        </div>
+      )}
       {failed && (
         <p role="alert">
           Couldn’t load or save calendars. Connect Google Calendar, then reload and try again.

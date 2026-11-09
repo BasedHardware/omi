@@ -12,6 +12,7 @@ vi.mock('./clientDevice', () => ({ getWindowsDeviceIdHash: async () => 'test-dev
 vi.mock('./byokKeys', () => ({ withByokHeadersIfActive: () => ({}) }))
 
 import { omiApi } from './apiClient'
+import { getCalendarOAuthUrl, getCalendarStatus } from './calendarConnect'
 import { loadGoogleCalendarSelection, saveGoogleCalendarSelection } from './googleCalendarSelection'
 const originalAdapter = omiApi.defaults.adapter
 const data = {
@@ -93,4 +94,12 @@ it('a 401 whose owner changed cannot retry or sign out the replacement account',
   await expect(loadGoogleCalendarSelection()).rejects.toBeDefined()
   expect(h.refresh).not.toHaveBeenCalled()
   expect(h.reauth).not.toHaveBeenCalled()
+})
+
+it('OAuth URL and status requests honor the same owner fence before dispatch', async () => {
+  const dispatch = vi.fn(async (config) => reply(config))
+  omiApi.defaults.adapter = dispatch
+  await expect(getCalendarOAuthUrl(() => false)).rejects.toThrow('owner changed')
+  await expect(getCalendarStatus(() => false)).rejects.toThrow('owner changed')
+  expect(dispatch).not.toHaveBeenCalled()
 })

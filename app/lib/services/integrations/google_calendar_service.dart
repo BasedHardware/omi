@@ -24,27 +24,16 @@ class GoogleCalendarService extends BaseIntegrationService {
       ? ''
       : '${SharedPreferencesUtil().uid}:${AnalyticsManager.identityEpoch}:$_selectionEpoch';
 
-  static void rememberMeetings(
-    String owner,
-    Iterable<CalendarCaptureWindow> windows, {
-    required DateTime now,
-  }) {
+  static void rememberMeetings(String owner, Iterable<CalendarCaptureWindow> windows, {required DateTime now}) {
     if (owner.isEmpty) return;
     final byId = <String, CalendarCaptureWindow>{
       if (knownMeetings.value.owner == owner)
         for (final window in knownMeetings.value.windows) window.id: window,
       for (final window in windows) window.id: window,
     };
-    final retained = byId.values
-        .where(
-          (w) => w.id.isNotEmpty && w.end.isAfter(now) && w.end.isAfter(w.start),
-        )
-        .toList()
+    final retained = byId.values.where((w) => w.id.isNotEmpty && w.end.isAfter(now) && w.end.isAfter(w.start)).toList()
       ..sort((a, b) => a.start.compareTo(b.start));
-    knownMeetings.value = CalendarMeetingSnapshot(
-      owner: owner,
-      windows: List.unmodifiable(retained.take(64)),
-    );
+    knownMeetings.value = CalendarMeetingSnapshot(owner: owner, windows: List.unmodifiable(retained.take(64)));
   }
 
   GoogleCalendarService() : super(appKey: _appKey, prefKey: _prefKey);
