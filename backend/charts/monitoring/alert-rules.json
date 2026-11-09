@@ -32703,7 +32703,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(deriv((max(omi_record_seal_oldest_age_seconds))[30m:]) >= bool 0) and on() (max(omi_record_seal_oldest_age_seconds) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
+          "expr": "(deriv((last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]))[30m:]) >= bool 0) and on() (last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

@@ -38,8 +38,10 @@ exit and the original response is still preserved.
 The active production repair CronJob now serves its existing shared probe
 collectors plus the bounded oldest-unsealed discovery sample on port 9090.
 Its PodMonitoring scrapes `/metrics` every 15 seconds. The idle seal worker's
-runtime setting is unchanged. The backlog expression aggregates before deriving
-the age slope so CronJob pod replacement does not hide falling backlog age.
+runtime setting is unchanged. The backlog expression filters idle NaN samples,
+aggregates the actual repair age, and carries the last valid sample for ten
+minutes across short CronJob gaps before deriving its slope. Pod replacement
+cannot invent a flat per-pod trend or reset the warning's hold period.
 Only this branch's backlog alert expression and its mirrors are updated; main's
 existing alert entries are preserved.
 
@@ -55,3 +57,8 @@ proof (27). The new pusher fixture initially omitted its explicit runtime stage;
 the fixture was corrected without relaxing an assertion. Final focused,
 all-backend conformance, lifecycle, alert/telemetry and expanded preflight results
 are recorded below after the complete run.
+
+The real-engine backtest runner is `tests/promql/record_token_lease.py` (run from
+backend with `--promtool <path>`). It reads the checked-in Grafana expression
+and its threshold/hold period, then tests rotating repair pods with idle NaN,
+healthy falling age, no recent releases, and no valid repair sample.

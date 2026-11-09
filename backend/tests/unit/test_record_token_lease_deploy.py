@@ -101,4 +101,6 @@ def test_prod_active_repair_scrapes_age_and_release_counters_without_enabling_id
     rules = json.loads((root / 'charts/monitoring/alerts/record-token-lease.json').read_text())
     # Aggregate before deriving so CronJob pod replacement does not invent a
     # permanently flat per-pod slope while the global age is actually falling.
-    assert 'deriv((max(omi_record_seal_oldest_age_seconds))[30m:])' in rules[1]['data'][0]['model']['expr']
+    assert (
+        'last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:])' in rules[1]['data'][0]['model']['expr']
+    )
