@@ -1039,3 +1039,87 @@ def test_synced_f_owner_read_does_not_follow_a_racing_redirect(store, monkeypatc
     monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
     assert episodes_db.get_episode(UID, first['id'], firestore_client=store, follow_redirects=False) is None
     assert len(reads) == 1
+
+
+def test_a_marker_that_loses_the_cas_rereads_and_merges_into_the_fresh_live_episode(monkeypatch):
+    """A live episode is written on every moment, so the attach-time version is often stale by the marker write."""
+    fallbacks, commits = [], []
+    monkeypatch.setattr(f_join, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    fresh = {
+        'id': 'e1',
+        'status': 'live',
+        'state_version': 4,
+        'conversation_ids': ['c1', 'c2'],
+        'pending_boundary': {'c0': {'gap_seconds': 300.0}},
+    }
+
+    def commit(uid, **kwargs):
+        commits.append(kwargs)
+        if kwargs['expected_version'] != fresh['state_version']:
+            raise EpisodeConflict('state_version_changed')
+        return {}
+
+    monkeypatch.setattr(f_join.episodes_db, 'commit_moment', commit)
+    monkeypatch.setattr(f_join.episodes_db, 'get_episode', lambda *a, **k: dict(fresh))
+    placed = {'id': 'e1', 'status': 'live', 'state_version': 2, 'conversation_ids': ['c1', 'c2']}
+    decision = policy.Boundary(policy.ASK, gap_seconds=720.0, source_changed=False)
+    f_join.mark_pending(UID, placed, placed, 'c2', decision, {}, firestore_client=None)
+    assert [c['expected_version'] for c in commits] == [2, 4]
+    pending = commits[-1]['updates']['pending_boundary']
+    # The retry keeps a concurrent writer's marker instead of overwriting it from the stale copy.
+    assert set(pending) == {'c0', 'c2'} and pending['c2']['variant'] == config.F_JOIN_VARIANT
+    assert fallbacks == []
+
+
+@pytest.mark.parametrize(
+    'fresh',
+    [
+        None,
+        {'id': 'e1', 'status': 'closed', 'state_version': 3, 'conversation_ids': ['c1', 'c2']},
+        {'id': 'e1', 'status': 'live', 'state_version': 3, 'conversation_ids': ['c1']},
+        {
+            'id': 'e1',
+            'status': 'live',
+            'state_version': 3,
+            'conversation_ids': ['c1', 'c2'],
+            'pending_boundary': {'c2': {}},
+        },
+    ],
+)
+def test_a_marker_stops_retrying_once_the_join_no_longer_stands(monkeypatch, fresh):
+    fallbacks, commits = [], []
+    monkeypatch.setattr(f_join, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    def commit(uid, **kwargs):
+        commits.append(kwargs)
+        raise EpisodeConflict('current_episode_changed')
+
+    monkeypatch.setattr(f_join.episodes_db, 'commit_moment', commit)
+    monkeypatch.setattr(f_join.episodes_db, 'get_episode', lambda *a, **k: fresh)
+    placed = {'id': 'e1', 'status': 'live', 'state_version': 2, 'conversation_ids': ['c1', 'c2']}
+    decision = policy.Boundary(policy.ASK, gap_seconds=720.0, source_changed=False)
+    f_join.mark_pending(UID, placed, placed, 'c2', decision, {}, firestore_client=None)
+    assert len(commits) == 1
+    assert [item['reason'] for item in fallbacks] == ['other']
+
+
+def test_a_marker_gives_up_after_bounded_retries(monkeypatch):
+    fallbacks, commits = [], []
+    monkeypatch.setattr(f_join, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    versions = iter(range(10, 20))
+
+    def commit(uid, **kwargs):
+        commits.append(kwargs)
+        raise EpisodeConflict('state_version_changed')
+
+    monkeypatch.setattr(f_join.episodes_db, 'commit_moment', commit)
+    monkeypatch.setattr(
+        f_join.episodes_db,
+        'get_episode',
+        lambda *a, **k: {'id': 'e1', 'status': 'live', 'state_version': next(versions), 'conversation_ids': ['c2']},
+    )
+    placed = {'id': 'e1', 'status': 'live', 'state_version': 2, 'conversation_ids': ['c2']}
+    decision = policy.Boundary(policy.ASK, gap_seconds=720.0, source_changed=False)
+    f_join.mark_pending(UID, placed, placed, 'c2', decision, {}, firestore_client=None)
+    assert len(commits) == f_join.MARK_PENDING_ATTEMPTS
+    assert len(fallbacks) == 1
