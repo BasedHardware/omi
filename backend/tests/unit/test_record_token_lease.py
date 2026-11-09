@@ -335,15 +335,12 @@ def test_custody_exact_clear_and_late_counter_follow_acceptance(enabled, accepte
     assert enabled.rows[PATH]['record_upload_revision'] == 7 + accepted
     assert record_audio.lease_metrics.LATE_APPEND._value.get() == before + accepted
     # A repeated/lost completion response cannot double-count or bump again.
-    if accepted:
-        with pytest.raises(record_custody_append.RecordCustodyFenceLost):
-            record_custody_append.finish(
-                'synthetic', 'record', 'custody:first', accepted=True, firestore_client=enabled
-            )
-    else:
-        assert not record_custody_append.finish(
-            'synthetic', 'record', 'custody:first', accepted=False, firestore_client=enabled
-        )
+    snapshot = deepcopy(enabled.rows)
+    assert not record_custody_append.finish(
+        'synthetic', 'record', 'custody:first', accepted=accepted, firestore_client=enabled
+    )
+    assert enabled.rows == snapshot
+    assert not enabled.transactions[-1].has_written
     assert record_audio.lease_metrics.LATE_APPEND._value.get() == before + accepted
 
 

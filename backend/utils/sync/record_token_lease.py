@@ -78,9 +78,15 @@ def custody_upload(fn):
     return run
 
 
-async def begin_upload(uid, cid, job_id):
+async def begin_upload(uid, cid, job_id, *, recording_session_id=None):
     state = _upload.get()
-    if state is None or not isinstance(cid, str) or not cid:
+    if state is None:
+        return
+    if not cid and recording_session_id:
+        cid = await run_blocking(db_executor, record_custody_append.resolve_target, uid, cid, recording_session_id)
+    # An unresolved session preserves the pre-existing archive/admission path;
+    # it cannot create a custody append for an unknown conversation.
+    if not isinstance(cid, str) or not cid:
         return
     state.update(uid=uid, cid=cid)
     if not lease.token_lease_serving(uid):

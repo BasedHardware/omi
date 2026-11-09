@@ -16,6 +16,30 @@ class RecordCustodyFenceLost(RuntimeError):
     """No successful ACK until this upload's own fence can be finalized."""
 
 
+def resolve_target(uid, cid, recording_session_id=None, *, firestore_client=None):
+    """Resolve the same user-scoped target before custody and record admission."""
+    if not cid and recording_session_id:
+        client = firestore_client if firestore_client is not None else get_firestore_client()
+        session = (
+            client.collection('users')
+            .document(uid)
+            .collection('recording_sessions')
+            .document(recording_session_id)
+            .get()
+            .to_dict()
+            or {}
+        )
+        cid = session.get('conversation_id')
+    if cid is not None and not isinstance(cid, str):
+        raise ValueError('invalid registered conversation identity')
+    return cid
+
+
+def _receipt(ref, session):
+    # Both normal finish and lost-fence recovery terminate the same upload.
+    return ref.collection('record_custody_recoveries').document(hashlib.sha256(session.encode()).hexdigest())
+
+
 def begin(uid, cid, session, *, firestore_client=None):
     if not lease.token_lease_serving(uid):
         return False
@@ -69,9 +93,14 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
     # invoke finish for a token acquired by begin; off requests do no IO.
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    receipt = _receipt(ref, session)
 
     @firestore.transactional
     def commit(tx):
+        # A response lost after commit must not masquerade as a cleared fence.
+        # Read before every potential write, including continuation creation.
+        if receipt.get(transaction=tx).exists:
+            return False
         row = ref.get(transaction=tx).to_dict() or {}
         sessions = dict(row.get('record_upload_sessions') or {})
         token = sessions.get(session)
@@ -95,6 +124,14 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
         if recovery:
             tx.set(*recovery)
         tx.update(ref, patch)
+        tx.set(
+            receipt,
+            {
+                'upload_revision': patch.get('record_upload_revision', row.get('record_upload_revision', 0)),
+                'recorded_at': time.time(),
+                'accepted': accepted and eligible,
+            },
+        )
         return accepted and late and eligible
 
     late = run_transactional(client, commit, transient=True)
@@ -112,7 +149,7 @@ def recover_committed(uid, cid, session, *, firestore_client=None):
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
-    receipt = ref.collection('record_custody_recoveries').document(hashlib.sha256(session.encode()).hexdigest())
+    receipt = _receipt(ref, session)
 
     @firestore.transactional
     def commit(tx):

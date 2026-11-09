@@ -842,7 +842,7 @@ async def sync_local_files_v2(
     sequencer_registration_started = False
 
     try:
-        await custody_lease.begin_upload(uid, conversation_id, job_id)
+        await custody_lease.begin_upload(uid, conversation_id, job_id, recording_session_id=recording_session_id)
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.

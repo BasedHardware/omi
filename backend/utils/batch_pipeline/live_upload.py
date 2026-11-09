@@ -25,6 +25,7 @@ from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
+from database.record_custody_append import resolve_target
 from database.sync_record_wait_cache import RECORD_WAIT_CACHE_SECONDS, cached_record_wait, remember_record_wait
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.intake import durable_status, start_response
@@ -244,12 +245,7 @@ async def registered_record_response(
 
     def target_snapshot() -> tuple[str | None, Any]:
         user = store.client.collection('users').document(uid)
-        target = conversation_id
-        if not target and recording_session_id:
-            session = user.collection('recording_sessions').document(recording_session_id).get().to_dict() or {}
-            target = session.get('conversation_id')
-        if target is not None and not isinstance(target, str):
-            raise ValueError('invalid registered conversation identity')
+        target = resolve_target(uid, conversation_id, recording_session_id, firestore_client=store.client)
         return (target, user.collection('conversations').document(target).get()) if target else (None, None)
 
     snapshot = None
