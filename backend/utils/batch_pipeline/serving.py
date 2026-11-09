@@ -496,10 +496,18 @@ def start_serving_from_env():
                 pass
 
     async def run():
-        if pump_enabled:
-            await projection_pump()
-        else:
-            await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        from utils.batch_pipeline.projection_drain import set_recurring_sweep
+
+        # Owner drains hold live-target owners passively only while this loop
+        # will sweep them again.
+        set_recurring_sweep('pump' if pump_enabled else 'serving')
+        try:
+            if pump_enabled:
+                await projection_pump()
+            else:
+                await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        finally:
+            set_recurring_sweep(None)
 
     return stop, start_background_task(
         run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'

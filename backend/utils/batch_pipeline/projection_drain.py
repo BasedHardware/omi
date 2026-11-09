@@ -19,13 +19,29 @@ from typing import TYPE_CHECKING
 
 from config.batch_pipeline import (
     max_owner_drains,
-    projection_pump_enabled,
     projection_drain_claim_aware_enabled,
     projection_drain_live_target_backoff_enabled,
     projection_drain_privacy_backoff_enabled,
     projection_drain_privacy_backoff_seconds,
     serving_projection_sweep_enabled,
 )
+
+# Which recurring projection sweep this process runs, set by the serving
+# runtime while its loop is alive: 'pump', 'serving' (its sweep still obeys
+# BATCH_PIPELINE_SERVING_PROJECTION_SWEEP each tick) or None. A passive owner
+# hold is safe only while one of them will re-request the owner.
+_recurring_sweep: str | None = None
+
+
+def set_recurring_sweep(mode: str | None) -> None:
+    global _recurring_sweep
+    _recurring_sweep = mode
+
+
+def recurring_sweep_active() -> bool:
+    return _recurring_sweep == 'pump' or (_recurring_sweep == 'serving' and serving_projection_sweep_enabled())
+
+
 from database.batch_pipeline_projection_claim import projection_claim_held
 from utils.batch_pipeline.metrics import (
     PROJECTION_DRAIN_CLAIM_HELD,
@@ -240,9 +256,10 @@ class OwnerDrains:
         # Passive hold (2026-11-09 readback): an expiry wake re-requested blocked
         # owners every 30-300 s, faster than the sweep that found them before,
         # and doubled owner-chain conflicts. Expiry only re-admits the owner
-        # while a sweep path is active to re-request it; with both sweep paths
-        # off, the hold keeps its wake so no owner is stranded.
-        passive = serving_projection_sweep_enabled() or projection_pump_enabled()
+        # while a recurring sweep runs in this process to re-request it; without
+        # one (serving off, sweep switch off, or a one-off reconcile request),
+        # the hold keeps its wake so no owner is stranded.
+        passive = recurring_sweep_active()
         if not self.defer(owner, delay=min(30 * 2 ** (attempt - 1), 300), wake=not passive):
             return False
         self.live_target_attempts.pop(owner, None)

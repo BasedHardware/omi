@@ -1276,6 +1276,13 @@ async def test_ttl_during_unchanged_early_check_cannot_lose_the_retry(monkeypatc
 # --- awaiting-live-target backoff ------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def serving_sweep_runs(monkeypatch):
+    # Default for this module: a serving runtime with its sweep is alive, so
+    # live-target holds are passive. Tests that need otherwise override it.
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', 'serving')
+
+
 def live_target_drain():
     projector = projector_for(ResultLog())
     projector.chain_prefetch = lambda owner: None
@@ -1337,11 +1344,13 @@ async def test_live_target_retries_never_exceed_the_sweep_cadence(drain_timers):
 
 
 @pytest.mark.asyncio
-async def test_live_target_hold_keeps_its_wake_when_no_sweep_path_runs(monkeypatch, drain_timers):
-    # Luna B1: with the serving sweep off and no pump, nothing else re-requests
-    # a held owner, so the hold must keep its expiry wake and overflow wake.
-    monkeypatch.setattr(projection_drain, 'serving_projection_sweep_enabled', lambda: False)
-    monkeypatch.setattr(projection_drain, 'projection_pump_enabled', lambda: False)
+@pytest.mark.parametrize('mode,sweep_switch', [(None, 'on'), ('serving', 'off')])
+async def test_live_target_hold_keeps_its_wake_without_a_recurring_sweep(monkeypatch, drain_timers, mode, sweep_switch):
+    # Luna B1 (both rounds): with no recurring sweep in this process (serving
+    # runtime not running, e.g. a one-off reconcile request, or its sweep switch
+    # off), nothing re-requests a held owner, so the hold keeps its wakes.
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', mode)
+    monkeypatch.setattr(projection_drain, 'serving_projection_sweep_enabled', lambda: sweep_switch == 'on')
     monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
     projector, drains = live_target_drain()
     drains.request([BURST])
@@ -1358,10 +1367,9 @@ async def test_live_target_hold_keeps_its_wake_when_no_sweep_path_runs(monkeypat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('sweep,pump', [(True, False), (False, True)])
-async def test_live_target_hold_is_passive_while_any_sweep_path_runs(monkeypatch, drain_timers, sweep, pump):
-    monkeypatch.setattr(projection_drain, 'serving_projection_sweep_enabled', lambda: sweep)
-    monkeypatch.setattr(projection_drain, 'projection_pump_enabled', lambda: pump)
+@pytest.mark.parametrize('mode', ['serving', 'pump'])
+async def test_live_target_hold_is_passive_while_a_recurring_sweep_runs(monkeypatch, drain_timers, mode):
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', mode)
     projector, drains = live_target_drain()
     drains.request([BURST])
     await settle(projector)
@@ -1369,6 +1377,15 @@ async def test_live_target_hold_is_passive_while_any_sweep_path_runs(monkeypatch
     await settle(projector)
     assert projector.drain_step.call_count == 1 and not list(projector.drain_requests)
     drains.close()
+
+
+def test_serving_runtime_marks_its_recurring_sweep_only_while_running():
+    projection_drain.set_recurring_sweep(None)
+    assert not projection_drain.recurring_sweep_active()
+    projection_drain.set_recurring_sweep('pump')
+    assert projection_drain.recurring_sweep_active()
+    projection_drain.set_recurring_sweep(None)
+    assert not projection_drain.recurring_sweep_active()
 
 
 @pytest.mark.asyncio
