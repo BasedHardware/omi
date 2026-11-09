@@ -1098,11 +1098,80 @@ final class ConversationRepositoryTests: XCTestCase {
       "the cleared state must be published so the UI empties and the page reloads")
   }
 
+  func testCacheRefreshCannotRestartKnownFailedRowWhenOffline() async {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let legacy = makeConversation(status: .processing, revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([failed]))
+    let local = FakeConversationLocal(listResult: [legacy])
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all, includeCache: false)
+    remote.listResult = .failure(TestFailure.offline)
+    await repository.load(query: .all)
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+    // Only a fresh server page may remove the projection for older servers.
+    remote.listResult = .success([legacy])
+    await repository.load(query: .all)
+    XCTAssertEqual(repository.conversations.first?.displayState, .processing)
+  }
+
+  func testDetailAndReplacementRetainFailedHomeProjection() async throws {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let detail = makeConversation(title: "Fresh detail", status: .merging, revision: 2, transcript: "Loaded content")
+    let remote = FakeConversationRemote(listResult: .success([failed]))
+    remote.detailResult = .success(detail)
+    let local = FakeConversationLocal(detailResult: detail)
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    var cached: ServerConversation?
+    let received = try await repository.detail(id: failed.id, seed: failed) { cached = $0 }
+    XCTAssertEqual(cached?.homeStep, "failed")
+    XCTAssertEqual(received.homeStep, "failed")
+    XCTAssertEqual(received.title, "Fresh detail")
+    XCTAssertEqual(received.transcriptSegments.first?.text, "Loaded content")
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+    repository.replace(detail)
+    XCTAssertEqual(repository.conversations.first?.homeStep, "failed")
+  }
+
+  func testLegacyDetailAndReplacementKeepProcessingBehavior() async throws {
+    let processing = makeConversation(status: .processing, revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([processing]))
+    remote.detailResult = .success(processing)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+    let detail = try await repository.detail(id: processing.id)
+    XCTAssertNil(detail.homeStep)
+    XCTAssertEqual(detail.displayState, .processing)
+    repository.replace(processing)
+    XCTAssertEqual(repository.conversations.first?.displayState, .processing)
+  }
+
+  func testCompletedDetailAndFreshLegacyPageCanClearHomeFailure() async throws {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let recovered = makeConversation(title: "Recovered", revision: 2)
+    let remote = FakeConversationRemote(listResult: .success([failed]))
+    remote.detailResult = .success(recovered)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+    let detail = try await repository.detail(id: failed.id)
+    XCTAssertNil(detail.homeStep)
+    XCTAssertNil(repository.conversations.first?.homeStep)
+    XCTAssertEqual(repository.conversations.first?.displayState, .titled("Recovered"))
+    remote.listResult = .success([makeConversation(status: .processing, homeStep: "failed", revision: 3)])
+    await repository.load(query: .all)
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+    remote.listResult = .success([makeConversation(status: .processing, revision: 4)])
+    await repository.load(query: .all)
+    XCTAssertNil(repository.conversations.first?.homeStep)
+    XCTAssertEqual(repository.conversations.first?.displayState, .processing)
+  }
+
   private func makeConversation(
     id: String = "conversation-1",
     title: String = "Title",
     overview: String = "Overview",
     status: ConversationStatus = .completed,
+    homeStep: String? = nil,
     starred: Bool = false,
     revision: TimeInterval?,
     transcript: String? = nil,
@@ -1147,6 +1216,7 @@ final class ConversationRepositoryTests: XCTestCase {
       source: .desktop,
       language: "en",
       status: status,
+      homeStep: homeStep,
       discarded: discarded,
       deleted: deleted,
       isLocked: false,
