@@ -36,6 +36,27 @@ class Alert:
     tier: str | None = None
 
 
+# Reviewed observability debt, independent of live rule state or failed assertions.
+# Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938 explicitly pauses known
+# backlog pages until #24731/#24893 drain work ships and clean24h criteria hold.
+# These rows do NOT have active dwell-alert protection while paused. The strict
+# invariant still fails; strict xfail removal is required when an owner unpauses.
+# Criteria: backend/charts/monitoring/batch-projection/pipeline-alerts.md.
+IMPORT_PAUSED_DWELL_ROWS = {
+    'batch:record_pending': 'omi-record-pending-dwell',
+    'batch:ready': 'omi-batch-unit-unpublished-2h',
+    'batch:leased': 'omi-batch-unit-unpublished-2h',
+    'batch:retry': 'omi-batch-unit-unpublished-2h',
+    'batch:result_ready': 'omi-batch-unit-unpublished-2h',
+    'batch:vendor_held': 'omi-batch-unit-unpublished-2h',
+    'batch:quarantined': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:pending': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:persisted': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:ready': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:quarantine_held': 'omi-pipeline-held-row-age',
+}
+
+
 @dataclass(frozen=True)
 class State:
     machine: str
@@ -462,8 +483,9 @@ STATES = (
             ('finalization_status', 'status'),
             exit=FINALIZER,
             metric='omi_finalization_byok_new_oldest_age_seconds',
-            alert=Alert('omi-finalization-byok-dwell-page', 'page'),
-            note='Recent-cohort dwell/page from #24595; historical age is separate. '
+            alert=Alert('omi-finalization-byok-dwell-page', 'agent'),
+            note='Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938: active muted BYOK warning; '
+            '259200s/1h threshold unchanged. Recent-cohort dwell from #24595; historical age is separate. '
             '14-day abandonment is computed from activity, not a deadline stamped at entry',
         ),
         row(

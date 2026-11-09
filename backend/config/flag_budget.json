@@ -24,8 +24,10 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 165,
-  "count": 266,
+  "count": 268,
   "names": {
+    "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
+    "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06"},
     "CONVERSATION_TERMINAL_FAMILY_MODE": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
@@ -43,6 +45,7 @@
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_SWEEP_AGE_GATE": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "PROJECTION_DRAIN_CLAIM_AWARE": {"owner": "two-lane lead", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
+    "PROJECTION_DRAIN_LIVE_TARGET_BACKOFF": {"replaces": "SYNC_BACKFILL_INFLIGHT_LIMIT", "owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "PROJECTION_DRAIN_PRIVACY_BACKOFF": {"owner": "omi-pipeline / privblock", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "PROJECTION_PRIVACY_REFUSAL_RESUME": {"owner": "omi-pipeline / refusal-resume", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS": {"owner": "omi-pipeline / privblock", "review_by": "2026-12-06"},
@@ -259,7 +262,6 @@
     "STT_SHED_CONNECT_FAILURES": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_ADMISSION_LIMITS": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_GLOBAL_DAILY_HOURS": {"seeded": "2026-10-25"},
-    "SYNC_BACKFILL_INFLIGHT_LIMIT": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_MAX_AGE_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_ORDER": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_ORDER_PERCENT": {"seeded": "2026-10-25"},
@@ -295,6 +297,8 @@
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
+    "DREAM_NO_PROGRESS_STOP_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
       "replaced_by": null

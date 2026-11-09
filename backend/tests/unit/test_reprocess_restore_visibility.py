@@ -5,20 +5,25 @@ the external model and app boundaries are controlled.
 """
 
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException, Response
 
 import routers.conversations as conv_router
+from database import apps as apps_db
+from database import notifications as notification_db
 from database import conversations as conversations_db
 from database import dream_dirty
 from database import processing_attention as attention_db
 from models.structured import Structured
 from tests.unit.test_restore_recording_obligation import CID, JOB_PATH, ROW_PATH, UID, restore_store  # noqa: F401
+from utils import apps as utils_apps
 from utils.batch_pipeline import live
 from utils.conversations import process_conversation as processor
-from utils.conversations.process_conversation import ExplicitAppSelectionFailedError
+
+APP_ID = 'summary-app'
 
 
 @pytest.fixture
@@ -48,7 +53,17 @@ def reprocess(restore_store, monkeypatch):
     )
     monkeypatch.setattr(processor, 'extract_memories', MagicMock(), raising=False)
     monkeypatch.setattr(processor, 'save_structured_vector', MagicMock(), raising=False)
-    monkeypatch.setattr(processor, 'trigger_conversation_apps', lambda *a, **k: None)
+    # The selected app is validated against the app store and the user's enablement; the
+    # app model call returns the summary. The processor's real explicit-selection check runs on it.
+    app = SimpleNamespace(id=APP_ID, disabled=False, enabled=True, works_with_memories=lambda: True)
+    monkeypatch.setattr(apps_db, 'get_app_by_id_db', lambda app_id: {'id': app_id})
+    monkeypatch.setattr(utils_apps, 'get_available_app_model_by_id', lambda *a, **k: app)
+    monkeypatch.setattr(utils_apps, 'is_user_app_enabled', lambda *a, **k: True)
+    monkeypatch.setattr(processor, 'get_available_apps', lambda uid: [app])
+    # The app prompt reads the user's timezone from Firestore; without it the app call fails
+    # before the model boundary, which would look like an empty summary.
+    monkeypatch.setattr(notification_db, 'get_user_time_zone', lambda uid: '')
+    monkeypatch.setattr(processor, 'get_app_result', lambda *a, **k: 'Synthetic app summary.')
     # Dream dirty marking is out of scope; its marker needs a document update StrictFirestore omits.
     monkeypatch.setattr(dream_dirty, 'mode', lambda: 'off')
     # The app-output write goes through update(), which StrictFirestore omits; merge into the row instead.
@@ -65,7 +80,7 @@ def reprocess(restore_store, monkeypatch):
 
 def _call():
     return conv_router.reprocess_conversation(
-        conversation_id=CID, uid=UID, response=Response(), background_tasks=BackgroundTasks()
+        conversation_id=CID, app_id=APP_ID, uid=UID, response=Response(), background_tasks=BackgroundTasks()
     )
 
 
@@ -94,14 +109,14 @@ def test_successful_reprocess_restores_with_exactly_one_obligation(reprocess, mo
 
 def test_failed_selected_app_leaves_the_row_hidden_without_visibility(reprocess, monkeypatch):
     registrations = _count_restore_registrations(monkeypatch)
+    # The selected app returns no summary: the processor's explicit-selection branch raises.
+    monkeypatch.setattr(processor, 'get_app_result', lambda *a, **k: '')
 
-    def failing_app(*a, **k):
-        raise ExplicitAppSelectionFailedError('synthetic selected app failure')
-
-    monkeypatch.setattr(processor, 'trigger_conversation_apps', failing_app)
-    with pytest.raises(HTTPException):
+    with pytest.raises(HTTPException) as error:
         _call()
 
+    # The HTTP error is chained to the processor's explicit-selection failure, not a generic one.
+    assert isinstance(error.value.__cause__, processor.ExplicitAppSelectionFailedError)
     assert registrations == []
     assert reprocess.rows[ROW_PATH]['discarded'] is True
     assert JOB_PATH not in reprocess.rows

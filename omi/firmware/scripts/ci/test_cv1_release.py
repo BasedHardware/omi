@@ -353,7 +353,7 @@ class ReleaseTests(unittest.TestCase):
 
     def publish_responses(self):
         tag_ref = json.dumps({'object': {'type': 'commit', 'sha': 'a' * 40}})
-        return ['', tag_ref, '', json.dumps({'draft': True, 'tag_name': 'Omi_CV1_v3.0.21'}), tag_ref, '']
+        return ['', tag_ref, '', json.dumps({'isDraft': True, 'tagName': 'Omi_CV1_v3.0.21'}), tag_ref, '']
 
     def publish_env(self):
         (self.root / 'cv1-validated-run.json').write_text(json.dumps({'run': self.run, 'workflow_id': 42}))
@@ -386,6 +386,11 @@ class ReleaseTests(unittest.TestCase):
             self.assertNotIn('.elf', ' '.join(args))
             self.assertIn('--draft', args)
             self.assertIn('--verify-tag', args)
+            # The draft lookup must not use GET releases/tags/{tag}, which 404s on drafts.
+            self.assertEqual(
+                gh.call_args_list[3].args,
+                ('release', 'view', 'Omi_CV1_v3.0.21', '--repo', 'BasedHardware/omi', '--json', 'isDraft,tagName'),
+            )
             self.assertEqual(
                 gh.call_args_list[0].args,
                 (
@@ -412,7 +417,7 @@ class ReleaseTests(unittest.TestCase):
             if failure == 'existing':
                 responses[0] = subprocess.CalledProcessError(1, ['gh'], stderr='Reference already exists')
             elif failure == 'release-tag':
-                responses[3] = json.dumps({'draft': True, 'tag_name': 'other-tag'})
+                responses[3] = json.dumps({'isDraft': True, 'tagName': 'other-tag'})
             else:
                 responses[1 if failure == 'before-create' else 4] = json.dumps(
                     {'object': {'type': 'commit', 'sha': 'b' * 40}}

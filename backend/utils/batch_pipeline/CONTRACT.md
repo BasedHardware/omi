@@ -111,6 +111,14 @@ or explicit user deletion; storage pressure cannot evict them.
 state and ledger shape and pins each answer in `tests/fixtures/custody_status_shapes.json`,
 which the phone replays through its terminal policy (`app/test/unit/custody_status_shapes_test.dart`).
 
+Owner drains with zero progress waiting on `live_target_not_persisted` retry
+after 30, 60, 120, 240, then at most 300 seconds per owner, counted by
+`omi_batch_projection_live_target_backoffs_total`; progress or any other stop
+resets the bounded process-local attempt state. Only
+`PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` disables this backoff (restoring
+`head_error`); privacy/deleted dispositions, other writer waits, productive FIFO
+continuations and the durable 24-hour hold bound remain unchanged.
+
 ## Trips: which invariant each enforces
 
 Registry: omi-workspace `infra/rollout/trips.toml` (rollback authority only with a
@@ -567,3 +575,43 @@ operator lane. Recovery redrive of `failed_held`: the redrive owner named in eac
 - Automatic redrive of vendor-cause `failed_held` (operator redrive today).
 - Exactly one vendor for language ID (Modulate today; self-LID #23460 is required from 50%).
 - Live preview quality: retire-cohort preview is a preference shift ([ADR 0003](../../docs/adr/0003-retire-flag-is-preview-preference.md)).
+
+
+### Dark projection hold observability (2026-11-08)
+
+`BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED` defaults OFF. Explicit `true` adds
+one INFO `event=batch_projection outcome=quarantine_persisted hold_reason=...`
+after a successful quarantine disposition commit, including partial multipart
+persists, and after a committed sibling acknowledgment transitions the summary
+state to `quarantined` or its projection hint to `quarantine_held`. Rewriting an
+already-held summary is silent, using the transaction's prior summary and hint.
+The closed reasons are `ambiguous_generation`, `conflict`, `poison_head`,
+`payload_contract`, and `sibling`. Transaction retries and receipt replays emit
+no additional success line; no identifiers or content enter the new line.
+Persisted dispositions and existing logs are unchanged.
+
+`BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED` independently defaults OFF. Explicit
+`true` adds `omi_batch_timeliness_all_time_units{leg=...}` for
+`quarantine_held_rows`, `assignment_held`, and `projection`. These are exact stock
+counts across all epochs and ages, including units younger than the SLA. They
+reuse the existing Firestore COUNT aggregation path: three unbounded count
+aggregations per successful refresh by the leader, no document scan and no
+queries on scrape. The companion requires `batch_timeliness_leader` on and this
+replica's lease; with election off, or on a follower, no companion COUNT runs.
+The timeliness alarm, cadence, election, freshness and existing epoch-scoped
+gauge remain unchanged. This companion is diagnostic; there is no alert or
+production metric-inventory requirement for it.
+Companion counts run only after the legacy sample has succeeded and the epoch
+gauges have published, so a slow or failed COUNT cannot delay or stale them.
+Each failed count logs its bounded leg and exception type, omits that series,
+and leaves other legs available. A refresh removes previously exported
+failed-leg values; it never substitutes zero. A legacy sample failure keeps its
+existing error behavior and runs no companion counts.
+
+Both controls are registered in `config/policy/kill_switches.py`,
+`config/feature-flags.yaml`, and `config/flag_budget.json`. They require `true`
+in every parser mode; unset/false emits no new logs or series and performs no
+extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
+No enablement is included: the lead owns a separate canary and expansion
+proposal after review. Rollback: set each switch to `false`; logs stop and the
+companion series disappears on collection. No data migration or cleanup.

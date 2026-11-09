@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
     'PROJECTION_PRIVACY_REFUSAL_RESUME',
@@ -204,6 +205,8 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED',
+        'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED',
         'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',
     }
 
@@ -256,11 +259,21 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         elif name == 'PROJECTION_DRAIN_CLAIM_AWARE':
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
+        elif name == 'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF':
+            assert entry['replaces'] == 'SYNC_BACKFILL_INFLIGHT_LIMIT'
+            assert 'SYNC_BACKFILL_INFLIGHT_LIMIT' not in names
+            assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
+            assert entry['owner'] == 'omi-pipeline'
+            assert entry['review_by'] == '2026-12-08'
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
             assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
-        assert flag['owner'] == ('omi-pipeline' if name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED' else 'dazheng')
+        assert flag['owner'] == (
+            'omi-pipeline'
+            if name in {'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF'}
+            else 'dazheng'
+        )
         assert flag['kind'] == 'env'
         assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']

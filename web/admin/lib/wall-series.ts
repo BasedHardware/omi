@@ -696,12 +696,12 @@ export function funnelFrames(legs: Legs, now: Date) {
   const funnel: Row[] = people
     ? [
         {
-          step: "Share of new users",
+          step: "New users",
           Device: percent(count(device(latest), PEOPLE), people),
           Organic: percent(count(organic(latest), PEOPLE), people),
         },
         split(
-          "Onboarded (phone and Mac)",
+          "Onboarded",
           latest.filter((r) => ONBOARDING_PLATFORMS.includes(r[1])),
           ONBOARDED
         ),
@@ -710,7 +710,7 @@ export function funnelFrames(legs: Legs, now: Date) {
     : [];
   const older = week(FUNNEL_KEPT_PERIOD);
   if (people && count(older, PEOPLE))
-    funnel.push(split("Kept, weeks 2–5 (older cohort)", older, KEPT));
+    funnel.push(split("Kept, weeks 2–5", older, KEPT));
 
   // Users ride in the label, largest platform first, as on Activation by capture.
   const funnelPlatforms: Row[] = Object.entries(FUNNEL_PLATFORMS)

@@ -279,9 +279,10 @@ def main():
             env['BODY_FILE'],
             *(str(out / name) for name in asset_names(ver)),
         )
-        created = json.loads(gh('api', f'repos/{repo}/releases/tags/{tag}'))
-        require(created['draft'] and created['tag_name'] == tag, 'Release tag or draft mismatch')
-        tag_ref = json.loads(gh('api', f"repos/{repo}/git/ref/tags/{created['tag_name']}"))
+        # GET releases/tags/{tag} never returns drafts (404), so read the draft by tag through gh.
+        created = json.loads(gh('release', 'view', tag, '--repo', repo, '--json', 'isDraft,tagName'))
+        require(created['isDraft'] and created['tagName'] == tag, 'Release tag or draft mismatch')
+        tag_ref = json.loads(gh('api', f"repos/{repo}/git/ref/tags/{created['tagName']}"))
         require(tag_ref['object']['type'] == 'commit' and tag_ref['object']['sha'] == sha, 'Release tag SHA mismatch')
         gh('release', 'edit', tag, '--repo', repo, '--draft=false')
 
