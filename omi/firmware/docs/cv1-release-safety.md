@@ -11,6 +11,12 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    is also supported. The workflow sets both BLE DIS and the app's signed
    MCUboot header version to that value; packaging verifies the signed header.
 2. Dispatch `firmware_release.yml` **without** `publish` to build QA artifacts.
+   The run first executes the simulator gate (`omi/sim/README.md`, "Scenario
+   suite": every scenario plus 40 fuzz seeds at this SHA). Staging fails
+   closed without a passing `sim-report.json` for the same SHA and version;
+   the report ships in the QA artifact, its SHA-256 is in `qa-provenance.json`
+   and promotion and publish revalidate it. The simulator is source-level
+   evidence, not a test of the signed bytes; the bench (step 3) still is.
    The default OTA zip contains only app image 0. Set `include_network_core=true`
    only when intentionally testing a paired app/radio update. This changes zip
    packaging only: MCUboot, partitions, sysbuild layout, `merged.hex` and
@@ -50,6 +56,25 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    tested SHA and refuses existing tags. A release is created as a draft and its
    tag is verified again before publication. If verification fails, it stays a
    draft; inspect the tag/draft before an approved cleanup and retry.
+
+## Release checklist (each gate fails closed)
+
+- **G0 candidate.** Fixes merged to main with host tests green and the
+  simulator suite (`omi/sim/scenario_runner.py`) passing at that SHA. Every field bug in the release has
+  a scenario whose `baseline_bug` reproduces on the previous release's sources
+  (`scenario_runner.py --baseline`) and whose `expect` passes on the candidate.
+  `omi/sim/check_isolation.py --base <previous release>` lists only the
+  declared fixes.
+- **G1 version minted once.** Bump `CONFIG_BT_DIS_FW_REV_STR` only when the fix
+  set is complete and G0 is green at that SHA. A blocked candidate does not
+  consume a version number.
+- **G2 QA build + simulator gate.** Build-only `firmware_release.yml` run at that
+  SHA (step 2), `sim-report.json` in the artifact.
+- **G3 bench on the QA bytes.** Step 3 plus the safe-mode jig checks in
+  `safe-mode.md`; the gesture subset can be scripted from the scenarios with
+  `tools/cv1/jig_gestures.py`.
+- **G4 publish.** Step 4 with all three provenance inputs; the promoted
+  attempt's simulator report is revalidated by code.
 
 ## Rollout plan: new releases start at 1%, and David expands
 

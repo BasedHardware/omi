@@ -12,12 +12,15 @@ LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 // Default values if not found in flash
 #define DEFAULT_DIM_LIGHT_RATIO 50
 #define DEFAULT_MIC_GAIN 6
-#define DEFAULT_MUTED 0
+/* Fail closed: muted until the omi subtree loads. A healthy load with no
+ * stored value means a device that was never muted (3.0.24). */
+#define DEFAULT_MUTED 1
 
 // In-memory cache for the settings
 static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
 static uint8_t muted = DEFAULT_MUTED;
+static bool muted_loaded;
 static struct rtc_time rtc_timestamp = {0};
 static uint64_t rtc_epoch = 0;
 
@@ -62,6 +65,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
     if (settings_name_steq(name, "muted", &next) && !next) {
         /* An unreadable mute may be a user's pause, so stay muted. The app reads this
          * state back, and an explicit unmute rewrites the setting (issue #5054). */
+        muted_loaded = true;
         if (len != sizeof(muted)) {
             muted = 1U;
             return -EINVAL;
@@ -243,11 +247,17 @@ int app_settings_init(void)
 {
 #ifdef CONFIG_OMI_FAULT_INJECT_SETTINGS_HANG
     printk("FAULT_INJECT: app settings init hang\n");
-    for (;;) {}
+    /* Spin without feeding WDT; busy-waiting lets simulated time (and the
+     * simulator's watchdog) advance on native_sim too. */
+    for (;;) {
+        k_busy_wait(1000);
+    }
 #endif
+    muted_loaded = false;
     int err = settings_subsys_init();
     if (err) {
-        LOG_ERR("Failed to initialize settings subsystem (err %d)", err);
+        LOG_ERR("Failed to initialize settings subsystem (err %d); capture stays muted", err);
+        muted = 1U;
         return err;
     }
 
@@ -259,6 +269,11 @@ int app_settings_init(void)
     err = settings_load_subtree("omi");
     if (err && err != -ENOENT) {
         LOG_ERR("Failed to load app settings (err %d)", err);
+        if (!muted_loaded) {
+            muted = 1U; /* the stored mute is unknown: fail closed */
+        }
+    } else if (!muted_loaded) {
+        muted = 0U; /* loaded, never muted */
     }
 
     LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u muted=%u rtc_epoch=%llu lsm6_base_epoch=%llu "
@@ -309,6 +324,11 @@ uint8_t app_settings_get_mic_gain(void)
 int app_settings_save_muted(uint8_t new_muted)
 {
     const uint8_t requested = new_muted ? 1U : 0U;
+    if (requested) {
+        /* A mute takes effect even if it cannot be persisted (3.0.24); the
+         * caller still reports the error. A failed unmute stays muted. */
+        muted = 1U;
+    }
     int err = settings_save_one("omi/muted", &requested, sizeof(requested));
     if (err) {
         LOG_ERR("Failed to save muted (err %d)", err);
