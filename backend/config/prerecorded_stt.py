@@ -25,7 +25,8 @@ from config.stt_provider_policy import (
 STT_PRERECORDED_MODEL_ENV = 'STT_PRERECORDED_MODEL'
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_PRERECORDED_MODELS = default_models_for_surface(STTServingSurface.PRERECORDED)
-SONIOX_HELD_RECOVERY_MODEL = 'stt-async-v5'
+# Single-edit batch rollback: restore stt-async-v5 here.
+SONIOX_HELD_RECOVERY_MODEL = 'stt-async-v6'
 
 
 class TranscriptionOutcome(str, Enum):
