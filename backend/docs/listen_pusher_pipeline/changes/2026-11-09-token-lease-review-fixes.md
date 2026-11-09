@@ -43,8 +43,8 @@ invalidated, without bumping upload revision or counting that refused request.
 The WAL inventory shares the partial worker's existing MAX_SOURCES bound (8192).
 Original raw archives and original retained chunks are never deleted/overwritten.
 
-Serve-only frames on a complete seal, including a fresh socket mint before any renewal, reopen `record_audio_closed=false`, restore
-the exact socket token with fresh clocks, bump revision and increment late_append.
+Serve-only frames on a complete seal, including a fresh socket mint before any
+renewal, reopen `record_audio_closed=false`, restore the exact socket token with fresh clocks, bump revision and increment late_append.
 The existing partial continuation processes newly retained audio, including an
 interior gap when the old tail already reached finished_at. A distinct durable
 coordinator preserves completed/leased original work and immutable projection
@@ -64,5 +64,156 @@ No Part B discovery or index implementation is added here.
 
 ## Validation
 
-Final commands, exact counts and commit identities will be recorded after the
-post-rebase validation run. No production/GCP access, push or PR is authorized.
+Recorded 2026-11-09T02:44:04+00:00 on branch
+`lane/tokenlease`, code head `a3e347e1b8438f1cafb3ad7e5bcb46ab880cd7ae`, rebased onto freshly fetched main
+`42448d34a441c3f7d64591190b466ab94ce260eb`. The later receipt-only commit is reported separately in the handoff.
+All final commands below ran serially without source changes during the final
+closeout. This is local validation, not CI, production acceptance or a deploy.
+GCP tier: **none**. No push or PR.
+
+Heavy admission and child commands:
+
+```sh
+/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 7200 -- python3 /Volumes/Ephemeral/scratch/tokenlease-review-closeout.py
+# Each unit suite below runs in its own interpreter, cwd backend:
+.venv/bin/python -m pytest -q --tb=short tests/unit/<suite>
+# Root; private emulators, OMI_REQUIRE_STORE_BACKENDS=all:
+env -u TOKENLEASE_RETRY -u TOKENLEASE_VALIDATE_HELD_ONLY python3 /Volumes/Ephemeral/scratch/run-tokenlease-local-validation.py
+# Inside firebase emulators:exec --only firestore --project demo-omi-listen-stack:
+.venv/bin/python -m pytest -q --tb=short tests/integration/test_held_custody_conformance.py
+.venv/bin/python -m pytest -q --tb=short tests/integration/test_recovery_custody_conformance.py
+.venv/bin/python -m testing.lifecycle_sim.run --keep --state-dir /Volumes/Ephemeral/scratch/tokenlease-validation-zvewnq8n/lifecycle --extra-test-module testing/lifecycle_properties/test_properties.py
+# Root, OMI_PR_BODY_FILE=.agent-brief/tokenlease-pr-body.md:
+make preflight
+```
+
+Every test launcher removes GOOGLE_APPLICATION_CREDENTIALS, every CLOUDSDK_*
+variable, service-account/auth-file variables and external PostgreSQL bindings.
+Private HOME/config/TMP prevent ADC fallback. Unit/preflight stage overrides are
+unset; integration uses offline with the Firestore demo project on loopback and
+fixture-owned PostgreSQL. Firebase shares emulator binaries only, not config or
+credentials. No backend stage env files exist in this worktree.
+
+| Unit suite | Exact final result |
+| --- | --- |
+| `test_record_token_lease.py` | 77 passed |
+| `test_record_custody_append.py` | 15 passed |
+| `test_record_lease_append.py` | 1 passed |
+| `test_record_producer_proof.py` | 27 passed |
+| `test_record_seal_repair.py` | 48 passed |
+| `test_record_partial.py` | 78 passed |
+| `test_pusher_record_abandon.py` | 24 passed |
+| `test_record_pending_repair.py` | 63 passed |
+| `test_record_audio_seal.py` | 57 passed |
+| `test_record_seal_cluster_repair.py` | 121 passed |
+| `test_record_seal_nojob.py` | 44 passed |
+| `test_refactor_modes.py` | 17 passed |
+| `test_lifecycle_state_table_writers.py` | 1738 passed |
+| `test_record_token_lease_deploy.py` | 8 passed |
+| `test_monitoring_telemetry_contract.py` | 52 passed |
+| `test_sync_v2.py` | 181 passed |
+| `test_record_seal_worker.py` | 20 passed |
+| `test_record_seal_worker_deploy.py` | 7 passed |
+| `test_record_seal_cluster_repair_deploy.py` | 10 passed |
+| `test_record_seal_worker_guards.py` | 13 passed |
+| `test_monitoring_alert_backtest.py` | 29 passed |
+| `test_monitoring_notification_contract.py` | 8 passed |
+| `test_monitoring_alert_rule_contract.py` | 75 passed |
+| `test_record_gap_fill.py` | 52 passed |
+| **Total (24 suites)** | **2,765 passed; no failures, skips or xfails** |
+
+| Integration / gate | Exact final result |
+| --- | --- |
+| Held custody, all three store backends | 75 passed |
+| Recovery custody, all three store backends | 39 passed |
+| Emulator lifecycle scenarios/properties | 34 passed, 3 pre-existing xfailed |
+| Named lease exits: seal / partial_finish / reactivated | All three passed |
+| Expanded local lane via final make preflight | **56 unique checks passed**, exit 0 |
+| Append-only monitoring shape / protected paths / git diff --check | Passed |
+
+The final log is `/Volumes/Ephemeral/scratch/tokenlease-review-fixes-results.log`.
+The emulator config is `/Volumes/Ephemeral/scratch/tokenlease-validation-zvewnq8n/firebase.json`; processes are stopped after the
+run. Disposable scripts/log paths are included for inspection; commands and exact
+results are preserved here independently of those scratch files.
+
+The earlier explicit expanded run selected the same 56 checks:
+
+```sh
+backend/.venv/bin/python .github/scripts/run_checks.py --lane local --base 42448d34a441c3f7d64591190b466ab94ce260eb --head HEAD --changed-files /Volumes/Ephemeral/scratch/tokenlease-review-fixes-changed-files.txt --pr-body-file .agent-brief/tokenlease-pr-body.md --keep-going
+```
+
+Its three failures were addressed without waivers: the recovery helper now
+uses the shared immutable-policy/first-writer fallback; the draft discloses the
+shared partial MAX_SOURCES bound (8192) and named exits; and the sync line-count
+declaration matches the rebased target (3819 to 3841). All three named checks
+passed, then the final full 56-check run passed. No policy-guard exception,
+review-date extension, assertion suppression or new xfail was added.
+
+Initial unit failures were corrected: the seal-race assertion now proves fence
+before bytes and revision after acceptance; the alert assertion checks the
+approved exact increase expression and aggregate mirror; test-name/setup errors
+were corrected. One existing 0.3-second child-start checkpoint test missed its
+checkpoint under load; it was rerun unchanged and the entire final 121-test
+cluster suite passed. The final uninterrupted 24-suite run is fully green.
+
+## Boundaries and remaining acceptance
+
+Correctness review items 2/3 are confirmed closed by the aggregate mirror,
+source-emitter declaration and worker HTTP metrics tests. All other reviewed
+items are fixed, including the fresh-socket mint path and ordering behind older
+full publication. The complete-seal and discovery function ASTs match pinned
+main; no index changes or Part B work are introduced by this branch. Main's
+independently merged #24953 age-order discovery is preserved.
+
+No edits to users.py, live.py, ProjectionReleaseStore or held_dead_letter files.
+The alert aggregate and metric inventory still contain only the previously
+approved append-only additions, preserving main's existing entries and values.
+The set_record_upload_pending edit is confined to the existing producer-token
+transaction: its off-mode payload is exact, and serve-only recovery joins that
+transaction before writes. seal_record_audio is unchanged.
+
+Recovery uses the existing partial continuation, not a reset of original
+immutable units. It deliberately carries a partial marker and waits for any
+older full publication. Existing privacy/payer refusals and inventory/storage
+bounds remain fail-closed with raw audio/WAL retained. No reviewed correctness
+item remains unfixed. Production signal-gap measurement, 48h shadow soak and
+lead2/P4 ramp acceptance remain unperformed; defaults stay off.
+
+## Local review-fix commits
+
+Rebased commits before the final receipt-only commit:
+
+- `16877e0ddf19956673f1882ed64a826d1272ca35` fix: fence custody appends and recover post-seal interior audio
+- `5bb179e68b53324d9067792d6c9f27d66169f1e4` test: cover crashed recovery producers and rearm partial storage failures
+- `0030c62a30c75f3ea71cd2835aec2deca9ea59ea` fix: order late partial recovery after original record publication
+- `334b349a64c0d75342e0695244f78c9346736b51` test: model durable append heartbeat in lifecycle reactivation exit
+- `864ef7bdb248573d2f0449e9f5b392bf540911d4` test: align custody completion and approved alert contract regressions
+- `c8d6df19ad3aaf48b7b8136b8b8f44432de13583` fix: pin recovery policy canonically and keep closed shadow rows inert
+- `fb2430f644fcfa530bd450cae9e120135c0b43dd` test: exercise closed shadow rows with existing producer tokens
+- `c4dce9e11f922e3915ba1979d1229602805fd4b0` fix: reconcile fresh socket mints after complete record seals
+- `a3e347e1b8438f1cafb3ad7e5bcb46ab880cd7ae` fix: subtract earlier WAL units before retaining later overlap
+
+## Files changed by this review correction (22)
+
+- `backend/database/batch_pipeline_record_lease_recovery.py`
+- `backend/database/record_audio.py`
+- `backend/database/record_custody_append.py`
+- `backend/database/record_partial.py`
+- `backend/docs/listen_pusher_pipeline.mdx`
+- `backend/docs/listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md`
+- `backend/routers/sync.py`
+- `backend/testing/lifecycle_properties/test_properties.py`
+- `backend/tests/support/lifecycle_state_table.py`
+- `backend/tests/support/lifecycle_writer_inventory.py`
+- `backend/tests/unit/test_record_custody_append.py`
+- `backend/tests/unit/test_record_lease_append.py`
+- `backend/tests/unit/test_record_partial.py`
+- `backend/tests/unit/test_record_seal_repair.py`
+- `backend/tests/unit/test_record_token_lease.py`
+- `backend/tests/unit/test_record_token_lease_deploy.py`
+- `backend/tests/unit/test_sync_v2.py`
+- `backend/utils/batch_pipeline/CONTRACT.md`
+- `backend/utils/batch_pipeline/live_upload.py`
+- `backend/utils/batch_pipeline/record_lease_append.py`
+- `backend/utils/batch_pipeline/record_seal_cluster_repair.py`
+- `backend/utils/sync/record_token_lease.py`
