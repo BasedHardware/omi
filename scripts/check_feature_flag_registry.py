@@ -68,7 +68,7 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
 ACCOUNT_OWNERS = {"dazheng"}
-# Keys use normalize_owner(); exceptions require an ISO expires date and reason.
+# Keys use owner_tokens(); exceptions require an ISO expires date and reason.
 OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {}
 
 
@@ -79,15 +79,26 @@ def normalize_owner(owner: str) -> str:
     return " ".join(owner.lower().split())
 
 
+def owner_tokens(owner: str) -> tuple[str, ...]:
+    """Split shared owners into distinct normalized lanes, preserving multiword names."""
+    return tuple(dict.fromkeys(
+        token.strip()
+        for token in re.split(r"[/,&+|]|\s+and\s+", normalize_owner(owner))
+        if token.strip()
+    ))
+
+
 def owner_backlog(registry: dict[str, Any], as_of: date | None = None) -> Counter[str]:
+    """Count each debt row once per distinct normalized lane token, including shared owners."""
     current_date = as_of or datetime.now(timezone.utc).date()
     return Counter(
-        normalize_owner(entry["owner"])
+        owner
         for entry in registry.get("flags", [])
         if entry.get("lifecycle") == "rollout"
         and entry.get("decision") in {"pending", "undecided"}
         and isinstance(entry.get("owner"), str)
         and ("ramp" not in entry or ramp_due(entry) + timedelta(days=REVIEW_GRACE_DAYS) < current_date)
+        for owner in owner_tokens(entry["owner"])
     )
 
 
@@ -123,6 +134,8 @@ def check_diff_rules(base: dict[str, Any], registry: dict[str, Any], errors: lis
     for entry in registry["flags"]:
         key = entry["key"]
         if key not in base_flags:
+            if ACCOUNT_OWNERS.intersection(owner_tokens(entry["owner"])):
+                errors.append(f"{key}: owner names an account; name the owning lane or area")
             continue
         old = base_flags[key]
         if "extension" in old and old["extension"]["until"] != entry.get("extension", {}).get("until"):
@@ -146,36 +159,36 @@ def check_owner_backlog(
         {"flags": [entry for entry in registry["flags"] if entry["key"] not in base_keys]}, current_date
     )
     for entry in registry["flags"]:
-        owner = normalize_owner(entry["owner"])
         if entry["key"] in base_keys or entry["lifecycle"] != "rollout":
             continue
-        if counts[owner] < MAX_UNRAMPED_PER_OWNER and counts[owner] + added_debt[owner] <= MAX_UNRAMPED_PER_OWNER:
-            continue
-        message = (
-            f"{entry['key']}: owner={owner} had {counts[owner]} unramped flags at merge-base "
-            f"(cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
-        )
-        if counts[owner] < MAX_UNRAMPED_PER_OWNER:
+        for owner in owner_tokens(entry["owner"]):
+            if counts[owner] < MAX_UNRAMPED_PER_OWNER and counts[owner] + added_debt[owner] <= MAX_UNRAMPED_PER_OWNER:
+                continue
             message = (
-                f"{entry['key']}: owner={owner} would have {counts[owner] + added_debt[owner]} unramped flags "
-                f"after this diff (cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
+                f"{entry['key']}: owner={owner} had {counts[owner]} unramped flags at merge-base "
+                f"(cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
             )
-        exception = OWNER_BACKLOG_EXCEPTIONS.get(owner)
-        if exception is None:
-            errors.append(message)
-            continue
-        try:
-            expires = date.fromisoformat(exception["expires"])
-            reason = exception["reason"].strip()
-            if not reason:
-                raise ValueError("empty reason")
-        except (KeyError, TypeError, ValueError, AttributeError):
-            errors.append(f"owner_backlog_exceptions[{owner}] requires an ISO expires date and nonempty reason")
-            continue
-        if current_date > expires:
-            errors.append(f"owner backlog exception expired {expires}: {message}")
-        else:
-            warnings.append(f"WARNING: owner backlog exception expires {expires}: {message} ({reason})")
+            if counts[owner] < MAX_UNRAMPED_PER_OWNER:
+                message = (
+                    f"{entry['key']}: owner={owner} would have {counts[owner] + added_debt[owner]} unramped flags "
+                    f"after this diff (cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
+                )
+            exception = OWNER_BACKLOG_EXCEPTIONS.get(owner)
+            if exception is None:
+                errors.append(message)
+                continue
+            try:
+                expires = date.fromisoformat(exception["expires"])
+                reason = exception["reason"].strip()
+                if not reason:
+                    raise ValueError("empty reason")
+            except (KeyError, TypeError, ValueError, AttributeError):
+                errors.append(f"owner_backlog_exceptions[{owner}] requires an ISO expires date and nonempty reason")
+                continue
+            if current_date > expires:
+                errors.append(f"owner backlog exception expired {expires}: {message}")
+            else:
+                warnings.append(f"WARNING: owner backlog exception expires {expires}: {message} ({reason})")
 
 
 def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -> tuple[list[str], list[str]]:
@@ -185,9 +198,6 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
     errors = validate_registry(registry, root=root, as_of=current_date)
     if errors:
         return errors, []
-    for entry in registry["flags"]:
-        if normalize_owner(entry["owner"]) in ACCOUNT_OWNERS:
-            errors.append(f"{entry['key']}: owner names an account; name the owning lane or area")
     for owner, count in sorted(owner_backlog(registry, current_date).items()):
         print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
     warnings: list[str] = []

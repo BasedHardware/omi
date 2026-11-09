@@ -15,7 +15,7 @@ from pathlib import Path
 
 from git_test_env import clean_git_env
 
-from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog
+from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog, owner_tokens
 from feature_flag_registry import effective_due, ramp_due, load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 
@@ -774,11 +774,12 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("registry diff rules and owner backlog gate skipped", "\n".join(warnings))
         self.assertIn("base unavailable", "\n".join(warnings))
 
-    def test_account_owner_is_rejected_even_when_base_is_unavailable(self) -> None:
-        self.write_flags([flag(owner="dazheng")])
+    def test_missing_base_warns_and_skips_new_owner_classification(self) -> None:
+        self.write_flags([flag(owner="dazheng / auditfix")])
         with mock.patch("check_feature_flag_registry.load_base_registry", side_effect=ValueError("base unavailable")):
             errors, warnings = check(self.root, check_render=False, as_of=date(2026, 11, 1))
-        self.assertIn("EXAMPLE_ENABLED: owner names an account; name the owning lane or area", errors)
+        self.assertEqual([], errors)
+        self.assertIn("registry diff rules and owner backlog gate skipped", "\n".join(warnings))
         self.assertIn("base unavailable", "\n".join(warnings))
 
     def test_permanent_rows_may_record_a_valid_bounded_extension(self) -> None:
@@ -810,15 +811,50 @@ class RegistryFixture(unittest.TestCase):
         errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 9))
         self.assertIn("NEW_ENABLED: owner=tester had 5 unramped flags", "\n".join(errors))
 
-    def test_account_owner_is_refused_for_all_rows_in_any_lifecycle(self) -> None:
+    def test_new_rows_with_account_owner_tokens_are_refused(self) -> None:
+        rows = self.backlog_base(count=1, owner="auditfix")
+        for owner in (
+            "  DAZHENG (backend) ", "dazheng / auditfix", "auditfix,dazheng",
+            "auditfix and dazheng", "auditfix & dazheng", "auditfix+dazheng", "auditfix|dazheng",
+        ):
+            for lifecycle in ("rollout", "ops_kill", "config_switch"):
+                with self.subTest(owner=owner, lifecycle=lifecycle):
+                    row = flag("NEW_ENABLED", owner=owner, lifecycle=lifecycle)
+                    if lifecycle != "rollout":
+                        row.pop("review_by")
+                    self.write_flags(rows + [row])
+                    self.assertIn("NEW_ENABLED: owner names an account; name the owning lane or area", self.errors())
+
+    def test_new_row_with_lane_owner_passes(self) -> None:
+        rows = self.backlog_base(count=1, owner="auditfix")
+        self.write_flags(rows + [flag("NEW_ENABLED", owner="auditfix")])
+        self.assertEqual([], self.errors())
+
+    def test_existing_rows_with_account_tokens_are_not_newly_refused(self) -> None:
         rows = self.backlog_base(count=1, owner="dazheng")
-        self.assertIn("owner names an account", "\n".join(self.errors()))
-        for lifecycle in ("rollout", "ops_kill", "config_switch"):
-            row = flag("NEW_ENABLED", owner="  DAZHENG (backend) ", lifecycle=lifecycle)
-            if lifecycle != "rollout":
-                row.pop("review_by")
-            self.write_flags(rows + [row])
-            self.assertIn("NEW_ENABLED: owner names an account; name the owning lane or area", self.errors())
+        for owner in ("dazheng", "dazheng / auditfix", "auditfix,dazheng", "auditfix and dazheng"):
+            with self.subTest(owner=owner):
+                self.write_flags([dict(rows[0], owner=owner)])
+                self.assertEqual([], self.errors())
+
+    def test_owner_tokens_preserve_multiword_lanes_and_deduplicate(self) -> None:
+        self.assertEqual(
+            ("auditfix", "two-lane lead", "backlog-refactor", "omi-pipeline"),
+            owner_tokens(" AUDITFIX (sweep) / two-lane lead, backlog-refactor & omi-pipeline + AUDITFIX | auditfix AND auditfix "),
+        )
+        self.assertEqual(("candy lane", "research-and-development"), owner_tokens("candy lane/research-and-development"))
+
+    def test_shared_debt_counts_once_for_each_distinct_lane(self) -> None:
+        rows = [flag(owner="auditfix / backlog-refactor / AUDITFIX"), flag("OTHER_ENABLED", owner="backlog-refactor")]
+        self.assertEqual({"auditfix": 1, "backlog-refactor": 2}, owner_backlog({"flags": rows}))
+
+    def test_shared_owner_cap_checks_base_and_new_rows_by_lane_token(self) -> None:
+        rows = self.backlog_base(owner="other / auditfix")
+        self.write_flags(rows + [flag("NEW_ENABLED", owner="fresh and auditfix")])
+        self.assertIn("NEW_ENABLED: owner=auditfix had 5 unramped flags", "\n".join(self.errors()))
+        rows = self.backlog_base(count=4, owner="other / auditfix")
+        self.write_flags(rows + [flag("NEW_ENABLED", owner="fresh / auditfix"), flag("ANOTHER_ENABLED", owner="auditfix, fresh")])
+        self.assertIn("owner=auditfix would have 6 unramped flags", "\n".join(self.errors()))
 
     def test_ops_kill_must_default_on_unless_temporarily_allowlisted(self) -> None:
         row = flag(lifecycle="ops_kill", decision="keep", fail="closed")
