@@ -120,12 +120,15 @@ class MixedWrite(ValueError):
 def widens_exposure(current: dict | None, change: dict | None) -> bool:
     """Classify a flag rule or _ramp patch before any liveness IO. Reject mixed writes.
 
-    Omitted fields are unchanged; deleting a rule only narrows exposure. A new
-    rule starts inactive at zero percent with empty allow/deny sets.
+    Omitted fields are unchanged. Deleting an Omi rule returns control to
+    PostHog and can widen exposure unless it is active at 100% with no denied
+    UIDs. A new rule starts inactive at zero percent with empty allow/deny sets.
     """
-    if change is None:
-        return False
     before = current or {}
+    if change is None:
+        return not (
+            before.get('active') is True and before.get('rollout_percentage') == 100 and not before.get('deny_uids')
+        )
     pairs = [
         (float((before.get('percents') or {}).get(name, 0)), float(percent))
         for name, percent in (change.get('percents') or {}).items()

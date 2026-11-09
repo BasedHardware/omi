@@ -231,6 +231,8 @@ def cmd_delete(args: argparse.Namespace) -> None:
     _, docs = store.read_all(client)
     if args.key not in docs:
         raise FlagCliError(f'{args.key}: no rule in the Omi store')
+    if live_preflight.widens_exposure(docs[args.key], None):
+        live_preflight.require(args.key, 100)
     _print({'before': docs[args.key], 'after': None})
     if not args.yes and input('delete (key returns to PostHog)? [y/N] ').strip().lower() != 'y':
         print('aborted')

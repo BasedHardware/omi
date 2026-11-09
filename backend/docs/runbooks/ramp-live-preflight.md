@@ -1,7 +1,7 @@
 # Live evidence before production raises
 
 `backend/scripts/rollout/live_preflight.py` is the shared primitive used by
-`omi_flags.py set`, `omi_flags.py import-posthog --apply`, `ramp_set.py --apply`
+`omi_flags.py set`, `omi_flags.py delete`, `omi_flags.py import-posthog --apply`, `ramp_set.py --apply`
 and production controller ADVANCE writes. It uses the credentials already held
 by the operator command (prod-operator for production writes); it never selects
 a tier, installs credentials or calls the fleet bus. Dry-run ramp commands do
@@ -9,8 +9,13 @@ not perform production preflight reads.
 
 All writers use `widens_exposure` before invoking liveness evidence. Percent
 increases, activation, allow UID additions and deny UID removals widen exposure.
-Percent decreases, deactivation, allow UID removals, deny UID additions and
-deletes narrow it. A mixed write refuses with `RAMP_PREFLIGHT REFUSE mixed_write`
+Percent decreases, deactivation, allow UID removals and deny UID additions
+narrow it. Deletion returns the key to PostHog and requires preflight for a
+possible 100% exposure, unless the current rule is active at 100% with no deny
+UIDs. Use deactivation or a decrease for emergency rollback. `_ramp` and the
+controller merge percent changes without deleting overrides; clearing an
+operator lock leaves serving percentages intact.
+A mixed write refuses with `RAMP_PREFLIGHT REFUSE mixed_write`
 and exit 2, including dry-run requests; run the narrowing change alone first,
 then the raise. `--accept-not-live` cannot override a mixed write.
 

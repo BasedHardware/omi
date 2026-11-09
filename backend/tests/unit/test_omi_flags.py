@@ -350,14 +350,46 @@ def test_cli_override_is_in_existing_audit_reason(monkeypatch):
     assert writer.call_count == 1
 
 
-def test_delete_never_runs_preflight(monkeypatch):
+@pytest.mark.parametrize(
+    'rule,gated',
+    [
+        ({'active': False, 'rollout_percentage': 100}, True),
+        ({'active': True, 'rollout_percentage': 25}, True),
+        ({'active': True, 'rollout_percentage': 100, 'deny_uids': ['denied']}, True),
+        ({'active': True, 'rollout_percentage': 100}, False),
+        ({'active': True, 'rollout_percentage': 100, 'allow_uids': ['allowed'], 'deny_uids': []}, False),
+    ],
+)
+def test_delete_preflights_posthog_handoff_unless_already_fully_exposed(monkeypatch, rule, gated):
     monkeypatch.setattr(cli, '_client', lambda args: object())
-    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': {'active': True, 'rollout_percentage': 100}}))
-    check = Mock(side_effect=AssertionError('prod read'))
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': rule}))
+    check = Mock(side_effect=None if gated else AssertionError('prod read'))
     monkeypatch.setattr(cli.live_preflight, 'require', check)
-    monkeypatch.setattr(cli, '_write', Mock())
-    assert cli.main(['delete', 'k', '--reason', 'rollback', '--yes']) == 0
-    check.assert_not_called()
+    writer = Mock()
+    monkeypatch.setattr(cli, '_write', writer)
+    assert cli.main(['delete', 'k', '--reason', 'handoff', '--yes']) == 0
+    if gated:
+        check.assert_called_once_with('k', 100)
+    else:
+        check.assert_not_called()
+    writer.assert_called_once_with(writer.call_args.args[0], 'k', None, 'handoff')
+
+
+@pytest.mark.parametrize('exit_code', [3, 4])
+def test_delete_preflight_refusal_preserves_rule(monkeypatch, capsys, exit_code):
+    rule = {'active': False, 'rollout_percentage': 25}
+    docs = {'k': rule}
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, docs))
+    monkeypatch.setattr(cli.live_preflight, 'require', Mock(side_effect=SystemExit(exit_code)))
+    writer = Mock(side_effect=lambda client, key, after, reason: docs.pop(key))
+    monkeypatch.setattr(cli, '_write', writer)
+    with pytest.raises(SystemExit) as error:
+        cli.main(['delete', 'k', '--reason', 'handoff', '--yes'])
+    assert error.value.code == exit_code
+    writer.assert_not_called()
+    assert docs == {'k': rule}
+    assert capsys.readouterr().out == ''
 
 
 def test_posthog_import_apply_cannot_bypass_raise_preflight(monkeypatch):

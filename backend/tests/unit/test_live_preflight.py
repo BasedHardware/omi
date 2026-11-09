@@ -148,7 +148,6 @@ class LivePreflightTest(unittest.TestCase):
             'percents': {'batch-pipeline': 20, 'batch-live-stt-retire': 10},
         }
         for change in (
-            None,
             {},
             {'active': False},
             {'rollout_percentage': 5},
@@ -166,6 +165,10 @@ class LivePreflightTest(unittest.TestCase):
         ):
             with self.subTest(change=change):
                 self.assertTrue(lp.widens_exposure(before, change))
+        self.assertTrue(lp.widens_exposure(before, None))
+        self.assertTrue(lp.widens_exposure({'active': False, 'rollout_percentage': 100}, None))
+        self.assertTrue(lp.widens_exposure({'active': True, 'rollout_percentage': 100, 'deny_uids': ['deny']}, None))
+        self.assertFalse(lp.widens_exposure({'active': True, 'rollout_percentage': 100}, None))
         self.assertTrue(lp.widens_exposure({'active': False}, {'active': True}))
         for change in (
             {'rollout_percentage': 5, 'allow_uids': ['allow', 'new']},
