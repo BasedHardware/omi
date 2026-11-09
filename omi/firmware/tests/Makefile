@@ -24,3 +24,4 @@ test:
 	python3 test_build_guard.py
 	python3 test_rc_integration.py
 	python3 -m unittest discover -s ../tools/cv1 -p test_startup_replay.py
+	python3 ../tools/cv1/test_jig_gestures.py
