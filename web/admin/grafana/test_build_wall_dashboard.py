@@ -158,6 +158,9 @@ class WallV2Contract(unittest.TestCase):
             self.assertIn(name, styled)
             self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
+        # Under the plot, never beside it: Health is a narrow column, and a right
+        # legend squeezed the 35-day stack and revenue line into a sliver.
+        self.assertEqual(cost["options"]["legend"]["placement"], "bottom")
         self.assertIn("Soniox console", cost["description"])
         self.assertIn("measured SaaS (Mercury)", cost["description"])
         self.assertIn("Modulate modelled", cost["description"])
