@@ -91,3 +91,85 @@ def test_real_transaction_rolls_back_job_if_seal_write_never_reached(source, mon
     job_id = result['entries'][0]['job']['segment_id']
     assert not client.collection(f'{store.namespace}_jobs').document(job_id).get().exists
     assert not client.document(interrupted_path).get().to_dict().get('record_audio_closed')
+
+
+def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypatch):
+    """Emulator proves query/cursor semantics; registry guards prove index coverage."""
+    from config import record_seal_repair as config
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_seal_cluster_repair as cluster
+    from utils.batch_pipeline.record_seal_budget import SweepBudget
+    from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
+
+    monkeypatch.delenv('RECORD_SEAL_REPAIR_AGE_ORDER', raising=False)
+    client = firestore.Client(project='demo-seal-age-order', credentials=AnonymousCredentials())
+    jobs = client.collection('batch_pipeline_prod_jobs')
+    for doc in jobs.stream():
+        doc.reference.delete()
+    refs, selected = [], {}
+    clocks = [200.123456789, 100.123456789, 100.123456789, None, 'old', True, float('nan'), -float('inf'), 'missing']
+    try:
+        for index, clock in enumerate(clocks):
+            cid = f'synthetic-{index}'
+            content, segment = record_identity('synthetic-age-owner', cid)
+            data = {
+                'state': 'record_pending',
+                'owner_id': 'synthetic-age-owner',
+                'conversation_id': cid,
+                'record_content_id': content,
+            }
+            if clock != 'missing':
+                data['enqueued_at'] = clock
+            ref = jobs.document(segment)
+            ref.set(data)
+            refs.append(ref)
+        frontier = RepairCursor(client, b'synthetic-local-key' * 2, jobs=True)
+        expected = [
+            f'users/synthetic-age-owner/conversations/synthetic-{i}'
+            for i in sorted(range(3), key=lambda i: (clocks[i], refs[i].id))
+        ]
+        observed, cursor, ages = [], None, []
+        # Scan only one document at a time, including ineligible NaN/-inf.
+        for _ in range(len(clocks) + 2):
+            rows, saturated, cursor = cluster.discover_jobs(
+                client, budget=SweepBudget(60), after=cursor, max_scan=1, selected_cursors=selected
+            )
+            observed += [path for path, _ in rows]
+            ages += [age for _, age in rows]
+            frontier.write(cursor, SweepBudget(60))
+            cursor = frontier.read(SweepBudget(60))
+            if cursor is None:
+                break
+        assert observed == expected and cursor is None
+        assert all(age >= config.JOBS_MIN_AGE_SECONDS for age in ages)
+        first, _, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+        content, segment = record_identity('synthetic-age-owner', 'late')
+        late = jobs.document(segment)
+        late.set(
+            {
+                'state': 'record_pending',
+                'owner_id': 'synthetic-age-owner',
+                'conversation_id': 'late',
+                'record_content_id': content,
+                'enqueued_at': cursor['horizon'].timestamp() + 1,
+            }
+        )
+        refs.append(late)
+        rest, _, end = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor)
+        assert [path for path, _ in first + rest] == expected and end is None
+        assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
+        # The legacy cursor can still be written and read, and off returns all
+        # the same eligible rows in exact Firestore document-name order.
+        monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'off')
+        old, _, old_cursor = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+        frontier.write(old_cursor, SweepBudget(60))
+        assert frontier.read(SweepBudget(60)) == old_cursor
+        rest, _, _ = cluster.discover_jobs(client, budget=SweepBudget(60), after=old_cursor)
+        expected_hash = [
+            f'users/synthetic-age-owner/conversations/synthetic-{i}' for i in sorted(range(3), key=lambda i: refs[i].id)
+        ]
+        assert [path for path, _ in old + rest] == expected_hash
+    finally:
+        for ref in refs:
+            ref.delete()
+        client.close()
