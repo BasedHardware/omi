@@ -12,6 +12,7 @@ from posthog.feature_flags import _hash as posthog_hash
 
 from config.proactivity_v2 import ProactivityDenied
 from routers import omi_flags as flags_router
+from database import omi_flags as omi_flags_store
 from scripts import omi_flags as cli
 from utils import omi_flags, proactivity_flags
 from utils.metrics import OMI_FLAG_DUAL_READ_TOTAL
@@ -372,7 +373,7 @@ def test_delete_preflights_posthog_handoff_unless_already_fully_exposed(monkeypa
         check.assert_called_once_with('k', 100)
     else:
         check.assert_not_called()
-    writer.assert_called_once_with(writer.call_args.args[0], 'k', None, 'handoff')
+    writer.assert_called_once_with(writer.call_args.args[0], 'k', None, 'handoff', expected=rule)
 
 
 @pytest.mark.parametrize('exit_code', [3, 4])
@@ -382,7 +383,7 @@ def test_delete_preflight_refusal_preserves_rule(monkeypatch, capsys, exit_code)
     monkeypatch.setattr(cli, '_client', lambda args: object())
     monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, docs))
     monkeypatch.setattr(cli.live_preflight, 'require', Mock(side_effect=SystemExit(exit_code)))
-    writer = Mock(side_effect=lambda client, key, after, reason: docs.pop(key))
+    writer = Mock(side_effect=lambda client, key, after, reason, **kwargs: docs.pop(key))
     monkeypatch.setattr(cli, '_write', writer)
     with pytest.raises(SystemExit) as error:
         cli.main(['delete', 'k', '--reason', 'handoff', '--yes'])
@@ -547,3 +548,78 @@ def test_import_classifies_all_rules_before_any_live_evidence(monkeypatch, capsy
     assert 'mixed_write' in capsys.readouterr().err
     check.assert_not_called()
     writer.assert_not_called()
+
+
+class _Doc(SimpleNamespace):
+    def to_dict(self):
+        return self.data
+
+
+def _fake_flag_client(stored):
+    """A client whose transaction reads ``stored`` for the flag doc and records writes."""
+    writes = []
+    refs = {}
+
+    def document(name=None):
+        ref = refs.setdefault(name, Mock(name=f'ref:{name}'))
+        if name == 'k':
+            ref.get = lambda transaction=None: _Doc(exists=stored is not None, data=stored)
+        elif name is not None:
+            ref.get = lambda transaction=None: _Doc(exists=True, data={'version': 7})
+        return ref
+
+    transaction = Mock()
+    transaction.set.side_effect = lambda ref, data: writes.append(('set', ref, data))
+    transaction.delete.side_effect = lambda ref: writes.append(('delete', ref))
+    client = Mock()
+    client.collection.return_value.document.side_effect = document
+    client.transaction.return_value = transaction
+    return client, writes
+
+
+@pytest.mark.parametrize(
+    'stored, expected, stale',
+    [
+        ({'active': True, 'rollout_percentage': 100, 'version': 5}, {'active': True, 'version': 5}, False),
+        ({'active': False, 'rollout_percentage': 100, 'version': 6}, {'active': True, 'version': 5}, True),
+        (None, None, False),
+        ({'active': True, 'version': 6}, None, True),
+        (None, {'active': True, 'version': 5}, True),
+    ],
+)
+def test_write_rule_refuses_when_stored_rule_changed_since_read(monkeypatch, stored, expected, stale):
+    monkeypatch.setattr(omi_flags_store.firestore, 'transactional', lambda function: function)
+    client, writes = _fake_flag_client(stored)
+    if stale:
+        with pytest.raises(omi_flags_store.StaleRuleError):
+            omi_flags_store.write_rule(client, 'k', None, actor='t', reason='r', expected=expected)
+        assert writes == []
+    else:
+        assert omi_flags_store.write_rule(client, 'k', None, actor='t', reason='r', expected=expected) == 8
+        assert writes[0][0] == 'delete'
+
+
+def test_write_rule_without_expected_keeps_last_writer_wins(monkeypatch):
+    monkeypatch.setattr(omi_flags_store.firestore, 'transactional', lambda function: function)
+    client, writes = _fake_flag_client({'active': False, 'version': 6})
+    assert omi_flags_store.write_rule(client, 'k', {'active': True}, actor='t', reason='r') == 8
+    assert writes[0][0] == 'set'
+
+
+@pytest.mark.parametrize('command', [['delete', 'k'], ['set', 'k', '--rollout', '5']])
+def test_cli_write_on_a_stale_snapshot_aborts_without_writing(monkeypatch, capsys, command):
+    rule = {'active': True, 'rollout_percentage': 100, 'version': 5}
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (5, {'k': rule}))
+    monkeypatch.setattr(cli.live_preflight, 'require', Mock(side_effect=AssertionError('prod read')))
+    seen = {}
+
+    def stale(client, key, after, *, actor, reason, expected):
+        seen['expected'] = expected
+        raise cli.store.StaleRuleError(key)
+
+    monkeypatch.setattr(cli.store, 'write_rule', stale)
+    assert cli.main([*command, '--reason', 'r', '--yes']) != 0
+    assert seen['expected'] is rule
+    assert 'rule changed since it was read; nothing written' in capsys.readouterr().err

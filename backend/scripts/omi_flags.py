@@ -175,8 +175,11 @@ def _actor() -> str:
     return os.getenv('OMI_FLAGS_ACTOR') or f'{getpass.getuser()}@{socket.gethostname()}'
 
 
-def _write(client: Any, key: str, rule: dict[str, Any] | None, reason: str) -> None:
-    version = store.write_rule(client, key, rule, actor=_actor(), reason=reason)
+def _write(client: Any, key: str, rule: dict[str, Any] | None, reason: str, *, expected: dict[str, Any] | None) -> None:
+    try:
+        version = store.write_rule(client, key, rule, actor=_actor(), reason=reason, expected=expected)
+    except store.StaleRuleError:
+        raise FlagCliError(f'{key}: rule changed since it was read; nothing written, rerun to re-check it') from None
     published = store.publish_redis_version(version)
     print(f'{key}: version {version}' + ('' if published else ' (Redis not updated; pods pick it up within 60 s)'))
 
@@ -220,7 +223,7 @@ def cmd_set(args: argparse.Namespace) -> None:
     if not args.yes and input('write? [y/N] ').strip().lower() != 'y':
         print('aborted')
         return
-    _write(client, args.key, rule, reason)
+    _write(client, args.key, rule, reason, expected=current)
     if mirror is not None:
         _posthog_request('PATCH', f'feature_flags/{mirror[0]}/', mirror[1])
         print(f'{args.key}: PostHog row mirrored')
@@ -237,7 +240,7 @@ def cmd_delete(args: argparse.Namespace) -> None:
     if not args.yes and input('delete (key returns to PostHog)? [y/N] ').strip().lower() != 'y':
         print('aborted')
         return
-    _write(client, args.key, None, args.reason)
+    _write(client, args.key, None, args.reason, expected=docs[args.key])
 
 
 def cmd_import(args: argparse.Namespace) -> None:
@@ -269,7 +272,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     for key, rule in raises:
         live_preflight.require(key, rule['rollout_percentage'], args.accept_not_live)
     for key, rule in planned:
-        _write(client, key, rule, reason)
+        _write(client, key, rule, reason, expected=None)
 
 
 def main(argv: list[str] | None = None) -> int:
