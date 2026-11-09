@@ -140,12 +140,13 @@ class CellGoals(WorkflowRepo):
         self._generation(account_generation)
 
         def build():
+            # Enumerate (and so lock, sorted) before the single-row read.
+            focused = {eid: r for eid, r in self._rows().items() if r.get('status') == 'focused' and eid != goal_id}
             row = self._read(goal_id)
             if row is None:
                 raise GoalNotFoundError(goal_id)
             if row.get('status') in ('achieved', 'abandoned'):
                 raise GoalConflictError('ended goals cannot be focused')
-            focused = {eid: r for eid, r in self._rows().items() if r.get('status') == 'focused' and eid != goal_id}
             if row.get('status') == 'focused' and focus_rank in (None, row.get('focus_rank')):
                 return row
             replacement = None

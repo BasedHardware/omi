@@ -148,6 +148,7 @@ class CellFolders(Repo):
         digest, prior = self.receipt(mutation_id, 'folders.reorder', folder_ids)
         if prior is not None:
             return prior
+        self._lock_in_order('folders', folder_ids)
         for fid in folder_ids:
             if fid not in self.store.state['folders']:
                 raise KeyError(fid)

@@ -744,6 +744,50 @@ def test_cross_domain_bodies_lock_in_flush_order(pg, monkeypatch):
     store.run(lambda tx: tx.folders.bulk_move_conversations(['c2', 'c1'], 'f2'))
     order = first_locks()
     assert order == sorted(order) and ('conversations', 'c1') in order
+    store.run(lambda tx: tx.folders.reorder(['f2', 'f1']))
+    order = first_locks()
+    assert order == sorted(order) and ('folders', 'f1') in order
+    store.run(lambda tx: tx.goals.create(GoalCreate(data={'goal_id': 'g0', 'title': 'g0'})))
+    seen.clear()
+    store.run(lambda tx: tx.goals.focus('g1', idempotency_key='f', account_generation=generation))
+    order = first_locks()
+    assert order == sorted(order) and ('goals', 'g0') in order
     store.run(lambda tx: tx.folders.delete('f2', move_to_folder_id='f1'))
     order = first_locks()
     assert order == sorted(order) and ('conversations', 'c1') in order
+
+
+def test_inverted_lock_order_deadlock_is_detected_and_retried(pg):
+    # Data-dependent bodies cannot always lock in flush order. Correctness rests
+    # on PostgreSQL deadlock detection plus the store's bounded body retry:
+    # force two bodies to lock a/b in opposite orders; both must commit.
+    sid = pg.space('deadlock-retry')
+    for entity_id in ('a', 'b'):
+        pg.seed(sid, 'folders', entity_id, {'name': entity_id, 'counter': 0})
+    store = pg.store(sid)
+    first_locked = {'ab': Event(), 'ba': Event()}
+    attempts = {'ab': 0, 'ba': 0}
+
+    def body(order):
+        def run(tx):
+            attempts[order] += 1
+            tx.get('folders', order[0])
+            if attempts[order] == 1:
+                first_locked[order].set()
+                other = 'ba' if order == 'ab' else 'ab'
+                assert first_locked[other].wait(timeout=5)
+            for entity_id in order:
+                doc = tx.get('folders', entity_id)
+                tx.put('folders', entity_id, {**doc, 'counter': doc['counter'] + 1})
+
+        return run
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(store.cell.run, sid, body(order), actor_uid=f'raw-{order}', now=0) for order in ('ab', 'ba')
+        ]
+        for future in futures:
+            future.result(timeout=30)
+    assert attempts['ab'] + attempts['ba'] >= 3
+    for entity_id in ('a', 'b'):
+        assert store.cell.read_doc(sid, 'folders', entity_id)['counter'] == 2
