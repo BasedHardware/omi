@@ -88,3 +88,6 @@ Every delayed retry, including an unchanged privacy head or held claim, also
 hands back its shard inflight admission while retaining its local timer and
 the pump's existing durable retry policy. Drain requests from an event-loop
 caller route on `db_executor`; a Redis push failure still records local intent.
+That short routing handoff is only an advisory notification: process loss
+before it runs leaves the committed pending results for the resuming
+tail/whole-log backstop, or the legacy sweep, to rediscover.

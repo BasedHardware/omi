@@ -1,6 +1,7 @@
 """Two serving processes, real owner drains and walks, one shard writer per owner."""
 
 import asyncio
+from concurrent.futures import Future
 from contextlib import contextmanager
 import threading
 
@@ -8,6 +9,7 @@ import fakeredis
 import pytest
 
 from tests.unit.test_batch_pipeline_owner_chain_projection import ResultLog, chain, projector_for
+from utils import executors
 from utils.batch_pipeline import projection, projection_drain, projection_followup, projection_shard_pump
 from utils.batch_pipeline.projection_shard_pump import ShardPump
 from utils.batch_pipeline.projection_shards import BACKLOG, FRESH, ProjectionShards
@@ -231,6 +233,67 @@ async def test_delayed_drain_returns_shard_wake_for_retry(claims, monkeypatch, s
         next_projector.ensure_drains().close()
     finally:
         drains.close()
+
+
+@pytest.mark.asyncio
+async def test_lost_router_notification_is_recovered_from_durable_results(claims, monkeypatch):
+    now = 1000.0
+    client = fakeredis.FakeRedis()
+    log = ResultLog()
+    log.clock = 994.0
+    ids = chain(log, 'owner', 'durable', 2)
+
+    def pages(**kwargs):
+        return [
+            (sid, log.bindings[sid].owner_id, row['committed_at'], 990.0)
+            for sid, row in log.results.items()
+            if row['projection_state'] == 'pending'
+        ], None
+
+    monkeypatch.setattr(log, 'projection_page_owners', pages, raising=False)
+    shards = ProjectionShards('ns', count=1, client=lambda: client, clock=lambda: now)
+    shards.refresh()
+    projector = projector_for(log)
+    pump = ShardPump(projector, shards)
+    projector.router = pump.route
+    lost = []
+
+    def lose_dispatch(executor, fn, *args):
+        assert executor is executors.db_executor
+        future = Future()
+        assert future.cancel()
+        lost.append(future)
+        return future  # Model process loss before this advisory notification runs.
+
+    with monkeypatch.context() as patch:
+        patch.setattr(executors, 'submit_with_context', lose_dispatch)
+        projector.request_drain('owner')
+    assert len(lost) == 1 and lost[0].cancelled()
+    assert not projector.owes_drains
+    assert shards.take(FRESH, 1) == shards.take(BACKLOG, 1) == []
+    assert log.persist_order == []
+    assert all(log.results[sid]['projection_state'] == 'pending' for sid in ids)
+    shards.release()
+
+    replacement = ProjectionShards('ns', count=1, client=lambda: client, clock=lambda: now)
+    replacement.refresh()
+    next_projector = projector_for(log)
+    next_projector.clock = lambda: now
+    next_pump = ShardPump(next_projector, replacement)
+    try:
+        # Discovery reconstructs the wake from durable metadata, without any
+        # memory, Redis wake or Future from the lost request.
+        await asyncio.to_thread(next_pump.backstop)
+        assert await next_pump.tick() == 1
+        await quiesce([next_projector])
+        await next_pump.tick()
+        assert log.persist_order == ids
+        assert claims['overlaps'] == 0
+        assert replacement.take(FRESH, 1) == replacement.take(BACKLOG, 1) == []
+    finally:
+        drains = next_projector.ensure_drains()
+        drains.close()
+        await asyncio.gather(*list(drains.tasks.values()), return_exceptions=True)
 
 
 @pytest.mark.asyncio
