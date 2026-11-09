@@ -108,6 +108,20 @@ final class PolicyTests: XCTestCase {
         XCTAssertEqual(PCM.int16LE(from: []).count, 0)
     }
 
+    func testPointerEncodingUsesSharedRoundingClampingAndNaNHandling() {
+        // This is the exact production seam used by the CoreAudio callbacks. Keep the samples
+        // asymmetric so truncation, wrapping, or NaN conversion cannot hide behind a symmetric
+        // fixture: 0.5 must round up, the tie must round away from zero, and both clamps must stay
+        // signed while NaN becomes encoded silence.
+        let samples: [Float] = [0.5, Float(16382.5 / 32767), 2, -3, .nan]
+        let encoded = samples.withUnsafeBufferPointer { PCM.int16LE(from: $0) }
+
+        XCTAssertEqual(
+            Array(encoded),
+            [0x00, 0x40, 0xFF, 0x3F, 0xFF, 0x7F, 0x01, 0x80, 0x00, 0x00])
+        XCTAssertEqual(PCM.peak(int16LE: encoded), 32767)
+    }
+
     func testFloatRoundTripStaysWithinOneLSB() {
         let samples: [Float] = [0, 0.5, -0.5, 0.123, -0.987, 1, -1]
 
