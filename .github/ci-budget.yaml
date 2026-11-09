@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 49,
-    "pr_linux_minutes_per_day": 14380,
+    "pr_linux_minutes_per_day": 14400,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380. 2026-11-03 ciflake: backend unit fanout 6->8 with proportional p50 forecast 8->6 minutes/runner leaves aggregate forecast (48 runner-minutes/run) and all caps unchanged; measured full-suite walls motivate capacity, not a relaxed 720s test gate.",
+  "caps_rationale": "2026-11-08 cap raise 14380 to 14400: PR linux budget is 14382.4 on main, already above the old cap, so the cap moves to 14400 for that existing overage. The funnel dashboard trigger row in #24942 runs on push to main only and is not counted in this PR cap. #21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380. 2026-11-03 ciflake: backend unit fanout 6->8 with proportional p50 forecast 8->6 minutes/runner leaves aggregate forecast (48 runner-minutes/run) and all caps unchanged; measured full-suite walls motivate capacity, not a relaxed 720s test gate.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -1778,7 +1778,7 @@
       "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {
         "environment": [
@@ -1788,7 +1788,7 @@
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Planning budget raised to 6 minutes for exclusive dashboard/alert backups with complete readback plus the prod-only Business board and ACL step; matrix narrows to one selected environment, main auto-dev and explicit protected prod only.",
+      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1800,13 +1800,13 @@
       "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased to 6 minutes for dashboard JSON plus combined/split alert lint; triggers now also cover the Business board JSON and both dashboard provisioners; no PR execution or new runner.",
+      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5500,7 +5500,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
       "triggers": {
         "push": {
           "branches": [
@@ -5515,7 +5515,8 @@
             ".github/workflows/grafana_dashboard_provisioning.yml",
             ".github/scripts/provision_grafana_dashboards.py",
             ".github/scripts/grafana_business.py",
-            "web/admin/grafana/dashboards/omi-tv-v2.json"
+            "web/admin/grafana/dashboards/omi-tv-v2.json",
+            "web/admin/grafana/dashboards/omi-tv-funnel.json"
           ]
         },
         "workflow_dispatch": {

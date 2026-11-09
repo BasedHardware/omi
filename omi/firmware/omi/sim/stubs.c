@@ -80,6 +80,8 @@ int battery_charge_start(void)
 {
     return 0;
 }
+void capture_mute_apply_runtime(void) {}
+
 int app_sd_init(void)
 {
     LOG_INF("SIM: SD init stub (no card or filesystem)");

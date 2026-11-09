@@ -6,15 +6,17 @@ Human on-ramp: the visual guide at `docs/doc/hardware/how-the-pendant-works.mdx`
 
 ## Release Workflow
 
-Firmware releases are manual via `.github/workflows/firmware_release.yml`:
-
-Follow [the CV1 release runbook](docs/cv1-release-safety.md): build-only QA first,
+First bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/omi.conf`.
+Releases run manually through `.github/workflows/firmware_release.yml`; omit
+`publish` for build-only QA. Commands, build logic and the OTA/backend contract:
+[scripts/ci/README.md](scripts/ci/README.md). Follow [the CV1 release runbook](docs/cv1-release-safety.md): build-only QA first,
 then promote its exact artifacts with `qa_run_id`, `qa_run_attempt` and the
 bench-reported `tested_signed_sha256` from the same main SHA.
 New releases start at 1%; David expands by editing the release body. Versions
 3.0.90–3.0.99 require the explicit emergency-revert input.
 
-Build logic lives in `omi/firmware/scripts/ci/`.
+Capture mute (`19B10015`, NVS key `muted`, feature bit 10) and its pendant-owned
+semantics are specified in [docs/gatt-map.md](docs/gatt-map.md).
 
 ## Formatting
 
