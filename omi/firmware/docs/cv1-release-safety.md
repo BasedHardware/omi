@@ -59,8 +59,8 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
 
 ## Release checklist (each gate fails closed)
 
-- **G0 candidate.** Fixes merged to main with host tests and the
-  `CV1 Firmware Simulator` repo check green. Every field bug in the release has
+- **G0 candidate.** Fixes merged to main with host tests green and the
+  simulator suite (`omi/sim/scenario_runner.py`) passing at that SHA. Every field bug in the release has
   a scenario whose `baseline_bug` reproduces on the previous release's sources
   (`scenario_runner.py --baseline`) and whose `expect` passes on the candidate.
   `omi/sim/check_isolation.py --base <previous release>` lists only the
