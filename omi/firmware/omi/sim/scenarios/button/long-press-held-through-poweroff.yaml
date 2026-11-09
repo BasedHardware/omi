@@ -1,0 +1,23 @@
+id: button/long-press-held-through-poweroff
+summary: >
+  Committee item 5. The user keeps holding after the 3 s power-off fires.
+  turnoff_all() must wait for release before arming the level-low wake;
+  otherwise System OFF wakes at once with the button still down, and 3.0.23's
+  power-on sampling then latches SAFE (a second route to the stuck pendant).
+committee: [5, 1]
+tags: [baseline-bug]
+timeline:
+  - {t: 5000, hold: 12000}
+end: 40000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, button_held_at_poweroff: false, log: ["long press detected"]}
+  invariants: [poweroff-waits-release, no-stuck-safe]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {exit: poweroff, button_held_at_poweroff: true}
+      - {reset: off-wake, safe: true, latch_reason: 2}

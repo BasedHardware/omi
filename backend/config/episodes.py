@@ -46,6 +46,8 @@ HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
 HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
+HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
+DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS = 21600
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
@@ -102,6 +104,19 @@ def home_neutral_minimum_titles_enabled() -> bool:
 def home_step_projection_enabled() -> bool:
     """Default-on Home row contract field on list reads; off omits ``home_step``."""
     return modes_default_on(HOME_STEP_PROJECTION_ENV)
+
+
+def home_processing_max_age_seconds() -> int | None:
+    """6h by default; None tells the reader to count invalid config and use 6h.
+
+    Nonpositive values are invalid, never a way to disable the age bound.
+    Normal finalization takes minutes; 6h leaves headroom over the 2h batch SLA.
+    """
+    try:
+        seconds = int(os.getenv(HOME_PROCESSING_MAX_AGE_SECONDS_ENV, str(DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS)))
+    except ValueError:
+        return None
+    return seconds if seconds > 0 else None
 
 
 def home_transcription_presentation_gate_enabled() -> bool:

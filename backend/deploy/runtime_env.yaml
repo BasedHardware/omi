@@ -348,6 +348,9 @@ environments:
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
             category: config
+          HOME_PROCESSING_MAX_AGE_SECONDS:
+            value: '21600'
+            category: config
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: ''
           HOSTED_TRANSLATION_API_URL:
@@ -484,6 +487,9 @@ environments:
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_PROCESSING_MAX_AGE_SECONDS:
+            value: '21600'
             category: config
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
@@ -1061,6 +1067,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1363,6 +1372,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -1650,6 +1662,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1899,6 +1914,9 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
               category: config
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'false'
@@ -2559,6 +2577,9 @@ environments:
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
             category: config
+          HOME_PROCESSING_MAX_AGE_SECONDS:
+            value: '21600'
+            category: config
           BATCH_FINAL_PASS_ENABLED:
             config_map:
               name: prod-omi-backend-config
@@ -2801,6 +2822,9 @@ environments:
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_PROCESSING_MAX_AGE_SECONDS:
+            value: '21600'
             category: config
           BATCH_FINAL_PASS_ENABLED:
             config_map:
@@ -3400,6 +3424,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
@@ -3831,6 +3858,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4249,6 +4279,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4610,6 +4643,9 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4646,6 +4682,7 @@ environments:
             PROVIDER_STT_TASKS_OIDC_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app
               category: service_auth
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill

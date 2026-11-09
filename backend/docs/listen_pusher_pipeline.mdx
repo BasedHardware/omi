@@ -3136,6 +3136,29 @@ are disabled while the gate is on because expiry does not bump writer versions.
 The [phase-1 change note](listen_pusher_pipeline/changes/2026-11-05-home-transcribing-hold.md)
 records rollback, surface coverage, telemetry gaps and unmeasured acceptance.
 
+### Home processing presentation age
+
+`HOME_PROCESSING_MAX_AGE_SECONDS` defaults to 21600 seconds (6h): normal
+finalization takes minutes, and the 2h batch STT SLA gets additional headroom.
+Invalid, blank or nonpositive values fall back to 21600 and are counted.
+With `HOME_STEP_PROJECTION` on (the default), `GET /v1/conversations` projects
+`home_step=failed` for processing/merging rows at or beyond this age. Nothing is
+stored; status, search and detail reads retain their existing behavior.
+`finished_at`, then `created_at`, supplies the stable fallback age anchor:
+`processing_admitted_at` is renewed by the processing heartbeat and there is
+no stored `processing_started`. `started_at` measures recorded time and
+`updated_at` changes during progress, so neither is used. Missing usable
+datetimes preserve the current step and increment the missing-timestamp counter.
+Naive datetimes are interpreted as UTC.
+Curation preserves completed rows but does not extend a processing wait.
+`HOME_STEP_PROJECTION=off` omits the field and stops the bound; a larger positive
+setting extends the wait. Conditional 304 responses are bypassed while either
+Home projection or transcription presentation is on, so expiry needs no write.
+`omi_home_processing_age_total{reason}` counts classifications (not unique rows):
+`expired`, `missing_timestamp`, and `invalid_config` use a closed reason enum.
+The [change note](listen_pusher_pipeline/changes/2026-11-07-home-processing-age.md)
+records the reader audit and unmeasured acceptance.
+
 ### Failure terminal summary recovery
 
 Only transient dead-letter failures with usable input and no prior

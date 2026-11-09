@@ -189,7 +189,7 @@ static void interrupted_dfu(void)
     for (int i = 0; i <= CONFIG_OMI_SAFE_MODE_BOOT_LIMIT; ++i) {
         boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
     }
-    assert(active && disk.state == STATE_SAFE);
+    assert(active && disk.state == 0); /* SAFE is never written to flash */
     reset_after_trial = true;
     dfu(MGMT_CB_OK);
     reset_after_trial = false;
@@ -299,19 +299,39 @@ int main(void)
     }
     assert(writes == 0 && retained.count == 100);
     boot(NRF_RESET_RESETREAS_LOCKUP_MASK, true);
-    assert(active && disk.state == STATE_SAFE && writes == 1);
+    assert(active && disk.state == 0 && writes == 0); /* 3.0.24: SAFE lives in RAM only */
     for (int i = 0; i < 100; i++) {
         boot(NRF_RESET_RESETREAS_DOG1_MASK, true);
+        assert(active);
     }
-    assert(writes == 1); /* SAFE once, never a per-reset counter write. */
+    boot(NRF_RESET_RESETREAS_SREQ_MASK, true);
+    assert(active && writes == 0); /* a phone's reset command keeps recovery */
     memset((void *) &retained, 0, sizeof(retained));
     boot(0, true);
-    assert(active); /* durable SAFE survives total loss of RAM */
+    assert(!active && retained.count == 1); /* total RAM loss: a fresh normal trial */
+    /* Even CRC-valid RAM that survives power-on, OFF wake or pin reset drops the
+     * latch: a user power cycle always leaves SAFE, with lifetime boots kept. */
+    const uint32_t user_resets[] = {0, NRF_RESET_RESETREAS_OFF_MASK, NRF_RESET_RESETREAS_RESETPIN_MASK};
+    for (size_t r = 0; r < sizeof(user_resets) / sizeof(user_resets[0]); ++r) {
+        for (int i = 0; i <= CONFIG_OMI_SAFE_MODE_BOOT_LIMIT; ++i) {
+            boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+        }
+        assert(active && retained.latch_reason == 1);
+        uint32_t lifetime = retained.total_boots;
+        boot(user_resets[r], true);
+        assert(!active && !retained.latch_reason && retained.count == 1 && retained_valid());
+        assert(retained.total_boots == lifetime + 1);
+    }
+    assert(writes == 0);
+    for (int i = 0; i <= CONFIG_OMI_SAFE_MODE_BOOT_LIMIT; ++i) {
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    }
+    assert(active);
     dfu(MGMT_CB_ERROR_RC);
-    assert(retained.latch_reason && writes == 1);
+    assert(retained.latch_reason && writes == 0);
     write_error = -EIO;
     dfu(MGMT_CB_OK);
-    assert(retained.latch_reason); /* failed persistence must not claim recovery */
+    assert(retained.latch_reason && writes == 1); /* failed persistence must not claim recovery */
     write_error = 0;
     dfu(MGMT_CB_OK);
     assert(!retained.latch_reason && !retained.count && disk.state == STATE_TRIAL);
@@ -362,6 +382,17 @@ int main(void)
     boot(NRF_RESET_RESETREAS_SREQ_MASK, true);
     good();
     assert(disk.state == STATE_GOOD);
+
+    /* A 3.0.23 pendant stuck with a durable SAFE for this version boots normally
+     * and the healthy trial overwrites the stale record with GOOD. */
+    clean();
+    disk.state = STATE_SAFE;
+    disk.reason = 2;
+    strcpy(disk.fw, FW);
+    boot(0, true);
+    assert(!active && retained.count == 1);
+    good();
+    assert(disk.state == STATE_GOOD && writes == 1);
 
     clean();
     boot(0, true);
@@ -544,7 +575,7 @@ int main(void)
     assert(retained.telemetry_blocked && retained_valid() && telemetry_opens == 1);
     telemetry_hang = false;
     boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
-    assert(active && telemetry_opens == 1 && disk.state == STATE_SAFE);
+    assert(active && telemetry_opens == 1 && disk.state == 0);
     retained.telemetry_blocked = 4;
     retained_seal();
     assert(!retained_valid());
@@ -553,5 +584,6 @@ int main(void)
     retained_seal();
     assert(!retained_valid());
 
-    puts("safe-mode: reset/uptime, persistence, CRC/ranges, image targeting and bounded DFU retry/hang tests passed");
+    puts("safe-mode: reset/uptime, RAM-only latch, CRC/ranges, image targeting and bounded DFU retry/hang tests "
+         "passed");
 }

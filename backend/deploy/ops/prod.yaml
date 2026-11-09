@@ -106,9 +106,9 @@ cloud_run:
   backend-integration:
     env:
       SYNC_TASKS_QUEUE: sync-jobs-fresh
-      # C4 (lane 9): summary-debt repair moves to the enrichment-maintenance Scheduler job,
-      # which targets backend-integration. The manifest enables it on backend-sync only,
-      # so without this the new owner's tick is a no-op.
+      # C4 (lane 9): enrichment-maintenance targets backend-integration.
+      # 2026-11-09 David (relay 3e764e): enable until the long-term fix.
+      # Keep aligned with runtime_env/prod.overlay.yaml; backend-sync stays disabled.
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
       # live-only, 2026-10-20 inventory
       FAIR_USE_ENABLED: 'true'
