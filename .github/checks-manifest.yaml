@@ -333,7 +333,7 @@ checks:
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
   - id: firmware-safe-mode-host
     command: ["make", "-C", "omi/firmware/tests", "test"]
-    triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**"]
+    triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**", "omi/firmware/tools/cv1/jig_gestures*", "omi/firmware/tools/cv1/test_jig_gestures.py"]
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "CV1 safe-mode recovery must count failed boots without NVS wear, survive same-version DFU, and preserve the fielded OTA slot geometry"
