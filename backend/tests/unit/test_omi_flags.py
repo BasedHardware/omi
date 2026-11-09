@@ -298,8 +298,10 @@ def test_registry_safe_parsers_reject_python_constructor_tags(tmp_path, monkeypa
     [
         (0, 5, False, False, True),
         (5, 25, False, False, True),
-        (25, 5, True, False, False),
-        (25, 100, False, True, False),
+        (25, 5, True, False, 'mixed'),
+        (25, 5, False, False, False),
+        (25, 100, False, True, 'mixed'),
+        (25, 25, False, True, False),
         (25, 25, False, False, False),
         (25, 25, True, False, True),
     ],
@@ -319,7 +321,11 @@ def test_cli_raise_matrix_and_rollback_without_any_prod_preflight_read(monkeypat
         args.append('--active')
     if inactive:
         args.append('--inactive')
-    if gated:
+    if gated == 'mixed':
+        assert cli.main(args) == 2
+        check.assert_not_called()
+        writer.assert_not_called()
+    elif gated:
         with pytest.raises(SystemExit) as error:
             cli.main(args)
         assert error.value.code == 4
@@ -386,8 +392,11 @@ def test_percentage_raise_on_inactive_rule_is_still_gated(monkeypatch):
     with pytest.raises(SystemExit):
         cli.main(['set', 'k', '--rollout', '25', '--reason', 'ramp', '--yes'])
     writer.assert_not_called()
-    assert cli.main(['set', 'k', '--rollout', '25', '--inactive', '--reason', 'kill', '--yes']) == 0
-    assert check.call_count == 1
+    # Reasserting inactive is a no-op, not an exposure decrease to pair with the raise.
+    with pytest.raises(SystemExit) as error:
+        cli.main(['set', 'k', '--rollout', '25', '--inactive', '--reason', 'kill', '--yes'])
+    assert error.value.code == 4
+    assert check.call_count == 2
 
 
 @pytest.mark.parametrize(
@@ -399,9 +408,10 @@ def test_percentage_raise_on_inactive_rule_is_still_gated(monkeypatch):
         (True, 0, ['existing'], ['--allow', 'existing'], False),
         (True, 0, ['existing'], ['--unallow', 'existing'], False),
         (True, 0, ['existing'], ['--deny', 'new'], False),
-        (True, 25, [], ['--allow', 'new', '--rollout', '5'], False),
-        (True, 0, [], ['--allow', 'new', '--inactive'], False),
-        (True, 0, ['existing'], ['--allow', 'new', '--unallow', 'existing'], True),
+        (True, 25, [], ['--allow', 'new', '--rollout', '5'], 'mixed'),
+        (True, 25, ['existing'], ['--rollout', '5', '--unallow', 'existing', '--deny', 'new', '--inactive'], False),
+        (True, 0, [], ['--allow', 'new', '--inactive'], 'mixed'),
+        (True, 0, ['existing'], ['--allow', 'new', '--unallow', 'existing'], 'mixed'),
         (True, 0, [], ['--allow', 'new', '--unallow', 'new'], False),
     ],
 )
@@ -415,7 +425,11 @@ def test_allowlist_raise_and_rollback_matrix(monkeypatch, active, pct, allow, op
     check = Mock(side_effect=SystemExit(4))
     monkeypatch.setattr(cli.live_preflight, 'require', check)
     args = ['set', 'k', '--reason', 'allowlist regression', '--yes', *options]
-    if gated:
+    if gated == 'mixed':
+        assert cli.main(args) == 2
+        check.assert_not_called()
+        writer.assert_not_called()
+    elif gated:
         with pytest.raises(SystemExit) as error:
             cli.main(args)
         assert error.value.code == 4
@@ -425,3 +439,79 @@ def test_allowlist_raise_and_rollback_matrix(monkeypatch, active, pct, allow, op
         assert cli.main(args) == 0
         check.assert_not_called()
         writer.assert_called_once()
+
+
+@pytest.mark.parametrize('active,pct', [(True, 100), (True, 0), (False, 0)])
+def test_deny_removal_widens_exposure_before_any_write(monkeypatch, active, pct):
+    current = {'active': active, 'rollout_percentage': pct, 'deny_uids': ['denied']}
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': current}))
+    check = Mock(side_effect=SystemExit(4))
+    writer = Mock()
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    monkeypatch.setattr(cli, '_write', writer)
+    with pytest.raises(SystemExit) as error:
+        cli.main(['set', 'k', '--undeny', 'denied', '--reason', 'raise', '--yes'])
+    assert error.value.code == 4
+    check.assert_called_once_with('k', pct, None)
+    writer.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'options',
+    [
+        ['--rollout', '5', '--allow', 'new'],
+        ['--rollout', '5', '--active'],
+        ['--rollout', '50', '--deny', 'new'],
+        ['--rollout', '50', '--unallow', 'allowed'],
+        ['--rollout', '5', '--undeny', 'denied'],
+        ['--undeny', 'denied', '--deny', 'new'],
+        ['--allow', 'new', '--inactive'],
+    ],
+)
+@pytest.mark.parametrize('override', [False, True])
+def test_mixed_flag_write_refused_before_evidence_or_mirror(monkeypatch, capsys, options, override):
+    current = {
+        'active': '--active' not in options,
+        'rollout_percentage': 25,
+        'allow_uids': ['allowed'],
+        'deny_uids': ['denied'],
+    }
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': current}))
+    guards = [Mock(side_effect=AssertionError('mixed write must not perform IO')) for _ in range(5)]
+    for owner, name, guard in zip(
+        [cli.live_preflight, cli.live_preflight, cli.live_preflight, cli, cli],
+        ['require', 'run', 'read_json', 'posthog_rows', '_write'],
+        guards,
+    ):
+        monkeypatch.setattr(owner, name, guard)
+    args = ['set', 'k', '--reason', 'mixed regression', '--yes', '--mirror-posthog', *options]
+    if override:
+        args += ['--accept-not-live', 'Approved deliberate exception']
+    assert cli.main(args) == 2
+    assert 'RAMP_PREFLIGHT REFUSE mixed_write' in capsys.readouterr().err
+    for guard in guards:
+        guard.assert_not_called()
+
+
+def test_import_classifies_all_rules_before_any_live_evidence(monkeypatch, capsys):
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY, 'k2': {**ENTRY, 'key': 'k2'}})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {}))
+    monkeypatch.setattr(cli, 'posthog_rows', lambda: {'k': {}, 'k2': {}})
+    rules = {
+        'k': {'active': True, 'rollout_percentage': 25},
+        'k2': {'active': True, 'rollout_percentage': 0, 'deny_uids': ['denied']},
+    }
+    monkeypatch.setattr(cli, 'rule_from_posthog_row', lambda row, entry: (rules[entry['key']], 'ok'))
+    check = Mock(side_effect=AssertionError('mixed import must not read live evidence'))
+    writer = Mock()
+    monkeypatch.setattr(cli.live_preflight, 'require', check)
+    monkeypatch.setattr(cli, '_write', writer)
+    assert cli.main(['import-posthog', '--apply', '--accept-not-live', 'Approved deliberate exception']) == 2
+    assert 'mixed_write' in capsys.readouterr().err
+    check.assert_not_called()
+    writer.assert_not_called()

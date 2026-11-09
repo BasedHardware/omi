@@ -139,6 +139,42 @@ class LivePreflightTest(unittest.TestCase):
     def check(self, key='feature', **kw):
         return lp.preflight(key, 25, self.repo, runner=self.runner, fetch=self.fetch, **kw)
 
+    def test_exposure_predicate_contract_for_partial_patches_and_deletes(self):
+        before = {
+            'active': True,
+            'rollout_percentage': 25,
+            'allow_uids': ['allow'],
+            'deny_uids': ['deny'],
+            'percents': {'batch-pipeline': 20, 'batch-live-stt-retire': 10},
+        }
+        for change in (
+            None,
+            {},
+            {'active': False},
+            {'rollout_percentage': 5},
+            {'allow_uids': []},
+            {'deny_uids': ['deny', 'new']},
+            {'percents': {'batch-pipeline': 5}},
+        ):
+            with self.subTest(change=change):
+                self.assertFalse(lp.widens_exposure(before, change))
+        for change in (
+            {'rollout_percentage': 50},
+            {'allow_uids': ['allow', 'new']},
+            {'deny_uids': []},
+            {'percents': {'batch-pipeline': 25}},
+        ):
+            with self.subTest(change=change):
+                self.assertTrue(lp.widens_exposure(before, change))
+        self.assertTrue(lp.widens_exposure({'active': False}, {'active': True}))
+        for change in (
+            {'rollout_percentage': 5, 'allow_uids': ['allow', 'new']},
+            {'deny_uids': [], 'active': False},
+            {'percents': {'batch-pipeline': 25, 'batch-live-stt-retire': 5}},
+        ):
+            with self.subTest(change=change), self.assertRaisesRegex(lp.MixedWrite, 'mixed_write'):
+                lp.widens_exposure(before, change)
+
     def test_pass_real_git_and_first_prose_metric(self):
         ok, token, detail = self.check()
         self.assertTrue(ok)

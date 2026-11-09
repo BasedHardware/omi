@@ -613,7 +613,12 @@ def tick(
         resumed_after_gap=resumed_after_gap,
     )
     decisions = decide_all(snapshot, verdict, names=names, now=now, context=context)
-    if effects.preflight is not None and any(item.action is Action.ADVANCE for item in decisions):
+    # Classify the entire atomic write before either evidence gate can run.
+    widening = live_preflight.widens_exposure(
+        {'percents': dict(snapshot.percents)},
+        {'percents': {item.name: item.to_percent for item in decisions if item.action in WRITE_ACTIONS}},
+    )
+    if effects.preflight is not None and widening:
         ok, token = effects.preflight(current if current is not None else 0.0)
         if not ok:
             decisions = [
@@ -635,7 +640,7 @@ def tick(
     if apply and env == 'prod':
         checked = []
         for item in decisions:
-            if item.action is Action.ADVANCE:
+            if widening and item.action is Action.ADVANCE:
                 prover = effects.live_preflight or live_preflight.preflight
                 result = prover(item.name, item.to_percent)
                 live_preflight.report(result)
@@ -909,6 +914,9 @@ def main(
                 errors = 0
                 lead = next((item for item in result.decisions if item.name == LEAD_NAME), None)
                 last_percent = lead.to_percent if lead is not None else last_percent
+            except live_preflight.MixedWrite as error:
+                print(str(error), file=sys.stderr)
+                return 2
             except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
                 errors += 1
                 logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
@@ -980,6 +988,9 @@ def _tick_once(args: argparse.Namespace, effects: Effects, heartbeat: Path) -> T
 def _one_tick(args: argparse.Namespace, effects: Effects, heartbeat: Path) -> int:
     try:
         _tick_once(args, effects, heartbeat)
+    except live_preflight.MixedWrite as error:
+        print(str(error), file=sys.stderr)
+        return 2
     except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
         logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
         return 1

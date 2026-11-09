@@ -112,14 +112,39 @@ def serving_revision(service: dict) -> str | None:
     return None
 
 
-def is_raise(current: dict | None, after: dict, *, inactive: bool = False) -> bool:
-    """Allowlist additions widen exposure at any percent; kills and decreases win."""
-    before = current or {}
-    old, new = float(before.get('rollout_percentage') or 0), float(after.get('rollout_percentage') or 0)
-    if inactive or new < old:
+class MixedWrite(ValueError):
+    def __init__(self):
+        super().__init__('RAMP_PREFLIGHT REFUSE mixed_write: run the narrowing change alone first, then the raise')
+
+
+def widens_exposure(current: dict | None, change: dict | None) -> bool:
+    """Classify a flag rule or _ramp patch before any liveness IO. Reject mixed writes.
+
+    Omitted fields are unchanged; deleting a rule only narrows exposure. A new
+    rule starts inactive at zero percent with empty allow/deny sets.
+    """
+    if change is None:
         return False
-    added_uids = set(after.get('allow_uids') or ()) - set(before.get('allow_uids') or ())
-    return bool(added_uids) or new > old or (after.get('active') is True and before.get('active') is not True)
+    before = current or {}
+    pairs = [
+        (float((before.get('percents') or {}).get(name, 0)), float(percent))
+        for name, percent in (change.get('percents') or {}).items()
+    ]
+    if 'rollout_percentage' in change:
+        pairs.append((float(before.get('rollout_percentage') or 0), float(change['rollout_percentage'] or 0)))
+    if 'active' in change:
+        pairs.append((float(before.get('active') is True), float(change['active'] is True)))
+    widening = any(new > old for old, new in pairs)
+    narrowing = any(new < old for old, new in pairs)
+    for field, additions_widen in (('allow_uids', True), ('deny_uids', False)):
+        old = set(before.get(field) or ())
+        new = set(change.get(field) or ()) if field in change else old
+        added, removed = bool(new - old), bool(old - new)
+        widening |= added if additions_widen else removed
+        narrowing |= removed if additions_widen else added
+    if widening and narrowing:
+        raise MixedWrite()
+    return widening
 
 
 def override_reason(reason: str, accept: str | None) -> str:
@@ -128,11 +153,6 @@ def override_reason(reason: str, accept: str | None) -> str:
     if len(accept.strip()) < 15 or any(ord(c) < 32 for c in accept):
         raise ValueError('--accept-not-live requires at least 15 characters and no control characters')
     return reason + ' accept_not_live:' + accept
-
-
-def raised_percents(entry: dict | None, change: dict) -> dict[str, float]:
-    old = (entry or {}).get('percents', {})
-    return {name: pct for name, pct in change.get('percents', {}).items() if pct > old.get(name, 0)}
 
 
 class Prover:

@@ -205,8 +205,9 @@ def cmd_set(args: argparse.Namespace) -> None:
         rule['payload'] = None
     rule['allow_uids'] = sorted((set(rule['allow_uids']) | set(args.allow or ())) - set(args.unallow or ()))
     rule['deny_uids'] = sorted((set(rule['deny_uids']) | set(args.deny or ())) - set(args.undeny or ()))
+    widening = live_preflight.widens_exposure(current, rule)
     reason = live_preflight.override_reason(args.reason, args.accept_not_live)
-    if live_preflight.is_raise(current, rule, inactive=args.inactive):
+    if widening:
         live_preflight.require(args.key, rule['rollout_percentage'], args.accept_not_live)
     _print({'before': current, 'after': rule})
     mirror = None
@@ -261,9 +262,10 @@ def cmd_import(args: argparse.Namespace) -> None:
         print(f'dry run: {len(planned)} rule(s); pass --apply to write')
         return
     reason = live_preflight.override_reason(args.reason or 'import from PostHog', args.accept_not_live)
-    for key, rule in planned:
-        if live_preflight.is_raise(None, rule):
-            live_preflight.require(key, rule['rollout_percentage'], args.accept_not_live)
+    # Classify every planned rule before any imported raise reads live evidence.
+    raises = [(key, rule) for key, rule in planned if live_preflight.widens_exposure(None, rule)]
+    for key, rule in raises:
+        live_preflight.require(key, rule['rollout_percentage'], args.accept_not_live)
     for key, rule in planned:
         _write(client, key, rule, reason)
 
