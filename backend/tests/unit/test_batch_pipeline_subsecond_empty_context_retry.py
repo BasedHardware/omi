@@ -10,6 +10,7 @@ exist to break. Synthetic PCM only; every custody, ownership, budget, debris
 and kill-switch contract below is pinned unchanged.
 """
 
+import logging
 import time
 from dataclasses import replace
 from types import SimpleNamespace
@@ -1235,7 +1236,7 @@ async def test_subsecond_empty_quarantines_attempt_one_with_closed_reason():
 
 
 @pytest.mark.asyncio
-async def test_subsecond_quarantine_emits_the_prod_signature_line(caplog):
+async def test_subsecond_quarantine_emits_the_held_for_recovery_line(caplog):
     retry = Mock(return_value=[])
     worker = make_worker(vad=lambda _: [(0.2, 0.8)], retry=retry)
     results = worker.process_batch([item('a', 4)])
@@ -1243,13 +1244,16 @@ async def test_subsecond_quarantine_emits_the_prod_signature_line(caplog):
     queue = Scheduler(store)
     queue.enqueue(item('a', 4), time.time())
     lease = queue.pull(time.time())[0]
-    with caplog.at_level('ERROR'):
+    with caplog.at_level('INFO'):
         await Pump(queue, worker)._publish(lease, {'a': results[0]}, set())
-    message = next(r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage())
+    held = next(r.getMessage() for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage())
     assert (
-        message == 'event=batch_quarantined reason=worker_failed attempt=1 recovery=held '
+        held == 'event=batch_empty_ladder outcome=held_for_recovery attempt=1 recovery=held '
         'stage=assemble_words worker_reason=empty_asr'
     )
+    held_record = next(r for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage())
+    assert held_record.levelno == logging.INFO
+    assert not [r for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
 
 
 @pytest.mark.asyncio

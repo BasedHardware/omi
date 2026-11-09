@@ -58,7 +58,12 @@ from utils.batch_pipeline.diarization_gate import (
     unassigned_word_count,
 )
 from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision, record_unit_diarization
-from utils.batch_pipeline.errors import FatalGpuError, LANGUAGE_GUARD_REDRIVE_REASONS
+from utils.batch_pipeline.errors import (
+    EMPTY_LADDER_RECOVERY_REASONS,
+    EMPTY_LADDER_RECOVERY_STAGE,
+    FatalGpuError,
+    LANGUAGE_GUARD_REDRIVE_REASONS,
+)
 from utils.batch_pipeline.word_validation import (
     BatchValidationError,
     ValidationReason,
@@ -1468,7 +1473,29 @@ class PipelineWorker:
                     if segment_id in shadow_ids:
                         logger.info('event=batch_shadow_worker_failure stage=%s reason=%s', failure_stage, reason)
                         continue
-                    if reason in LANGUAGE_GUARD_REDRIVE_REASONS:
+                    if failure_stage == EMPTY_LADDER_RECOVERY_STAGE and reason in EMPTY_LADDER_RECOVERY_REASONS:
+                        # The empty ladder's terminal empty verdict is the
+                        # designed recovery handoff: typed empty recognition,
+                        # the bounded context-bearing retry already run, the
+                        # RecoveryWork handoff carrying retry and VAD
+                        # evidence, fenced recovery lane waiting below. Keep
+                        # every diagnostic field the fault channel carried,
+                        # but report the transition instead of booking a
+                        # worker fault per empty unit.
+                        logger.info(
+                            'event=batch_empty_ladder outcome=recovery_handoff error_class=%s stage=%s segment_id=%s '
+                            'reason=%s samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
+                            error_class,
+                            failure_stage,
+                            segment_id,
+                            reason,
+                            samples,
+                            spans,
+                            clips,
+                            asr_words,
+                            owned,
+                        )
+                    elif reason in LANGUAGE_GUARD_REDRIVE_REASONS:
                         # The language barrier is the designed redrive handoff:
                         # typed refusal, affirmative strict-VAD speech
                         # evidence, terminal chain end, fenced recovery lane

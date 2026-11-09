@@ -36,6 +36,7 @@ from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import activation_surface, activate, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import (
+    empty_ladder_recovery_failure,
     error_site_field,
     language_guard_redrive_failure,
     validate_worker_failure,
@@ -1037,6 +1038,22 @@ class Scheduler:
                         # leaves the ERROR quarantine channel to faults.
                         logger.info(
                             'event=batch_language_guard outcome=held_for_redrive attempt=%d recovery=held stage=%s worker_reason=%s',
+                            attempt,
+                            terminal_stage,
+                            terminal_reason,
+                        )
+                    elif empty_ladder_recovery_failure(diagnosis):
+                        # The empty ladder's handoff is the designed recovery
+                        # hold: a typed empty recognition the bounded
+                        # context-bearing retry already ran, booked with the
+                        # worker_empty_evidence this commit kept, and the
+                        # fenced quarantine-recovery lane waiting below. It
+                        # keeps the same durable state and the
+                        # awaiting-recovery warning below, but it is not a
+                        # worker fault, so it leaves the ERROR quarantine
+                        # channel to faults.
+                        logger.info(
+                            'event=batch_empty_ladder outcome=held_for_recovery attempt=%d recovery=held stage=%s worker_reason=%s',
                             attempt,
                             terminal_stage,
                             terminal_reason,

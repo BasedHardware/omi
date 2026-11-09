@@ -71,6 +71,55 @@ def language_guard_redrive_failure(failure: object) -> bool:
     )
 
 
+# The empty ladder's terminal empty verdict is the assemble_words sibling of
+# the language barrier: a typed BatchValidationError the worker already
+# resolved through its bounded context-bearing retry, a RecoveryWork handoff
+# carrying the retry and VAD evidence, and the fenced quarantine-recovery
+# lane waiting below. Nothing about the unit is faulted and no worker retry
+# can change the verdict, so booking each held unit on the ERROR fault
+# channels misbooks a designed platform outcome as a production error: the
+# assemble_words empty_asr / no_owned_words family is a top sensor signature
+# purely because the handoff reuses the ERROR worker-fault lines (the
+# scheduler's ``batch_quarantined reason=worker_failed ... recovery=held
+# stage=assemble_words worker_reason=empty_asr`` and the worker's
+# ``batch_worker_failed error_class=BatchValidationError stage=assemble_words``
+# fires for the same unit). Both logging sites (the worker boundary and the
+# scheduler's terminal quarantine line) consult this family so the empty
+# ladder demotes together and nothing else does. The demotion rechannels the
+# report only: durable state, evidence, metrics, custody and the
+# awaiting-fenced-recovery warning are unchanged.
+#
+# Failure-Class: FC-empty-ladder-recovery-handoff-misclassified-as-worker-fault
+EMPTY_LADDER_RECOVERY_REASONS = frozenset({'empty_asr', 'no_owned_words'})
+
+# The stage the empty ladder owns: EMPTY_ASR and NO_OWNED_WORDS raise nowhere
+# else, so an empty-family token at any other stage keeps its fault
+# classification.
+EMPTY_LADDER_RECOVERY_STAGE = WorkerValidationStage.ASSEMBLE_WORDS.value
+
+
+def empty_ladder_recovery_failure(failure: object) -> bool:
+    """True for a closed terminal diagnosis that is the empty ladder's handoff.
+
+    Accepts exactly the closed shapes the scheduler stores on a job: the
+    two-key ``{'stage', 'reason'}`` dicts the store validators admit, with
+    the stage the empty ladder owns. Anything anonymous (empty diagnosis,
+    extra fields, foreign reason, off-vocabulary stage, non-string tokens,
+    non-dict input) is not the ladder and keeps its fault classification.
+    Never raises on hostile input.
+    """
+
+    if not isinstance(failure, dict) or set(failure) != {'stage', 'reason'}:
+        return False
+    stage, reason = failure['stage'], failure['reason']
+    return (
+        isinstance(stage, str)
+        and isinstance(reason, str)
+        and stage == EMPTY_LADDER_RECOVERY_STAGE
+        and reason in EMPTY_LADDER_RECOVERY_REASONS
+    )
+
+
 def validate_worker_failure_evidence(failure):
     """Evidence-only diagnostics from an ordinary retryable failure.
 

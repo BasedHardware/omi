@@ -643,33 +643,37 @@ def test_reason_vad_bounds_at_assemble_words_keeps_quarantine_error(caplog):
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_empty_asr_at_assemble_words_keeps_quarantine_error(caplog):
-    """empty_asr at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_empty_asr_at_assemble_words_holds_for_recovery(caplog):
+    """empty_asr at assemble_words reports the designed recovery hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "empty_asr"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=empty_asr' in quar[0].getMessage()
+    ladder = [r for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage()]
+    assert not guard and not quar and len(ladder) == 1
+    assert ladder[0].levelno == logging.INFO
+    assert 'outcome=held_for_recovery' in ladder[0].getMessage()
+    assert 'attempt=1 recovery=held' in ladder[0].getMessage()
+    assert 'stage=assemble_words' in ladder[0].getMessage() and 'worker_reason=empty_asr' in ladder[0].getMessage()
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape
 
 
-def test_reason_no_owned_words_at_assemble_words_keeps_quarantine_error(caplog):
-    """no_owned_words at assemble_words keeps the terminal quarantine ERROR."""
+def test_reason_no_owned_words_at_assemble_words_holds_for_recovery(caplog):
+    """no_owned_words at assemble_words reports the designed recovery hold."""
     caplog.set_level(logging.INFO)
     shape = {"stage": "assemble_words", "reason": "no_owned_words"}
     store, queue, lease = _queued()
     assert _fail(queue, lease, worker_failure=shape) is True
     guard, quar, warn = _split(caplog)
-    assert not guard and len(quar) == 1
-    assert quar[0].levelno == logging.ERROR
-    assert 'reason=worker_failed' in quar[0].getMessage()
-    assert 'stage=assemble_words' in quar[0].getMessage() and 'worker_reason=no_owned_words' in quar[0].getMessage()
+    ladder = [r for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage()]
+    assert not guard and not quar and len(ladder) == 1
+    assert ladder[0].levelno == logging.INFO
+    assert 'outcome=held_for_recovery' in ladder[0].getMessage()
+    assert 'attempt=1 recovery=held' in ladder[0].getMessage()
+    assert 'stage=assemble_words' in ladder[0].getMessage() and 'worker_reason=no_owned_words' in ladder[0].getMessage()
     assert len(warn) == 1
     job = store.probe('jobs', 'a')
     assert job['state'] == 'quarantined' and job['worker_failure'] == shape

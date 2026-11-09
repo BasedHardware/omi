@@ -294,18 +294,33 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
     else:
         settings['persist'] = broken
     worker, *_ = setup_worker(**settings)
+    caplog.set_level(logging.INFO)
     results = worker.process_batch([item(duration=60)])
     expected_reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage)
     assert results == ([ValidationFailureWork('a', stage, expected_reason)] if expected_reason else [])
-    records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
+    events = 'event=batch_empty_ladder' if stage == 'assemble_words' else 'event=batch_worker_failed'
+    records = [record for record in caplog.records if events in record.getMessage()]
     assert len(records) == worker.counts['failed'] == 1
     reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage, 'unclassified')
     error_class = 'ValueError' if reason == 'unclassified' else 'BatchValidationError'
-    assert (
-        records[0]
-        .getMessage()
-        .startswith(f'event=batch_worker_failed error_class={error_class} stage={stage} segment_id=a reason={reason} ')
-    )
+    if stage == 'assemble_words':
+        assert records[0].levelno == logging.INFO
+        assert (
+            records[0]
+            .getMessage()
+            .startswith(
+                f'event=batch_empty_ladder outcome=recovery_handoff error_class={error_class} stage={stage} segment_id=a reason={reason} '
+            )
+        )
+    else:
+        assert records[0].levelno == logging.ERROR
+        assert (
+            records[0]
+            .getMessage()
+            .startswith(
+                f'event=batch_worker_failed error_class={error_class} stage={stage} segment_id=a reason={reason} '
+            )
+        )
     assert all(isinstance(value, (str, int)) for value in records[0].args)
     assert records[0].exc_info is None
     assert private_marker not in caplog.text
@@ -374,11 +389,16 @@ def test_empty_asr_on_vad_speech_stays_failure_with_numeric_shape(caplog):
         words_providers={'parakeet': EmptyWords()},
         on_failure=None,
     )
+    caplog.set_level(logging.INFO)
     assert worker.process_batch([item(duration=7.9)]) == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
     assert not saved
-    message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
+    message = next(r.getMessage() for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage())
     assert 'stage=assemble_words' in message and 'reason=empty_asr' in message
     assert 'samples=126400 vad_spans=1 windows=1 asr_words=0 owned_words=0' in message
+    demoted = next(r for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage())
+    assert demoted.levelno == logging.INFO
+    assert 'outcome=recovery_handoff' in demoted.getMessage()
+    assert not [r for r in caplog.records if 'event=batch_worker_failed' in r.getMessage()]
 
 
 @pytest.mark.parametrize('first_words', [[], [{'word': 'context', 'timestamp': [4.5, 4.8]}]])
@@ -464,12 +484,17 @@ def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
     worker, _, saved, _, diarized, failures = setup_worker(
         words_providers={'parakeet': EmptyWords()}, recover_words=recover
     )
+    caplog.set_level(logging.INFO)
     results = worker.process_batch([item(), item('b', 3)])
     assert ValidationFailureWork('a', 'assemble_words', 'empty_asr') in results
     assert [r.segment_id for r in results if isinstance(r, WorkResult)] == ['b']
     assert calls == [32000, 48000] and set(saved) == {'b'}
     assert failures == [('a', 'BatchValidationError')] and diarized == [48000]
     assert 'reason=empty_asr' in caplog.text
+    assert not [r for r in caplog.records if 'event=batch_worker_failed' in r.getMessage()]
+    handoff = [r for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage()]
+    assert {r.getMessage().split('segment_id=')[1].split()[0] for r in handoff} == {'a'}
+    assert all(r.levelno == logging.INFO for r in handoff)
 
 
 @pytest.mark.parametrize('mode', ['silence', 'nonempty', 'invalid'])
@@ -532,12 +557,16 @@ def test_context_only_hypothesis_is_observable_failure_not_silence(caplog):
         words_providers={'parakeet': ContextWords()},
         on_failure=None,
     )
+    caplog.set_level(logging.INFO)
     assert worker.process_batch([item(duration=10.02)]) == [
         ValidationFailureWork('a', 'assemble_words', 'no_owned_words')
     ]
     assert not saved
-    message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
+    message = next(r.getMessage() for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage())
     assert 'reason=no_owned_words' in message and 'asr_words=1 owned_words=0' in message
+    demoted = next(r for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage())
+    assert demoted.levelno == logging.INFO
+    assert not [r for r in caplog.records if 'event=batch_worker_failed' in r.getMessage()]
 
 
 def test_fractional_window_rebase_uses_actual_sample_origin():

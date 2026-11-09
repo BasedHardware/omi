@@ -146,19 +146,20 @@ def test_evidence_stage_is_closed_and_reasons_allow_unknown():
 
 def test_quarantine_log_names_the_worker_failure_diagnosis(caplog):
     store, queue, lease = leased()
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.INFO):
         terminal(store, queue, lease, padded_retry='empty', padded_retry_empty=True)
-    quarantined = [r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
-    assert len(quarantined) == 1
-    assert 'attempt=1 recovery=held' in quarantined[0]
-    assert 'stage=assemble_words worker_reason=empty_asr' in quarantined[0]
+    held = [r.getMessage() for r in caplog.records if 'event=batch_empty_ladder' in r.getMessage()]
+    assert len(held) == 1
+    assert 'attempt=1 recovery=held' in held[0]
+    assert 'stage=assemble_words worker_reason=empty_asr' in held[0]
 
 
 def test_no_owned_diagnosis_names_itself_in_the_terminal_record(caplog):
     store, queue, lease = leased()
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.INFO):
         terminal(store, queue, lease, worker_failure={'stage': 'assemble_words', 'reason': 'no_owned_words'})
     assert 'worker_reason=no_owned_words' in caplog.text
+    assert not [r for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
 
 
 def test_terminal_record_names_the_preserved_diagnosis_when_the_call_has_none(caplog):
