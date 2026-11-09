@@ -64,6 +64,9 @@ class ConversationDetailProvider extends ChangeNotifier
     EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
     SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
     PreferredSummaryAppWrite? writePreferredSummaryApp,
+    Future<bool> Function(String)? unlinkCalendar,
+    Future<CalendarEventLink?> Function(String, String)? linkCalendar,
+    Future<CalendarEventLink?> Function(String)? autoLinkCalendar,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
         _assignRecording = assignRecording ?? (assignSpeaker == null ? assignRecordingSpeakers : null),
         _fetchRecording = fetchRecording ??
@@ -84,7 +87,13 @@ class ConversationDetailProvider extends ChangeNotifier
         _fetchConversation = fetchConversation ?? ((id) => getConversationById(id, userInitiated: true)),
         enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
         suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
-        preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp;
+        preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp,
+        _unlinkCalendar = unlinkCalendar ?? conv_api.unlinkCalendarEvent,
+        _linkCalendar = linkCalendar ?? conv_api.linkCalendarEvent,
+        _autoLinkCalendar = autoLinkCalendar ?? conv_api.autoLinkCalendarEvent;
+  final Future<bool> Function(String) _unlinkCalendar;
+  final Future<CalendarEventLink?> Function(String, String) _linkCalendar;
+  final Future<CalendarEventLink?> Function(String) _autoLinkCalendar;
   final SpeakerAssignmentCall _assignSpeaker;
   final RecordingAssignmentCall? _assignRecording;
   final Future<RecordingTranscript?> Function(String) _fetchRecording;
@@ -1127,7 +1136,7 @@ class ConversationDetailProvider extends ChangeNotifier
         return false;
       }
 
-      conversationProvider?.updateConversation(updatedConversation);
+      conversationProvider?.updateConversation(updatedConversation, preserveHomeStep: false);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
       // Update the cached conversation to ensure we have the latest data. Reads already in
@@ -1353,7 +1362,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Unlinks the calendar event from the current conversation
   Future<bool> unlinkCalendarEvent() async {
     try {
-      final success = await conv_api.unlinkCalendarEvent(conversation.id);
+      final success = await _unlinkCalendar(conversation.id);
       if (success) {
         _updateLocalConversationWithCalendarEvent(null);
         notifyListeners();
@@ -1387,6 +1396,7 @@ class ConversationDetailProvider extends ChangeNotifier
         externalIntegration: _cachedConversation!.externalIntegration,
         calendarEvent: calendarEvent,
         status: _cachedConversation!.status,
+        homeStep: _cachedConversation!.homeStep,
         isLocked: _cachedConversation!.isLocked,
         starred: _cachedConversation!.starred,
         folderId: _cachedConversation!.folderId,
@@ -1404,7 +1414,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Auto-links the conversation to the best overlapping calendar event
   Future<CalendarEventLink?> autoLinkCalendarEvent() async {
     try {
-      final calendarEvent = await conv_api.autoLinkCalendarEvent(conversation.id);
+      final calendarEvent = await _autoLinkCalendar(conversation.id);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -1418,7 +1428,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Links the conversation to a specific calendar event by event ID
   Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
     try {
-      final calendarEvent = await conv_api.linkCalendarEvent(conversation.id, eventId);
+      final calendarEvent = await _linkCalendar(conversation.id, eventId);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }

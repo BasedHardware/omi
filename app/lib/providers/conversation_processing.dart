@@ -67,6 +67,29 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
           ? row.withHomeStep('failed')
           : row;
 
+  /// Reprocess results explicitly replace the old presentation; ordinary edits retain it.
+  ServerConversation _homeReplacement(ServerConversation row, bool preserveHomeStep) {
+    if (!preserveHomeStep && row.homeStep != 'failed') _failedHomeProcessingIds.remove(row.id);
+    return preserveHomeStep ? _retainingHomeStep(row) : _restoreHomeProcessingProjection(row);
+  }
+
+  /// Local edits/detail reads may omit the list-only field. Server page replacement
+  /// deliberately bypasses this retention so absence still supports older servers.
+  ServerConversation _retainingHomeStep(ServerConversation row) {
+    row = _withHomeProcessingProjection(row);
+    if (row.homeStep != null) return _restoreHomeProcessingProjection(row);
+    for (final current in [...conversations, ...searchedConversations]) {
+      if (current.id == row.id &&
+          current.homeStep != null &&
+          (current.status == row.status ||
+              (_isActiveProcessingStatus(row.status) &&
+                  (current.homeStep == 'failed' || _isActiveProcessingStatus(current.status))))) {
+        return _restoreHomeProcessingProjection(row.withHomeStep(current.homeStep!));
+      }
+    }
+    return row;
+  }
+
   ServerConversation _restoreHomeProcessingProjection(ServerConversation row) {
     if (row.homeStep == 'failed') _failedHomeProcessingIds.add(row.id);
     return _withHomeProcessingProjection(row);

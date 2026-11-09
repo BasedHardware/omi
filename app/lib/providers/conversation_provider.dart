@@ -499,7 +499,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     // Search results are ranked by the server, including transcript-match relevance.
     // Re-sorting by recency would bury older spoken-moment matches.
-    searchedConversations = _filterPendingDeletes(result.items);
+    searchedConversations = _filterPendingDeletes(result.items).map(_retainingHomeStep).toList();
     currentSearchPage = result.currentPage;
     totalSearchPages = result.totalPages;
     groupSearchConvosByDate();
@@ -550,7 +550,7 @@ class ConversationProvider extends ChangeNotifier {
       _setLoadingConversationSearch(false);
       return;
     }
-    searchedConversations.addAll(_filterPendingDeletes(result.items));
+    searchedConversations.addAll(_filterPendingDeletes(result.items).map(_retainingHomeStep));
     totalSearchPages = result.totalPages;
     currentSearchPage = result.currentPage;
     groupSearchConvosByDate();
@@ -586,7 +586,7 @@ class ConversationProvider extends ChangeNotifier {
       addProcessingConversation(updated);
       return;
     }
-    upsertConversation(updated);
+    upsertConversation(updated, preserveHomeStep: false);
   }
 
   void removeProcessingConversation(String conversationId) {
@@ -832,7 +832,7 @@ class ConversationProvider extends ChangeNotifier {
     final completedById = <String, ServerConversation>{
       for (final conversation in newConversations)
         if (_isHomeListRow(conversation) && !currentlyProcessingIds.contains(conversation.id))
-          conversation.id: conversation,
+          conversation.id: _withHomeProcessingProjection(conversation),
     };
     for (final lifecycleResult in lifecycleResults.values) {
       final conversation = lifecycleResult.item;
@@ -844,7 +844,7 @@ class ConversationProvider extends ChangeNotifier {
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
-      completedById[conversation.id] = conversation;
+      completedById[conversation.id] = _withHomeProcessingProjection(conversation);
     }
     // Refresh pages exclude discarded/bridged donors. Absence is authoritative
     // inside this page's time window, not for older paginated rows. Failed or
@@ -1364,7 +1364,8 @@ class ConversationProvider extends ChangeNotifier {
     conversations = conversations.map(_withHomeProcessingProjection).toList();
     processingConversations.removeWhere(_hasFailedHomeProcessing);
     _syncProcessingReconcileTimer();
-    conversations.addAll(visiblePage.where((conversation) => !existingIds.contains(conversation.id)));
+    conversations.addAll(
+        visiblePage.where((conversation) => !existingIds.contains(conversation.id)).map(_withHomeProcessingProjection));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     final siriFetchIsUnfiltered = selectedFolderId == null &&
@@ -1387,8 +1388,8 @@ class ConversationProvider extends ChangeNotifier {
     return true;
   }
 
-  Future<void> addConversation(ServerConversation conversation) async {
-    conversation = _withHomeProcessingProjection(conversation);
+  Future<void> addConversation(ServerConversation conversation, {bool preserveHomeStep = true}) async {
+    conversation = _homeReplacement(conversation, preserveHomeStep);
     if (conversation.deleted || conversation.isMergedDonor || _mergedAwayConversationIds.contains(conversation.id)) {
       return;
     }
@@ -1462,8 +1463,8 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   final _phoneOnlyConversations = <String, ServerConversation>{};
-  void upsertConversation(ServerConversation conversation) {
-    conversation = _withHomeProcessingProjection(conversation);
+  void upsertConversation(ServerConversation conversation, {bool preserveHomeStep = true}) {
+    conversation = _homeReplacement(conversation, preserveHomeStep);
     if (_isHiddenByDelete(conversation.id)) return;
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
@@ -1474,9 +1475,9 @@ class ConversationProvider extends ChangeNotifier {
     if (conversation.id.startsWith('ondevice-')) _phoneOnlyConversations[conversation.id] = conversation;
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
     if (idx < 0) {
-      addConversation(conversation);
+      addConversation(conversation, preserveHomeStep: preserveHomeStep);
     } else {
-      updateConversation(conversation, idx);
+      updateConversation(conversation, index: idx, preserveHomeStep: preserveHomeStep);
     }
     if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
@@ -1486,6 +1487,7 @@ class ConversationProvider extends ChangeNotifier {
   void updateConversationInSortedList(ServerConversation conversation) => _updateConversationProjections(conversation);
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
+    conversation = _retainingHomeStep(conversation);
     conversations.insert(0, conversation);
     SiriIntegration.current.queueUpsertConversations([conversation]);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -1513,7 +1515,8 @@ class ConversationProvider extends ChangeNotifier {
     return (idx, memDate);
   }
 
-  void updateConversation(ServerConversation conversation, [int? index]) {
+  void updateConversation(ServerConversation conversation, {int? index, bool preserveHomeStep = true}) {
+    conversation = _homeReplacement(conversation, preserveHomeStep);
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;
@@ -1719,18 +1722,6 @@ class ConversationProvider extends ChangeNotifier {
       removed = true;
     }
     return removed;
-  }
-
-  /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
-  /// the server refuses or fails the DELETE, since the conversation then still exists.
-  Future<void> _restoreDeletedConversation(ServerConversation conversation) async {
-    memoriesToDelete.remove(conversation.id);
-    if (!conversations.any((e) => e.id == conversation.id)) {
-      conversations.add(conversation);
-      conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    }
-    groupConversationsByDate();
-    await _restoreSiriAfterOptimisticDelete(conversation);
   }
 
   /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
