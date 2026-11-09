@@ -749,11 +749,11 @@ ignore:
   - {"key":"OMI_DISABLE_LOCAL_EMBEDDINGS","reason":"Local incident override deliberately honored in shipped builds; not remote rollout authority"}
   - {"key":"OMI_DISABLE_LOCAL_INFERENCE","reason":"Local incident override deliberately honored in shipped builds; not remote rollout authority"}
   - {"key":"freeTierLocalProcessing","reason":"UserDefaults override deliberately honored in shipped builds; not remote rollout authority"}
-  - {"key":"localEmbeddingsEnabled","reason":"UserDefaults override deliberately honored in shipped builds; not remote rollout authority","owner":"dazheng","decision":"graduate","review_by":"2026-10-23","notes":"Blocked on production local-embedding availability and fallback verification"}
+  - {"key":"localEmbeddingsEnabled","reason":"UserDefaults override deliberately honored in shipped builds; not remote rollout authority","owner":"auditfix","decision":"graduate","review_by":"2026-10-23","notes":"Blocked on production local-embedding availability and fallback verification"}
   - {"key":"disableLocalInference","reason":"UserDefaults override deliberately honored in shipped builds; not remote rollout authority"}
   - {"key":"forceCloudSTT","reason":"UserDefaults override deliberately honored in shipped builds; not remote rollout authority"}
   - {"key":"vadGateEnabled","reason":"Mobile shipped developer preference, pending product decision; not remote rollout authority","decision":"pending","review_by":"2026-10-23","notes":"David: decide after registry+cleanup is prod-stable"}
-  - {"key":"meeting_note_screenshots_enabled","reason":"Account-level screenshot consent, not remote rollout authority","owner":"dazheng","decision":"graduate","review_by":"2026-10-23","notes":"Blocked on screen-frame consent and prod egress validation"}
+  - {"key":"meeting_note_screenshots_enabled","reason":"Account-level screenshot consent, not remote rollout authority","owner":"auditfix","decision":"graduate","review_by":"2026-10-23","notes":"Blocked on screen-frame consent and prod egress validation"}
   - {"key":"OMI_FREE_TIER_LOCAL_PROCESSING","reason":"Environment override deliberately honored in shipped builds; not remote rollout authority"}
   - {"key":"OMI_FORCE_LOCAL_INFERENCE_ENGINE","reason":"Local inference engine override deliberately honored in shipped builds"}
   - {"key":"forceLocalInferenceEngine","reason":"UserDefaults inference engine override deliberately honored in shipped builds"}

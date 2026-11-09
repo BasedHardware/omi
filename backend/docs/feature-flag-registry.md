@@ -1478,11 +1478,11 @@ reason:
 | `OMI_DISABLE_LOCAL_EMBEDDINGS` | Local incident override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
 | `OMI_DISABLE_LOCAL_INFERENCE` | Local incident override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
 | `freeTierLocalProcessing` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
-| `localEmbeddingsEnabled` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | dazheng | graduate | 2026-10-23 | Blocked on production local-embedding availability and fallback verification |
+| `localEmbeddingsEnabled` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | auditfix | graduate | 2026-10-23 | Blocked on production local-embedding availability and fallback verification |
 | `disableLocalInference` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
 | `forceCloudSTT` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
 | `vadGateEnabled` | Mobile shipped developer preference, pending product decision; not remote rollout authority | — | pending | 2026-10-23 | David: decide after registry+cleanup is prod-stable |
-| `meeting_note_screenshots_enabled` | Account-level screenshot consent, not remote rollout authority | dazheng | graduate | 2026-10-23 | Blocked on screen-frame consent and prod egress validation |
+| `meeting_note_screenshots_enabled` | Account-level screenshot consent, not remote rollout authority | auditfix | graduate | 2026-10-23 | Blocked on screen-frame consent and prod egress validation |
 | `OMI_FREE_TIER_LOCAL_PROCESSING` | Environment override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
 | `OMI_FORCE_LOCAL_INFERENCE_ENGINE` | Local inference engine override deliberately honored in shipped builds | — | — | — | — |
 | `forceLocalInferenceEngine` | UserDefaults inference engine override deliberately honored in shipped builds | — | — | — | — |
