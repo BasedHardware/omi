@@ -119,6 +119,11 @@ def default_off(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
     return False
 
 
+def record_seal_repair_age_order() -> bool:
+    """Prefer oldest pending records; off restores the name-ordered repair scan."""
+    return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
+
+
 def uid_digest(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 

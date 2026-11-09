@@ -302,6 +302,8 @@
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
+    "DREAM_NO_PROGRESS_STOP_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
       "replaced_by": null

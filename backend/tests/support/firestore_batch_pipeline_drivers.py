@@ -1,6 +1,7 @@
 """Executable query coverage for the dormant batch pipeline's stage namespaces."""
 
 from datetime import datetime, timezone
+from itertools import cycle
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -11,6 +12,12 @@ def _projection_debt_on(client):
     from utils import record_projection_rebuild
 
     return patch.object(record_projection_rebuild, 'durable_debt_enabled', lambda: True)
+
+
+def _repair_age_orders(client):
+    from config import refactor_modes
+
+    return patch.object(refactor_modes, 'record_seal_repair_age_order', side_effect=cycle((False, True)))
 
 
 def entries():
@@ -55,12 +62,19 @@ def entries():
         ),
         DriverEntry(
             'utils.batch_pipeline.record_seal_cluster_repair.discover_jobs',
+            trials=2,
+            patchers=(_repair_age_orders,),
             domains={
                 'after': [
                     None,
                     {
                         'path': 'batch_pipeline_prod_jobs/old',
                         'finished_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
+                    },
+                    {
+                        'path': 'batch_pipeline_prod_jobs/old',
+                        'enqueued_at': 1.0,
+                        'horizon': datetime(2026, 10, 1, tzinfo=timezone.utc),
                     },
                 ]
             },
@@ -69,6 +83,7 @@ def entries():
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+                'progress': (lambda _: None, 'content-free fallback diagnostic only'),
             },
         ),
         DriverEntry(
