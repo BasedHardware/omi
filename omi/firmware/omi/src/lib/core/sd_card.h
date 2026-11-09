@@ -23,6 +23,16 @@ typedef struct {
 
 int app_sd_init(void);
 int app_sd_off(void);
+
+/**
+ * @brief Stop all SD mount attempts for the rest of this boot.
+ *
+ * Waits (bounded) for an in-flight attempt to finish. Shutdown calls it even
+ * when the card is already off: a failing card sits powered off between
+ * backoff retries, and a retry must not power it during System OFF entry.
+ * app_sd_off() calls it too.
+ */
+void sd_begin_shutdown(void);
 void sd_write_pause(bool pause);
 bool is_sd_on(void);
 /** @brief True when the SD is powered AND mounted (ring reads/writes will work). */

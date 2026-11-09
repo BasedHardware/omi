@@ -103,7 +103,10 @@ int app_settings_save_muted(uint8_t muted);
 /**
  * @brief Get the persisted capture mute/pause flag.
  *
- * @return 1 when muted, 0 otherwise (default unmuted).
+ * Fails closed: 1 until app_settings_init() has loaded the omi subtree, and
+ * after any init/load failure that leaves the stored value unknown.
+ *
+ * @return 1 when muted, 0 otherwise.
  */
 uint8_t app_settings_get_muted(void);
 

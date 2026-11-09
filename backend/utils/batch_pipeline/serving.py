@@ -470,6 +470,8 @@ def start_serving_from_env():
                 logging.getLogger(__name__).error(
                     'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
                 )
+            else:
+                metrics.projection_pump_last_success.set(time.time())
             finally:
                 metrics.projection_pump_last_tick.set(time.time())
                 logging.getLogger(__name__).info(

@@ -1,0 +1,13 @@
+id: button/long-press-powers-off
+summary: A 3.5 s hold in normal mode runs turnoff_all() and enters System OFF; the device stays off.
+tags: [guard]
+timeline:
+  - {t: 5000, hold: 3500}
+end: 30000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, safe: false, is_off: true, button_held_at_poweroff: false,
+       log: ["long press detected", "Entering system off; press usr_btn to restart"]}
+  invariants: [poweroff-waits-release]

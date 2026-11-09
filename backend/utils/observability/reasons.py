@@ -75,6 +75,7 @@ class ReasonFamily(StrEnum):
     BATCH_FINAL_PASS = 'batch_final_pass'
     RECURRING_VOICE = 'recurring_voice'
     RECORD_GAP_FILL = 'record_gap_fill'
+    RECORD_RETAINED_ACK = 'record_retained_ack'
 
 
 class PusherPcmStage(StrEnum):
@@ -121,6 +122,23 @@ class RecordGapFillOutcome(StrEnum):
     SKIPPED_NO_AUDIO = 'skipped_no_audio'
     SKIPPED_NOT_CONTIGUOUS = 'skipped_not_contiguous'
     SKIPPED_COLLISION = 'skipped_collision'
+    SKIPPED_BUSY = 'skipped_busy'
+    RACED = 'raced'
+    FAILED = 'failed'
+
+
+class RecordRetainedAckOutcome(StrEnum):
+    """One option A byte-exact retained-copy proof (``utils.batch_pipeline.record_retained_ack``)."""
+
+    UNKNOWN = 'unknown'
+    ACKED = 'acked'
+    SKIPPED_FILL = 'skipped_fill'
+    SKIPPED_UNCOVERED = 'skipped_uncovered'
+    SKIPPED_LOSSY_SOURCE = 'skipped_lossy_source'
+    SKIPPED_BYTES_DIFFER = 'skipped_bytes_differ'
+    SKIPPED_OUTSIDE_RECORD = 'skipped_outside_record'
+    SKIPPED_BOUNDS = 'skipped_bounds'
+    SKIPPED_PRIVACY = 'skipped_privacy'
     FAILED = 'failed'
 
 

@@ -29,8 +29,11 @@ The upload filter uses platform request logs, the upload route (with optional qu
 method POST, status 503 and exactly 266 response bytes. The size is a custody-wait **proxy**, not captured response
 body proof; 259-byte `sync_batch_unavailable` responses and polling requests are excluded. `out-t8.md` gives the
 size-class attribution but does not contain a literal full filter or an explicit contention service list. We
-scope contention and owner-drain metrics to the batch Cloud Run services: backend-sync, backend-sync-backfill,
-backend-integration. Contention matches textPayload or jsonPayload.message. Verify counts with the exact
+scope contention to backend-sync, backend-sync-backfill and backend-integration. The paired owner-drain
+metrics cover those serving services plus backend-projection-pump, preserving the claim_busy numerator and
+turn denominator scope and the existing metric names/queries. This filter extension requires a separately
+approved reconciler apply, readback to MATCH and new service-scoped ingestion evidence; it does not backfill
+pump history. Contention matches textPayload or jsonPayload.message. Verify counts with the exact
 committed filter in one-minute buckets; counts are log entries, not unique failed transactions.
 
 Main exposes no owner-drain GMP counters. The authoritative existing line is:

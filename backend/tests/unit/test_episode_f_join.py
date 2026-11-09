@@ -68,7 +68,7 @@ def _env(monkeypatch):
 @pytest.fixture
 def store(monkeypatch):
     store = StrictFirestore()
-    # The user's current private cloud sync consent (read last, before any Jev question) is on by default here.
+    # The user's current private cloud sync consent (checked before any Jev question) is on by default here.
     store.rows[('users', UID)] = {'private_cloud_sync_enabled': True}
     # Policy/storage seam as in test_episode_live_integrity; query ordering runs on the emulator.
     monkeypatch.setattr(
@@ -530,7 +530,7 @@ def test_a_predecessor_without_private_cloud_sync_consent_is_never_sent_to_jev(s
 )
 def test_a_candidate_changed_while_the_predecessor_is_read_never_reaches_jev(store, monkeypatch, change):
     # The intake gate passed, then the candidate changed during the predecessor and name reads.
-    # The stored-privacy re-read is the last read before Jev, so the question is never asked.
+    # The stored-privacy re-read just before Jev prevents the question.
     first = _first_episode(store)
     _store_row(store, 'c2', SECOND, minutes=12)
     row = store.rows[('users', UID, 'conversations', 'c2')]
@@ -561,7 +561,7 @@ def test_a_candidate_changed_while_the_predecessor_is_read_never_reaches_jev(sto
 
 @pytest.mark.parametrize('user_state', ['doc_missing', 'field_missing', 'off'])
 def test_a_synced_candidate_without_current_user_consent_is_never_sent_to_jev(store, user_state):
-    # The user-level toggle is read last. A missing user document or field is not permission (fail closed).
+    # The user-level toggle is re-read before Jev. A missing user document or field is not permission (fail closed).
     first = _first_episode(store)
     _store_row(store, 'c2', SECOND, minutes=12)
     if user_state == 'doc_missing':
@@ -583,7 +583,7 @@ def test_a_synced_candidate_without_current_user_consent_is_never_sent_to_jev(st
 
 
 def test_a_user_who_turns_private_cloud_sync_off_while_the_predecessor_is_read_is_never_asked_about(store, monkeypatch):
-    # The row-level snapshot still says on; the user's current toggle, read last, says off.
+    # The row-level snapshot still says on; the user's current toggle, checked before Jev, says off.
     first = _first_episode(store)
     _store_row(store, 'c2', SECOND, minutes=12)
     row = store.rows[('users', UID, 'conversations', 'c2')]
@@ -689,9 +689,92 @@ def test_a_conversation_already_placed_is_never_asked_about_again(store, monkeyp
     monkeypatch.setattr(f_join, 'settle', lambda *a, **k: pytest.fail('a placed conversation was asked about again'))
     row = store.rows[('users', UID, 'conversations', 'c2')]
     span = conversation_span(row)
+    with monkeypatch.context() as retry:
+        retry.setattr(
+            episode_timeline,
+            'recorded_candidates',
+            lambda *a, **k: pytest.fail('a placed conversation queried recorded candidates again'),
+        )
+        retry.setattr(
+            episodes_db,
+            'get_episode',
+            lambda *a, **k: pytest.fail('a placed conversation read the recorded episode again'),
+        )
+        retry.setattr(
+            f_join,
+            'uncertain',
+            lambda *a, **k: pytest.fail('a placed conversation evaluated the boundary again'),
+        )
+        assert (
+            service._synced_f_verdict(UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13))
+            is None
+        )
     service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13))
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+def test_synced_candidate_placed_after_owner_snapshot_declines_before_settlement(store, monkeypatch):
+    first = _first_episode(store)
+    assert first is not None
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    uncertain = f_join.uncertain
+    checked = []
+
+    def attach_before_uncertain(uid, owner, *a, **kw):
+        assert owner['id'] == first['id'] and 'c2' not in owner['conversation_ids']
+        assert episodes_db.get_episode_owner_snapshot(UID, 'c2', firestore_client=store) is None
+        with monkeypatch.context() as control:
+            control.setenv(config.EPISODE_F_JOIN_ENABLED_ENV, 'off')
+            _sync_attach(store, 'c2', SECOND, minutes=12)
+        placed = episodes_db.get_episode_owner_snapshot(UID, 'c2', firestore_client=store)
+        assert placed is not None and placed['id'] == first['id']
+        marker = uncertain(uid, owner, *a, **kw)
+        assert marker is not None and marker.action == policy.ASK
+        checked.append(True)
+        return marker
+
+    def forbidden(*a, **kw):
+        pytest.fail('a concurrently placed candidate reached settlement or Jev')
+
+    monkeypatch.setattr(f_join, 'uncertain', attach_before_uncertain)
+    monkeypatch.setattr(f_join, 'settle', forbidden)
+    monkeypatch.setattr(incremental, 'ask_same_occasion_f', forbidden)
+    assert (
+        service.attach_synced_intake(UID, 'c2', row, collaborators=_c(store, minutes=13, ask=forbidden)) == 'recorded'
+    )
+    assert checked == [True]
+
+
+@pytest.mark.parametrize('during', ['previous_transcript', '_user_consent_allows'])
+def test_synced_candidate_placed_during_settlement_never_reaches_jev(store, monkeypatch, during):
+    first = _first_episode(store)
+    assert first is not None
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    original = getattr(f_join, during)
+    attached = []
+
+    def attach_during_reads(*a, **kw):
+        result = original(*a, **kw)
+        with monkeypatch.context() as control:
+            control.setenv(config.EPISODE_F_JOIN_ENABLED_ENV, 'off')
+            _sync_attach(store, 'c2', SECOND, minutes=12)
+        attached.append(True)
+        return result
+
+    def forbidden(*a, **kw):
+        pytest.fail('a candidate placed during settlement reached Jev')
+
+    monkeypatch.setattr(f_join, during, attach_during_reads)
+    monkeypatch.setattr(incremental, 'ask_same_occasion_f', forbidden)
+    assert (
+        service.attach_synced_intake(UID, 'c2', row, collaborators=_c(store, minutes=13, ask=forbidden)) == 'recorded'
+    )
+    assert attached == [True]
+    placed = episodes_db.get_episode_owner_snapshot(UID, 'c2', firestore_client=store)
+    assert placed is not None and placed['id'] == first['id']
 
 
 EXCLUDED_CLASSES = [
@@ -784,7 +867,7 @@ def test_a_long_synced_candidate_names_at_most_the_people_read_limit(store):
     service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, c)
     assert asked, 'the candidate must reach Jev for the cap to matter'
     assert lookups and all(len(ids) <= config.F_JOIN_PEOPLE_READ_LIMIT for ids in lookups)
-    # The complete synced/late decision reserves two name reads per side within its 24-read budget.
+    # The complete synced/late decision reserves two name reads per side within its 26-read budget.
     assert sorted(lookups[-1]) == ['p0', 'p1']
     new_speech = asked[0].split('NEW speech (full transcript):\n', 1)[1]
     assert len(new_speech) <= config.F_JOIN_NEW_CHARS
@@ -889,14 +972,17 @@ def _bounded_query_fake(store, monkeypatch, reads):
     return original
 
 
-@pytest.mark.parametrize('owner_reuse,optimizations', [('true', 'true'), ('false', 'true'), ('true', 'false')])
+@pytest.mark.parametrize(
+    'owner_reuse,optimizations', [('true', 'true'), ('false', 'true'), ('true', 'false'), ('false', 'false')]
+)
 @pytest.mark.parametrize('answer', [0.05, 0.9, None, TimeoutError('slow Jev')])
 def test_synced_f_read_and_jev_budget_includes_close_and_all_attach_retries(
-    store, monkeypatch, owner_reuse, optimizations, answer
+    store, monkeypatch, owner_reuse, optimizations, answer, record_property
 ):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 
     first = _first_episode(store)
+    assert first is not None
     # Seed retained live members directly: recorded attachment marks members recovered,
     # which intentionally takes the reconciliation/control branch instead of this F close.
     owner = store.rows[('users', UID, 'episodes', first['id'])]
@@ -962,11 +1048,12 @@ def test_synced_f_read_and_jev_budget_includes_close_and_all_attach_retries(
     assert len(name_reads) == 4
     assert sum(pid.startswith('c2-') for pid in name_reads) == 2
     assert sum(pid.startswith('c4-') for pid in name_reads) == 2
-    assert len(reads) <= 24, reads
+    record_property('document_reads', len(reads))
+    assert len(reads) <= 26, reads
     if answer != 0.05:
-        # Non-close outcomes: 12 in the default configuration. The optimization-off and owner-reuse-off
-        # configurations add one re-read each, so the worst case is 13 until lead2 rules on the bound.
-        assert len(reads) <= 13, reads
+        # Non-close outcomes include both new unplaced-link rechecks; optimization-off/owner-reuse-off
+        # configurations retain their existing rereads.
+        assert len(reads) <= 15, reads
     if answer == 0.05:
         assert store.rows[('users', UID, 'episodes', first['id'])]['status'] == 'closed'
         assert store.transactions[-1]._max_attempts == 1

@@ -1,0 +1,30 @@
+id: safe/crash-loop-off-wake-with-ram-retained
+summary: >
+  Same exit as crash-loop-safe-then-off-and-wake, but on silicon whose System
+  OFF retains RAM: the CRC-valid latch must still be cleared, both by the
+  power-off path and by the OFF-wake reset class.
+committee: [1]
+tags: [fix]
+build: wdt-starve
+initial: {off_retains_ram: true}
+timeline:
+  - {t: 200000, hold: 4000}
+  - {t: 220000, tap: [150]}
+end: 240000
+expect:
+  boots:
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: poweroff, safe: true}
+    - {reset: off-wake, warm: true, safe: false, boot_count: 1}
+  invariants: [no-stuck-safe]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {exit: poweroff, safe: true}
+      - {reset: off-wake, safe: true}

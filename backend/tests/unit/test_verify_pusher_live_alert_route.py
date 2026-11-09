@@ -82,7 +82,7 @@ def test_accepts_exact_active_rule_healthy_datasource_and_receiver(verifier: Sim
     ("mutation", "expected"),
     [
         ("rule", "does not match"),
-        ("paused", "unpaused"),
+        ("paused", "isPaused"),
         ("datasource", "health is not OK"),
         ("pusher", "scrape targets are not both healthy"),
         ("metrics", "telemetry sources are missing"),
@@ -843,7 +843,7 @@ def test_import_fails_closed_when_a_referenced_mute_timing_is_uncommitted(
 
 
 # Ruling699300 / PR #24938 deliberately pauses these gated backlog pages.
-# Fleet coverage must still fail closed on that debt; do not infer this set
+# Pin that disposition independently; do not infer this set
 # from current isPaused values, which would hide a new accidental pause.
 APPROVED_PAUSED_GATED_UIDS = {
     'omi-batch-unit-unpublished-2h',
@@ -864,16 +864,17 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
     failures, report = verifier._run_fleet_coverage(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
-    assert len(failures) == len(APPROVED_PAUSED_GATED_UIDS)
-    assert set(failures) == {f'live alert rule {uid} must be unpaused' for uid in APPROVED_PAUSED_GATED_UIDS}
+    assert failures == []
+    assert {uid for uid, rule in committed.items() if rule.get('isPaused') is True} == APPROVED_PAUSED_GATED_UIDS
     count = len(committed)
-    matching = count - len(APPROVED_PAUSED_GATED_UIDS)
+    matching = count
     assert set(verifier.RULE_UIDS) <= set(committed)
     assert report[0] == (
         f"FLEET committed={count} live={count} gated={count} matching={matching} gated_matching={matching}"
     )
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
+    assert f"PRESENT_BUT_PAUSED (3): {', '.join(sorted(APPROVED_PAUSED_GATED_UIDS))}" in report
 
 
 @pytest.mark.parametrize(("exists", "method"), [(False, "POST"), (True, "PUT")])
@@ -989,6 +990,44 @@ def test_classify_present_but_paused(verifier: SimpleNamespace) -> None:
     assert coverage.live_and_matching == ()
 
 
+@pytest.mark.parametrize('committed_paused', [False, True])
+@pytest.mark.parametrize('live_paused', [False, True, None, 'true', 0, 1])
+def test_pause_state_must_match_committed_source(verifier, committed_paused, live_paused):
+    expected = _live_rule(next(iter(verifier._committed_rules().values())), isPaused=committed_paused)
+    uid = expected['uid']
+    live = _live_rule(expected, isPaused=live_paused)
+    if live_paused is None:
+        live.pop('isPaused')
+    matches = live_paused is committed_paused
+    errors = verifier.rule_definition_errors(uid, live, expected)
+    assert errors == ([] if matches else [f'live alert rule {uid} isPaused does not match the committed rule'])
+
+    coverage = verifier.classify_fleet_coverage({uid: expected}, {uid: live})
+    assert coverage.live_and_matching == ((uid,) if matches else ())
+    assert coverage.present_but_paused == ((uid,) if live_paused is not False else ())
+    assert coverage.present_but_divergent == (() if matches else (f'{uid} (isPaused)',))
+    report = verifier.format_fleet_report(coverage, committed_count=1, gated_uids=(uid,))
+    assert f'PRESENT_BUT_DIVERGENT ({0 if matches else 1}):' in ' '.join(report)
+    for fail_on in ('gated', 'all'):
+        failures = verifier.fleet_gate_failures(coverage, (uid,), fail_on)
+        assert failures == ([] if matches else [f'live alert rule {uid} (isPaused) does not match the committed rule'])
+
+
+def test_committed_pause_does_not_hide_other_definition_drift_or_absence(verifier):
+    expected = _live_rule(next(iter(verifier._committed_rules().values())), isPaused=True)
+    uid = expected['uid']
+    live = _live_rule(expected, title='wrong')
+    assert verifier.rule_definition_errors(uid, live, expected) == [
+        f'live alert rule {uid} title does not match the committed rule'
+    ]
+    coverage = verifier.classify_fleet_coverage({uid: expected}, {uid: live})
+    assert verifier.fleet_gate_failures(coverage, (uid,), 'gated') == [
+        f'live alert rule {uid} (title) does not match the committed rule'
+    ]
+    absent = verifier.classify_fleet_coverage({uid: expected}, {})
+    assert verifier.fleet_gate_failures(absent, (uid,), 'gated') == [f'live alert rule {uid} is absent from Grafana']
+
+
 def test_classify_present_but_divergent(verifier: SimpleNamespace) -> None:
     expected = next(iter(verifier._committed_rules().values()))
     live = _live_rule(expected, title="wrong", condition="wrong")
@@ -1002,7 +1041,7 @@ def test_paused_and_divergent_rule_is_listed_in_both_buckets(verifier: SimpleNam
     live = _live_rule(expected, isPaused=True, title="wrong")
     coverage = verifier.classify_fleet_coverage({expected["uid"]: expected}, {expected["uid"]: live})
     assert coverage.present_but_paused == (expected["uid"],)
-    assert coverage.present_but_divergent == (f"{expected['uid']} (title)",)
+    assert coverage.present_but_divergent == (f"{expected['uid']} (title,isPaused)",)
 
 
 def test_fleet_fail_on_none_is_silent_when_ungated_rules_are_missing(verifier: SimpleNamespace) -> None:
@@ -1417,10 +1456,10 @@ def test_development_fleet_does_not_require_production_canaries(verifier, monkey
     failures, report = verifier._run_fleet_coverage(
         'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
     )
-    assert len(failures) == len(APPROVED_PAUSED_GATED_UIDS)
-    assert set(failures) == {f'live alert rule {uid} must be unpaused' for uid in APPROVED_PAUSED_GATED_UIDS}
+    assert failures == []
+    assert {uid for uid, rule in development.items() if rule.get('isPaused') is True} == APPROVED_PAUSED_GATED_UIDS
     count = len(development)
-    matching = count - len(APPROVED_PAUSED_GATED_UIDS)
+    matching = count
     assert set(verifier.RULE_UIDS) <= set(development)
     assert (
         report[0] == f'FLEET committed={count} live={count} gated={count} matching={matching} gated_matching={matching}'
