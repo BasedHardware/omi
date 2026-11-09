@@ -143,7 +143,11 @@ reset classes, manual entry, SAFE loop, DFU callbacks), `button.c` (the real
 gesture FSM and `turnoff_all()`), `settings.c` over Zephyr NVS on a flash file,
 `capture_mute.c`, `sd_card.c`'s raw-ring worker with `custody.c`, and
 `battery_guard.c`. Drivers, BLE, codec and the microphone are stubs
-(`stubs.c`); the SD card is a RAM disk with ok/absent/slow/dead behaviour
+(`stubs.c`). `transport.c` is **not** linked: the battery worker and the
+offline audio pusher in `stubs.c` re-create its call sites (guard call,
+mute-gated `write_to_file()`), so a regression in transport's own call sites
+is caught by the host tests that compile its code verbatim
+(`omi/tests/battery`, `run_power_control_test.sh`), not here; the SD card is a RAM disk with ok/absent/slow/dead behaviour
 (`sim_sd.c`), persisted per scenario.
 
 **Power model.** `power_model.py` turns one global timeline into a chain of

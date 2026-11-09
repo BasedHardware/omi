@@ -124,6 +124,15 @@ class OracleTests(unittest.TestCase):
         failures = pm.check({"boot_count": 2, "boots": [{"safe": True, "not_log": ["boot"]}]}, outcome)
         self.assertEqual(len(failures), 3)
 
+    def test_safe_boot_reports_the_reason_that_selected_it(self):
+        log = ('BOOTSTATE: active=1 count=1 reason=2 reset=0x00000001 state=0\nSIM EXIT: poweroff\n'
+               'SIMSTATE: {"exit":"poweroff","uptime_ms":20000,"safe":true,"latch_reason":0}\n')
+        state = pm.parse_boot_log(log)["state"]
+        self.assertEqual((state["latch_reason"], state["exit_latch_reason"]), (2, 0))
+        normal = pm.parse_boot_log('BOOTSTATE: active=0 count=1 reason=0 reset=0x0 state=0\nSIM EXIT: stop\n'
+                                   'SIMSTATE: {"exit":"stop","uptime_ms":1,"safe":false,"latch_reason":0}\n')
+        self.assertEqual(normal["state"]["latch_reason"], 0)
+
     def test_parse_rejects_missing_or_double_state(self):
         with self.assertRaises(pm.ScenarioError):
             pm.parse_boot_log("SIM EXIT: stop\n")

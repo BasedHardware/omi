@@ -264,6 +264,9 @@ SIMSTATE = re.compile(r"^SIMSTATE: (\{.*\})\s*$", re.M)
 SIM_EXIT = re.compile(r"^SIM EXIT: (\w+)\s*$", re.M)
 
 
+BOOTSTATE = re.compile(r"^BOOTSTATE: active=1 count=\d+ reason=(\d+)", re.M)
+
+
 def parse_boot_log(text):
     exits = SIM_EXIT.findall(text)
     states = SIMSTATE.findall(text)
@@ -272,6 +275,14 @@ def parse_boot_log(text):
     state = json.loads(states[0])
     if state.get("exit") != exits[0]:
         raise ScenarioError("SIM EXIT and SIMSTATE disagree")
+    # SIMSTATE is taken at exit, after SAFE power-off or a completed upload has
+    # already cleared the RAM latch for the next boot. For a SAFE boot,
+    # latch_reason means why SAFE was selected: the boot-time BOOTSTATE line.
+    # The raw exit value stays available as exit_latch_reason.
+    state["exit_latch_reason"] = state.get("latch_reason")
+    entry = BOOTSTATE.search(text)
+    if entry and state.get("safe"):
+        state["latch_reason"] = int(entry.group(1))
     return {"exit": exits[0], "uptime_ms": state["uptime_ms"], "state": state}
 
 
