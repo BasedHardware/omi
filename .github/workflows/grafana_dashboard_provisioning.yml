@@ -147,16 +147,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 15
 
-  # Auto-apply for prod dashboard JSON (David approved 2026-11-09). A merge to
-  # main that changes a dashboard file applies the Ops and Business dashboards
-  # to prod without a dispatch. The approval tap is replaced by the
-  # grafana-dashboards-prod environment, which holds only the Grafana tokens and
-  # has no required reviewers. Alert rules and the admin deploy keep their gates.
-  provision-prod-dashboards:
+  # Auto-apply for prod Ops dashboard JSON (David approved 2026-11-09). A merge
+  # to main that changes an Ops dashboard file applies it to prod without a
+  # dispatch. It uses only the repo-level MONITOR_GRAFANA_TOKEN, so it has no
+  # environment and no approval gate. The Business TV boards keep the gated
+  # prod path because their token lives only in the prod environment. Alert
+  # rules and the admin deploy keep their gates.
+  provision-prod-ops-dashboards:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
-    environment: grafana-dashboards-prod
     concurrency:
       group: grafana-dashboard-provisioning-prod-auto
       cancel-in-progress: false
@@ -164,7 +164,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
-      - name: Decide whether this push changed a dashboard file
+      - name: Decide whether this push changed an Ops dashboard file
         id: changed
         env:
           BEFORE: ${{ github.event.before }}
@@ -176,11 +176,11 @@ jobs:
           fi
           git fetch --no-tags --depth=1 origin "$BEFORE" || true
           if git diff --name-only "$BEFORE" "$GITHUB_SHA" -- \
-              backend/charts/monitoring/dashboards web/admin/grafana/dashboards | grep -q .; then
+              backend/charts/monitoring/dashboards | grep -q .; then
             echo "apply=true" >> "$GITHUB_OUTPUT"
           else
             echo "apply=false" >> "$GITHUB_OUTPUT"
-            echo "No dashboard file changed in this push; skipping."
+            echo "No Ops dashboard file changed in this push; skipping."
           fi
       - name: Provision prod Ops dashboards (dashboard JSON only)
         if: steps.changed.outputs.apply == 'true'
@@ -198,22 +198,6 @@ jobs:
             --source-sha "$GIT_SHORT_SHA" \
             --backup-file "$RUNNER_TEMP/grafana-dashboard-backup.json" \
             --allowlist 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,omi-services-overview.json,fleet-telemetry.json'
-      - name: Provision prod Business boards (TV wall and funnel)
-        if: steps.changed.outputs.apply == 'true'
-        env:
-          BUSINESS_GRAFANA_TOKEN: ${{ secrets.BUSINESS_GRAFANA_TOKEN }}
-          GIT_SHORT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          umask 077
-          test -n "$BUSINESS_GRAFANA_TOKEN"
-          python3 .github/scripts/provision_grafana_dashboards.py \
-            --dashboards-dir web/admin/grafana/dashboards \
-            --grafana-url https://monitor.omi.me \
-            --token-env BUSINESS_GRAFANA_TOKEN \
-            --source-sha "$GIT_SHORT_SHA" \
-            --allowlist omi-tv-v2.json,omi-tv-funnel.json \
-            --folder-uid business
       - name: Preserve pre-apply dashboard definitions for reviewed rollback
         if: always() && steps.changed.outputs.apply == 'true'
         uses: actions/upload-artifact@v7

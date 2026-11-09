@@ -1796,9 +1796,9 @@
       },
       "runs_on": "ubuntu-latest"
     },
-    "grafana_dashboard_provisioning.yml/provision-prod-dashboards": {
+    "grafana_dashboard_provisioning.yml/provision-prod-ops-dashboards": {
       "budget_p50_minutes": 5,
-      "display_name": "provision-prod-dashboards",
+      "display_name": "provision-prod-ops-dashboards",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
       "if": "github.event_name == 'push' && github.ref == 'refs/heads/main'",
@@ -1806,7 +1806,7 @@
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Prod dashboard auto-apply on merge to main, approved by David 2026-11-09. Runs only when a dashboard file changed in the push; the step skips otherwise. expected_runs_per_day 1 is a conservative daily ceiling for merged dashboard changes. The 5-minute p50 is a reviewed estimate for two small Grafana API applies; re-measure with --reseed after the first runs.",
+      "rationale": "Prod Ops dashboard auto-apply on merge to main, approved by David 2026-11-09. Runs only when a file under backend/charts/monitoring/dashboards changed in the push; the step skips otherwise. Uses the repo-level MONITOR_GRAFANA_TOKEN with no environment. expected_runs_per_day 1 is a conservative daily ceiling. The 5-minute p50 is a reviewed estimate for one small Grafana API apply; re-measure with --reseed after the first runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5518,7 +5518,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; a push that changes a dashboard file auto-applies prod dashboards through provision-prod-dashboards (environment grafana-dashboards-prod, no reviewers, approved by David 2026-11-09); the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; a push that changes an Ops dashboard file auto-applies prod Ops dashboards through provision-prod-ops-dashboards (repo-level MONITOR_GRAFANA_TOKEN, no environment, approved by David 2026-11-09); the Business TV boards stay on the gated prod path until a repo-level business token exists; the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
       "triggers": {
         "push": {
           "branches": [
