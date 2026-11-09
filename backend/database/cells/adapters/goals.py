@@ -104,6 +104,10 @@ class CellGoals(WorkflowRepo):
     def update(
         self, goal_id: str, patch: GoalUpdate, *, expected_revision: int | None = None, mutation_id: str | None = None
     ) -> GoalEntity | None:
+        # Identity and generation move only through their own checked operations.
+        if forbidden := sorted(set(patch.data) & {'id', 'goal_id', 'account_generation'}):
+            raise ValueError(f'goal update cannot change {", ".join(forbidden)}')
+
         def build():
             row = self._read(goal_id)
             if row is None:

@@ -27,6 +27,7 @@ from database.jobstore.migrate import load, migrate
 from database.ports.action_items import ActionItemDraft
 from database.ports.folders import FolderCreate
 from database.ports.goals import GoalCreate, GoalUpdate
+from database.ports.people import PersonDraft
 from database.ports.workstreams import WorkstreamCreate, WorkstreamUpdate
 from testing.cells_fixtures import cells_dsn
 from testing.domain_fixtures import build_backend
@@ -664,3 +665,39 @@ def test_goal_update_replays_saved_none_after_goal_appears(pg, backend):
     assert store.run(lambda tx: tx.goals.get('goal_late')).title == 'Original'
     if harness is not pg:
         harness.close()
+
+
+@pytest.mark.parametrize('backend', ['postgres', 'sim'])
+@pytest.mark.parametrize('field', ['id', 'goal_id', 'account_generation'])
+def test_goal_update_rejects_identity_and_generation_fields(pg, backend, field):
+    harness = pg if backend == 'postgres' else build_backend('sim')
+    try:
+        store = harness.store(harness.space('goal-identity'))
+        store.run(lambda tx: tx.goals.create(GoalCreate(data={'goal_id': 'goal_fixed', 'title': 'Original'})))
+        with pytest.raises(ValueError, match=field):
+            store.run(lambda tx: tx.goals.update('goal_fixed', GoalUpdate(data={field: 'other', 'title': 'X'})))
+        goal = store.run(lambda tx: tx.goals.get('goal_fixed'))
+        assert goal.title == 'Original' and goal.goal_id == 'goal_fixed'
+    finally:
+        if harness is not pg:
+            harness.close()
+
+
+@pytest.mark.parametrize('backend', ['postgres', 'sim'])
+def test_person_create_replay_survives_deleted_person(pg, backend):
+    # Firestore replays a receipt whose person is gone as {'id': receipt id}.
+    harness = pg if backend == 'postgres' else build_backend('sim')
+    try:
+        store = harness.store(harness.space('person-replay'))
+        draft = PersonDraft(id='person_gone', name='Gone')
+        created = store.run(lambda tx: tx.people.get_or_create_by_name(draft, mutation_id='person-once'))
+
+        def delete(tx):
+            del tx.people.store.state['people'][created.id]
+
+        store.run(delete)
+        replay = store.run(lambda tx: tx.people.get_or_create_by_name(draft, mutation_id='person-once'))
+        assert replay.id == 'person_gone'
+    finally:
+        if harness is not pg:
+            harness.close()

@@ -44,7 +44,9 @@ class CellPeople(Repo):
     def get_or_create_by_name(self, draft: PersonDraft, *, mutation_id: str | None = None) -> PersonEntity:
         digest, prior = self.receipt(mutation_id, 'people.create', draft.model_dump())
         if prior is not None:
-            return PersonEntity.model_construct(**self._project({**self.store.state['people'][prior], 'id': prior}))
+            return PersonEntity.model_construct(
+                **self._project({**(self.store.state['people'].get(prior) or {}), 'id': prior})
+            )
         matches = self.store.query(
             'people',
             "jsonb_typeof(doc->'name')='string' AND doc->>'name'=%s "

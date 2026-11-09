@@ -447,7 +447,9 @@ class SimPeople(_Repo):
     def get_or_create_by_name(self, draft: PersonDraft, *, mutation_id: str | None = None) -> PersonEntity:
         digest, prior = self.receipt(mutation_id, 'people.create', draft.model_dump())
         if prior is not None:
-            return PersonEntity.model_construct(**self._project({**self.store.state['people'][prior], 'id': prior}))
+            return PersonEntity.model_construct(
+                **self._project({**(self.store.state['people'].get(prior) or {}), 'id': prior})
+            )
         existing_id = next(
             (
                 eid
@@ -932,6 +934,10 @@ class SimGoals(_WorkflowRepo):
     def update(
         self, goal_id: str, patch: GoalUpdate, *, expected_revision: int | None = None, mutation_id: str | None = None
     ) -> GoalEntity | None:
+        # Identity and generation move only through their own checked operations.
+        if forbidden := sorted(set(patch.data) & {'id', 'goal_id', 'account_generation'}):
+            raise ValueError(f'goal update cannot change {", ".join(forbidden)}')
+
         def build():
             row = self._read(goal_id)
             if row is None:
