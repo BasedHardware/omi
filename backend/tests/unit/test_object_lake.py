@@ -22,7 +22,6 @@ def storage(tmp_path, monkeypatch):
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '100')
     monkeypatch.setenv('OBJECT_LAKE_RELEASE', 'v1')
-    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '5')
     monkeypatch.delenv('OBJECT_LAKE_KMS_KEY', raising=False)
     monkeypatch.delenv('OBJECT_LAKE_KMS_FAKE_SECRET', raising=False)
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')  # FakeKMS is admitted only offline
@@ -78,7 +77,7 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
         row = store.rows[('lake_upload_candidates', candidate_id)]
         assert set(row) == {'bucket', 'key', 'created_at', 'admitted_at', 'in_flight', 'settled'}
         assert row['settled'] is False and len(row['in_flight']) == 1
-        assert all(value.tzinfo is not None for value in row['in_flight'].values())
+        assert all(value['admitted_at'].tzinfo is not None and value['session'] for value in row['in_flight'].values())
         assert row['bucket'] == bucket.name and row['key'] == blob.name
         assert row['created_at'].tzinfo is not None
         return upload(blob, *args, **kwargs)
@@ -162,30 +161,6 @@ def test_deadline_checked_after_post_put_authority(storage, monkeypatch):
     assert len(list(bucket.list_blobs())) == 1
 
 
-def test_expired_creator_preserves_concurrently_published_pointer(storage, monkeypatch):
-    bucket, store = storage
-    clock = Mock(monotonic=Mock(return_value=10.0))
-    monkeypatch.setattr(lake, 'time', clock)
-    upload = LocalBlob.upload_from_string
-    published = []
-
-    def publish_before_expiry(blob, *args, **kwargs):
-        upload(blob, *args, **kwargs)
-        # Another successful writer reuses the content-addressed name before
-        # the creating writer notices that its own budget has expired.
-        with monkeypatch.context() as context:
-            context.setattr(LocalBlob, 'upload_from_string', upload)
-            published.append(put())
-        clock.monotonic.return_value += lake.config.put_deadline_seconds()
-
-    monkeypatch.setattr(LocalBlob, 'upload_from_string', publish_before_expiry)
-    with pytest.raises(lake.LakeWriteDeadlineExceeded):
-        put()
-    assert len(list(bucket.list_blobs())) == 1
-    assert lake.get_space_object(published[0]).startswith(b'private transcript')
-    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
-
-
 @pytest.mark.parametrize('operation', ['get', 'create'])
 def test_candidate_record_failure_prevents_upload(storage, monkeypatch, operation):
     bucket, _ = storage
@@ -225,7 +200,7 @@ def test_ambiguous_upload_retains_durable_candidate(storage, monkeypatch):
 @pytest.mark.parametrize('field', ['bucket', 'key', 'created_at'])
 def test_invalid_existing_candidate_refuses_upload(storage, monkeypatch, field):
     bucket, store = storage
-    lake._record_upload_candidate(bucket.name, 'v1/spaces/s/transcript/c/' + hashlib.sha256(b'new').hexdigest())
+    record_candidate(bucket.name, 'v1/spaces/s/transcript/c/' + hashlib.sha256(b'new').hexdigest())
     row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
     row[field] = None
     with pytest.raises(lake.LakeObjectConflict, match='candidate is invalid'):
@@ -532,43 +507,6 @@ def test_wrong_bucket_and_malformed_pointer_are_rejected(storage):
         lake.LakeObjectRef.from_pointer_dict({'key': 'garbage'})
 
 
-def test_strict_dict_bucket_retry_uses_existing_metadata(storage):
-    """GCS-shaped fake rejects writes without an explicit create precondition."""
-    from google.api_core.exceptions import PreconditionFailed
-
-    rows = {}
-
-    class Blob:
-        def __init__(self, name):
-            self.name = name
-            self.metadata = None
-            self.size = None
-
-        def upload_from_string(self, data, *, content_type, if_generation_match, timeout, retry):
-            assert if_generation_match == 0
-            assert retry is None and all(value > 0 for value in timeout)
-            if self.name in rows:
-                raise PreconditionFailed('exists')
-            rows[self.name] = (data, dict(self.metadata))
-
-        def reload(self, *, timeout, retry):
-            assert retry is None and all(value > 0 for value in timeout)
-            data, self.metadata = rows[self.name]
-            self.size = len(data)
-
-        def download_as_bytes(self):
-            return rows[self.name][0]
-
-    class Bucket:
-        def blob(self, name):
-            return Blob(name)
-
-    with patch.object(lake, '_lake_bucket', return_value=Bucket()):
-        ref = put(b'dictionary storage')
-        assert put(b'dictionary storage') == ref
-        assert lake.get_space_object(ref) == b'dictionary storage'
-
-
 def test_bucket_client_is_lazy_and_reused(monkeypatch):
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'lazy-lake')
     monkeypatch.setattr(lake, '_bucket_instance', None)
@@ -641,36 +579,6 @@ def test_conversation_fence_refuses_put_before_storage_or_keys(storage, monkeypa
     bucket.assert_not_called()
 
 
-def test_late_upload_self_deletes_after_conversation_purge_final_listing(storage, monkeypatch):
-    from utils.other import lake_wipe
-
-    monkeypatch.setattr(lake_wipe, 'schedule_conversation_lake_repurge', Mock())
-
-    bucket, store = storage
-    original = LocalBlob.upload_from_string
-    events = []
-
-    def upload_after_purge(blob, *args, **kwargs):
-        assert lake_wipe.purge_conversation_lake_objects('s', 'c') == 0
-        assert not list(bucket.list_blobs())
-        events.append('absence-verified')
-        original(blob, *args, **kwargs)
-        events.append('upload-finished')
-
-    monkeypatch.setattr(LocalBlob, 'upload_from_string', upload_after_purge)
-    with pytest.raises(lake.LakeWriteFenced, match='Conversation'):
-        put()
-    assert events == ['absence-verified', 'upload-finished']
-    assert not list(bucket.list_blobs())
-    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
-    assert store.collection('users').document('s').collection('deleted_conversations').document('c').get().exists
-    # Retry is still fenced; a sibling is unaffected.
-    with pytest.raises(lake.LakeWriteFenced):
-        put()
-    monkeypatch.setattr(LocalBlob, 'upload_from_string', original)
-    lake.put_space_object('s', 'transcript', 'sibling', b'live sibling')
-
-
 def test_create_only_retry_does_not_delete_reused_referenced_object(storage, monkeypatch):
     bucket, store = storage
     ref = put()
@@ -723,12 +631,11 @@ def test_delayed_candidate_creation_refused_after_owner_purge(storage, monkeypat
     bucket, store = storage
     record = lake._record_upload_candidate
 
-    def record_after_purge(bucket_name, key):
+    def record_after_purge(bucket_name, key, session):
         store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
         monkeypatch.setattr(lake_wipe.users_db, 'get_user_deletion_wipe_status', lambda uid: 'running')
-        monkeypatch.setattr(lake_wipe, 'time', Mock(sleep=Mock()))
         assert lake_wipe.purge_owner_lake_content('s')['status'] == 'purged'
-        record(bucket_name, key)
+        record(bucket_name, key, session)
 
     monkeypatch.setattr(lake, '_record_upload_candidate', record_after_purge)
     with pytest.raises(lake.LakeWriteFenced):
@@ -742,7 +649,8 @@ def test_candidate_absence_verification_failure_is_retryable(storage, monkeypatc
     put()
     from tests.unit.fixtures.lake_firestore import CandidateDocument
 
-    monkeypatch.setattr(CandidateDocument, 'delete', lambda self: None)
+    monkeypatch.setattr(StrictFirestoreTransaction, 'delete', lambda self, ref: None)
+    store.collection('account_deletions').document('s').set({'wipe_status': 'running'})
     with pytest.raises(lake.LakeFetchError, match='remain after purge'):
         lake.delete_space_upload_candidates('s')
 
@@ -750,15 +658,15 @@ def test_candidate_absence_verification_failure_is_retryable(storage, monkeypatc
 def test_settlement_of_one_same_key_request_leaves_other_inflight(storage):
     bucket, store = storage
     key = 'v1/spaces/s/transcript/c/' + hashlib.sha256(b'new').hexdigest()
-    one = lake._record_upload_candidate(bucket.name, key)
-    two = lake._record_upload_candidate(bucket.name, key)
+    one = record_candidate(bucket.name, key)
+    two = record_candidate(bucket.name, key)
     lake._settle_upload_candidate(bucket.name, key, two)
     row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
     assert set(row['in_flight']) == {one} and row['settled'] is False
-    with pytest.raises(lake.LakeFetchError, match='still in flight'):
-        lake.assert_space_uploads_quiescent('s')
+    lake.assert_space_uploads_quiescent('s')
     lake._settle_upload_candidate(bucket.name, key, one)
     lake.assert_space_uploads_quiescent('s')
+    store.collection('account_deletions').document('s').set({'wipe_status': 'running'})
     assert lake.delete_space_upload_candidates('s') == 1
     lake._settle_upload_candidate(bucket.name, key, one)
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
@@ -766,7 +674,7 @@ def test_settlement_of_one_same_key_request_leaves_other_inflight(storage):
 
 def test_failed_put_keeps_ambiguous_request_in_flight(storage, monkeypatch):
     # A raised transport error can still commit server-side: only the
-    # quiescence bound, never the exception, may release the attempt.
+    # storage session fence, never elapsed time, may release the attempt.
     _, store = storage
     monkeypatch.setattr(LocalBlob, 'upload_from_string', Mock(side_effect=RuntimeError('transport failed')))
     with pytest.raises(lake.LakeFetchError):
@@ -795,38 +703,6 @@ def test_large_payload_refuses_resumable_upload_before_admission(storage, monkey
         put(b'content')
     forbidden.assert_not_called()
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
-
-
-def test_single_request_limit_matches_installed_sdk_dispatch(monkeypatch):
-    from google.cloud.storage import Blob, Client
-    from google.auth.credentials import AnonymousCredentials
-    from io import BytesIO
-
-    client = Client(project='demo-pgf-c4', credentials=AnonymousCredentials())
-    try:
-        blob = client.bucket('synthetic-lake').blob('synthetic-object')
-        response = Mock(json=Mock(return_value={}))
-        multipart = Mock(return_value=response)
-        resumable = Mock(side_effect=AssertionError('resumable request dispatched'))
-        monkeypatch.setattr(Blob, '_do_multipart_upload', multipart)
-        monkeypatch.setattr(Blob, '_do_resumable_upload', resumable)
-        blob._do_upload(
-            client,
-            BytesIO(),
-            'application/octet-stream',
-            lake._MAX_SINGLE_REQUEST_BYTES,
-            num_retries=None,
-            predefined_acl=None,
-            if_generation_match=0,
-            if_generation_not_match=None,
-            if_metageneration_match=None,
-            if_metageneration_not_match=None,
-            retry=None,
-        )
-        multipart.assert_called_once()
-        resumable.assert_not_called()
-    finally:
-        client.close()
 
 
 def test_deletion_after_post_put_check_fails_the_put(storage, monkeypatch):
@@ -895,3 +771,149 @@ def test_account_wipe_marker_before_settlement_fails_the_put(storage, monkeypatc
     # The account wipe, not settlement, owns erasing discovery rows.
     rows = [doc.to_dict() for doc in store.collection('lake_upload_candidates').stream()]
     assert len(rows) == 1 and rows[0]['in_flight'] == {} and rows[0]['settled'] is True
+
+
+def record_candidate(bucket, key):
+    blob = lake.create_storage_client().bucket(bucket).blob(key)
+    session = blob.create_resumable_upload_session(
+        content_type='application/octet-stream', size=9, if_generation_match=0, timeout=(1, 1), retry=None
+    )
+    return lake._record_upload_candidate(bucket, key, session)
+
+
+def test_record_fenced_after_session_creation_cancels_empty_session(storage, monkeypatch):
+    bucket, store = storage
+    create = LocalBlob.create_resumable_upload_session
+    sessions = []
+
+    def fence_after_create(blob, **kwargs):
+        session = create(blob, **kwargs)
+        sessions.append(session)
+        store.collection('users').document('s').collection('deleted_conversations').document('c').create({})
+        return session
+
+    monkeypatch.setattr(LocalBlob, 'create_resumable_upload_session', fence_after_create)
+    with pytest.raises(lake.LakeWriteFenced):
+        put()
+    assert not list(bucket.list_blobs())
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert lake._UploadSession.status(bucket.client, sessions[0]) == 499
+
+
+@pytest.mark.parametrize('operation', ['create', 'put'])
+def test_session_errors_and_pointer_never_expose_capability(storage, monkeypatch, caplog, operation):
+    bucket, store = storage
+    ref = put()
+    assert 'session' not in repr(ref) and 'session' not in repr(ref.to_pointer_dict())
+    secret = 'https://storage.googleapis.com/upload?upload_id=secret-capability'
+    if operation == 'create':
+        monkeypatch.setattr(LocalBlob, 'create_resumable_upload_session', Mock(side_effect=OSError(secret)))
+    else:
+
+        def fail(*args):
+            raise OSError(secret)
+
+        bucket.client._http.before_request = fail
+    with pytest.raises(lake.LakeFetchError) as error:
+        put(b'other plaintext')
+    assert secret not in str(error.value) and secret not in caplog.text
+    assert error.value.__suppress_context__
+
+
+@pytest.mark.parametrize('precondition_stage', ['none', 'initiation', 'finalize'])
+def test_real_gcs_session_seam_uses_one_put_and_generation_zero(storage, monkeypatch, precondition_stage):
+    from google.api_core.exceptions import PreconditionFailed
+    from google.cloud.storage import Blob, Client
+    from google.auth.credentials import AnonymousCredentials
+
+    put()  # Existing candidate authority for the initiation replay case.
+    session = 'https://storage.googleapis.com/upload?upload_id=secret-capability'
+    client = Client(project='demo-pgf-c4', credentials=AnonymousCredentials())
+    blob = client.bucket('lake-test').blob('v1/spaces/s/transcript/c/' + hashlib.sha256(b'real seam').hexdigest())
+    create = Mock(return_value=session)
+    if precondition_stage == 'initiation':
+        create.side_effect = PreconditionFailed(session)
+    monkeypatch.setattr(Blob, 'create_resumable_upload_session', create)
+    response = Mock(status_code=412 if precondition_stage == 'finalize' else 200)
+    http = Mock(request=Mock(return_value=response))
+    client._http_internal = http
+    blob.metadata = {'space_id': 's', 'data_class': 'transcript', 'plaintext_sha256': 'digest'}
+    try:
+        if precondition_stage == 'initiation':
+            with pytest.raises(PreconditionFailed) as error:
+                lake._UploadSession.create(blob, b'payload', 'application/octet-stream', lake.time.monotonic() + 5)
+            assert session not in str(error.value)
+            http.request.assert_not_called()
+        else:
+            assert (
+                lake._UploadSession.create(blob, b'payload', 'application/octet-stream', lake.time.monotonic() + 5)
+                == session
+            )
+            if precondition_stage == 'finalize':
+                with pytest.raises(PreconditionFailed) as error:
+                    lake._UploadSession.put_all(client, session, b'payload', lake.time.monotonic() + 5)
+                assert session not in str(error.value)
+            else:
+                lake._UploadSession.put_all(client, session, b'payload', lake.time.monotonic() + 5)
+            http.request.assert_called_once()
+            args, kwargs = http.request.call_args
+            assert args == ('PUT', session) and kwargs['data'] == b'payload'
+            assert kwargs['headers'] == {'Content-Length': '7'}
+            assert kwargs['allow_redirects'] is False
+        assert create.call_args.kwargs['size'] == 7
+        assert create.call_args.kwargs['if_generation_match'] == 0
+        assert create.call_args.kwargs['retry'] is None
+        assert blob.metadata['space_id'] == 's'
+    finally:
+        client.close()
+
+
+def test_initiation_precondition_replay_records_discovery_and_returns_existing_ref(storage, monkeypatch):
+    from google.api_core.exceptions import PreconditionFailed
+
+    bucket, store = storage
+    ref = put()
+    # Even an existing object without discovery gains settled discovery before
+    # the replay returns; no new session capable of committing was issued.
+    for path in list(store.rows):
+        if path[0] == 'lake_upload_candidates':
+            del store.rows[path]
+    monkeypatch.setattr(LocalBlob, 'create_resumable_upload_session', Mock(side_effect=PreconditionFailed('exists')))
+    assert put() == ref
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    assert row['settled'] is True and not row['in_flight']
+
+
+def test_expired_creator_preserves_concurrently_published_pointer(storage, monkeypatch):
+    bucket, store = storage
+    clock = Mock(monotonic=Mock(return_value=10.0))
+    monkeypatch.setattr(lake, 'time', clock)
+    published = []
+
+    def publish_before_expiry(method, uri, data, headers, response):
+        if method == 'PUT' and not headers.get('Content-Range'):
+            bucket.client._http.after_request = None
+            published.append(put())
+            clock.monotonic.return_value += lake.config.put_deadline_seconds()
+
+    bucket.client._http.after_request = publish_before_expiry
+    with pytest.raises(lake.LakeWriteDeadlineExceeded):
+        put()
+    assert len(list(bucket.list_blobs())) == 1
+    assert lake.get_space_object(published[0]).startswith(b'private transcript')
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+
+
+@pytest.mark.parametrize('status', [200, 201, 400, 404, 410, 499, 308, 503, 302, 202, 0])
+def test_fence_requires_terminal_storage_status(storage, monkeypatch, status):
+    bucket, store = storage
+    session = 'local-session://' + 'a' * 32
+    calls = []
+    monkeypatch.setattr(lake._UploadSession, 'cancel', lambda client, uri: calls.append(('DELETE', uri)))
+    monkeypatch.setattr(lake._UploadSession, 'status', lambda client, uri: calls.append(('status', uri)) or status)
+    if status in (200, 201) or 400 <= status < 500:
+        lake._fence_upload_attempt({'session': session})
+    else:
+        with pytest.raises(lake.LakeFetchError):
+            lake._fence_upload_attempt({'session': session})
+    assert calls == [('DELETE', session), ('status', session)]

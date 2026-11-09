@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import fcntl
+import uuid
+from dataclasses import dataclass
 import logging
 import os
 import shutil
 import threading
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from urllib.parse import quote
 from utils.other.owned_paths import owned_scratch_path
 
@@ -128,6 +131,9 @@ class LocalBlob:
             raise PreconditionFailed('local storage create-only object exists') from error
         self.patch()
 
+    def create_resumable_upload_session(self, *, content_type, size, if_generation_match, timeout, retry):
+        return self.bucket.client._http.create(self, size, content_type, if_generation_match)
+
     def download_as_bytes(self, *_args, **_kwargs) -> bytes:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
@@ -170,7 +176,8 @@ class LocalBlob:
 
 
 class LocalBucket:
-    def __init__(self, root: Path, name: str):
+    def __init__(self, root: Path, name: str, client=None):
+        self.client = client if client is not None else LocalStorageClient(root)
         self.root = root
         self.name = _safe_relative_path(name, label='bucket name').as_posix()
         if '/' in self.name:
@@ -205,10 +212,98 @@ class LocalBucket:
         return destination
 
 
+@dataclass
+class _LocalSessionResponse:
+    status_code: int
+
+    def close(self):
+        pass
+
+
+class _LocalSessionHTTP:
+    """Disk-backed sessions survive client/worker loss. Lock cancel against finalize.
+
+    Tests may install before_request/after_request hooks to stage remote races;
+    production lake code uses exactly the same session transport contract.
+    """
+
+    def __init__(self, client):
+        self.client = client
+        self.before_request: Callable[..., None] | None = None
+        self.after_request: Callable[..., None] | None = None
+
+    def create(self, blob, size, content_type, match):
+        sessions = self.client.root / '.sessions'
+        sessions.mkdir(parents=True, exist_ok=True)
+        token = uuid.uuid4().hex
+        state = {
+            'bucket': blob.bucket.name,
+            'key': blob.name,
+            'size': size,
+            'content_type': content_type,
+            'match': match,
+            'metadata': blob.metadata,
+            'status': 308,
+        }
+        with (sessions / token).open('x') as file:
+            json.dump(state, file)
+        return f'local-session://{token}'
+
+    def request(self, method, uri, *, data=b'', headers=None, **kwargs):
+        if self.before_request is not None:
+            self.before_request(method, uri, data, headers)
+        token = uri.removeprefix('local-session://')
+        if (
+            not uri.startswith('local-session://')
+            or len(token) != 32
+            or any(c not in '0123456789abcdef' for c in token)
+        ):
+            return _LocalSessionResponse(404)
+        try:
+            file = (self.client.root / '.sessions' / token).open('r+')
+        except FileNotFoundError:
+            return _LocalSessionResponse(404)
+        with file:
+            fcntl.flock(file, fcntl.LOCK_EX)
+            state = json.load(file)
+            status = state['status']
+            if method == 'DELETE':
+                if status == 308:
+                    state['status'] = status = 499
+            elif method == 'PUT' and not (headers or {}).get('Content-Range'):
+                if status == 308:
+                    if len(data) != state['size']:
+                        status = 400
+                    else:
+                        blob = self.client.bucket(state['bucket']).blob(state['key'])
+                        blob.metadata = state['metadata']
+                        try:
+                            blob.upload_from_string(
+                                data,
+                                content_type=state['content_type'],
+                                if_generation_match=state['match'],
+                                retry=None,
+                                **kwargs,
+                            )
+                            state['status'] = status = 200
+                        except PreconditionFailed:
+                            state['status'] = status = 412
+                elif status == 200:
+                    status = 400  # A finalized capability cannot create again.
+            file.seek(0)
+            json.dump(state if state['status'] == 308 else {'status': state['status']}, file)
+            file.truncate()
+        response = _LocalSessionResponse(status)
+        if self.after_request is not None:
+            self.after_request(method, uri, data, headers, response)
+        return response
+
+
 class LocalStorageClient:
     def __init__(self, root: Path):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self._http = _LocalSessionHTTP(self)
 
     @classmethod
     def from_env(cls) -> 'LocalStorageClient | None':
@@ -216,7 +311,7 @@ class LocalStorageClient:
         return cls(root) if root is not None else None
 
     def bucket(self, name: str) -> LocalBucket:
-        return LocalBucket(self.root, name)
+        return LocalBucket(self.root, name, self)
 
     def get_bucket(self, name: str) -> LocalBucket:
         return self.bucket(name)

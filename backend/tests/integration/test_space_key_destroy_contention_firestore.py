@@ -2,7 +2,6 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
-from datetime import datetime, timedelta, timezone
 import os
 from threading import Barrier, Event
 from unittest.mock import Mock
@@ -28,15 +27,11 @@ def state(tmp_path, monkeypatch):
     storage_client = LocalStorageClient(tmp_path)
     bucket = storage_client.bucket('lake-c4-contention')
     monkeypatch.setattr(lake, 'create_storage_client', lambda: storage_client)
-    monkeypatch.setattr(lake_wipe, 'schedule_conversation_lake_repurge', Mock())
     for key, value in {
         'BUCKET_OBJECT_LAKE': bucket.name,
         'OBJECT_LAKE_RELEASE': 'v1',
         'OBJECT_LAKE_WRITE_ENABLED': 'true',
         'OBJECT_LAKE_WRITE_PERCENT': '100',
-        # Real transaction contention on a shared host needs the supported
-        # maximum put-success budget; wipe sleeping remains mocked out.
-        'OBJECT_LAKE_WIPE_DRAIN_SECONDS': '60',
         'OMI_ENV_STAGE': 'offline',
     }.items():
         monkeypatch.setenv(key, value)
@@ -45,7 +40,6 @@ def state(tmp_path, monkeypatch):
         space_keys, 'space_key_firestore_client', lambda supplied=None: supplied if supplied is not None else client
     )
     monkeypatch.setattr(lake, '_lake_bucket', lambda: bucket)
-    monkeypatch.setattr(lake_wipe, 'time', Mock(sleep=Mock()))
     monkeypatch.setattr(
         lake_wipe.users_db,
         'get_user_deletion_wipe_status',
@@ -55,7 +49,8 @@ def state(tmp_path, monkeypatch):
     try:
         yield client, uid, bucket
     finally:
-        lake.delete_space_upload_candidates(uid, now=datetime.now(timezone.utc) + timedelta(days=1, seconds=1))
+        client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+        lake.delete_space_upload_candidates(uid)
         for blob in bucket.list_blobs():
             blob.delete()
         client.collection('space_keys').document(uid).delete()
@@ -159,17 +154,16 @@ def test_inflight_put_self_deletes_during_purge_drain(state, monkeypatch):
 def test_conversation_upload_after_purge_final_listing_self_deletes(state, monkeypatch):
     client, uid, bucket = state
     uploading, release = Event(), Event()
-    original = LocalBlob.upload_from_string
 
-    def paused_upload(blob, *args, **kwargs):
-        uploading.set()
-        assert release.wait(timeout=30)
-        return original(blob, *args, **kwargs)
+    def paused_upload(method, uri, data, headers):
+        if method == 'PUT' and not headers.get('Content-Range'):
+            uploading.set()
+            assert release.wait(timeout=30)
 
-    monkeypatch.setattr(LocalBlob, 'upload_from_string', paused_upload)
+    bucket.client._http.before_request = paused_upload
 
     def put():
-        with pytest.raises(lake.LakeWriteFenced, match='Conversation'):
+        with pytest.raises(lake.LakeFetchError):
             lake.put_space_object(uid, 'transcript', 'c', b'late transcript')
 
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -191,20 +185,19 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
 def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
     client, uid, bucket = state
     sibling = uid + '-sibling'
-    attempt = lake._record_upload_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest')
+    attempt = record_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest')
     lake._settle_upload_candidate('previous-bucket', f'v1/spaces/{uid}/transcript/orphan/digest', attempt)
-    lake._record_upload_candidate(bucket.name, f'v1/spaces/{sibling}/transcript/keep/digest')
+    record_candidate(bucket.name, f'v1/spaces/{sibling}/transcript/keep/digest')
     client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+    client.collection('account_deletions').document(sibling).set({'wipe_status': 'running'})
     try:
         assert lake_wipe.purge_owner_lake_content(uid)['candidates_deleted'] == 0
         assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
         assert lake.delete_space_upload_candidates(uid) == 0
-        assert (
-            lake.delete_space_upload_candidates(sibling, now=datetime.now(timezone.utc) + timedelta(days=1, seconds=1))
-            == 1
-        )
+        assert lake.delete_space_upload_candidates(sibling) == 1
     finally:
-        lake.delete_space_upload_candidates(sibling, now=datetime.now(timezone.utc) + timedelta(days=1, seconds=1))
+        lake.delete_space_upload_candidates(sibling)
+        client.collection('account_deletions').document(sibling).delete()
 
 
 def test_late_upload_worker_loss_keeps_discovery_until_final_purge(state, monkeypatch):
@@ -229,11 +222,7 @@ def test_late_upload_worker_loss_keeps_discovery_until_final_purge(state, monkey
     candidate_id = hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
     row = client.collection('lake_upload_candidates').document(candidate_id).get().to_dict()
     assert row['settled'] is False and len(row['in_flight']) == 1
-    with pytest.raises(lake.LakeFetchError, match='still in flight'):
-        lake_wipe.destroy_owner_lake_keys(uid)
-    assert space_keys.get_space_keys(uid) is not None
-    now = row['admitted_at'] + timedelta(seconds=lake.config.put_quiescence_seconds() + 1)
-    assert lake_wipe.destroy_owner_lake_keys(uid, now=now)['status'] == 'destroyed'
+    assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
     assert not list(bucket.list_blobs())
     assert lake.delete_space_upload_candidates(uid) == 0
     assert_destroyed(client, uid)
@@ -269,7 +258,7 @@ def test_delayed_candidate_cannot_reappear_after_wipe_scan(state, monkeypatch):
 
 
 def test_concurrent_upload_candidates_are_idempotent_under_real_transactions(state):
-    _, uid, _ = state
+    client, uid, _ = state
     space_keys.get_or_create_space_key(uid)
     barrier = Barrier(2)
 
@@ -282,50 +271,50 @@ def test_concurrent_upload_candidates_are_idempotent_under_real_transactions(sta
         first, second = one.result(timeout=60), two.result(timeout=60)
     assert first == second
     assert lake.get_space_object(first) == b'[]'
+    client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
     assert lake.delete_space_upload_candidates(uid) == 1
 
 
 def test_same_key_admissions_use_server_times_and_settle_independently(state):
     client, uid, bucket = state
     key = f'v1/spaces/{uid}/transcript/concurrent/digest'
-    one = lake._record_upload_candidate(bucket.name, key)
-    two = lake._record_upload_candidate(bucket.name, key)
+    one = record_candidate(bucket.name, key)
+    two = record_candidate(bucket.name, key)
     candidate_id = hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
     row = client.collection('lake_upload_candidates').document(candidate_id).get().to_dict()
     assert row['admitted_at'].tzinfo is not None
     assert set(row['in_flight']) == {one, two}
-    assert all(timestamp.tzinfo is not None for timestamp in row['in_flight'].values())
+    assert all(
+        attempt['admitted_at'].tzinfo is not None and attempt['session'] for attempt in row['in_flight'].values()
+    )
     client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
     lake._settle_upload_candidate(bucket.name, key, two)
-    with pytest.raises(lake.LakeFetchError, match='still in flight'):
-        lake_wipe.destroy_owner_lake_keys(uid)
+    lake.assert_space_uploads_quiescent(uid)
     lake._settle_upload_candidate(bucket.name, key, one)
     assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
     assert lake.delete_space_upload_candidates(uid) == 0
 
 
-def test_conversation_purge_erases_settled_and_aged_intents_with_real_ranges(state):
+def test_conversation_purge_fences_sessions_and_erases_with_real_ranges(state):
     client, uid, _ = state
     lake.put_space_object(uid, 'transcript', 'c', b'settled')
     key = f'v1/spaces/{uid}/transcript/c/abandoned'
-    lake._record_upload_candidate('old-bucket', key)
+    record_candidate('old-bucket', key)
     candidate = client.collection('lake_upload_candidates').document(
         hashlib.sha256(f'old-bucket/{key}'.encode()).hexdigest()
     )
     row = candidate.get().to_dict()
     assert lake_wipe.purge_conversation_lake_objects(uid, 'c') == 1
-    assert candidate.get().exists
-    now = row['admitted_at'] + timedelta(seconds=lake.config.put_quiescence_seconds() + 1)
-    assert lake_wipe.repurge_conversation_lake_objects(uid, 'c', now=now) == 1
+    assert not candidate.get().exists
     assert lake.delete_space_upload_candidates(uid) == 0
 
 
 def test_last_conversation_attempt_deletes_candidate_in_real_transaction(state):
     client, uid, bucket = state
     key = f'v1/spaces/{uid}/transcript/c/digest'
-    one = lake._record_upload_candidate(bucket.name, key)
-    two = lake._record_upload_candidate(bucket.name, key)
-    lake_wipe.purge_conversation_lake_objects(uid, 'c')
+    one = record_candidate(bucket.name, key)
+    two = record_candidate(bucket.name, key)
+    lake_wipe._fence_conversation_uploads(uid, 'c')
     candidate = client.collection('lake_upload_candidates').document(
         hashlib.sha256(f'{bucket.name}/{key}'.encode()).hexdigest()
     )
@@ -333,3 +322,11 @@ def test_last_conversation_attempt_deletes_candidate_in_real_transaction(state):
     assert set(candidate.get().to_dict()['in_flight']) == {two}
     lake._settle_upload_candidate(bucket.name, key, two, delete_if_fenced=True)
     assert not candidate.get().exists
+
+
+def record_candidate(bucket, key):
+    blob = lake.create_storage_client().bucket(bucket).blob(key)
+    session = blob.create_resumable_upload_session(
+        content_type='application/octet-stream', size=9, if_generation_match=0, timeout=(1, 1), retry=None
+    )
+    return lake._record_upload_candidate(bucket, key, session)

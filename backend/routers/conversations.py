@@ -116,7 +116,7 @@ from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
-from utils.cloud_tasks import is_listen_finalization_dispatch_enabled, verify_cloud_tasks_oidc
+from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -131,12 +131,12 @@ from utils.llm.conversation_processing import SummaryProviderError, generate_sum
 from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.speaker_learning_jobs import schedule_reprocessed_learning
-from utils.other import lake_wipe, object_lake
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.other import object_lake
 from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
@@ -163,22 +163,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-class LakeRepurgeRequest(BaseModel):
-    space_id: str = Field(min_length=1, pattern=r'^[^/\\\x00-\x1f]+$')
-    entity_id: str = Field(min_length=1, pattern=r'^[^/\\\x00-\x1f]+$')
-
-
-@router.post('/internal/lake/conversation-repurge', include_in_schema=False, status_code=204)
-def repurge_lake_conversation(
-    payload: LakeRepurgeRequest, _retry_count: int = Depends(verify_cloud_tasks_oidc)
-) -> Response:
-    try:
-        lake_wipe.repurge_conversation_lake_objects(payload.space_id, payload.entity_id)
-    except object_lake.LakeFetchError:
-        raise HTTPException(status_code=503, detail='Lake re-purge unavailable; retry later') from None
-    return Response(status_code=204)
 
 
 def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[str, Any]]) -> None:

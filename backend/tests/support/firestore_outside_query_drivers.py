@@ -555,14 +555,12 @@ _driver(
     base={'space_id': UID},
     profile='maintenance-lake-account-erasure',
     serving=False,
-    neutrals={'now': (None, 'clock injection only; same key range')},
 )
 _driver(
     'utils.other.object_lake.assert_space_uploads_quiescent',
     base={'space_id': UID},
     profile='maintenance-lake-erasure-quiescence',
     serving=False,
-    neutrals={'now': (None, 'clock injection only; the query shape is a fixed key range')},
 )
 
 _driver(
@@ -570,9 +568,4 @@ _driver(
     base={'space_id': UID, 'entity_id': 'conversation-1'},
     profile='maintenance-lake-conversation-erasure',
     serving=False,
-    domains={'erase_expired': [False, True]},
-    neutrals={
-        'now': (None, 'clock injection only; the query shape is a fixed entity key range'),
-        'schedule_repurge': (None, 'task callback only; no query shape change'),
-    },
 )

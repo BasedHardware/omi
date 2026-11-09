@@ -15,7 +15,6 @@ def clean_env(monkeypatch):
         'OBJECT_LAKE_INLINE_MAX_BYTES',
         'OBJECT_LAKE_RELEASE',
         'OBJECT_LAKE_KEY_CACHE_TTL_SECONDS',
-        'OBJECT_LAKE_WIPE_DRAIN_SECONDS',
         'OMI_ENV_STAGE',
     ):
         monkeypatch.delenv(name, raising=False)
@@ -30,21 +29,7 @@ def test_defaults():
     assert object_lake.key_cache_ttl_seconds() == 86400
     assert object_lake.release() == 'v1'
     assert not object_lake.write_admitted('s')
-    assert object_lake.put_deadline_seconds() == 2.5 < object_lake.wipe_drain_seconds() == 5
-
-
-@pytest.mark.parametrize('raw', ['0.01', '1.25', '5', '60'])
-def test_put_deadline_is_derived_strictly_below_drain(monkeypatch, raw):
-    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', raw)
-    assert 0 < object_lake.put_deadline_seconds() == object_lake.wipe_drain_seconds() / 2 < float(raw)
-
-
-@pytest.mark.parametrize('raw', ['bad', '-1', '61', 'nan', 'inf', '-inf', '5e-324'])
-@pytest.mark.parametrize('load', [object_lake.wipe_drain_seconds, object_lake.put_deadline_seconds])
-def test_invalid_wipe_and_put_timing_fails_closed(monkeypatch, raw, load):
-    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', raw)
-    with pytest.raises(ValueError):
-        load()
+    assert object_lake.put_deadline_seconds() == 5
 
 
 @pytest.mark.parametrize('raw', ['bad', '-1', '101', 'nan', 'inf', ''])
@@ -123,18 +108,3 @@ def test_local_write_settings_remain_available(monkeypatch, stage):
     monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '100')
     assert object_lake.validate_write_settings(stage, 'true', '100') == []
     assert object_lake.write_admitted('owner')
-
-
-def test_quiescence_bound_is_a_fixed_day_independent_of_put_budget(monkeypatch):
-    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '60')
-    assert object_lake.put_quiescence_seconds() == 24 * 60 * 60
-    bound = object_lake.put_quiescence_seconds()
-    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '1')
-    assert object_lake.put_quiescence_seconds() == bound
-
-
-def test_zero_drain_keeps_positive_put_budget_and_fixed_quiescence(monkeypatch):
-    monkeypatch.setenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '0')
-    assert object_lake.wipe_drain_seconds() == 0
-    assert object_lake.put_deadline_seconds() == 5
-    assert object_lake.put_quiescence_seconds() == 86400

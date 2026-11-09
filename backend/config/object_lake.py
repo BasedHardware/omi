@@ -1,6 +1,5 @@
 """Object-lake admission and codec settings; environment is read at call time."""
 
-import math
 import os
 
 from config.policy.batch import cohort_bucket
@@ -99,30 +98,6 @@ def validate_write_settings(stage: str, enabled: object, percent: object) -> lis
     return errors
 
 
-_MAX_WIPE_DRAIN_SECONDS = 60
-_ZERO_DRAIN_PUT_SECONDS = 5
-
-
-def wipe_drain_seconds() -> float:
-    value = float(os.getenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '5'))
-    if not math.isfinite(value) or not 0 <= value <= _MAX_WIPE_DRAIN_SECONDS:
-        raise ValueError('OBJECT_LAKE_WIPE_DRAIN_SECONDS must be finite and in [0, 60]')
-    # Validate the derived upload budget here as well, before a wipe can drain.
-    if value and not 0 < value / 2 < value:
-        raise ValueError('Lake put deadline must be positive and shorter than the wipe drain')
-    return value
-
-
 def put_deadline_seconds() -> float:
-    """Half a positive drain, or a fixed five-second budget when drain is zero."""
-    drain = wipe_drain_seconds()
-    return drain / 2 if drain else _ZERO_DRAIN_PUT_SECONDS
-
-
-def put_quiescence_seconds() -> float:
-    """Assume no storage request can commit 24 hours after its admission.
-
-    SDK socket budgets are not total request deadlines. Expiry requires another
-    recorded-bucket delete and absence check before discovery may be erased.
-    """
-    return 24 * 60 * 60
+    """Pointer-success budget only; deletion authority comes from session fencing."""
+    return 5.0

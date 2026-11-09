@@ -228,7 +228,6 @@ def _real_lake_delete(monkeypatch, tmp_path):
     from utils.other import object_lake, space_keys, lake_wipe
     from utils.other.local_storage import LocalStorageClient
 
-    monkeypatch.setattr(lake_wipe, 'schedule_conversation_lake_repurge', MagicMock())
     store = StrictFirestore()
     bucket = LocalStorageClient(tmp_path).bucket('synthetic-lake')
     for key, value in {
@@ -245,6 +244,7 @@ def _real_lake_delete(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(space_keys, '_cache', None)
     monkeypatch.setattr(object_lake, '_lake_bucket', lambda: bucket)
+    monkeypatch.setattr(object_lake, 'create_storage_client', lambda: bucket.client)
     monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *args: [])
     monkeypatch.setattr(
         conversation_frame_evidence.frame_requests_db, 'list_all_frame_request_storage_ids', lambda *args, **kw: []
@@ -297,73 +297,20 @@ def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monke
 
     with _delete_client(monkeypatch) as client:
         bucket, doc, deleted = _real_lake_delete(monkeypatch, tmp_path)
-        upload = LocalBlob.upload_from_string
         statuses = []
 
-        def finish_after_delete(blob, *args, **kwargs):
+        def finish_after_delete(method, uri, data, headers):
+            if method != 'PUT' or headers.get('Content-Range'):
+                return
+            bucket.client._http.before_request = None
             response = client.delete('/v1/conversations/conversation-1')
             statuses.append(response.status_code)
             assert response.status_code == 204 and response.content == b''
             assert not list(bucket.list_blobs())
-            upload(blob, *args, **kwargs)
 
-        monkeypatch.setattr(LocalBlob, 'upload_from_string', finish_after_delete)
-        with pytest.raises(object_lake.LakeWriteFenced):
+        bucket.client._http.before_request = finish_after_delete
+        with pytest.raises(object_lake.LakeFetchError):
             object_lake.put_space_object('uid-delete-contract', 'transcript', 'conversation-1', b'late candidate')
         assert statuses == [204]
         assert not doc.get().exists and not list(bucket.list_blobs())
         deleted.assert_called_once()
-
-
-def _repurge_app():
-    # Mount only the task route: the full router and its OpenAPI build cost
-    # more than the fast-unit CPU budget per case.
-    route = next(
-        r for r in conversations.router.routes if getattr(r, 'path', '') == '/internal/lake/conversation-repurge'
-    )
-    assert route.include_in_schema is False
-    app = FastAPI()
-    # Re-register on the app so its dependency overrides apply to the route.
-    app.add_api_route(
-        route.path, route.endpoint, methods=list(route.methods), status_code=route.status_code, include_in_schema=False
-    )
-    return app
-
-
-@pytest.mark.parametrize('outcome', ['success', 'failure', 'unauthorized'])
-def test_delayed_lake_repurge_route_is_oidc_protected_and_retryable(monkeypatch, outcome):
-    from utils.other import lake_wipe, object_lake
-
-    app = _repurge_app()
-    purge = MagicMock()
-    monkeypatch.setattr(lake_wipe, 'repurge_conversation_lake_objects', purge)
-    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
-    monkeypatch.delenv('SYNC_TASKS_HANDLER_URL', raising=False)
-    if outcome != 'unauthorized':
-        app.dependency_overrides[conversations.verify_cloud_tasks_oidc] = lambda: 0
-    if outcome == 'failure':
-        purge.side_effect = object_lake.LakeFetchError('storage unavailable')
-    with TestClient(app) as client:
-        response = client.post('/internal/lake/conversation-repurge', json={'space_id': 's', 'entity_id': 'c'})
-    assert response.status_code == {'success': 204, 'failure': 503, 'unauthorized': 403}[outcome]
-    if outcome == 'unauthorized':
-        purge.assert_not_called()
-    else:
-        purge.assert_called_once_with('s', 'c')
-
-
-def test_delayed_lake_repurge_rejects_invalid_payload(monkeypatch):
-    from utils.other import lake_wipe
-
-    app = _repurge_app()
-    app.dependency_overrides[conversations.verify_cloud_tasks_oidc] = lambda: 0
-    purge = MagicMock()
-    monkeypatch.setattr(lake_wipe, 'repurge_conversation_lake_objects', purge)
-    with TestClient(app) as client:
-        assert (
-            client.post(
-                '/internal/lake/conversation-repurge', json={'space_id': 's/other', 'entity_id': 'c'}
-            ).status_code
-            == 422
-        )
-    purge.assert_not_called()
