@@ -150,6 +150,103 @@ def test_sample_rate_above_ceiling_is_typed():
         decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': 48001}, KEY)
 
 
+# --- Rate metadata that was never an integer is typed, not anonymous ----------
+#
+# A stored sample_rate the int() conversion rejects is deterministic on the
+# pinned manifest: a retry re-reads the same metadata and fails the same
+# conversion. Before typing it escaped decode_source as a bare ValueError
+# (or TypeError), the fetch_decode boundary booked it reason=unclassified,
+# the scheduler walked the retry ladder on identical bytes, and the sensor
+# saw error_class=ValueError stage=fetch_decode with no family token.
+# Failure-Class: FC-permanent-retained-decode-failure-burns-retry-ladder
+
+
+def test_non_numeric_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': '16 kHz'}, KEY)
+
+
+def test_float_string_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': '16000.0'}, KEY)
+
+
+def test_empty_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': ''}, KEY)
+
+
+def test_none_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': None}, KEY)
+
+
+def test_bytes_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': b'not-a-rate'}, KEY)
+
+
+def test_mapping_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': {'rate': 16000}}, KEY)
+
+
+def test_nan_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': float('nan')}, KEY)
+
+
+def test_infinite_rate_metadata_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': float('inf')}, KEY)
+
+
+def test_fractional_float_rate_below_floor_is_typed():
+    with pytest.raises(RetainedAudioInvalid, match='^invalid retained PCM$'):
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': 7999.9}, KEY)
+
+
+def test_fractional_float_rate_within_bounds_truncates_and_converts():
+    out = decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': 16000.5}, KEY)
+    assert isinstance(out, bytes) and out
+
+
+def test_bytes_digit_rate_still_converts():
+    out = decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': b'8000'}, KEY)
+    assert isinstance(out, bytes) and out
+
+
+def test_conversion_fault_never_leaks_the_stored_value():
+    with pytest.raises(RetainedAudioInvalid) as error:
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': 'secret-rate-value'}, KEY)
+    assert 'secret-rate-value' not in str(error.value)
+    assert error.value.__suppress_context__
+
+
+def test_numeric_string_rate_still_converts():
+    out = decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': '8000'}, KEY)
+    assert isinstance(out, bytes) and out
+
+
+def test_integral_float_rate_still_converts():
+    out = decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': 48000.0}, KEY)
+    assert isinstance(out, bytes) and out
+
+
+def test_manifest_with_bad_rate_is_terminal_at_the_fetch_decode_boundary():
+    """The REAL conversion drives the worker: terminal custody, not a ladder walk."""
+    with pytest.raises(RetainedAudioInvalid) as error:
+        decode_source(PCM, {'path': 'chunks/o/c/x.bin', 'sample_rate': '16000.0'}, KEY)
+    fault = error.value
+
+    def decode(work):
+        raise fault
+
+    worker, words, saved, *_ = setup_worker(decode=decode)
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'retained_audio_invalid')]
+    assert not words.calls and not saved
+
+
 def test_materialize_digest_change_is_typed():
     wrong = slice_ref(b'\2\0' * 160)
     with pytest.raises(RetainedAudioInvalid) as error:

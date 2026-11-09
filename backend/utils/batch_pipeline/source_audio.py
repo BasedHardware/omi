@@ -99,7 +99,19 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
             return leaf_timings.call('decode', decode_opus_to_pcm, raw, sample_rate=16000)
         except ValueError as error:
             raise RetainedAudioInvalid(str(error)) from error
-    rate = int(ref.get('sample_rate', 16000))
+    rate = ref.get('sample_rate', 16000)
+    try:
+        rate = int(rate)
+    except (TypeError, ValueError, OverflowError):
+        # A stored rate that was never an integer is deterministic on the
+        # pinned manifest: every retry re-reads the same metadata and fails
+        # the same conversion, so the fault must end the GPU chain with the
+        # family token instead of walking the bounded retry ladder on
+        # identical bytes and booking the unit as an anonymous production
+        # error (the sensor's bare ValueError cohort at fetch_decode). The
+        # raise site carries the type and the worker boundary reads the
+        # type — never an exception message.
+        raise RetainedAudioInvalid('invalid retained PCM') from None
     if len(raw) % 2 or not 8000 <= rate <= 48000:
         raise RetainedAudioInvalid('invalid retained PCM')
     return leaf_timings.call('decode', audioop.ratecv, raw, 2, 1, rate, 16000, None)[0] if rate != 16000 else raw
