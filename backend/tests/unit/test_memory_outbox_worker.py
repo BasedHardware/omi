@@ -1196,7 +1196,8 @@ def test_delivered_ack_write_failure_leaves_processing_lease_for_safe_replay():
     assert stored["lease_expires_at"] == NOW + timedelta(seconds=60)
 
 
-def test_lease_and_ack_index_new_string_leaves_atomically():
+def test_lease_and_ack_index_new_string_leaves_atomically(monkeypatch):
+    monkeypatch.setenv('MEMORY_PRIVACY_REFERENCE_INDEX', 'on')
     db = _db(_event())
     leases = lease_canonical_memory_outbox_events(uid=UID, worker_id='new-worker', db_client=db, now=NOW)
     assert len(leases) == 1

@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import pytest
 
 from database import memory_vector_repair_outbox_worker as worker
-from database.memory_privacy_reference_index import privacy_reference_tokens
+from database.memory_privacy_reference_index import privacy_reference_tokens, with_privacy_reference_tokens
 from tests.unit.fixtures.memory_privacy_reference_fakes import apply_reference_patch
 
 from database.memory_vector_repair_pinecone_adapter import (
@@ -1332,7 +1332,8 @@ class TestEntrypoint:
         assert upserts[0]["vectors"][0]["metadata"]["memory_id"] == "mem1"
 
 
-def test_ack_adds_new_string_leaves_without_losing_existing_tokens():
+def test_ack_adds_new_string_leaves_without_losing_existing_tokens(monkeypatch):
+    monkeypatch.setenv('MEMORY_PRIVACY_REFERENCE_INDEX', 'on')
     path = 'users/u1/memory_outbox/rec-1'
     old_tokens = privacy_reference_tokens('u1', {'mem-1'})
     record = _record(outbox_path=path)
@@ -1344,3 +1345,36 @@ def test_ack_adds_new_string_leaves_without_losing_existing_tokens():
     assert set(old_tokens + privacy_reference_tokens('u1', {'new-error', 'repair'})) <= set(
         db.store[path]['privacy_reference_tokens']
     )
+
+
+@pytest.mark.parametrize('switch', [None, 'off'])
+@pytest.mark.parametrize('transactional', [False, True])
+def test_disabled_index_repeated_lease_ack_does_not_grow_tokens(monkeypatch, switch, transactional):
+    if switch is None:
+        monkeypatch.delenv('MEMORY_PRIVACY_REFERENCE_INDEX', raising=False)
+    else:
+        monkeypatch.setenv('MEMORY_PRIVACY_REFERENCE_INDEX', switch)
+    monkeypatch.setenv('ENCRYPTION_SECRET', 's' * 32)
+    now = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    path = 'users/u1/memory_outbox/rec-1'
+    record = with_privacy_reference_tokens('u1', _record(available_at=now.isoformat(), outbox_path=path))
+    original_tokens = list(record['privacy_reference_tokens'])
+    assert original_tokens
+    db = (_FakeTransactionalFirestore if transactional else _FakeFirestore)({path: record})
+    for attempt in range(50):
+        attempt_time = now + timedelta(minutes=attempt)
+        leases = lease_vector_repair_purge_outbox_records(
+            db_client=db, uid='u1', worker_id=f'worker-{attempt}', now=attempt_time, lease_seconds=30, limit=1
+        )
+        assert len(leases) == 1
+        ack_vector_repair_purge_outbox_record(
+            db_client=db,
+            record=leases[0],
+            patch={'status': 'pending', 'last_error': f'error-{attempt}'},
+            now=attempt_time + timedelta(seconds=1),
+        )
+        stored = db.store[path]
+        assert stored['privacy_reference_tokens'] == original_tokens
+        assert stored['updated_at'] == (attempt_time + timedelta(seconds=1)).isoformat()
+        assert stored['lease_owner'] == f'worker-{attempt}'
+        assert stored['last_error'] == f'error-{attempt}'

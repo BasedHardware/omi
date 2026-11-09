@@ -63,6 +63,8 @@ run_proof "destructive gate contention (same-kind block / stale takeover fence)"
   "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
   "$PYTHON" scripts/knowledge_ledger_correction_emulator_test.py
+run_proof "privacy reference index pagination and atomic ArrayUnion" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_memory_privacy_reference_index_emulator.py
 # Module execution, not a file path: this older proof has no sys.path bootstrap
 # and relies on backend/ staying the import root.
 run_proof "writer cutover / rollback / rollforward" \

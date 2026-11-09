@@ -80,6 +80,11 @@ def privacy_reference_patch(uid: str, patch: dict[str, Any]) -> dict[str, Any]:
 
     Old tokens are harmless candidates: readers always recheck the payload.
     Full replacements recompute the exact set. No extra document read is needed.
+    While disabled, skip unions: lease/ack timestamps would otherwise grow hot
+    rows indefinitely. These rows require backfill under the cutover fence;
+    enabling also requires bounding the enabled-mode patch history.
     """
+    if not privacy_reference_index_enabled():
+        return dict(patch)
     tokens = with_privacy_reference_tokens(uid, patch)[PRIVACY_REFERENCE_TOKENS]
     return {**patch, PRIVACY_REFERENCE_TOKENS: ArrayUnion(tokens)} if tokens else dict(patch)
