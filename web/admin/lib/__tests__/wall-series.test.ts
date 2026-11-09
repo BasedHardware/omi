@@ -1837,7 +1837,7 @@ describe("funnelFrames", () => {
   it("splits the latest cohort by paired and shows Kept from the older one", () => {
     const { funnel } = funnelFrames({ deviceFunnel }, now);
     expect(funnel[0]).toEqual({
-      step: "Share of new users",
+      step: "New users",
       Device: 20,
       Organic: 80,
     });
@@ -1847,7 +1847,7 @@ describe("funnelFrames", () => {
       Organic: 23.1,
     });
     expect(funnel.at(-1)).toEqual({
-      step: "Kept, weeks 2–5 (older cohort)",
+      step: "Kept, weeks 2–5",
       Device: 50,
       Organic: 3.3,
     });
@@ -1863,7 +1863,7 @@ describe("funnelFrames", () => {
     );
     const { funnel } = funnelFrames({ deviceFunnel: rows }, now);
     expect(funnel[1]).toEqual({
-      step: "Onboarded (phone and Mac)",
+      step: "Onboarded",
       Device: null,
       Organic: 50,
     });

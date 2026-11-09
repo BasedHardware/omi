@@ -116,7 +116,7 @@ def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_p
         blind = rules['omi-batch-queue-safety-blind']
         expr = blind['data'][0]['model']['expr']
         assert expr == (
-            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
+            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 900) or vector(1))'
             f' + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector})) or vector(0))'
             f' + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector})) or vector(0))'
         )
@@ -2103,10 +2103,13 @@ def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions
             assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [threshold]
             assert page['for'] == pending
             assert page['noDataState'] == 'OK'
-            assert page['labels']['tier'] == 'page'
+            assert page['labels']['tier'] == ('agent' if prefix == 'omi_finalization_byok' else 'page')
+            assert page['isPaused'] == (prefix != 'omi_finalization_byok')
             if prefix != 'omi_finalization_byok':
                 assert '2026-11-04T09:27Z' in page['annotations']['scope']
-            assert not page['notification_settings']['mute_time_intervals']
+            assert page['notification_settings']['mute_time_intervals'] == (
+                ['omi-tier-silent'] if prefix == 'omi_finalization_byok' else []
+            )
             for suffix in ('', '-stale', '-blind'):
                 rule = rules[uid + suffix]
                 assert rule['uid'] in gate

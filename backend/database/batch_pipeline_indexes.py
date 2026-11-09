@@ -8,6 +8,17 @@ def _asc(field):
 
 
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
+    # Shared by result-ready draining and oldest-first record-pending repair.
+    # Moved from sync_pipeline_indexes; retain its existing registry identity.
+    *(
+        FirestoreIndexRequirement(
+            f'{namespace}_result_ready',
+            f'{namespace}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('enqueued_at'), _asc('__name__')),
+        )
+        for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
+    ),
     *(
         FirestoreIndexRequirement(
             f'{namespace}_seal_pending_finished',

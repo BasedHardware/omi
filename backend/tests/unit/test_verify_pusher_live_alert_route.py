@@ -842,6 +842,16 @@ def test_import_fails_closed_when_a_referenced_mute_timing_is_uncommitted(
         verifier._run_live_stt_import("https://monitor.omi.me", "secret")
 
 
+# Ruling699300 / PR #24938 deliberately pauses these gated backlog pages.
+# Fleet coverage must still fail closed on that debt; do not infer this set
+# from current isPaused values, which would hide a new accidental pause.
+APPROVED_PAUSED_GATED_UIDS = {
+    'omi-batch-unit-unpublished-2h',
+    'omi-record-pending-dwell',
+    'omi-enrichment-fresh-dwell',
+}
+
+
 def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
     verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -854,10 +864,14 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
     failures, report = verifier._run_fleet_coverage(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
-    assert failures == []
+    assert len(failures) == len(APPROVED_PAUSED_GATED_UIDS)
+    assert set(failures) == {f'live alert rule {uid} must be unpaused' for uid in APPROVED_PAUSED_GATED_UIDS}
     count = len(committed)
+    matching = count - len(APPROVED_PAUSED_GATED_UIDS)
     assert set(verifier.RULE_UIDS) <= set(committed)
-    assert report[0] == (f"FLEET committed={count} live={count} gated={count} matching={count} gated_matching={count}")
+    assert report[0] == (
+        f"FLEET committed={count} live={count} gated={count} matching={matching} gated_matching={matching}"
+    )
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
 
@@ -1403,10 +1417,14 @@ def test_development_fleet_does_not_require_production_canaries(verifier, monkey
     failures, report = verifier._run_fleet_coverage(
         'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
     )
-    assert failures == []
+    assert len(failures) == len(APPROVED_PAUSED_GATED_UIDS)
+    assert set(failures) == {f'live alert rule {uid} must be unpaused' for uid in APPROVED_PAUSED_GATED_UIDS}
     count = len(development)
+    matching = count - len(APPROVED_PAUSED_GATED_UIDS)
     assert set(verifier.RULE_UIDS) <= set(development)
-    assert report[0] == f'FLEET committed={count} live={count} gated={count} matching={count} gated_matching={count}'
+    assert (
+        report[0] == f'FLEET committed={count} live={count} gated={count} matching={matching} gated_matching={matching}'
+    )
 
 
 def test_development_fleet_rejects_unprotected_keep_last(verifier, monkeypatch):

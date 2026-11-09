@@ -19,16 +19,23 @@ import sys
 import time
 from typing import Any
 
+from google.api_core.exceptions import FailedPrecondition
+from google.cloud.firestore_v1 import FieldFilter
+
 from utils.batch_pipeline import record_seal_profile
+from config import refactor_modes
 from config import record_seal_repair as config
 from config import record_partial as partial_config
+from config.record_audio import record_identity
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
 from utils.observability.firestore_probe_export import collect_child_probe, launch_with_probe
+from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
+_age_order_index_warned = False
 DISPOSITIONS = frozenset(
     {
         'eligible',
@@ -321,37 +328,79 @@ def pending_blocker(row):
 
 
 @read_origin('job:record_seal_cluster_repair:discover_jobs')
-def discover_jobs(client, *, budget, after=None, max_rows=8, max_scan=128, selected_cursors=None):
-    """Independent bounded state/name cursor: no completed-conversation predicate.
+def discover_jobs(
+    client, *, budget, after=None, max_rows=8, max_scan=128, selected_cursors=None, progress=lambda _: None
+):
+    """Oldest pending jobs first, with a frozen horizon and wrapping frontier.
 
-    Filter numeric enqueued_at locally, avoiding a new composite index and the
-    drainer's mutable available_at. The encrypted frontier wraps over refusals.
-    Resolution and all writes happen in disposable, deadline-bound row workers.
+    Missing/non-finite/non-numeric enqueue clocks were already ineligible in
+    the name scan; the age query does not remove any eligible record. Keep the
+    local age/identity filters in both modes. Never use mutable available_at.
     """
-    from google.cloud.firestore_v1 import FieldFilter
-    from config.record_audio import record_identity
-
+    global _age_order_index_warned
     if not 1 <= max_rows <= MAX_ROWS or not 1 <= max_scan <= MAX_SCAN:
         raise ValueError('invalid jobs discovery limits')
     budget.check()
-    horizon = (after or {}).get('finished_at') or datetime.now(timezone.utc)
-    query = (
-        client.collection('batch_pipeline_prod_jobs')
-        .where(filter=FieldFilter('state', '==', 'record_pending'))
-        .order_by('__name__')
-        .select(('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id'))
-        .limit(min(128, max_scan))
-    )
-    if after:
-        query = query.start_after({'__name__': client.document(after['path'])})
-    page = list(query.stream(timeout=budget.timeout(), retry=None))
+    age_order = refactor_modes.record_seal_repair_age_order()
+    hash_after = after if after and 'enqueued_at' not in after else None
+    # A cursor from the other ordering cannot be resumed safely. Restart at
+    # that order's head (also upgrades the legacy hash frontier without loss).
+    if after and ('enqueued_at' in after) != age_order:
+        after = None
+    horizon = (after or {}).get('horizon' if age_order else 'finished_at') or datetime.now(timezone.utc)
+
+    def page_for(age_order, after):
+        budget.check()
+        query = client.collection('batch_pipeline_prod_jobs').where(filter=FieldFilter('state', '==', 'record_pending'))
+        if age_order:
+            query = query.where(filter=FieldFilter('enqueued_at', '<=', horizon.timestamp())).order_by('enqueued_at')
+        query = (
+            query.order_by('__name__')
+            .select(('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id'))
+            .limit(min(128, max_scan))
+        )
+        if after:
+            values = {'__name__': client.document(after['path'])}
+            if age_order:
+                values['enqueued_at'] = after['enqueued_at']
+            query = query.start_after(values)
+        return list(query.stream(timeout=budget.timeout(), retry=None))
+
+    try:
+        page = page_for(age_order, after)
+    except FailedPrecondition as error:
+        message = str(error).lower()
+        if not age_order or not (
+            'requires an index' in message or ('index' in message and ('not ready' in message or 'building' in message))
+        ):
+            raise
+        if not _age_order_index_warned:
+            _age_order_index_warned = True
+            record_fallback(
+                component='firestore_read',
+                from_mode='record_seal_age_order',
+                to_mode='record_seal_hash_order',
+                reason='other',
+                outcome='degraded',
+            )
+            # The coordinator suppresses dependency logging; its explicit
+            # aggregate channel remains visible. Never emit the SDK message.
+            progress({'event': 'record_seal_repair_age_order', 'outcome': 'missing_index_hash_order'})
+        age_order = False
+        # An age cursor's position has no meaning in hash order.
+        horizon = (hash_after or {}).get('finished_at') or datetime.now(timezone.utc)
+        page = page_for(False, hash_after)
     budget.check()
     rows, cursor = [], None
     for doc in page:
         budget.check()
-        cursor = {'path': doc.reference.path, 'finished_at': horizon}
         job = doc.to_dict() or {}
         uid, cid, enqueued = job.get('owner_id'), job.get('conversation_id'), job.get('enqueued_at')
+        cursor = (
+            {'path': doc.reference.path, 'enqueued_at': enqueued, 'horizon': horizon}
+            if age_order
+            else {'path': doc.reference.path, 'finished_at': horizon}
+        )
         if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
             continue
         if doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
@@ -675,6 +724,7 @@ def run(*, progress=lambda _: None):
                     after=jobs_frontier.read(budget),
                     max_rows=max(1, workers // 2),
                     selected_cursors=job_cursors,
+                    progress=progress,
                 )
             rows, saturated, cursor = discover(
                 client,
