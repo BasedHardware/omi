@@ -295,10 +295,21 @@ def verify_receiver(
                 response = httpx.post(
                     url, json=payload, headers=headers, timeout=_DELIVERY_TIMEOUT, follow_redirects=False
                 )
-        except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+        except (httpx.InvalidURL, ValueError):
+            rows.append(
+                {
+                    "check": event.name,
+                    "result": "fail",
+                    "detail": _sentences(
+                        "No usable response",
+                        "Pass a full http(s) URL with a valid host and port, e.g. https://example.com/webhook",
+                    ),
+                }
+            )
+            continue
+        except httpx.HTTPError as exc:
             rows.append({"check": event.name, "result": "fail", "detail": _sentences(f"No usable response: {exc}")})
-            if isinstance(exc, httpx.HTTPError):
-                unreachable = True
+            unreachable = True
             continue
         elapsed_ms = int((time.monotonic() - started) * 1000)
         latencies.append(elapsed_ms)

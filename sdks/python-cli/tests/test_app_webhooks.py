@@ -592,7 +592,7 @@ def test_target_rejects_invalid_or_out_of_range_port(bad_port_url: str) -> None:
     assert "invalid port" in report.summary.lower()
 
 
-@pytest.mark.parametrize("bad_url", ["http://[", "https://example.com:99999/webhook"])
+@pytest.mark.parametrize("bad_url", ["http://[", "https://example.com:0/webhook", "https://example.com:99999/webhook"])
 def test_verify_reports_malformed_url_as_usage_error_without_traceback(
     cli_runner: CliRunner, config_path: Path, monkeypatch: pytest.MonkeyPatch, bad_url: str
 ) -> None:
@@ -600,9 +600,20 @@ def test_verify_reports_malformed_url_as_usage_error_without_traceback(
     result = _run(cli_runner, "--json", "app", "verify", "--to", bad_url, "--event", "memory_created")
 
     assert result.exit_code == EXIT_USAGE
+    assert "Traceback" not in result.output
     rows = json.loads(result.stdout)
     assert rows[0]["check"] == "delivery target"
     assert rows[0]["result"] == "fail"
+    for row in rows:
+        detail = str(row.get("detail", "")).lower()
+        # Advisory copy only — never raw InvalidURL/ValueError text.
+        assert "invalidurl" not in detail
+        assert "port could not be cast" not in detail
+        assert "invalid ipv6" not in detail
+        assert "port out of range" not in detail
+        if row["check"] == "memory_created":
+            assert row["result"] == "fail"
+            assert "pass a full http(s) url" in detail
 
 
 @pytest.mark.parametrize("bad_url", ["http://[", "https://example.com:0/webhook", "https://example.com:99999/webhook"])
