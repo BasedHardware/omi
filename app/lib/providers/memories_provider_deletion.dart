@@ -135,10 +135,11 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
     final existing = _memoryCreations[draft.id];
     if (existing != null) return existing;
     final generation = _sessionGeneration;
+    final ownerUid = draft.uid;
     final request = Future<Memory?>.sync(() =>
             _createMemoryRequest?.call(draft.content, draft.visibility.name, draft.category.name) ??
             createMemoryServer(draft.content, draft.visibility.name, draft.category.name,
-                canSend: () => generation == _sessionGeneration && SharedPreferencesUtil().uid == draft.uid))
+                canSend: () => generation == _sessionGeneration && SharedPreferencesUtil().uid == ownerUid))
         .catchError((Object error) {
       Logger.debug('MemoriesProvider: memory sync failed: ${error.runtimeType}');
       return null;
