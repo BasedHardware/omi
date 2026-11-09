@@ -5995,7 +5995,7 @@
         "legend": {
           "showLegend": true,
           "displayMode": "list",
-          "placement": "right"
+          "placement": "bottom"
         },
         "tooltip": {
           "mode": "multi",
