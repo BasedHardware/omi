@@ -47,6 +47,8 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 ARM_FIELD = 'f_join_arm'
+# Marking a join re-reads the live episode after a lost compare-and-swap: one try plus two retries.
+MARK_PENDING_ATTEMPTS = 3
 
 
 def admitted(uid: str) -> bool:
@@ -145,22 +147,50 @@ def mark_pending(
         'variant': F_JOIN_VARIANT,
         'previous': latest_member(owner, conversation_id),
     }
-    try:
-        episodes_db.commit_moment(
-            uid,
-            expected_episode_id=str(placed['id']),
-            expected_version=placed.get('state_version'),
-            updates={'pending_boundary': {**pending, conversation_id: marker}},
-            firestore_client=firestore_client,
-        )
-        metrics.record_boundary('f_pending')
-    except EpisodeConflict:
-        metrics.record_boundary('f_pending_conflict')
-        _fallback('other')
-    except Exception as error:
-        metrics.record_boundary('f_pending_error')
-        _fallback('other')
-        logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+    episode_id = str(placed['id'])
+    version = placed.get('state_version')
+    for attempt in range(MARK_PENDING_ATTEMPTS):
+        try:
+            episodes_db.commit_moment(
+                uid,
+                expected_episode_id=episode_id,
+                expected_version=version,
+                updates={'pending_boundary': {**pending, conversation_id: marker}},
+                firestore_client=firestore_client,
+            )
+            metrics.record_boundary('f_pending')
+            return
+        except EpisodeConflict as conflict:
+            # A live episode takes a write on every moment, so the version read at attach is often stale
+            # by now. Re-read and retry while the join still stands; otherwise today's join is kept.
+            reason = str(conflict) or 'conflict'
+            fresh = None
+            if attempt + 1 < MARK_PENDING_ATTEMPTS:
+                try:
+                    fresh = episodes_db.get_episode(
+                        uid, episode_id, firestore_client=firestore_client, follow_redirects=False
+                    )
+                except Exception:
+                    fresh = None
+            if (
+                fresh is None
+                or not policy.is_live(fresh)
+                or conversation_id not in (fresh.get('conversation_ids') or [])
+                or conversation_id in (fresh.get('pending_boundary') or {})
+            ):
+                metrics.record_boundary('f_pending_conflict')
+                _fallback('other')
+                logger.warning(
+                    'event=episode_f_join outcome=pending_conflict reason=%s attempts=%d', reason, attempt + 1
+                )
+                return
+            version = fresh.get('state_version')
+            pending = fresh.get('pending_boundary') or {}
+        except Exception as error:
+            metrics.record_boundary('f_pending_error')
+            _fallback('other')
+            logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+            return
 
 
 def synced_failed(error: BaseException) -> None:

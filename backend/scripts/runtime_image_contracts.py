@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable
@@ -487,68 +488,82 @@ def _imported_modules(
     return imported
 
 
-def source_closure_errors(contract: ImageContract, *, _import_trees: dict[str, ast.Module] | None = None) -> list[str]:
+def _import_tree(path: Path, trees: dict[str, ast.Module]) -> ast.Module:
+    """Reuse only import nodes for identical bytes, including nested lazy imports."""
+    text = path.read_text(encoding="utf-8")
+    if text not in trees:
+        parsed = ast.parse(text, filename=str(path))
+        trees[text] = ast.Module(
+            body=[node for node in ast.walk(parsed) if isinstance(node, (ast.Import, ast.ImportFrom))],
+            type_ignores=[],
+        )
+    return trees[text]
+
+
+def source_closure_errors(
+    contract: ImageContract,
+    *,
+    _import_trees: dict[str, ast.Module] | None = None,
+    _runtime_root: Path | None = None,
+) -> list[str]:
     if _import_trees is None:
         _import_trees = {}
+    if _runtime_root is None:
+        with tempfile.TemporaryDirectory(prefix=f"omi-runtime-image-{contract.name}-") as temp_dir:
+            runtime_root = Path(temp_dir)
+            stage_runtime_sources(contract, runtime_root)
+            return source_closure_errors(contract, _import_trees=_import_trees, _runtime_root=runtime_root)
     errors: list[str] = []
-    with tempfile.TemporaryDirectory(prefix=f"omi-runtime-image-{contract.name}-") as temp_dir:
-        runtime_root = Path(temp_dir)
-        stage_runtime_sources(contract, runtime_root)
-        visited: set[str] = set()
-        source_roots = _first_party_source_roots(contract)
+    runtime_root = _runtime_root
+    visited: set[str] = set()
+    source_roots = _first_party_source_roots(contract)
 
-        def visit(module: str, imported_by: str | None = None) -> None:
-            if module in visited:
-                return
-            visited.add(module)
-            source = _find_module_source(source_roots, module)
-            if source is None:
-                return
-            source_path, _ = source
-            runtime_path = _module_path(runtime_root, module)
-            if runtime_path is None:
-                location = f" imported by {imported_by}" if imported_by else ""
-                errors.append(
-                    f"{contract.name}: first-party module {module!r}{location} is absent from the final runtime COPY surface"
-                )
-                return
-            try:
-                source_text = runtime_path.read_text(encoding="utf-8")
-                if source_text not in _import_trees:
-                    parsed = ast.parse(source_text, filename=str(runtime_path))
-                    # All images still stage and resolve their own COPY surface.
-                    # Identical sources need parsing/walking only once per check;
-                    # retain imports at every nesting depth, including lazy ones.
-                    _import_trees[source_text] = ast.Module(
-                        body=[node for node in ast.walk(parsed) if isinstance(node, (ast.Import, ast.ImportFrom))],
-                        type_ignores=[],
+    def visit(module: str, imported_by: str | None = None) -> None:
+        if module in visited:
+            return
+        visited.add(module)
+        source = _find_module_source(source_roots, module)
+        if source is None:
+            return
+        source_path, _ = source
+        runtime_path = _module_path(runtime_root, module)
+        if runtime_path is None:
+            location = f" imported by {imported_by}" if imported_by else ""
+            errors.append(
+                f"{contract.name}: first-party module {module!r}{location} is absent from the final runtime COPY surface"
+            )
+            return
+        try:
+            tree = _import_tree(runtime_path, _import_trees)
+        except SyntaxError as exc:
+            errors.append(f"{contract.name}: staged module {module!r} has invalid syntax: {exc}")
+            return
+        for dependency in sorted(
+            _imported_modules(tree, module, source_roots, current_is_package=source_path.name == "__init__.py")
+        ):
+            top_level = dependency.split(".", 1)[0]
+            if _module_or_namespace_exists(source_roots, top_level):
+                if not _module_or_namespace_exists((runtime_root,), dependency):
+                    errors.append(
+                        f"{contract.name}: first-party module {dependency!r} imported by {module} "
+                        "is absent from the final runtime COPY surface"
                     )
-                tree = _import_trees[source_text]
-            except SyntaxError as exc:
-                errors.append(f"{contract.name}: staged module {module!r} has invalid syntax: {exc}")
-                return
-            for dependency in sorted(
-                _imported_modules(tree, module, source_roots, current_is_package=source_path.name == "__init__.py")
-            ):
-                top_level = dependency.split(".", 1)[0]
-                if _module_or_namespace_exists(source_roots, top_level):
-                    if not _module_or_namespace_exists((runtime_root,), dependency):
-                        errors.append(
-                            f"{contract.name}: first-party module {dependency!r} imported by {module} "
-                            "is absent from the final runtime COPY surface"
-                        )
-                        continue
-                    visit(dependency, module)
+                    continue
+                visit(dependency, module)
 
-        for entrypoint in contract.entrypoints:
-            visit(entrypoint)
+    for entrypoint in contract.entrypoints:
+        visit(entrypoint)
     return errors
 
 
-def first_party_import_closure(contract: ImageContract, entrypoints: Iterable[str]) -> set[str]:
+def first_party_import_closure(
+    contract: ImageContract, entrypoints: Iterable[str], *, _import_trees: dict[str, ast.Module] | None = None
+) -> set[str]:
     """Return the first-party modules reachable from ``entrypoints`` in the checkout."""
     source_roots = _first_party_source_roots(contract)
     visited: set[str] = set()
+    if _import_trees is None:
+        _import_trees = {}
 
     def visit(module: str) -> None:
         if module in visited:
@@ -558,7 +573,7 @@ def first_party_import_closure(contract: ImageContract, entrypoints: Iterable[st
         if source is None:
             return
         source_path, _ = source
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        tree = _import_tree(source_path, _import_trees)
         for imported in _imported_modules(
             tree, module, source_roots, current_is_package=source_path.name == "__init__.py"
         ):
@@ -570,14 +585,18 @@ def first_party_import_closure(contract: ImageContract, entrypoints: Iterable[st
     return visited
 
 
-def import_smoke_environment_errors(contracts: Iterable[ImageContract]) -> list[str]:
+def import_smoke_environment_errors(
+    contracts: Iterable[ImageContract], *, _import_trees: dict[str, ast.Module] | None = None
+) -> list[str]:
     """Fail registrations whose import smoke would hit an import-time environment guard."""
     errors: list[str] = []
+    if _import_trees is None:
+        _import_trees = {}
     for contract in contracts:
         if not contract.image_import_smoke:
             continue
         declared = dict(contract.smoke_environment)
-        reachable = first_party_import_closure(contract, contract.smoke_entrypoints)
+        reachable = first_party_import_closure(contract, contract.smoke_entrypoints, _import_trees=_import_trees)
         for module, variable in sorted(IMPORT_TIME_REQUIRED_ENVIRONMENT.items()):
             if module in reachable and variable not in declared:
                 errors.append(
@@ -587,12 +606,31 @@ def import_smoke_environment_errors(contracts: Iterable[ImageContract]) -> list[
     return errors
 
 
-def check_source_closures(contracts: Iterable[ImageContract]) -> list[str]:
+def check_source_closures(
+    contracts: Iterable[ImageContract], *, _import_trees: dict[str, ast.Module] | None = None
+) -> list[str]:
     errors: list[str] = []
-    import_trees: dict[str, ast.Module] = {}
-    for contract in contracts:
-        errors.extend(final_stage_layer_errors(contract))
-        errors.extend(source_closure_errors(contract, _import_trees=import_trees))
+    if _import_trees is None:
+        _import_trees = {}
+    # Cache setup only for identical COPY inputs, within this invocation. Each
+    # contract still walks its own entrypoints and checkout roots; changed files
+    # and Dockerfiles are restaged on the next call, including after failures.
+    surfaces: dict[tuple[Path, PurePosixPath, tuple[CopyInstruction, ...]], Path] = {}
+    with ExitStack() as stack:
+        for contract in contracts:
+            errors.extend(final_stage_layer_errors(contract))
+            key = (
+                contract.build_context,
+                contract.workdir,
+                tuple(final_stage_copy_instructions(contract.dockerfile, contract.target)),
+            )
+            if key not in surfaces:
+                staged = Path(
+                    stack.enter_context(tempfile.TemporaryDirectory(prefix=f"omi-runtime-image-{contract.name}-"))
+                )
+                stage_runtime_sources(contract, staged)
+                surfaces[key] = staged
+            errors.extend(source_closure_errors(contract, _import_trees=_import_trees, _runtime_root=surfaces[key]))
     return errors
 
 
@@ -1110,8 +1148,9 @@ def main() -> int:
             errors = []
             notes: list[str] = []
             if args.command in {"check", "check-source"}:
-                errors.extend(check_source_closures(contracts))
-                errors.extend(import_smoke_environment_errors(contracts))
+                import_trees: dict[str, ast.Module] = {}
+                errors.extend(check_source_closures(contracts, _import_trees=import_trees))
+                errors.extend(import_smoke_environment_errors(contracts, _import_trees=import_trees))
             if args.command in {"check", "check-workflows"}:
                 errors.extend(workflow_contract_errors(contracts))
             if args.command in {"check", "check-roles"}:

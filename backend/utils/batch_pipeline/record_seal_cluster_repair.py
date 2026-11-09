@@ -72,6 +72,13 @@ DISPOSITIONS = frozenset(
 )
 
 
+def valid_metric_clock(started):
+    """A metrics-only clock guard; never used to decide repair eligibility."""
+    return (
+        isinstance(started, (int, float)) and not isinstance(started, bool) and math.isfinite(started) and started > 0
+    )
+
+
 @contextmanager
 def silent_dependencies():
     """Also suppress native SDK output; never store provider errors or inputs."""
@@ -286,7 +293,9 @@ def discover(
                 and finished.tzinfo is not None
                 and not settled(data)
             ):
-                rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
+                stamp = finished.timestamp()
+                age = max(0, int(time.time() - stamp)) if valid_metric_clock(stamp) else None
+                rows.append((doc.reference.path, age))
                 if selected_cursors is not None:
                     selected_cursors[doc.reference.path] = cursor
                 if len(rows) <= advance_rows:
@@ -411,7 +420,8 @@ def discover_jobs(
         if age < config.JOBS_MIN_AGE_SECONDS:
             continue
         path = f'users/{uid}/conversations/{cid}'
-        rows.append((path, max(0, int(age))))
+        # Preserve selection/cursors even for zero or negative clocks. Only the metric is absent.
+        rows.append((path, max(0, int(age)) if valid_metric_clock(enqueued) else None))
         if selected_cursors is not None:
             selected_cursors[path] = cursor
         if len(rows) >= max_rows:
@@ -549,7 +559,7 @@ def coordinate(
     gaps, partial_reasons, blocker_outcomes = Counter(), Counter(), Counter()
     started = clock()
     deadline = started + run_seconds
-    max_age, sealed_age = 0, 0
+    max_age, sealed_age, invalid_clock_rows = 0, 0, 0
     elapsed_by_disposition = Counter()
     try:
         while pending or active:
@@ -562,7 +572,10 @@ def coordinate(
             while pending and len(active) < workers and now < deadline:
                 path, age = pending.popleft()
                 attempted(path)
-                max_age = max(max_age, age)
+                if age is None:
+                    invalid_clock_rows += 1
+                else:
+                    max_age = max(max_age, age)
                 seconds = min(row_seconds, deadline - now)
                 try:
                     process = launch(path, seconds, mode)
@@ -613,9 +626,10 @@ def coordinate(
                         reasons[reason] += 1
                         if reason == 'tail_lagging':
                             gaps[gap] += 1
-                    age += max(0, int(clock() - started))
+                    if age is not None:
+                        age += max(0, int(clock() - started))
                     sealed = disposition in {'sealed', 'sealed_registered', 'upload_failed_cleared'}
-                    if sealed:
+                    if sealed and age is not None:
                         sealed_age = max(sealed_age, age)
                     progress(
                         {
@@ -627,7 +641,7 @@ def coordinate(
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
                             **({'partial_reason': partial_reason} if disposition == 'partial_finished' else {}),
-                            'seal_age_seconds': age if sealed else 0,
+                            **({'seal_age_seconds': age if sealed else 0} if age is not None else {}),
                             **({'proof_reason': reason} if disposition == 'proof_refused' else {}),
                             **(
                                 {'tail_gap_bucket': gap}
@@ -651,6 +665,7 @@ def coordinate(
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,
+        'invalid_clock_rows': invalid_clock_rows,
     }
 
 
