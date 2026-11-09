@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import secrets
 import time
 from collections import OrderedDict
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -16,6 +19,8 @@ from payment.executor import PaymentExecutor
 from payment.intent_parser import PaymentIntent, parse_intent, parse_pay_command
 from payment.ledger import EXECUTING, Ledger, LimitExceeded, Payment
 from payment.policy import Action, Source, SpendingPolicy, format_usd, to_micro
+
+logger = logging.getLogger(__name__)
 
 _BUFFER_SECONDS = 30.0
 _BUFFER_SEGMENTS = 4
@@ -59,7 +64,16 @@ def create_app(settings: Settings | None = None, executor: PaymentExecutor | Non
     buffer = TranscriptBuffer()
     last_hint: dict[str, float] = {}
 
-    app = FastAPI(title="Spraay Pay for Omi", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if settings.network == "base" and not settings.allowed_domain_set:
+            logger.warning(
+                "ALLOWED_DOMAINS is empty on mainnet — payments can target any HTTPS domain. "
+                "Set ALLOWED_DOMAINS to restrict."
+            )
+        yield
+
+    app = FastAPI(title="Spraay Pay for Omi", version="0.1.0", lifespan=lifespan)
 
     def require_token(token: str = Query(default="")) -> None:
         # Omi sends no signature or auth header, so the URL carries a shared secret.

@@ -58,6 +58,32 @@ class _SignatureTracker(httpx.AsyncBaseTransport):
         await self.inner.aclose()
 
 
+class _PinnedIPTransport(httpx.AsyncBaseTransport):
+    """Connects to the address that passed validation, closing the DNS rebinding gap.
+
+    The URL's host becomes the IP, so nothing re-resolves the name. The Host header and
+    TLS SNI keep the original name, and the certificate is still verified against it.
+    It works on a copy because the x402 transport reuses the caller's request to retry.
+    """
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, ip: str):
+        self.inner = inner
+        self.ip = ip
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        pinned = httpx.Request(
+            request.method,
+            request.url.copy_with(host=self.ip),
+            headers=request.headers,
+            stream=request.stream,
+            extensions={**request.extensions, "sni_hostname": request.url.raw_host.decode("ascii")},
+        )
+        return await self.inner.handle_async_request(pinned)
+
+    async def aclose(self) -> None:
+        await self.inner.aclose()
+
+
 async def _system_resolver(host: str) -> list[str]:
     infos = await asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     return [info[4][0] for info in infos]
@@ -86,17 +112,20 @@ class PaymentExecutor:
         client.set_spend_controls({"max_amount_per_payment": format_usd(amount_micro)})
         return client
 
-    async def _is_public(self, url: str) -> bool:
-        """Block server-side requests into private networks."""
+    async def _resolve_public_ip(self, url: str) -> str | None:
+        """Return the IP to pin, or None to block server-side requests into private networks."""
         host = urlsplit(url).hostname or ""
         try:
-            addresses = await self._resolver(host)
+            addresses = [a.split("%")[0] for a in await self._resolver(host)]
         except OSError:
-            return False
-        return bool(addresses) and all(ipaddress.ip_address(a.split("%")[0]).is_global for a in addresses)
+            return None
+        if not addresses or not all(ipaddress.ip_address(a).is_global for a in addresses):
+            return None
+        return addresses[0]
 
     async def pay(self, target_url: str, amount_micro: int) -> PaymentResult:
-        if not await self._is_public(target_url):
+        pinned_ip = await self._resolve_public_ip(target_url)
+        if pinned_ip is None:
             return PaymentResult(FAILED, "That service could not be reached, so nothing was paid.")
         try:
             client = self._client(amount_micro)
@@ -104,7 +133,7 @@ class PaymentExecutor:
             logger.error("Payment wallet is not usable")
             return PaymentResult(FAILED, "The payment wallet is not set up, so nothing was paid.")
 
-        tracker = _SignatureTracker(self._transport or httpx.AsyncHTTPTransport())
+        tracker = _SignatureTracker(_PinnedIPTransport(self._transport or httpx.AsyncHTTPTransport(), pinned_ip))
         try:
             async with httpx.AsyncClient(
                 transport=x402_httpx_transport(client, tracker), timeout=_TIMEOUT_SECONDS

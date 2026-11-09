@@ -140,6 +140,69 @@ async def test_blocks_private_addresses(address):
     assert service.signatures == []
 
 
+PINNED_IP = "93.184.216.34"
+
+
+def recording(service):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return service(request)
+
+    return requests, handler
+
+
+async def test_every_request_goes_to_the_pinned_ip():
+    service = PaidService(payment_required(1_000_000), httpx.Response(200, headers=settled_header()))
+    requests, handler = recording(service)
+    result = await executor_for(handler).pay(URL, 1_000_000)
+    assert result.status == SETTLED
+    assert len(requests) == 2  # The unpaid probe and the signed retry.
+    for request in requests:
+        assert request.url.host == PINNED_IP
+        assert request.url.path == "/data"
+        assert request.headers["host"] == "api.example.com"
+        assert request.extensions["sni_hostname"] == "api.example.com"
+
+
+async def test_rebinding_after_validation_cannot_change_the_target():
+    answers = [[PINNED_IP], ["169.254.169.254"]]
+
+    async def rebinding_resolver(_host):
+        return answers.pop(0)
+
+    requests, handler = recording(PaidService(httpx.Response(200)))
+    await PaymentExecutor(settings(), httpx.MockTransport(handler), rebinding_resolver).pay(URL, 1_000_000)
+    assert len(answers) == 1  # Validation was the only lookup.
+    assert [request.url.host for request in requests] == [PINNED_IP]
+
+
+async def test_blocks_host_when_any_resolved_address_is_private():
+    async def resolver(_host):
+        return [PINNED_IP, "10.0.0.5"]
+
+    requests, handler = recording(PaidService(httpx.Response(200)))
+    result = await PaymentExecutor(settings(), httpx.MockTransport(handler), resolver).pay(URL, 1_000_000)
+    assert result.status == FAILED
+    assert requests == []
+
+
+async def test_pins_ipv6_and_keeps_port():
+    address = "2606:2800:220:1:248:1893:25c8:1946"
+
+    async def resolver(_host):
+        return [address]
+
+    requests, handler = recording(PaidService(httpx.Response(200)))
+    url = "https://api.example.com:8443/data"
+    await PaymentExecutor(settings(), httpx.MockTransport(handler), resolver).pay(url, 1_000_000)
+    assert requests[0].url.host == address
+    assert requests[0].url.port == 8443
+    assert requests[0].headers["host"] == "api.example.com:8443"
+    assert requests[0].extensions["sni_hostname"] == "api.example.com"
+
+
 async def test_missing_wallet_pays_nothing():
     executor = PaymentExecutor(
         Settings(_env_file=None), httpx.MockTransport(PaidService(httpx.Response(200))), public_resolver

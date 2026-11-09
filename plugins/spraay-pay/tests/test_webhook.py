@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -60,6 +61,34 @@ def chat(client, path, **body):
 
 def segment(text, start, is_user=True):
     return {"id": f"s{start}", "text": text, "speaker": "SPEAKER_00", "speaker_id": 0, "is_user": is_user, "start": start, "end": start + 1}
+
+
+# --- Startup warning -----------------------------------------------------------------
+
+MAINNET_WARNING = (
+    "ALLOWED_DOMAINS is empty on mainnet — payments can target any HTTPS domain. Set ALLOWED_DOMAINS to restrict."
+)
+
+
+def startup_warnings(tmp_path, executor, caplog, **overrides):
+    with caplog.at_level(logging.WARNING, logger="main"):
+        with build(tmp_path, executor, **overrides):  # Entering the context runs startup.
+            pass
+    return [record for record in caplog.records if record.name == "main" and record.levelno == logging.WARNING]
+
+
+@pytest.mark.parametrize("allowed_domains", ["", " , "])
+def test_warns_on_mainnet_without_allowed_domains(tmp_path, executor, caplog, allowed_domains):
+    warnings = startup_warnings(tmp_path, executor, caplog, network="base", allowed_domains=allowed_domains)
+    assert [record.getMessage() for record in warnings] == [MAINNET_WARNING]
+
+
+@pytest.mark.parametrize(
+    "network, allowed_domains",
+    [("base-sepolia", ""), ("base", "api.example.com"), ("base-sepolia", "api.example.com")],
+)
+def test_no_warning_on_testnet_or_with_allowed_domains(tmp_path, executor, caplog, network, allowed_domains):
+    assert startup_warnings(tmp_path, executor, caplog, network=network, allowed_domains=allowed_domains) == []
 
 
 # --- Authentication ------------------------------------------------------------------
