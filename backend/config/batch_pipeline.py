@@ -1003,7 +1003,7 @@ def projection_shards_enabled() -> bool:
     """Default off: one shard holder drains each owner; off restores the per-instance sweep."""
     return rollout_default_off(
         'BATCH_PROJECTION_SHARDS_ENABLED',
-        os.getenv('BATCH_PROJECTION_SHARDS_ENABLED', 'false').strip().lower() == 'true',
+        os.getenv('BATCH_PROJECTION_SHARDS_ENABLED', 'false').strip().lower() in {'true', '1', 'on', 'yes'},
     )
 
 
@@ -1036,5 +1036,6 @@ def projection_blocked_head_deadline_enabled() -> bool:
     """Default off: a chain head blocked past the deadline is held (audio kept, redrivable)."""
     return rollout_default_off(
         'BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED',
-        os.getenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'false').strip().lower() == 'true',
+        os.getenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'false').strip().lower()
+        in {'true', '1', 'on', 'yes'},
     )

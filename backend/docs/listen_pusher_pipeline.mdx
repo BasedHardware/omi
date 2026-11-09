@@ -9491,11 +9491,11 @@ every row exactly as before.
 
 | Env | Default | Bounds and fallback |
 | --- | --- | --- |
-| `BATCH_PROJECTION_SHARDS_ENABLED` | off | Only `true`/`1`/`on` enables it. Off is the per-instance sweep. |
+| `BATCH_PROJECTION_SHARDS_ENABLED` | off | Only `true`/`1`/`on`/`yes` enables it (trimmed, case-insensitive). Unset, blank, off or unknown stays off: the per-instance sweep. |
 | `BATCH_PROJECTION_SHARD_MEMBER` | true | `false` keeps the process out of shard leases. It still routes and pushes wakes. |
 | `BATCH_PROJECTION_BACKLOG_RESERVE` | 2 | 0..16, never more than the drain slots (`BATCH_PIPELINE_MAX_OWNER_DRAINS`). Malformed values keep 2. |
 | `BATCH_PROJECTION_HEAD_DEADLINE_SECONDS` | 86400 | 3600..604800. Malformed or out-of-range values keep 86400, the previous constant. |
-| `BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED` | off | Prod enablement needs David's approval. |
+| `BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED` | off | Only `true`/`1`/`on`/`yes` enables it (trimmed, case-insensitive). Unset, blank, off or unknown stays off. Prod enablement needs David's approval. |
 
 **Shards and leases.** An owner's shard is `int(owner_key[:12], 16) % 64`, and
 `owner_key` is the sha256 of the owner id. Each shard has a 30 s Redis lease,

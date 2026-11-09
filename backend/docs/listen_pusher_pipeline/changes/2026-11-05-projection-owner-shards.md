@@ -52,6 +52,12 @@ parts.
      changing either component starts a fresh deadline.
    - Prod enablement needs David's approval.
 
+The two opt-in switches match the shared `config.refactor_modes.default_off`
+parser and the sibling `config.listen_quiet_finalization` env-read convention: only `true`, `1`, `on` or `yes` enables them (trimmed, case-insensitive);
+unset, blank, off and unknown values stay off in every capture-coverage mode.
+The membership switch retains its documented default true and `false` opt-out.
+The backlog reserve and head deadline retain their documented bounds and fallbacks.
+
 All new switches default to today's behavior. Shards apply to the serving
 loops only. A dedicated projection pump process (`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED`)
 keeps its plain sweep. With `BATCH_PIPELINE_SERVING_PROJECTION_SWEEP=off` the

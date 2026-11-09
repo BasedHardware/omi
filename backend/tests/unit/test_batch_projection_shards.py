@@ -14,6 +14,7 @@ import fakeredis
 import pytest
 from google.api_core import exceptions as api_exceptions  # noqa: F401 (parity with chain tests)
 
+from config import batch_pipeline as batch_config
 from database.batch_pipeline_projection import ProjectionBlocked
 from database.batch_pipeline_store import FirestoreStore
 from database.jobstore.postgres_store import PostgresStore
@@ -27,6 +28,7 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.serving import Serving
 
 ENV = (
+    'BATCH_PROJECTION_SHARD_MEMBER',
     'BATCH_PROJECTION_SHARDS_ENABLED',
     'BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED',
     'BATCH_PROJECTION_HEAD_DEADLINE_SECONDS',
@@ -39,6 +41,72 @@ ENV = (
 def clean_env(monkeypatch):
     for name in ENV:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.parametrize('mode', ('off', 'shadow', 'serve'))
+@pytest.mark.parametrize(
+    'name,read',
+    (
+        ('BATCH_PROJECTION_SHARDS_ENABLED', batch_config.projection_shards_enabled),
+        ('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', batch_config.projection_blocked_head_deadline_enabled),
+    ),
+)
+@pytest.mark.parametrize(
+    'raw',
+    (
+        None,
+        '',
+        'true',
+        '1',
+        'on',
+        'yes',
+        ' TRUE ',
+        ' ON ',
+        ' YeS ',
+        'false',
+        '0',
+        'off',
+        'no',
+        'unknown',
+        'enabled',
+        '2',
+    ),
+)
+def test_opt_in_flag_tokens_match_shared_parser(monkeypatch, mode, name, read, raw):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    if raw is not None:
+        monkeypatch.setenv(name, raw)
+    assert read() is (raw is not None and raw.strip().lower() in {'true', '1', 'on', 'yes'})
+
+
+@pytest.mark.parametrize(
+    'raw,expected', ((None, True), ('true', True), ('false', False), (' FALSE ', False), ('unknown', True))
+)
+def test_shard_membership_keeps_documented_default_and_false_opt_out(monkeypatch, raw, expected):
+    if raw is not None:
+        monkeypatch.setenv('BATCH_PROJECTION_SHARD_MEMBER', raw)
+    assert batch_config.projection_shard_member() is expected
+
+
+@pytest.mark.parametrize(
+    'name,read,default,low,high',
+    (
+        ('BATCH_PROJECTION_BACKLOG_RESERVE', batch_config.projection_backlog_reserve, 2, 0, 16),
+        ('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', batch_config.projection_head_deadline_seconds, 86400, 3600, 604800),
+    ),
+)
+def test_numeric_shard_flags_match_documented_bounds_and_fallback(monkeypatch, name, read, default, low, high):
+    assert read() == default
+    for raw, expected in (
+        ('', default),
+        ('unknown', default),
+        (str(low - 1), default),
+        (str(high + 1), default),
+        (str(low), low),
+        (str(high), high),
+    ):
+        monkeypatch.setenv(name, raw)
+        assert read() == expected
 
 
 @pytest.fixture
