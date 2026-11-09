@@ -745,6 +745,27 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("EXAMPLE_ENABLED: extension.granted must not be in the future", errors)
         self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2099, 1, 1)))
 
+    def test_already_decided_rows_cannot_postpone_original_dates(self) -> None:
+        for decision in ("ship", "graduate", "kill"):
+            rows = self.backlog_base(count=1, decision=decision, ramp=ramp_plan(done_by="2026-11-01"))
+            for changes in ({"review_by": "2026-12-01"}, {"ramp": ramp_plan(done_by="2026-11-02")}):
+                with self.subTest(decision=decision, changes=changes):
+                    self.write_flags([dict(rows[0], **changes)])
+                    self.assertIn("due date moved later without an extension", "\n".join(self.errors()))
+
+    def test_existing_ramp_cannot_be_removed_while_its_deadline_applies(self) -> None:
+        rows = self.backlog_base(count=1, review_by="2026-12-01", ramp=ramp_plan(done_by="2026-11-01"))
+        row = dict(rows[0])
+        row.pop("ramp")
+        self.write_flags([row])
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 9))
+        self.assertIn(f"{row['key']}: ramp deadline removed; keep the plan, ramp, or retire", errors)
+        # The approved permanent-lifecycle relabel removes an inapplicable plan.
+        row.update(lifecycle="config_switch", decision="keep", terminal="keep")
+        row.pop("review_by")
+        self.write_flags([row])
+        self.assertEqual([], self.errors())
+
     def test_missing_base_warns_and_skips_all_diff_rules(self) -> None:
         self.write_flags([flag(extension=extension())])
         with mock.patch("check_feature_flag_registry.load_base_registry", side_effect=ValueError("base unavailable")):

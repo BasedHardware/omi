@@ -127,8 +127,8 @@ def check_diff_rules(base: dict[str, Any], registry: dict[str, Any], errors: lis
         old = base_flags[key]
         if "extension" in old and old["extension"]["until"] != entry.get("extension", {}).get("until"):
             errors.append(f"{key}: second extension refused: ramp or retire")
-        if not any(row.get("decision") in {"pending", "undecided"} for row in (old, entry)):
-            continue
+        if old.get("ramp", {}).get("done_by") and "ramp" not in entry and _ramp_applies_to(entry):
+            errors.append(f"{key}: ramp deadline removed; keep the plan, ramp, or retire")
         for previous, current in (
             (old.get("review_by"), entry.get("review_by")),
             (old.get("ramp", {}).get("done_by"), entry.get("ramp", {}).get("done_by")),
