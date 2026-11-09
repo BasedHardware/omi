@@ -189,6 +189,8 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
         reactivated = source == 'frames' and bool(row.get('record_audio_partial'))
         closed_frame = source == 'frames' and bool(row.get('record_audio_closed'))
         serving = record_seal_rules.token_lease_serving(uid)
+        if closed_frame and not serving:
+            return False, True, []  # Shadow observes a seal; it never mutates it.
         identified = [token for token in sessions.values() if isinstance(token, dict)]
         if (
             source == 'custody_append'

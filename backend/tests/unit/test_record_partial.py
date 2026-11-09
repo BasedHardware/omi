@@ -1138,6 +1138,7 @@ def test_post_seal_recovery_preserves_old_work_and_waits_for_full_publication(so
     assert finish(source) == 'partial_finished'
     original = pending(source)
     original.update(state=old_state, partial_coordinator=False)
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')  # A later ramp cannot replace the stored policy.
     source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
     source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
     renew_record_token_lease(
@@ -1149,10 +1150,12 @@ def test_post_seal_recovery_preserves_old_work_and_waits_for_full_publication(so
         firestore_client=source[1],
     )
     if old_state == 'record_pending':
+        assert pending(source)['policy'] == original['policy']
         assert pending(source)['partial_coordinator']
         assert not source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
         return
     recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    assert recovery['policy'] == original['policy']
     content = original['record_content_id']
     source[0].run(lambda tx: tx.put('intakes', 'bp_' + content, {'segment_ids': [original['segment_id']]}))
     source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'processing'}))

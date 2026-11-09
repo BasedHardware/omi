@@ -1,12 +1,12 @@
 """Re-arm the existing partial continuation without rewriting completed work."""
 
-from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 
-from config.policy import resolve_batch_policy
 from config.record_audio import record_identity
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_policy import policy_in_transaction
+from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.stage import current_stage
 
@@ -38,12 +38,6 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
     )
     job = original_job if ref == original_ref else ref.get(transaction=tx).to_dict() or {}
     generation = assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
-    policy = (
-        original_job.get('policy')
-        or replace(
-            resolve_batch_policy(uid), batch_enabled=True, live_admission_enabled=True, live_record_enabled=True
-        ).to_dict()
-    )
     snapshot = {
         key: row.get(key)
         for key in (
@@ -82,8 +76,8 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
         'enqueued_at': job.get('enqueued_at', now),
         'record_content_id': content,
         'record_snapshot': snapshot,
-        'policy': job.get('policy') or policy,
-        'policy_source': 'admission',
+        'policy': job.get('policy') or original_job.get('policy'),
+        'policy_source': job.get('policy_source') or original_job.get('policy_source', 'admission'),
         'merge_pending': False,
         'partial_coordinator': True,
         'lease_recovery': ref != original_ref,
@@ -94,4 +88,12 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
         run.pop('retired_at', None)
         run.update(next_inventory_at=now, inventory_changed_at=now, complete=True, fingerprint='')
         job['partial_run'] = run
+    # Copy a recorded admission snapshot. Pre-policy reservations use the
+    # canonical first-writer fallback and persist it on this obligation in the
+    # same transaction; a later append never re-resolves its policy.
+    view = FirestoreTransaction(client, namespace, tx)
+    policy = policy_in_transaction(view, job)
+    if set(view.writes) - {('jobs', ref.id)}:
+        raise ValueError('recovery cannot rewrite original policy siblings')
+    job['policy'] = policy.to_dict()
     return {'record_audio_closed': False, 'record_audio_partial': mark}, (ref, job)
