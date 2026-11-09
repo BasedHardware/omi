@@ -1,6 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearAllCache, invalidateCache, invalidationPatterns } from '@/lib/cache';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  clearAllCache,
+  invalidateCache,
+  invalidationPatterns,
+  setCache,
+  cacheKeys,
+  CACHE_TTL,
+} from '@/lib/cache';
 
 vi.mock('@/lib/api', () => ({
   getConversations: vi.fn(),
@@ -56,7 +63,170 @@ beforeEach(() => {
   );
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('useConversations', () => {
+  it('pages past an entirely failed cached page', async () => {
+    setCache(
+      cacheKeys.conversations(),
+      {
+        conversations: page(0, 50).map((c) => ({
+          ...c,
+          status: 'processing',
+          home_step: 'failed',
+        })),
+        offset: 0,
+        hasMore: true,
+      },
+      CACHE_TTL.MEDIUM,
+    );
+    const { result } = renderHook(() => useConversations({ limit: 50 }));
+    await waitFor(() => expect(result.current.conversations).toHaveLength(50));
+    expect(getConversations).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(getConversations).mock.calls[0][0]?.offset).toBe(50);
+    expect(ids(result.current.conversations)).toContain('c50');
+  });
+
+  it('does not page a new cached filter using a hidden previous list', async () => {
+    setCache(
+      cacheKeys.conversations(),
+      {
+        conversations: page(0, 50).map((c) => ({
+          ...c,
+          status: 'processing',
+          home_step: 'failed',
+        })),
+        offset: 50,
+        hasMore: true,
+      },
+      CACHE_TTL.MEDIUM,
+    );
+    setCache(
+      cacheKeys.conversations('work'),
+      {
+        conversations: WORK,
+        offset: 0,
+        hasMore: false,
+      },
+      CACHE_TTL.MEDIUM,
+    );
+    const { result, rerender } = renderHook(
+      ({ enabled, folderId }: { enabled: boolean; folderId?: string }) =>
+        useConversations({ enabled, folderId }),
+      { initialProps: { enabled: false, folderId: undefined as string | undefined } },
+    );
+    rerender({ enabled: true, folderId: 'work' });
+    expect(ids(result.current.conversations)).toEqual(['w1']);
+    await act(async () => {});
+    expect(getConversations).not.toHaveBeenCalled();
+  });
+
+  it('hides failed projections from the feed and date groups, including cached pages', async () => {
+    vi.mocked(getConversations).mockResolvedValueOnce([
+      { ...page(0, 1)[0], status: 'processing', home_step: 'failed' },
+      ...page(1, 1),
+    ] as never);
+    const first = renderHook(() => useConversations());
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    expect(ids(first.result.current.conversations)).toEqual(['c1']);
+    expect(
+      Object.values(first.result.current.groupedConversations)
+        .flat()
+        .map((c) => c.id),
+    ).toEqual(['c1']);
+    first.unmount();
+    const cached = renderHook(() => useConversations());
+    expect(ids(cached.result.current.conversations)).toEqual(['c1']);
+    expect(getConversations).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps raw page offsets when an entire page is hidden', async () => {
+    vi.mocked(getConversations).mockResolvedValueOnce(
+      page(0, 50).map((c) => ({
+        ...c,
+        status: 'processing',
+        home_step: 'failed',
+      })) as never,
+    );
+    const { result } = renderHook(() => useConversations({ limit: 50 }));
+    await waitFor(() => expect(result.current.conversations).toHaveLength(50));
+    expect(vi.mocked(getConversations).mock.calls.at(-1)![0]?.offset).toBe(50);
+    expect(ids(result.current.conversations)).toContain('c50');
+    expect(result.current.hasMore).toBe(true);
+    await act(async () => {
+      await result.current.loadMore();
+    });
+    expect(vi.mocked(getConversations).mock.calls.at(-1)![0]?.offset).toBe(100);
+    expect(ids(result.current.conversations)).toContain('c100');
+  });
+
+  it('stops paging a fully hidden feed at the server page boundary', async () => {
+    vi.mocked(getConversations)
+      .mockResolvedValueOnce(
+        page(0, 50).map((c) => ({
+          ...c,
+          status: 'processing',
+          home_step: 'failed',
+        })) as never,
+      )
+      .mockResolvedValueOnce([]);
+    const { result } = renderHook(() => useConversations({ limit: 50 }));
+    await waitFor(() => expect(result.current.hasMore).toBe(false));
+    expect(result.current.conversations).toEqual([]);
+    expect(getConversations).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([undefined, null, 'processing'])(
+    'keeps legacy processing visible and polling for home_step=%s',
+    async (home_step) => {
+      vi.useFakeTimers();
+      vi.mocked(getConversations).mockResolvedValue([
+        { ...page(0, 1)[0], status: 'processing', home_step },
+      ] as never);
+      const { result } = renderHook(() => useConversations());
+      await act(async () => {});
+      expect(ids(result.current.conversations)).toEqual(['c0']);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(getConversations).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('stops polling when the server projects a processing row as failed', async () => {
+    vi.useFakeTimers();
+    const active = { ...page(0, 1)[0], status: 'processing' };
+    vi.mocked(getConversations)
+      .mockResolvedValueOnce([active] as never)
+      .mockResolvedValue([{ ...active, home_step: 'failed' }] as never);
+    const { result } = renderHook(() => useConversations());
+    await act(async () => {});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(result.current.conversations).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120000);
+    });
+    expect(getConversations).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start polling for failed processing rows', async () => {
+    vi.useFakeTimers();
+    vi.mocked(getConversations).mockResolvedValue([
+      { ...page(0, 1)[0], status: 'processing', home_step: 'failed' },
+    ] as never);
+    const { result } = renderHook(() => useConversations());
+    await act(async () => {});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120000);
+    });
+    expect(result.current.conversations).toEqual([]);
+    expect(getConversations).toHaveBeenCalledTimes(1);
+  });
+
   it('clears an earlier fetch error when a cached filter is shown', async () => {
     const { result, rerender } = renderHook(
       ({ folderId }: { folderId: string }) => useConversations({ limit: 50, folderId }),

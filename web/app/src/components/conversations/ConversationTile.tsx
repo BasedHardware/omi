@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import { conversationDisplayTitle } from '@/lib/conversationTitle';
+import { isConversationProcessing } from '@/lib/conversationHome';
 import type { Conversation } from '@/types/conversation';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
@@ -208,7 +209,7 @@ export const ConversationTile = memo(function ConversationTile({
             {speakerCount}
           </span>
         )}
-        {conversation.status === 'processing' && (
+        {isConversationProcessing(conversation) && (
           <span className="flex items-center gap-1.5 rounded-chip bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-secondary">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-text-primary" />
             Processing
