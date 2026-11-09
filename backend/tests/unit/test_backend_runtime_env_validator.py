@@ -15,8 +15,8 @@ import yaml
 from scripts.verify_pusher_cohost_env_diff import parse_env_entries
 from scripts.runtime_env_validation import manifest as manifest_validation
 from scripts.runtime_env_validation.manifest import (
-    _validate_directory_routing_bindings,
-)  # pyright: ignore[reportPrivateUsage] -- unit contract seam
+    _validate_directory_routing_bindings,  # pyright: ignore[reportPrivateUsage]
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
@@ -3267,8 +3267,8 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
 
 def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
     from scripts.runtime_env_validation.manifest import (
-        _validate_stt_serving_model_policy,
-    )  # pyright: ignore[reportPrivateUsage] -- unit contract seam
+        _validate_stt_serving_model_policy,  # pyright: ignore[reportPrivateUsage]
+    )
 
     env_map = {
         'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
@@ -3281,8 +3281,8 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
 
 def test_non_listener_stt_models_accept_a_policy_ordered_subset():
     from scripts.runtime_env_validation.manifest import (
-        _validate_stt_serving_model_policy,
-    )  # pyright: ignore[reportPrivateUsage] -- unit contract seam
+        _validate_stt_serving_model_policy,  # pyright: ignore[reportPrivateUsage]
+    )
 
     env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox'}}
     config = {'gke': {'pusher': {'env': env_map}}}
@@ -3661,14 +3661,11 @@ def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
     gateway_env = env_config['llm_gateway']['env']
     assert gateway_env['OMI_FLAGS_SOURCE']['value'] == 'omi'
     assert 'PROACTIVITY_V2_POSTHOG_TOKEN' not in gateway_env
-    assert (
-        manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config) == []
-    )  # pyright: ignore[reportPrivateUsage] -- unit contract seam
+    check_hosts = manifest_validation._validate_proactivity_v2_flag_hosts  # pyright: ignore[reportPrivateUsage]
+    assert check_hosts('prod', env_config) == []
 
     gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
-    errors = manifest_validation._validate_proactivity_v2_flag_hosts(
-        'prod', env_config
-    )  # pyright: ignore[reportPrivateUsage] -- unit contract seam
+    errors = check_hosts('prod', env_config)
     assert [error.scope for error in errors] == ['prod/llm_gateway']
 
 
