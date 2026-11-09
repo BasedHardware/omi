@@ -111,7 +111,9 @@ def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
     return state
 
 
-def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: float) -> tuple[str, float | None]:
+def admission(
+    row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: float, sealed_fast: bool = False
+) -> tuple[str, float | None]:
     """A missing watermark is unknown, never inferred from one uploaded file.
 
     No existing WAL producer supplies a contiguous device upload watermark. If
@@ -125,7 +127,7 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     watermark = state.get('upload_watermark_at')
     gap = timestamp(row.get('finished_at')) + QUIET_SECONDS
     if now < first + MAX_HOLD_SECONDS:
-        if now < due:
+        if not sealed_fast and now < due:
             return 'quiet_wait', due
         if watermark is not None and timestamp(watermark) < gap:
             return 'watermark_wait', min(now + QUIET_SECONDS, first + MAX_HOLD_SECONDS)

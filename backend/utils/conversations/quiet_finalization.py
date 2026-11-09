@@ -15,6 +15,7 @@ from utils.cloud_tasks import (
     is_listen_finalization_dispatch_enabled,
 )
 from utils.conversations import lifecycle
+from utils.conversations import pipeline_attention
 from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.metrics import CONVERSATION_ORPHANED_UNFINALIZED
@@ -58,6 +59,8 @@ def arm(
         uid, conversation_id, timeout, requires_byok=requires_byok, firestore_client=firestore_client
     )
     if check is not None:
+        if pipeline_attention.admitted(uid):
+            pipeline_attention.metrics.stage('silence_configured', checks_db.quiet_timeout(timeout))
         _dispatch(check)
 
 

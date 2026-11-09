@@ -398,6 +398,13 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/episodes/composer.py",
+      "function": "schedule",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "Pre-existing episode composer executor, newly visible through the pipeline settlement import closure; this PR adds no detached submit. A process kill leaves the canonical Firestore episode closed/uncomposed and its composition lease expires; the next read or member finalization reschedules through the existing fingerprint/lease checks. Lost scheduling can delay readiness, never certifies completion or loses source custody. This existing recovery limit is a carried pre-ramp risk in the pipeline change note; device/provider-to-Home acceptance must cover it."
     }
   ]
 }

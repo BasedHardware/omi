@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import wave
+from unittest.mock import Mock
 
 import pytest
 
@@ -270,6 +271,69 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['pending', 'expired', 'admitted'])
+async def test_record_defer_preserves_attention_and_dead_letter_metrics(monkeypatch, outcome):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 0,
+        'enqueued_at': 900,
+        'record_dead_letter_deadline_at': 999 if outcome == 'expired' else 1001,
+    }
+    clock = [1000]
+    monkeypatch.setattr(live.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(live.pipeline_policy, 'mode', lambda: 'serve')
+    monkeypatch.setattr(live.pipeline_policy, 'record_fast_enabled', lambda: True)
+    monkeypatch.setattr(live.record_attention.attention, 'serving', lambda _: True)
+    monkeypatch.setattr(live.record_attention.attention, 'admitted', lambda _: True)
+    monkeypatch.setattr(live.record_attention, 'select', lambda rows, limit: rows)
+    deferred, completed, stage, dead_letter = Mock(), Mock(), Mock(), Mock()
+    monkeypatch.setattr(live.record_attention, 'defer', deferred)
+    monkeypatch.setattr(live.record_attention, 'completed', completed)
+    monkeypatch.setattr(live.record_attention.metrics, 'stage', stage)
+    monkeypatch.setattr(live, 'batch_held_dead_letter_enabled', lambda: True)
+    monkeypatch.setattr(live, 'record_drain_barrier_backoff_enabled', lambda: True)
+
+    def retry_delay(age):
+        assert age == 100
+        # Deferral must use the scheduling time, while expiry uses its snapshot.
+        clock[0] = 1005
+        return 60
+
+    monkeypatch.setattr(live, 'barrier_retry_delay', retry_delay)
+
+    async def admission(store, pending):
+        if outcome == 'admitted':
+            store.rows['jobs', 'synthetic']['state'] = 'ready'
+        else:
+            raise ValueError(live.BARRIER_NOT_CLOSED)
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store, metrics=Mock(record_dead_letter=dead_letter))
+    row = store.rows['jobs', 'synthetic']
+    assert row['state'] == {'pending': 'record_pending', 'expired': 'dead', 'admitted': 'ready'}[outcome]
+    assert dead_letter.inc.call_count == int(outcome == 'expired')
+    assert deferred.call_args_list[0].args == ('synthetic', 1000 + live.record_drain_lease_seconds())
+    if outcome == 'pending':
+        assert row['available_at'] == 1065
+        assert deferred.call_args_list[1].args == ('synthetic', 1065)
+        completed.assert_not_called()
+    else:
+        assert deferred.call_count == 1
+        completed.assert_called_once_with('synthetic')
+    if outcome != 'admitted':
+        assert 'pipeline_record_lease_until' not in row
+        assert row['pipeline_record_deferred'] is True
+    if outcome == 'expired':
+        assert row['dead_letter_reason'] == 'record_barrier_aged'
+        assert row['record_dead_letter_at'] == 1000
+    assert [call.args[0] for call in stage.call_args_list] == ['record_queue', 'record_admission']
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('blocked_rows', [1, 2])
 async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_rows(monkeypatch, blocked_rows):
     from utils.batch_pipeline import live
@@ -471,6 +535,17 @@ def test_concurrent_finalize_registration_and_replay_create_one_pending_obligati
     assert next(iter(store.rows.values()))['state'] == 'record_pending'
 
 
+def test_registration_replay_rebuilds_hints_from_durable_original_age(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    ages = []
+    monkeypatch.setattr(live.record_attention, 'register', lambda uid, cid, age: ages.append(age))
+    assert register_recording('synthetic', recording(), store=store, now=100)
+    assert register_recording('synthetic', recording(), store=store, now=1000)
+    assert ages == [100, 100]  # A lost Redis hint cannot rejuvenate existing debt.
+
+
 @pytest.mark.parametrize('recorded_enabled', [True, False])
 def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypatch, recorded_enabled):
     store = MemoryStore()
@@ -649,16 +724,19 @@ def test_reference_scope_and_generation_are_fail_closed(change):
         )
 
 
+@pytest.mark.parametrize('pipeline_mode', ['off', 'serve'])
 @pytest.mark.parametrize('server_only', [False, True])
 @pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
 @pytest.mark.parametrize('language', ['en', 'multi', 'ca'])
 async def test_native_admission_stages_references_and_drains_after_rollback(
-    monkeypatch, server_only, barrier_change, language
+    monkeypatch, server_only, barrier_change, language, pipeline_mode
 ):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
 
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', pipeline_mode)
+    monkeypatch.setattr(live.record_attention.attention, 'serving', lambda _: pipeline_mode == 'serve')
     unit_reads = []
     original_run_blocking = live.run_blocking
 
@@ -671,7 +749,9 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch.setattr(live, 'run_blocking', run_blocking)
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
-    current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
+    current = recording(
+        record_audio_closed=True, record_upload_revision=0, finished_at=datetime.fromtimestamp(101, timezone.utc)
+    )
     current['language'] = language
     proofs = []
     from unittest.mock import Mock
@@ -786,6 +866,18 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     result = await live.admit_recording(store, pending, now=1, provider_outbox_factory=lambda: outbox)
     assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
+    intake = store.rows['intakes', 'bp_' + content]
+    if pipeline_mode == 'serve':
+        assert intake['pipeline_record_barrier']['record_upload_revision'] == current['record_upload_revision']
+        assert len(intake['record_ranges']) == len(intake['segment_ids'])
+        assert (
+            live.record_attention.receipt(
+                'synthetic', 'record', current, store=store, require_projection=False
+            ).capture_end
+            == 101
+        )
+    else:
+        assert 'pipeline_record_barrier' not in intake
     job = store.rows['jobs', segment]
     assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')
     if language == 'ca':
@@ -914,3 +1006,52 @@ async def test_privacy_fenced_claim_does_not_stop_the_worker(monkeypatch):
     assert await live.drain_recordings(store) is False
     assert admitted == ['b-ok']
     assert store.rows['jobs', 'a-fenced']['available_at'] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mode,flag,cohort,expected',
+    [
+        ('off', True, True, 1060),
+        ('shadow', True, True, 1060),
+        ('serve', False, True, 1060),
+        ('serve', True, False, 1060),
+        ('serve', True, True, 1065),
+    ],
+)
+async def test_deferred_record_clock_is_legacy_unless_record_flag_and_cohort_serve(
+    monkeypatch, mode, flag, cohort, expected
+):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 0,
+        'enqueued_at': 900,
+    }
+    clock = [1000]
+    monkeypatch.setattr(live.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(live.pipeline_policy, 'mode', lambda: mode)
+    monkeypatch.setattr(live.pipeline_policy, 'record_fast_enabled', lambda: flag)
+    monkeypatch.setattr(live.record_attention.attention, 'serving', lambda _: cohort)
+    monkeypatch.setattr(live.record_attention.attention, 'admitted', lambda _: cohort)
+    monkeypatch.setattr(live.record_attention, 'select', lambda rows, limit: rows)
+    monkeypatch.setattr(live.record_attention, 'defer', Mock())
+    monkeypatch.setattr(live.record_attention, 'completed', Mock())
+    monkeypatch.setattr(live, 'batch_held_dead_letter_enabled', lambda: False)
+    monkeypatch.setattr(live, 'record_drain_barrier_backoff_enabled', lambda: True)
+
+    def delay(age):
+        assert age == 100
+        clock[0] += 5
+        return 60
+
+    async def admission(*args):
+        raise ValueError(live.BARRIER_NOT_CLOSED)
+
+    monkeypatch.setattr(live, 'barrier_retry_delay', delay)
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic']['available_at'] == expected

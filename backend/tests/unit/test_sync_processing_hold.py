@@ -1,7 +1,10 @@
 """Occasion step 1: paid admission over synthetic content and durable worker wakes."""
 
 from unittest.mock import Mock
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
+import fakeredis
 import pytest
 
 from database.outbox_firestore import ENRICHMENT_OUTBOX
@@ -85,6 +88,40 @@ def test_optional_watermark_must_pass_quiet_gap():
     assert hold.admission(conversation, {'first_pending_at': 100}, now=700) == ('watermark_wait', 1300)
     conversation[hold.FIELD]['upload_watermark_at'] = 660
     assert hold.admission(conversation, {'first_pending_at': 100}, now=700) == ('ready', None)
+
+
+def test_full_seal_fast_path_still_consumes_unchanged_obligation_once():
+    conversation = row()
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=101, sealed_fast=True) == ('ready', None)
+    conversation[hold.FIELD] = hold.completion_patch(conversation, hold.content_snapshot(conversation))
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=102, sealed_fast=True) == ('unchanged', None)
+
+
+def test_patient_dispatch_deadline_clamps_the_existing_durable_outbox(state, monkeypatch):
+    monkeypatch.setattr(
+        outbox,
+        'pipeline_snapshot',
+        lambda *_: {
+            'recorded_end': 100,
+            'pipeline_capture_end': 100,
+            'record_lane_owner': 'batch_sync_v1',
+        },
+    )
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=1600, sync_hold=True)
+    key = outbox.key('u', 'c')
+    assert rows[key]['due_at'] == 1780 and rows[key]['pipeline_dispatch_at'] == 1780
+    outbox.mark('u', 'c', 'en', now=1700, sync_hold=True)
+    assert rows[key]['due_at'] == 1780
+
+
+def test_pipeline_obligation_keeps_processing_context_with_unknown_capture_clock(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setattr(outbox, 'pipeline_snapshot', lambda *_: {'record_lane_owner': 'batch_sync_v1'})
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    assert rows[outbox.key('u', 'c')]['sync_hold'] is True
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
 
 
 def test_kill_switch_drains_already_held_obligation_without_waiting(state, monkeypatch):
@@ -537,3 +574,498 @@ def test_explicit_rollback_only_settles_existing_hold_metadata(monkeypatch):
     )
     complete.assert_not_called()
     assert hold.FIELD not in world.raw('parent')
+
+
+def test_seal_fast_skips_quiet_only_and_preserves_watermark_proof():
+    conversation = row()
+    conversation[hold.FIELD]['upload_watermark_at'] = 659
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=101, sealed_fast=True) == ('watermark_wait', 701)
+
+
+def test_optional_pipeline_snapshot_failure_does_not_drop_obligation(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
+    monkeypatch.setattr(
+        outbox.conversations_db, 'get_conversation_raw_snapshot', Mock(side_effect=RuntimeError('optional'))
+    )
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    assert outbox.key('u', 'c') in rows
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+
+
+def test_promotion_does_not_persist_a_permanent_immediate_tier(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    read = Mock(
+        return_value={
+            'status': 'completed',
+            'record_lane_owner': 'batch_live_v1',
+            'finished_at': 100,
+            'record_audio_closed': True,
+            'record_upload_revision': 3,
+            'sync_content_revision': 7,
+        }
+    )
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', read)
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, True, 100)
+    )
+    promoted = outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101)
+    assert promoted and 'immediate' not in promoted
+    assert 'transcript_segments' not in read.call_args.kwargs['field_paths']
+    assert rows[outbox.key('u', 'c')]['due_at'] == 101
+
+
+@pytest.mark.parametrize('reason', ['content_below_floor', 'local_only'])
+def test_pipeline_intentionally_blocked_minimum_is_not_empty_output(monkeypatch, reason):
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2)
+    current = world.get('user-1', 'parent')
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
+    minimum = callback.deserialize_conversation({**current, 'structured': {'title': 'Pending'}})
+    monkeypatch.setattr(callback, 'process_conversation', Mock(return_value=minimum))
+    context = {'owner': 'worker', 'pipeline_seal': {'synthetic': 'claim'}, 'blocked_reason': reason}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        assert callback.enrich_conversation('user-1', 'parent', 'en') is minimum
+    finally:
+        PROCESS_CONTEXT.reset(token)
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+def test_past_deadline_does_not_turn_blocked_retries_into_a_hot_loop(state, monkeypatch, driver):
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setattr(
+        outbox,
+        'pipeline_snapshot',
+        lambda *_: {
+            'recorded_end': 100,
+            'pipeline_capture_end': 100,
+            'record_lane_owner': 'batch_sync_v1',
+        },
+    )
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=1600, sync_hold=True)
+    key = outbox.key('u', 'c')
+
+    def blocked(*_):
+        context = PROCESS_CONTEXT.get()
+        assert context['pipeline_dispatch_at'] == 1780
+        assert context['pipeline_capture_end'] == 100 and context['pipeline_record']
+        context.update(defer_reason='pipeline_seal_pending', defer_until=1840)
+
+    if driver == 'legacy':
+        assert outbox.run(key, tasks[-1]['task_token'], blocked, now=1780) == 'deferred'
+    else:
+        result = run_push(
+            EnrichmentConsumer(ENRICHMENT_OUTBOX, process=blocked),
+            ENRICHMENT_OUTBOX,
+            key,
+            tasks[-1]['task_token'],
+            now=1780,
+        )
+        assert result.outcome == 'deferred'
+    assert rows[key]['pipeline_dispatch_at'] == 1780
+    assert rows[key]['due_at'] == 1840 and rows[key]['lease_until'] == 0
+
+
+def test_promotion_keeps_due_time_while_projection_siblings_are_pending(state, monkeypatch):
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    before = dict(rows[outbox.key('u', 'c')])
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed())
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, False, 100)
+    )
+    assert outbox.promote_pipeline('u', outbox.key('u', 'c'), now=101) is None
+    assert rows[outbox.key('u', 'c')] == before
+
+
+def test_full_intake_clock_is_pinned_before_projection_and_survives_worker_envelope(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    from tests.unit.test_pipeline_attention import sealed
+
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    rows, tasks = state
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
+    monkeypatch.setattr(
+        outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed(recorded_end=100)
+    )
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, 1000)
+    )
+    outbox.mark('u', 'c', 'en', now=1100, sync_hold=True)
+    key = outbox.key('u', 'c')
+    assert rows[key]['pipeline_capture_end'] == 1000
+    assert rows[key]['pipeline_dispatch_at'] == 2680
+    outbox.mark('u', 'c', 'en', now=1200, sync_hold=True)
+    assert rows[key]['pipeline_dispatch_at'] == 2680
+
+    def deferred(*_):
+        context = PROCESS_CONTEXT.get()
+        assert context['pipeline_capture_end'] == 1000 and context['pipeline_dispatch_at'] == 2680
+        assert context['pipeline_record']
+        context.update(defer_reason='pipeline_projection_pending', defer_until=2740)
+
+    result = run_push(
+        EnrichmentConsumer(ENRICHMENT_OUTBOX, process=deferred),
+        ENRICHMENT_OUTBOX,
+        key,
+        tasks[-1]['task_token'],
+        now=2680,
+    )
+    assert result.outcome == 'deferred'
+
+
+def test_missing_intake_clock_never_uses_preview_as_capture_end(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'attention', lambda *_a, **_k: 'unwatched')
+    monkeypatch.setattr(
+        outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed(recorded_end=100)
+    )
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, None)
+    )
+    outbox.mark('u', 'c', 'en', now=1100)
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+    assert rows[outbox.key('u', 'c')]['pipeline_record']
+
+
+def test_unknown_presence_after_double_lease_expiry_still_gets_absolute_deadline(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    from tests.unit.test_pipeline_attention import sealed
+
+    rows, _ = state
+    attention = outbox.pipeline_attention
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(attention, 'client', lambda: redis)
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    attention.observe_surface('u', 'home', {'foreground': True, 'home_visible': True}, now=100)
+    assert attention.attention('u', now=100) == 'watched'
+    assert attention.attention('u', now=191) == 'unwatched'
+    assert attention.attention('u', now=280) == 'unknown'
+    assert not attention.promoted('u')
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: sealed())
+    monkeypatch.setattr(
+        outbox.record_attention, 'receipt', lambda *a, **k: outbox.record_attention.RecordReceipt(True, None, 1000)
+    )
+    outbox.mark('u', 'c', 'en', now=1100)
+    assert rows[outbox.key('u', 'c')]['pipeline_dispatch_at'] == 1000 + 1680
+    assert rows[outbox.key('u', 'c')]['pipeline_record']
+
+
+@pytest.mark.asyncio
+async def test_durable_record_registration_and_intake_precede_deadline_creation(state, monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    from database.batch_pipeline_staging import artifact_id
+    from tests.unit.test_batch_pipeline_live import recording
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from utils.batch_pipeline import live
+
+    rows, _ = state
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_prod'
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setattr(outbox.pipeline_attention, 'serving', lambda _: True)
+    monkeypatch.setattr(outbox.pipeline_attention, 'client', lambda: fakeredis.FakeRedis())
+    monkeypatch.setattr(outbox.record_attention, 'FirestoreStore', lambda *a, **k: store)
+    current = recording(
+        record_audio_closed=True, record_upload_revision=3, finished_at=datetime.fromtimestamp(101, timezone.utc)
+    )
+    store.rows['conversations', 'u/record'] = current
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: current)
+    key = outbox.key('u', 'record')
+    outbox.mark('u', 'record', 'en', now=99)
+    assert 'pipeline_dispatch_at' not in rows[key]
+
+    # Real registration commits the record_pending job before any intake or deadline exists.
+    assert live.register_recording('u', current, store=store, now=100)
+    content, segment = live.record_identity('u', 'record')
+    pending = store.run(lambda tx: tx.get('jobs', segment))
+    assert pending['state'] == 'record_pending'
+    assert store.run(lambda tx: tx.get('intakes', 'bp_' + content)) == {}
+    outbox.mark('u', 'record', 'en', now=110)
+    assert 'pipeline_dispatch_at' not in rows[key]
+
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value.to_dict.return_value = (
+        current
+    )
+    store.client = client
+    monkeypatch.setattr(live, 'create_storage_client', lambda: None)
+    monkeypatch.setattr(
+        live,
+        'list_audio_chunks',
+        lambda *a, **k: [{'path': 'chunks/u/record/audio', 'generation': 1, 'timestamp': 100}],
+    )
+    monkeypatch.setattr(live, 'read_reference', lambda *a, **k: b'\x01\x00' * 16000)
+
+    def stage(item, body):
+        uri = 'gs://synthetic-manifest/audio#1'
+        store.rows['artifacts', artifact_id(item.segment_id, uri)] = {'owner_id': 'u', 'privacy_generation': 0}
+        return uri
+
+    monkeypatch.setattr(
+        live,
+        'create_artifact_store',
+        lambda *a: SimpleNamespace(
+            key_for_owner=lambda _: b'a' * 32,
+            stage_audio=stage,
+            authorize=lambda _: SimpleNamespace(level='standard'),
+        ),
+    )
+    assert await live.admit_recording(store, pending, now=300) == {'outcome': 'batch', 'job_id': 'bp_' + content}
+    intake = store.run(lambda tx: tx.get('intakes', 'bp_' + content))
+    assert intake['pipeline_record_barrier']['record_upload_revision'] == 3
+    assert intake['record_ranges'] == [{'start': 100, 'end': 101}]
+    # Read the committed intake through the real receipt and outbox paths; projection is still pending.
+    assert outbox.record_attention.receipt('u', 'record', current, store=store).projected is False
+    outbox.mark('u', 'record', 'en', now=300)
+    assert rows[key]['pipeline_capture_end'] == 101
+    assert rows[key]['pipeline_dispatch_at'] == 101 + 1680
+
+
+@pytest.fixture
+def pipeline_notes(state, monkeypatch):
+    from database import _client
+    from tests.unit.test_pipeline_attention import sealed
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    clock = [100]
+    monkeypatch.setattr(callback.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(outbox.pipeline_attention, 'client', lambda: fakeredis.FakeRedis())
+    monkeypatch.setattr(
+        outbox.pipeline_attention.omi_flags,
+        'resolve',
+        lambda key, uid: SimpleNamespace(enabled=key == 'pipeline_attention'),
+    )
+    world = World(monkeypatch)
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: world.store)
+    world.add(
+        'parent',
+        0,
+        1,
+        **{
+            **sealed(id='parent'),
+            'sync_content_revision': 2,
+            'started_at': datetime.fromtimestamp(10, timezone.utc),
+            'created_at': datetime.fromtimestamp(10, timezone.utc),
+            'finished_at': datetime.fromtimestamp(100, timezone.utc),
+            'structured': {'title': 'Pending', 'overview': ''},
+            hold.FIELD: {'pending_since': 100, 'last_content_at': 100, 'held': True},
+        }
+    )
+    snapshot = Mock(side_effect=world.get)
+    monkeypatch.setattr(outbox.conversations_db, 'get_conversation_raw_snapshot', snapshot)
+    receipt = Mock(return_value=outbox.record_attention.RecordReceipt(True, True, 100))
+    monkeypatch.setattr(outbox.record_attention, 'receipt', receipt)
+    monkeypatch.setattr(callback.pipeline_settlement, 'settle', lambda *a, **k: False)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *a: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
+
+    def persist(**kwargs):
+        current = world.get('user-1', 'parent')
+        current['structured'] = {'title': 'Recovered notes', 'overview': 'Synthetic retained preview notes'}
+        world.raw('parent')['structured'] = current['structured']
+        return callback.deserialize_conversation(current)
+
+    process = Mock(side_effect=persist)
+    monkeypatch.setattr(callback, 'process_conversation', process)
+    return world, clock, process, snapshot, receipt
+
+
+@pytest.mark.parametrize('mode,seal', [('serve', 'false'), ('off', 'true'), ('shadow', 'true')])
+@pytest.mark.parametrize('requested_hold', [False, True])
+def test_new_obligation_flags_off_preserve_legacy_hold_and_notes_timing(
+    state, pipeline_notes, monkeypatch, mode, seal, requested_hold
+):
+    rows, _ = state
+    world, clock, process, snapshot, receipt = pipeline_notes
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', seal)
+    outbox.mark('user-1', 'parent', 'en', now=100, sync_hold=requested_hold)
+    key = outbox.key('user-1', 'parent')
+    assert rows[key]['due_at'] == 700
+    assert not rows[key].get('pipeline_record') and 'pipeline_dispatch_at' not in rows[key]
+    assert bool(rows[key].get('sync_hold')) is requested_hold
+    snapshot.assert_not_called()
+    receipt.assert_not_called()
+    clock[0] = 699
+    assert outbox.run(key, rows[key]['task_token'], callback.enrich_conversation, now=699) == 'deferred'
+    process.assert_not_called()
+    clock[0] = 700
+    assert outbox.run(key, rows[key]['task_token'], callback.enrich_conversation, now=700) == 'processed'
+    process.assert_called_once()
+    assert world.get('user-1', 'parent')['structured']['overview'] == 'Synthetic retained preview notes'
+    assert key not in rows
+
+
+@pytest.mark.parametrize('failure', ['partial', 'failed', 'projection'])
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+def test_pipeline_wait_reaches_normal_notes_and_terminal_state_after_one_hour(state, pipeline_notes, failure, driver):
+    rows, _ = state
+    world, clock, process, _, receipt = pipeline_notes
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    if failure == 'partial':
+        world.raw('parent')['record_audio_partial'] = {'reason': 'tail_lost_or_unproven'}
+    elif failure == 'failed':
+        world.raw('parent')['record_upload_failed'] = True
+    receipt.return_value = outbox.record_attention.RecordReceipt(True, False, 100)
+
+    def deliver():
+        token = rows[key]['task_token']
+        if driver == 'legacy':
+            return outbox.run(key, token, callback.enrich_conversation, now=clock[0])
+        return run_push(
+            EnrichmentConsumer(ENRICHMENT_OUTBOX, process=callback.enrich_conversation),
+            ENRICHMENT_OUTBOX,
+            key,
+            token,
+            now=clock[0],
+        ).outcome
+
+    clock[0] = 700
+    assert deliver() == 'deferred'
+    assert rows[key]['due_at'] == 760
+    process.assert_not_called()
+    clock[0] = 3699
+    assert deliver() == 'deferred'
+    assert rows[key]['due_at'] == 3700 and rows[key]['first_pending_at'] == 100
+    process.assert_not_called()
+    clock[0] = 3700
+    assert deliver() in {'processed', 'done'}
+    process.assert_called_once()
+    assert world.get('user-1', 'parent')['structured']['overview'] == 'Synthetic retained preview notes'
+    assert key not in rows
+
+
+@pytest.mark.parametrize('reason', ['pipeline_seal_pending', 'pipeline_projection_pending'])
+def test_pipeline_pending_reasons_use_existing_slow_retry_classification(reason):
+    now = outbox.STUCK_DEFER_GRACE_SECONDS + 100
+    assert outbox.custody_defer_until({'defer_reason': reason, 'defer_until': now + 60}, 100, now) == now + 3600
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+@pytest.mark.parametrize('recovery', ['hour_bound', 'mode_off'])
+def test_pipeline_empty_after_seal_and_recovery_exhausts_three_attempts(
+    state, pipeline_notes, monkeypatch, driver, recovery
+):
+    from database import summary_processing
+
+    rows, _ = state
+    world, clock, process, _, _ = pipeline_notes
+    contexts = []
+
+    def empty(**kwargs):
+        contexts.append(dict(PROCESS_CONTEXT.get()))
+        return callback.deserialize_conversation(world.get('user-1', 'parent'))
+
+    process.side_effect = empty
+    # The atomic implementation is covered with StrictFirestore in test_summary_empty_recovery.
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', outbox.record_empty_failure)
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    clock[0] = 700
+    for attempt in range(3):
+        if attempt == 1 and recovery == 'mode_off':
+            monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+        token = rows[key]['task_token']
+        if driver == 'legacy':
+            if attempt < 2:
+                with pytest.raises(callback.SummaryOutputUnavailable):
+                    outbox.run(key, token, callback.enrich_conversation, now=clock[0])
+            else:
+                assert outbox.run(key, token, callback.enrich_conversation, now=clock[0]) == 'blocked'
+        else:
+            result = run_push(
+                EnrichmentConsumer(ENRICHMENT_OUTBOX, process=callback.enrich_conversation),
+                ENRICHMENT_OUTBOX,
+                key,
+                token,
+                now=clock[0],
+            )
+            assert result.outcome == ('retry' if attempt < 2 else 'stale')
+        assert rows[key]['summary_empty_failures'] == attempt + 1
+        clock[0] = max(clock[0] + 1801, rows[key].get('lease_until', 0) + 1)
+    assert process.call_count == 3
+    assert contexts[0].get('pipeline_seal') and not contexts[-1].get('pipeline_seal')
+    assert rows[key]['dormant'] and rows[key]['due_at'] is None
+    assert rows[key]['summary_blocked_reason'] == 'empty_output_exhausted'
+
+
+def _pipeline_delivery(rows, key, driver, now):
+    token = rows[key]['task_token']
+    if driver == 'legacy':
+        return outbox.run(key, token, callback.enrich_conversation, now=now)
+    return run_push(
+        EnrichmentConsumer(ENRICHMENT_OUTBOX, process=callback.enrich_conversation),
+        ENRICHMENT_OUTBOX,
+        key,
+        token,
+        now=now,
+    ).outcome
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+def test_ready_notes_run_before_dispatch_ceiling_without_presence(state, pipeline_notes, driver):
+    rows, _ = state
+    _, clock, process, _, _ = pipeline_notes
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    assert rows[key]['pipeline_dispatch_at'] == 1780
+    clock[0] = 700
+    assert _pipeline_delivery(rows, key, driver, 700) in {'processed', 'done'}
+    process.assert_called_once()
+    assert key not in rows
+
+
+@pytest.mark.parametrize('driver', ['legacy', 'envelope'])
+@pytest.mark.parametrize('kill', ['mode', 'seal', 'cohort'])
+def test_pipeline_kill_resumes_existing_projection_wait_on_legacy_timing(
+    state, pipeline_notes, monkeypatch, driver, kill
+):
+    rows, _ = state
+    _, clock, process, _, receipt = pipeline_notes
+    outbox.mark('user-1', 'parent', 'en', now=100)
+    key = outbox.key('user-1', 'parent')
+    receipt.return_value = outbox.record_attention.RecordReceipt(True, False, 100)
+    clock[0] = 700
+    assert _pipeline_delivery(rows, key, driver, 700) == 'deferred'
+    process.assert_not_called()
+    if kill == 'mode':
+        monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'off')
+    elif kill == 'seal':
+        monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'false')
+    else:
+        monkeypatch.setattr(outbox.pipeline_attention.omi_flags, 'resolve', lambda *a: SimpleNamespace(enabled=False))
+    clock[0] = 760
+    assert _pipeline_delivery(rows, key, driver, 760) in {'processed', 'done'}
+    process.assert_called_once()
+    assert key not in rows

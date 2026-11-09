@@ -2,7 +2,8 @@
 
 Cloud Tasks remains the wakeup owner; Redis contains IDs and scheduling metadata
 only. Losing Redis fails eager, leaving durable retries and reconciliation intact.
-No Firestore read is performed by admission, promotion or queue-age publication.
+Admission and queue-age publication do not read Firestore. The dark pipeline
+owner promotion may advance bounded sealed sync obligations with a Firestore CAS.
 """
 
 from __future__ import annotations
@@ -13,6 +14,9 @@ import logging
 import os
 import time
 from typing import Any
+from utils.conversations import pipeline_attention
+from utils.enrichment import outbox as enrichment_outbox
+from utils.batch_pipeline import record_attention
 
 from prometheus_client import Counter, Gauge
 from config.demand_processing import (
@@ -190,6 +194,16 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
     if row['owner'] != owner_key(uid):
         return False
     due = max(now, row.get('not_before', now))
+    if row.get('payload', {}).get('kind') == 'sync_reprocess':
+        try:
+            advanced = enrichment_outbox.promote_pipeline(uid, obligation, now=now)
+        except Exception:
+            _fallback()  # One optional advance cannot strand the rest of the owner snapshot.
+            advanced = None
+        if advanced:
+            due = now
+            row['not_before'] = now
+            row['payload']['task_token'] = advanced['task_token']
     row.update(tier=0, due_at=due)
     p = r.pipeline()
     p.set(prefix() + obligation, json.dumps(row), ex=TTL)
@@ -203,6 +217,22 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
     p.execute()
     _wake(row, immediate=True, now=now)
     return True
+
+
+def promote_owner(uid: str, *, trigger: str, now: float | None = None) -> dict:
+    """#24607 read hook. Call once at authenticated personal-data read boundary."""
+    now = time.time() if now is None else now
+    if not enabled(uid) or not pipeline_attention.serving(uid):
+        return {'status': 'disabled', 'ready': False}
+    try:
+        if not pipeline_attention.begin_promotion(uid, trigger=trigger, now=now):
+            return {'status': 'promotion_pending', 'ready': False}
+        result = promote(uid, hours=48, limit=OPEN_PROMOTE_LIMIT, now=now)
+        result['promoted_records'] = record_attention.promote_owner(uid, limit=OPEN_PROMOTE_LIMIT, now=now)
+        return result
+    except Exception:
+        _fallback()
+        return {'status': 'pending', 'ready': False}
 
 
 def promote_conversation_effects(uid: str, conversation_id: str) -> None:
@@ -225,6 +255,10 @@ def observe_surface(uid: str, session: str, payload: dict, *, now: float | None 
     now = time.time() if now is None else now
     try:
         r = client()
+        try:
+            pipeline_attention.observe_surface(uid, session, payload, now=now, redis=r)
+        except Exception:
+            pipeline_attention.unavailable()
         base = owner_key(uid)
         was_open = bool(r.zcount(base + ':surfaces', now, '+inf'))
         p = r.pipeline()
@@ -239,7 +273,10 @@ def observe_surface(uid: str, session: str, payload: dict, *, now: float | None 
         if foreground and not was_open:
             # Newest indexed work, including older debt, bounded per open edge: an
             # unbounded wake is a Cloud Task per obligation and a tier-0 backlog.
-            promote(uid, hours=48, limit=OPEN_PROMOTE_LIMIT, now=now)
+            if pipeline_attention.serving(uid):
+                promote_owner(uid, trigger='app_open', now=now)
+            else:
+                promote(uid, hours=48, limit=OPEN_PROMOTE_LIMIT, now=now)
     except Exception:
         _fallback()
 

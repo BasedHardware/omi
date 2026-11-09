@@ -29,8 +29,27 @@ def test_surface_lease_uses_authenticated_owner_and_rejects_uid_payload(endpoint
     assert response.status_code == 200 and response.json() == {'status': 'ok'}
     assert report.call_args.args[:2] == ('synthetic-owner', 'synthetic-phone')
     assert report.call_args.args[2]['surface_open'] is True
+    assert report.call_args.args[2]['home_visible'] is False
     assert client.post('/v1/users/client-state', json={**payload, 'uid': 'other'}).status_code == 422
     assert report.call_count == 1
+
+
+def test_explicit_home_visibility_is_additive_and_authenticated(endpoint):
+    app, users, report = endpoint
+    app.dependency_overrides[users.auth.get_current_user_uid] = lambda: 'synthetic-owner'
+    response = TestClient(app).post(
+        '/v1/users/client-state',
+        json={
+            'session_id': 'synthetic-phone',
+            'foreground': True,
+            'surface_open': True,
+            'transcript_visible': False,
+            'home_visible': True,
+        },
+    )
+    assert response.status_code == 200
+    assert report.call_args.args[0] == 'synthetic-owner'
+    assert report.call_args.args[2]['home_visible'] is True
 
 
 def test_surface_lease_requires_authentication(endpoint):

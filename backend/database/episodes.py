@@ -32,6 +32,7 @@ from typing import Any, Mapping, Optional, Sequence
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
 from config.episode_attach import membership_dedupe_enabled
+from config import pipeline_attention as pipeline_policy
 from config.episodes import (
     MAX_EPISODE_SECONDS,
     episode_hard_cap_across_conversations_enabled,
@@ -760,6 +761,7 @@ def _close(
     split_after: Optional[datetime] = None,
     retained_member_window: bool = False,
     synced_f: bool = False,
+    pipeline_seals: Optional[Mapping[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -771,7 +773,9 @@ def _close(
     current_id = _link_target(client, uid, CURRENT, transaction)
     if not raw or raw.get('status') != 'live':
         return None
-    if reason == 'idle' and expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
+    if pipeline_seals is not None and raw.get('pending_boundary'):
+        return None  # Only canonical F-join reconciliation may consume this decision.
+    if expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
         return None  # Speech won the race with a lazy reader's stale idle decision.
     if expected_conversation_ids is not None and set(raw.get('conversation_ids') or []) != set(
         expected_conversation_ids
@@ -804,6 +808,10 @@ def _close(
             .to_dict()
             or {}
         )
+        if pipeline_seals is not None and (
+            cid not in pipeline_seals or not pipeline_policy.snapshot_matches(member, pipeline_seals[cid])
+        ):
+            return None  # A producer reopened while settlement was planned.
         if (
             cid in hidden
             or is_relevance_discarded(member)
@@ -864,6 +872,7 @@ def close_episode(
     firestore_client: Any = None,
     retained_member_window: bool = False,
     synced_f: bool = False,
+    pipeline_seals: Optional[Mapping[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     """Close a live episode once. Returns the closed state, or None when it was not live.
 
@@ -889,6 +898,7 @@ def close_episode(
         split_after,
         retained_member_window,
         synced_f,
+        pipeline_seals,
         **transaction_options,
     )
 

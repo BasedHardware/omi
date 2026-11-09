@@ -29,6 +29,10 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Invali
 from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
+from utils.conversations import pipeline_attention
+from utils.batch_pipeline import record_attention
+from config import pipeline_attention as pipeline_policy
+from database import conversations as conversations_db
 from config import enrichment as enrichment_config
 from config.summary_guarantee import (
     ADMITTED_OWNER,
@@ -63,7 +67,14 @@ LIVE_DEFER_SECONDS = 120
 # has deferred a row past the grace (``deferred_since``), it polls hourly;
 # custody, sweep repair and the eventual resume are unchanged.
 STUCK_DEFER_REASONS = frozenset(
-    {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
+    {
+        'redirect_unresolved',
+        'conversation_missing',
+        'open_live_target',
+        'pending_live_bridge',
+        'pipeline_seal_pending',
+        'pipeline_projection_pending',
+    }
 )
 STUCK_DEFER_GRACE_SECONDS = 6 * 3600
 STUCK_DEFER_POLL_SECONDS = 3600
@@ -318,7 +329,7 @@ def _enqueue(row: dict[str, Any]) -> None:
     name = _task_name(row)
 
     first_summary = first_summary_pending(row)
-    if not first_summary and schedule(
+    if (not first_summary or pipeline_attention.serving(row['uid'])) and schedule(
         row['uid'],
         document_id,
         payload,
@@ -378,6 +389,7 @@ def mark(
         stamps=stamps,
         sync_hold=sync_hold,
         merge_hold=merge_hold,
+        pipeline_snapshot=pipeline_snapshot(uid, conversation_id) if not effects_only else None,
     )
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
@@ -406,6 +418,7 @@ def mark_update(
     stamps: list[tuple[str, str]] | None = None,
     sync_hold: bool = False,
     merge_hold: bool = False,
+    pipeline_snapshot: dict | None = None,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
@@ -497,6 +510,23 @@ def mark_update(
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
             )
 
+        deadline = (
+            pipeline_policy.seconds(row.get('pipeline_dispatch_at'))
+            if pipeline_policy.mode() == 'serve' and pipeline_policy.seal_fast_enabled()
+            else None
+        )
+        if pipeline_snapshot is not None:
+            row['pipeline_record'] = True
+            row['sync_hold'] = True  # Projection gating does not depend on a usable clock.
+            captured = pipeline_policy.seconds(pipeline_snapshot.get('pipeline_capture_end'))
+            if captured is not None:
+                row['pipeline_capture_end'] = captured
+                deadline = pipeline_policy.dispatch_at({}, row)
+        if deadline is not None:
+            row['pipeline_dispatch_at'] = deadline
+            row['due_at'] = min(row['due_at'], max(current, deadline))
+            row['sync_hold'] = True
+
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
         backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         if (old is None or old.get('dormant')) and not backfill and not effects_only and recent is None:
@@ -520,6 +550,86 @@ def mark_update(
         return row, ({**row, '_wake': wake}, old is not None)
 
     return update
+
+
+def pipeline_snapshot(uid, conversation_id, *, firestore_client=None):
+    if not pipeline_attention.notes_serving(uid):
+        return None
+    try:
+        row = conversations_db.get_conversation_raw_snapshot(
+            uid,
+            conversation_id,
+            firestore_client=firestore_client,
+            field_paths=[
+                'record_lane_owner',
+                'status',
+                'finished_at',
+                'record_audio_closed',
+                'record_audio_partial',
+                'record_upload_failed',
+                'record_upload_sessions',
+                'deleted',
+                'discarded',
+                'record_upload_revision',
+            ],
+        )
+        if row:
+            record = record_attention.receipt(
+                uid, conversation_id, row, require_projection=False, firestore_client=firestore_client
+            )
+            if record.admitted is True:
+                if record.capture_end is None:
+                    pipeline_attention.metrics.event('unknown_capture_clock')
+                return {'pipeline_capture_end': record.capture_end}
+    except Exception:
+        pipeline_attention.unavailable()
+    return None  # Retain the original durable obligation with legacy timing.
+
+
+def promote_pipeline(uid, document_id, *, now):
+    """A bounded owner read may advance a sealed obligation, never an active lease."""
+    if not pipeline_attention.serving(uid) or not pipeline_policy.seal_fast_enabled():
+        return None
+
+    def promote(old):
+        if (
+            not old
+            or old.get('uid') != uid
+            or old.get('dormant')
+            or old.get('effects_only')
+            or old.get('lease_until', 0) > now
+            or key(uid, old.get('conversation_id', '')) != document_id
+        ):
+            return old, None
+        source = conversations_db.get_conversation_raw_snapshot(
+            uid,
+            old['conversation_id'],
+            field_paths=[
+                'record_lane_owner',
+                'status',
+                'finished_at',
+                'record_audio_closed',
+                'record_audio_partial',
+                'record_upload_failed',
+                'record_upload_sessions',
+                'deleted',
+                'discarded',
+                'record_upload_revision',
+                'sync_content_revision',
+                'record_projection_revision',
+            ],
+        )
+        if (
+            not source
+            or pipeline_policy.seal_snapshot(source) is None
+            or record_attention.receipt(uid, old['conversation_id'], source).projected is not True
+        ):
+            return old, None
+        row = dict(old, due_at=now, task_due_at=now, task_token=uuid.uuid4().hex)
+        row.pop('immediate', None)
+        return row, row
+
+    return _mutate(document_id, promote)
 
 
 def _deadline_seconds(row: Row) -> int:
@@ -674,6 +784,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 merge_hold=bool(row.get('merge_hold')),
                 sync_hold_requested=bool(row.get('sync_hold_requested')),
                 first_pending_at=row['first_pending_at'],
+                pipeline_dispatch_at=row.get('pipeline_dispatch_at'),
+                pipeline_capture_end=row.get('pipeline_capture_end'),
+                pipeline_record=bool(row.get('pipeline_record')),
             )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
@@ -840,6 +953,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             pending['summary_repair'] = False
             pending['summary_expected_revision'] = None
             pending['due_at'] = max(current, pending['first_pending_at']) + settle_seconds()
+        deadline = pipeline_policy.seconds(pending.get('pipeline_dispatch_at'))
+        if deadline is not None and current < deadline:
+            pending['due_at'] = min(pending['due_at'], deadline)
         pending.update(
             lease_until=0,
             task_token=uuid.uuid4().hex,

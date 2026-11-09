@@ -25,6 +25,10 @@ from config.occasion_relevance import enabled as occasion_relevance_enabled
 from database import conversations as conversations_db
 from database._client import get_firestore_client
 from database.summary_processing import claim_from_snapshot
+from utils.conversations import pipeline_attention
+from config import pipeline_attention as pipeline_policy
+from utils.episodes import pipeline_settlement
+from utils.batch_pipeline import record_attention
 from models.conversation_enums import ConversationSource
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
@@ -41,6 +45,7 @@ from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
     REPAIR_CONTEXT,
     SummaryRepairSuperseded,
+    SummaryOutputUnavailable,
     present as summary_output_present,
     refusal as summary_repair_refusal,
     repair_fenced,
@@ -113,12 +118,54 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
         # finalizer skips processing that later content.
         return sync_defer(context, 'open_live_target')
 
+    pipeline_fast = False
+    accepted_deadline = pipeline_policy.seconds(context.get('pipeline_dispatch_at')) if context is not None else None
+    if context is not None and pipeline_policy.seal_fast_enabled() and pipeline_attention.admitted(uid):
+        deadline = accepted_deadline
+        record = record_attention.receipt(uid, conversation_id, conversation_data)
+        projected = record.projected
+        if record.capture_end is not None:
+            context['pipeline_capture_end'] = record.capture_end
+        settled = (
+            pipeline_settlement.settle(uid, conversation_id, conversation_data, deadline)
+            if projected is True and pipeline_attention.serving(uid)
+            else False
+        )
+        pipeline_fast, pipeline_due, proof = pipeline_attention.hold_decision(
+            uid, conversation_data, context, projected=projected, settled=settled
+        )
+        if pipeline_due is not None:
+            context.update(
+                defer_reason=(
+                    'pipeline_seal_pending'
+                    if pipeline_policy.seal_snapshot(conversation_data) is None
+                    else 'pipeline_projection_pending' if projected is not True else 'quiet_wait'
+                ),
+                defer_until=pipeline_due,
+            )
+            return sync_result('deferred')
+        if proof is not None:
+            digest = pipeline_attention.notes_fingerprint(conversation_data)
+            if (conversation_data.get(pipeline_policy.FIELD) or {}).get('notes_fingerprint') == digest:
+                # Complete the existing obligation without a second paid run.
+                if processing_hold.FIELD in conversation_data and not conversations_db.complete_sync_processing_hold(
+                    uid, conversation_id, conversation_data.get('sync_content_revision'), None
+                ):
+                    raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+                context['hold_skipped'] = True
+                return sync_result('no_op')
+            context.update(
+                pipeline_seal=proof,
+                pipeline_fingerprint=digest,
+                pipeline_attention=pipeline_attention.attention(uid),
+            )
+
     if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
         context['sync_hold'] = True
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(conversation_data, context, now=time.time(), sealed_fast=pipeline_fast)
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
@@ -227,6 +274,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
+    if context and context.get('pipeline_seal'):
+        pipeline_attention.metrics.event('notes_attempt')
     try:
         processed_conversation = process_conversation(
             uid=uid,
@@ -246,6 +295,16 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
             return sync_result('deferred')
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         return sync_result('deferred', deserialize_conversation(canonical) if canonical else None)
+
+    if (
+        context
+        and (context.get('pipeline_seal') or context.get('pipeline_record'))
+        and not context.get('hold_budget_denied_at_max')
+        and not context.get('blocked_reason')
+        and not processed_conversation.discarded
+        and not summary_output_present(processed_conversation.structured)
+    ):
+        raise SummaryOutputUnavailable('pipeline notes output is pending')
 
     if context is not None and context.get('hold_budget_denied_at_max'):
         if not conversations_db.complete_sync_processing_hold(
@@ -268,6 +327,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
     ):
         raise SyncConversationPersistenceFenced('hold completion snapshot changed')
     elapsed = time.monotonic() - started
+    if context and context.get('pipeline_seal'):
+        pipeline_attention.metrics.stage('notes_work', elapsed, context.get('pipeline_attention', 'unknown'))
     # Persistence is guaranteed here: a fenced write raises before return.
     # client_platform is the Conversation field set at sync intake; None -> unknown.
     client_kind = resolve_client_kind(x_app_platform=getattr(conversation, 'client_platform', None), user_agent=None)

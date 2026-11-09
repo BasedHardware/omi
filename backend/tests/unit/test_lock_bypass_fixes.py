@@ -7,6 +7,8 @@ across all previously-bypassed endpoints by calling the real code paths.
 from unittest.mock import MagicMock, call, patch
 import os
 import pytest
+
+from utils.conversations import pipeline_attention  # noqa: F401 - retain dark runtime before legacy cloud stubs
 import sys
 from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType, SimpleNamespace
@@ -108,6 +110,8 @@ def _tool(func=None, *args, **kwargs):
 
 
 _stubs = [
+    'utils.batch_pipeline.record_attention',
+    'utils.episodes.pipeline_settlement',
     'anthropic',
     'av',
     'database._client',

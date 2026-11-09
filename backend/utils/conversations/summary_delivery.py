@@ -13,6 +13,9 @@ from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Callable, Mapping, cast
 from utils.conversations import phase_shadow
+from utils.conversations import pipeline_metrics
+from utils.conversations.pipeline_attention import prepare_notes_receipt
+from config.pipeline_attention import snapshot_matches
 
 from utils.observability.delivery import record_delivery
 
@@ -54,6 +57,9 @@ REPAIR_CONTEXT: ContextVar[Row | None] = ContextVar('summary_repair', default=No
 
 def processing_fenced(existing: Row) -> bool:
     context = PROCESS_CONTEXT.get()
+    if context and context.get('pipeline_seal'):
+        if not snapshot_matches(existing, context['pipeline_seal']):
+            return True
     return bool(context and context.get('claimed') and existing.get('summary_processing_owner') != context['owner'])
 
 
@@ -209,6 +215,19 @@ def creation_result(write: Row, uid: str) -> Row | None:
 
 
 def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
+    current = time.time() if now is None else now
+    context = PROCESS_CONTEXT.get()
+    if context and context.get('pipeline_seal'):
+        write.setdefault('summary_output_present', present(write.get('structured')))
+        if not write['summary_output_present'] and (existing.get('pipeline_attention') or {}).get('notes_versions'):
+            if existing.get('structured'):
+                write['structured'] = deepcopy(existing['structured'])  # Keep old text while its correction is pending.
+    pipeline = prepare_notes_receipt(existing, write, uid, now=current, context=context)
+    receipt = _merge_result(existing, write, uid, now=current)
+    return {**(receipt or {}), 'pipeline': pipeline} if pipeline else receipt
+
+
+def _merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     """Inside the existing revision-fenced transaction, before its write."""
     if not enabled(uid) or 'summary_output_present' not in write:
         return None
@@ -329,6 +348,9 @@ def lane(row: Row) -> str:
 
 def emit(receipt: Row | None) -> None:
     if receipt is None:
+        return
+    pipeline_metrics.committed(receipt.get('pipeline'))
+    if 'lane' not in receipt:
         return
     RECEIPTS.labels(receipt['lane'], receipt['reason'], str(receipt['present']).lower()).inc()
     if receipt['present'] and receipt['latency'] is not None:

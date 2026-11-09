@@ -7,6 +7,7 @@ They are deliberately hermetic: no GCP, no Firestore, no network.
 import importlib.util
 import json
 import pathlib
+from datetime import datetime, timezone
 
 import pytest
 
@@ -17,6 +18,134 @@ _SPEC.loader.exec_module(alloc)
 _AUTH_SPEC = importlib.util.spec_from_file_location("finops_gcpauth", _FINOPS / "gcpauth.py")
 gcpauth = importlib.util.module_from_spec(_AUTH_SPEC)
 _AUTH_SPEC.loader.exec_module(gcpauth)
+_CAPTURE_SPEC = importlib.util.spec_from_file_location('finops_capture', _FINOPS / 'pull_captured_audio.py')
+capture = importlib.util.module_from_spec(_CAPTURE_SPEC)
+_CAPTURE_SPEC.loader.exec_module(capture)
+
+
+def _manifest(**updates):
+    return {
+        'owner': 'synthetic',
+        'capture_root': 'physical',
+        'device': 'pendant',
+        'channel': 'mono',
+        'clock_epoch': 'boot',
+        'epoch_started_at': '2026-11-07T23:30:00Z',
+        'sample_rate': 16000,
+        'start_frame': 0,
+        'end_frame': 3600 * 16000,
+        'path': 'batch',
+        **updates,
+    }
+
+
+def test_capture_hour_union_counts_retry_live_and_reupload_once_across_midnight():
+    rows = [_manifest(), _manifest(path='live'), _manifest(start_frame=16000, end_frame=32000)]
+    report = capture.captured_hours(rows)
+    assert report['captured_audio_hours'] == {'2026-11-07': 0.5, '2026-11-08': 0.5}
+    assert report == capture.captured_hours(rows * 3)
+    assert report['manifest_ranges_valid'] and not report['denominator_complete']
+    assert 'synthetic' not in json.dumps(report)
+
+
+def test_distinct_physical_capture_rates_and_failed_transcription_count():
+    report = capture.captured_hours(
+        [
+            _manifest(transcription_status='failed'),
+            _manifest(capture_root='other', sample_rate=8000, end_frame=3600 * 8000),
+        ]
+    )
+    assert sum(report['captured_audio_hours'].values()) == 2
+
+
+def test_capture_unknown_identity_and_conflicting_clock_are_never_guessed():
+    report = capture.captured_hours([_manifest(), _manifest(owner=None)])
+    assert report['unknown_manifest_rows'] == 1 and not report['denominator_complete']
+    conflict = capture.captured_hours([_manifest(), _manifest(sample_rate=8000)])
+    assert conflict['captured_audio_hours'] == {} and conflict['conflicting_physical_sources'] == 1
+
+
+def test_cost_requires_complete_denominator_and_reconciled_captured_day_sources():
+    report = capture.captured_hours([_manifest()])
+    now = datetime(2026, 11, 8, tzinfo=timezone.utc)
+    proof = {
+        'source': 'retained_capture_manifest_inventory',
+        'complete': True,
+        'unknown_capture_roots': 0,
+        'physical_capture_roots': 1,
+        'covered_utc_days': ['2026-11-07', '2026-11-08'],
+        'captured_audio_hours': {'2026-11-07': 0.5, '2026-11-08': 0.5},
+        'manifest_sha256': 'exact-export',
+        'source_receipt': 'aggregate-inventory-receipt',
+        'generated_at': '2026-11-08T00:00:00Z',
+        'valid_until': '2026-11-09T00:00:00Z',
+    }
+    report = capture.verify_inventory_coverage(report, proof, 'exact-export', now=now)
+    day = '2026-11-07'
+    costs = {
+        day: {
+            'reconciled': True,
+            'basis': 'captured_utc_day',
+            'gpu_excluded_from_cloud': True,
+            'source_receipts': ['settled-cloud', 'vendor-usage'],
+            'components': {name: 1 for name in capture.REQUIRED_COSTS},
+        }
+    }
+    assert capture.cost_per_captured_hour(report, costs, now=now)[day]['usd_per_captured_audio_hour'] == 12
+    costs[day]['basis'] = 'processing_day'
+    assert capture.cost_per_captured_hour(report, costs, now=now)[day]['usd_per_captured_audio_hour'] is None
+    costs[day]['basis'] = 'captured_utc_day'
+    report['denominator_complete'] = False
+    assert capture.cost_per_captured_hour(report, costs, now=now)[day]['status'] == 'unknown'
+
+
+@pytest.mark.parametrize('changed', ['missing', 'expired', 'wrong_hash', 'incomplete_population', 'missing_frames'])
+def test_valid_capture_ranges_cannot_publish_cost_without_inventory_coverage(changed):
+    report = capture.captured_hours([_manifest()])
+    proof = {
+        'source': 'retained_capture_manifest_inventory',
+        'complete': True,
+        'unknown_capture_roots': 0,
+        'physical_capture_roots': 1,
+        'covered_utc_days': ['2026-11-07', '2026-11-08'],
+        'captured_audio_hours': {'2026-11-07': 0.5, '2026-11-08': 0.5},
+        'manifest_sha256': 'export',
+        'source_receipt': 'aggregate-inventory-receipt',
+        'generated_at': '2026-11-08T00:00:00Z',
+        'valid_until': '2026-11-09T00:00:00Z',
+    }
+    if changed == 'missing':
+        proof = {}
+    elif changed == 'expired':
+        proof['valid_until'] = '2026-11-07T00:00:00Z'
+    elif changed == 'wrong_hash':
+        proof['manifest_sha256'] = 'another-export'
+    elif changed == 'incomplete_population':
+        proof['physical_capture_roots'] = 2
+    else:
+        proof['captured_audio_hours'] = {'2026-11-07': 1, '2026-11-08': 1}
+    checked = capture.verify_inventory_coverage(report, proof, 'export', now=datetime(2026, 11, 8, tzinfo=timezone.utc))
+    assert not checked['denominator_complete'] and checked['inventory_receipt'] is None
+
+
+def test_capture_report_dark_default_does_not_read_or_write(tmp_path, monkeypatch):
+    monkeypatch.delenv('PIPELINE_CAPTURE_COST_ENABLED', raising=False)
+    out = tmp_path / 'report.json'
+    with pytest.raises(SystemExit) as stopped:
+        capture.main(['--manifests', str(tmp_path / 'absent.jsonl'), '--output', str(out)])
+    assert stopped.value.code == 0 and not out.exists()
+
+
+def test_unique_conversation_rewrite_census_survives_export_replay():
+    receipts = [
+        {'owner_key': 'one', 'conversation_id': 'c', 'notes_versions': 1},
+        {'owner_key': 'one', 'conversation_id': 'c', 'notes_versions': 3},
+        {'owner_key': 'two', 'conversation_id': 'c', 'notes_versions': 1},
+    ]
+    census = capture.rewrite_census(receipts * 3)
+    assert census['omi_pipeline_notes_rewrites_per_conversation'] == {0: 1, 2: 1}
+    assert census['conversations'] == 2 and census['unknown_receipts'] == 0
+    assert 'owner_key' not in json.dumps(census)
 
 
 def test_writer_is_finops_sa_not_human_or_readonly_bot():
@@ -352,3 +481,29 @@ def test_cohort_window_is_a_trailing_window_ending_on_the_usage_day():
 def test_cohort_window_can_be_pinned_to_reproduce_an_older_report():
     assert alloc.cohort_window_start_for("2026-09-07", 7, fixed="2026-08-31") == "2026-08-31"
     assert alloc.cohort_window_start_for("2026-09-01", 7, fixed="2026-08-31") == "2026-08-31"
+
+
+@pytest.mark.parametrize('clock', [None, 42, {}, []])
+def test_non_string_capture_epoch_is_unknown(clock):
+    report = capture.captured_hours([_manifest(epoch_started_at=clock)])
+    assert report['unknown_manifest_rows'] == 1 and not report['manifest_ranges_valid']
+
+
+def test_republishing_an_expired_capture_report_removes_price():
+    report = {
+        'manifest_ranges_valid': True,
+        'denominator_complete': True,
+        'inventory_receipt': 'synthetic-inventory',
+        'inventory_generated_at': '2026-11-08T00:00:00+00:00',
+        'valid_until': '2026-11-09T00:00:00+00:00',
+        'cost': {'2026-11-07': {'status': 'reconciled', 'pipeline_cost_usd': 6, 'usd_per_captured_audio_hour': 12}},
+    }
+    assert alloc.revalidate_report(report, now=datetime(2026, 11, 8, tzinfo=timezone.utc)) is report
+    checked = alloc.revalidate_report(report, now=datetime(2026, 11, 10, tzinfo=timezone.utc))
+    assert not checked['denominator_complete']
+    assert checked['cost']['2026-11-07'] == {
+        'status': 'unknown',
+        'pipeline_cost_usd': None,
+        'usd_per_captured_audio_hour': None,
+    }
+    assert report['cost']['2026-11-07']['usd_per_captured_audio_hour'] == 12

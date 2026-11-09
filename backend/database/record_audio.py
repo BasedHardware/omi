@@ -1,12 +1,15 @@
 """Transactional record-audio closure and cross-session upload custody metadata."""
 
-from typing import Literal
+from typing import Any, Literal
 import time
 
 from google.cloud import firestore
 
 from config import record_seal_rules
 from database._client import get_firestore_client, run_transactional
+from config import pipeline_attention as pipeline_policy
+from utils.batch_pipeline import record_attention
+from utils.conversations import pipeline_attention
 
 
 class RecordUploadCapacityExceeded(ValueError):
@@ -25,10 +28,14 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    committed_row = {}
+    observed = pipeline_attention.attention(uid) if pipeline_attention.admitted(uid) else None
 
     @firestore.transactional
     def commit(tx):
+        committed_row.clear()
         row = ref.get(transaction=tx).to_dict() or {}
+        was_closed = row.get('record_audio_closed') is True
         if row.get('deleted') or not row:
             return 'deleted'
         if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
@@ -44,13 +51,37 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # missing tail. Repair refreshes the separate partial barrier.
             return None
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
-            patch: dict[str, bool | None] = {'record_audio_closed': True}
+            patch: dict[str, Any] = {'record_audio_closed': True}
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
+            if observed is not None:
+                patch[pipeline_policy.FIELD] = {
+                    **(row.get(pipeline_policy.FIELD) or {}),
+                    'attention': (row.get(pipeline_policy.FIELD) or {}).get('attention', observed),
+                    'sealed_at': pipeline_policy.seconds((row.get(pipeline_policy.FIELD) or {}).get('sealed_at'))
+                    or time.time(),
+                }
             tx.update(ref, patch)
+            row.update(patch)
+        committed_row.update(row, record_audio_closed=True)
+        committed_row['_new_seal'] = not was_closed
         return None
 
-    return run_transactional(client, commit, transient=True)
+    result = run_transactional(client, commit, transient=True)
+    if result is None and committed_row.get('_new_seal') and observed is not None:
+        captured = pipeline_policy.capture_end(committed_row)
+        closed = pipeline_policy.seconds(committed_row.get('finished_at'))
+        pipeline_attention.metrics.stage(
+            'recorded_span_to_seal', time.time() - captured if captured else None, observed
+        )
+        pipeline_attention.metrics.stage('finished_to_seal', time.time() - closed if closed else None, observed)
+        finished = pipeline_policy.seconds((committed_row.get(pipeline_policy.FIELD) or {}).get('producer_finished_at'))
+        pipeline_attention.metrics.stage(
+            'producer_finish_to_seal', time.time() - finished if finished else None, observed
+        )
+    if result is None and pipeline_policy.record_fast_enabled() and committed_row:
+        record_attention.sealed(uid, conversation_id, committed_row)
+    return result
 
 
 def set_record_upload_pending(
@@ -63,6 +94,7 @@ def set_record_upload_pending(
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    instrument = pipeline_attention.admitted(uid)
 
     @firestore.transactional
     def commit(tx):
@@ -90,7 +122,13 @@ def set_record_upload_pending(
             if isinstance(sessions[session], dict) and 'abandoned_at' in sessions[session]:
                 return False  # Only repair's retained-tail proof may release this fence.
             sessions.pop(session)
-            tx.update(ref, {'record_upload_sessions': sessions})
+            update = {'record_upload_sessions': sessions}
+            if not sessions and instrument:
+                update[pipeline_policy.FIELD] = {
+                    **(row.get(pipeline_policy.FIELD) or {}),
+                    'producer_finished_at': time.time(),
+                }
+            tx.update(ref, update)
         return True
 
     return run_transactional(client, commit, transient=True)

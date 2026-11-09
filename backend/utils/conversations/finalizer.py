@@ -79,6 +79,8 @@ from services.conversation_keyframes import ensure_conversation_keyframe_job, re
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
+from utils.conversations import pipeline_attention
+from utils.enrichment import outbox as enrichment_outbox
 
 logger = logging.getLogger(__name__)
 
@@ -293,10 +295,11 @@ async def finalize_persisted_conversation(
     )
     if fenced is not None:
         return fenced
-    if (
-        server_batch_owned(conversation_data)
-        and not conversation.transcript_segments
+    if server_batch_owned(conversation_data) and (
+        not conversation.transcript_segments
         and not getattr(conversation, 'photos', None)
+        or server_batch_has_audio(conversation_data)
+        and await run_blocking(db_executor, pipeline_attention.notes_serving, uid)
     ):
         if conversation_data.get('discarded'):
             if not await run_blocking(
@@ -324,10 +327,16 @@ async def finalize_persisted_conversation(
             ):
                 raise RuntimeError('server batch empty cleanup fenced')
             return ConversationFinalizationDisposition.fenced
-        # No preview to enrich. Reserve batch before terminalizing this generation;
+        # Hand batch-covered capture to its retained-audio owner before notes. Reserve batch before terminalizing this generation;
         # its upload barrier still prevents work until pusher has committed the tail.
         if not await run_blocking(db_executor, register_recording, uid, conversation_data):
             raise RuntimeError('desktop batch registration refused')
+        if conversation.transcript_segments or getattr(conversation, 'photos', None):
+            # Commit the ordinary notes obligation before terminalizing capture.
+            # A failed/dead-lettered batch must not strand its existing preview.
+            await run_blocking(
+                db_executor, enrichment_outbox.mark, uid, conversation_id, language or 'en', sync_hold=True
+            )
         completion = await run_blocking(
             db_executor,
             lifecycle_service.complete_server_batch_capture,

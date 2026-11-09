@@ -793,6 +793,75 @@ def test_an_ended_conversation_never_reopens_its_episode_and_the_next_words_open
     assert episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)['id'] == first['id']
 
 
+@pytest.mark.parametrize('race', ['producer', 'membership', 'activity', 'pending_boundary', 'none'])
+def test_pipeline_close_rechecks_member_seal_and_snapshot_in_strict_transaction(race):
+    from config.pipeline_attention import seal_snapshot
+    from tests.unit.test_pipeline_attention import sealed
+
+    store = StrictFirestore()
+    assert _attach(store, 'c1', minutes=0) == 'opened'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    row = sealed(id='c1', finished_at=T0 + timedelta(seconds=60), recorded_end=T0 + timedelta(seconds=60))
+    store.rows[('users', UID, 'conversations', 'c1')] = dict(row)
+    proof = seal_snapshot(row)
+    before = episode['last_activity_at']
+    if race == 'producer':
+        store.rows[('users', UID, 'conversations', 'c1')]['record_upload_revision'] += 1
+    if race == 'activity':
+        store.rows[('users', UID, 'episodes', episode['id'])]['last_activity_at'] += timedelta(seconds=1)
+    if race == 'membership':
+        store.rows[('users', UID, 'episodes', episode['id'])]['conversation_ids'].append('late')
+    if race == 'pending_boundary':
+        store.rows[('users', UID, 'episodes', episode['id'])]['pending_boundary'] = {'c1': {'pending': True}}
+    kwargs = dict(
+        closed_at=T0 + timedelta(seconds=1680),
+        expected_conversation_ids=['c1'],
+        expected_activity_at=before,
+        pipeline_seals={'c1': proof},
+        firestore_client=store,
+    )
+    if race == 'membership':
+        with pytest.raises(episodes_db.EpisodeConflict):
+            episodes_db.close_episode(UID, episode['id'], 'boundary', **kwargs)
+    else:
+        result = episodes_db.close_episode(UID, episode['id'], 'boundary', **kwargs)
+        assert (result is not None) == (race == 'none')
+    if race != 'none':
+        assert store.rows[('users', UID, 'episodes', episode['id'])]['status'] == 'live'
+    assert store.rows[('users', UID, 'conversations', 'c1')]['transcript_segments'] == row['transcript_segments']
+
+
+def test_flag_on_close_on_seal_closes_fully_projected_capture_early(monkeypatch):
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    import fakeredis
+    from tests.unit.test_pipeline_attention import sealed
+    from utils.conversations import pipeline_attention
+    from utils.episodes import pipeline_settlement
+
+    store = StrictFirestore()
+    assert _attach(store, 'c1', minutes=0) == 'opened'
+    row = sealed(id='c1', finished_at=T0 + timedelta(seconds=60))
+    assert row['record_projection_revision'] == 1
+    store.rows[('users', UID, 'conversations', 'c1')] = row
+    monkeypatch.setattr(episodes_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve')
+    monkeypatch.setenv('PIPELINE_CLOSE_ON_SEAL_ENABLED', 'true')
+    monkeypatch.setattr(pipeline_attention.omi_flags, 'resolve', lambda *a: SimpleNamespace(enabled=True))
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(pipeline_attention, 'client', lambda: redis)
+    now = T0.timestamp() + 100
+    deadline = T0.timestamp() + 60 + 1680
+    pipeline_attention.observe_surface(UID, 'home', {'foreground': True, 'home_visible': True}, now=now)
+    assert now < deadline
+    assert pipeline_settlement.settle(UID, 'c1', row, deadline, now=now)
+    closed = episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)
+    assert closed['status'] == 'closed' and closed['close_reason'] == 'boundary'
+    assert closed['closed_at'] == datetime.fromtimestamp(now, timezone.utc)
+    assert closed['pipeline_dispatch_at'] == deadline
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+
+
 def test_a_finalize_tail_never_opens_an_episode_after_its_own_closed():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['A', 'B']})
@@ -2272,3 +2341,9 @@ def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
     wires = home_read.project_episodes(UID, [first], firestore_client=store)
     assert wires[0]['status'] == 'closed'
     assert scheduled == [(UID, first['id'])]
+
+
+def test_pipeline_service_refuses_planned_f_boundary(monkeypatch):
+    monkeypatch.setattr(service, '_close', lambda *a, **k: pytest.fail('F reconciliation owns boundary'))
+    episode = {'pending_boundary': {'c1': {'pending': True}}}
+    assert service.close_pipeline_snapshot(UID, episode, 1680, {}, now=1680) is None

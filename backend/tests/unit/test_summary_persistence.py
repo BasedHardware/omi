@@ -81,6 +81,27 @@ def test_record_owner_does_not_bypass_summary_processing_fence(writer):
         delivery.PROCESS_CONTEXT.reset(token)
 
 
+@pytest.mark.parametrize('changed', ['record_upload_revision', 'sync_content_revision', 'record_audio_closed'])
+def test_actual_writer_refuses_late_producer_after_pipeline_claim(writer, changed):
+    from config.pipeline_attention import seal_snapshot
+    from tests.unit.test_pipeline_attention import sealed
+
+    writer.document.update(sealed(sync_content_revision=3))
+    proof = seal_snapshot(writer.document)
+    token = delivery.PROCESS_CONTEXT.set({'pipeline_seal': proof})
+    if changed == 'record_audio_closed':
+        writer.document[changed] = False
+    else:
+        writer.document[changed] += 1
+    try:
+        assert not db.persist_processing_result_with_lifecycle(
+            'u', {**payload(), 'sync_content_revision': writer.document['sync_content_revision']}
+        )
+        assert all(value is None for value in writer.commits)
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
+
+
 def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
     emit = Mock()
     monkeypatch.setattr(delivery, 'emit', emit)

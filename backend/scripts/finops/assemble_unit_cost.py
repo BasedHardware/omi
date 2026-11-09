@@ -30,10 +30,12 @@ import csv
 import datetime as dt
 import json
 import pathlib
+import os
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from gcp_cost_reconciliation import company_stt_rows  # noqa: E402
+from pull_captured_audio import revalidate_report  # noqa: E402
 
 STT_VENDOR_RATE_PER_MIN = 0.0043  # PLACEHOLDER (Deepgram Nova list). Modulate/Soniox contract rates pending.
 STT_VENDOR_HIGH_MULTIPLIER = 1.8
@@ -870,12 +872,23 @@ def main(argv=None) -> None:
     )
     ap.add_argument("--settled-through", default=None)
     ap.add_argument("--cohort-lookback-days", type=int, default=7)
+    ap.add_argument(
+        '--captured-audio-report',
+        type=pathlib.Path,
+        help='Aggregate union report from pull_captured_audio.py; kept separate from transcription drivers',
+    )
     a = ap.parse_args(argv)
     raw, out = pathlib.Path(a.raw), pathlib.Path(a.out)
     start = a.start or min(r["usage_day"] for r in json.load(open(raw / "gcp_components_daily.json")))
     end = a.end or max(r["usage_day"] for r in json.load(open(raw / "gcp_components_daily.json")))
     res = assemble(raw, out, start, end, a.cohort_window_start, a.settled_through, a.cohort_lookback_days)
     report(res, start, end)
+    if a.captured_audio_report and os.getenv('PIPELINE_CAPTURE_COST_ENABLED', 'false').strip().lower() == 'true':
+        captured = revalidate_report(json.loads(a.captured_audio_report.read_text()))
+        (out / 'captured_audio_cost.json').write_text(json.dumps(captured, indent=2) + '\n')
+        print('Captured-audio cost (independent of transcription allocation):')
+        for day, row in sorted(captured.get('cost', {}).items()):
+            print(day, row.get('status', 'unknown'), row.get('usd_per_captured_audio_hour'))
 
 
 if __name__ == "__main__":

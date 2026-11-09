@@ -7,6 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import Mock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -22,6 +23,18 @@ from utils.episodes import composer, home_read, metrics, service
 
 UID = 'composer-uid'
 T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
+
+
+def test_patient_settle_uses_absolute_accepted_deadline(monkeypatch):
+    monkeypatch.setattr(composer.pipeline_attention, 'notes_serving', lambda _: True)
+    episode = {
+        'compose_pending_since': T0 + timedelta(seconds=1000),
+        'compose_activity_at': T0 + timedelta(seconds=1600),
+        'closed_at': T0 + timedelta(seconds=1650),
+        'pipeline_dispatch_at': T0.timestamp() + 1680,
+    }
+    assert composer.settle_delay(UID, episode, now=T0 + timedelta(seconds=1679)) == 1
+    assert composer.settle_delay(UID, episode, now=T0 + timedelta(seconds=1680)) == 0
 
 
 def _row(cid, start, minutes, *, status='completed', title='T', overview='O', lines=None):
@@ -921,7 +934,7 @@ def test_new_speech_extends_quiet_window_but_preserves_first_pending_time(store,
     store.rows['c1']['transcript_segments'][0]['text'] += ' Late words.'
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
     assert store.episode['compose_pending_since'] == first
-    assert 299 < composer.settle_delay(store.episode) <= 300
+    assert 299 < composer.settle_delay(UID, store.episode) <= 300
 
 
 def test_continuous_upload_pays_at_max_latency_cap(store):
@@ -1165,7 +1178,7 @@ def test_superseded_at_latency_cap_still_waits_before_next_paid_attempt(store, m
 
     assert composer.schedule(UID, 'ep1', collaborators=_c(invoke=invoke))
     assert len(calls) == 1 and composer._deferred
-    assert 590 < composer.settle_delay(store.episode) <= 600
+    assert 590 < composer.settle_delay(UID, store.episode) <= 600
 
 
 def test_off_restores_immediate_superseded_retry(store, monkeypatch):
@@ -1229,3 +1242,48 @@ def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, c
     store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
     assert len(calls) == 2
+
+
+def test_accepted_deadline_waits_for_all_projection_siblings_before_paid_compose(store, monkeypatch):
+    store.episode['pipeline_dispatch_at'] = datetime.now(timezone.utc).timestamp() + 1680
+    monkeypatch.setattr(composer.pipeline_attention, 'notes_serving', lambda _: True)
+    calls = []
+    monkeypatch.setattr(
+        composer.record_attention, 'receipt', lambda *a, **k: composer.record_attention.RecordReceipt(True, False, 100)
+    )
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    assert calls == []
+    monkeypatch.setattr(
+        composer.record_attention, 'receipt', lambda *a, **k: composer.record_attention.RecordReceipt(True, True, 100)
+    )
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('mode,seal', [('off', 'true'), ('serve', 'false'), ('shadow', 'true')])
+def test_pipeline_kills_restore_legacy_episode_settle_timing(monkeypatch, mode, seal):
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', mode)
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', seal)
+    monkeypatch.setattr(composer.pipeline_attention.omi_flags, 'resolve', lambda *a: SimpleNamespace(enabled=True))
+    episode = {
+        'compose_pending_since': T0 + timedelta(seconds=1000),
+        'compose_activity_at': T0 + timedelta(seconds=1600),
+        'closed_at': T0 + timedelta(seconds=1650),
+        'pipeline_dispatch_at': T0.timestamp() + 1680,
+    }
+    assert composer.settle_delay(UID, episode, now=T0 + timedelta(seconds=1679)) == 571
+
+
+@pytest.mark.parametrize('reason', ['mode_off', 'expired'])
+def test_pipeline_projection_wait_releases_to_legacy_compose_on_kill_or_hour_bound(store, monkeypatch, reason):
+    now = datetime.now(timezone.utc).timestamp()
+    store.episode['pipeline_dispatch_at'] = now - 4000 if reason == 'expired' else now + 1680
+    monkeypatch.setenv('PIPELINE_ATTENTION_MODE', 'serve' if reason == 'expired' else 'off')
+    monkeypatch.setenv('PIPELINE_SEAL_FAST_ENABLED', 'true')
+    monkeypatch.setattr(composer.pipeline_attention.omi_flags, 'resolve', lambda *a: SimpleNamespace(enabled=True))
+    receipt = Mock(return_value=composer.record_attention.RecordReceipt(True, False, 100))
+    monkeypatch.setattr(composer.record_attention, 'receipt', receipt)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 1
+    receipt.assert_not_called()

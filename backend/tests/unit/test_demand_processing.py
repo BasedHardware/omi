@@ -290,3 +290,34 @@ def test_legacy_or_malformed_foreground_is_not_surface_intent(runtime, surface_o
     assert redis.get(demand.owner_key('owner') + ':last_surface_open_at') is None
     assert json.loads(redis.get(demand.prefix() + 'pending'))['tier'] == 2
     wake.assert_not_called()
+
+
+def test_optional_attention_failure_preserves_surface_lease(runtime, monkeypatch):
+    _, wake = runtime
+    schedule('owner', 'pending')
+    monkeypatch.setattr(demand.pipeline_attention, 'observe_surface', Mock(side_effect=RuntimeError('optional')))
+    report('owner')
+    assert demand.user_tier('owner', now=1001) == 0
+    assert wake.call_count >= 2
+
+
+def test_one_failed_durable_promotion_does_not_strand_other_members(runtime, monkeypatch):
+    redis, _ = runtime
+    for name in ('first', 'second'):
+        demand.schedule(
+            'owner',
+            name,
+            {'kind': 'sync_reprocess'},
+            {
+                'queue': 'q',
+                'handler': 'https://worker/run',
+                'audience': 'https://worker',
+                'invoker_sa': 'worker',
+            },
+            'task-' + name,
+            now=1000,
+        )
+    advance = Mock(side_effect=[RuntimeError('optional'), {'task_token': 'new-token'}])
+    monkeypatch.setattr(demand.enrichment_outbox, 'promote_pipeline', advance)
+    assert demand.promote('owner', now=1100)['promoted'] == 2
+    assert advance.call_count == 2

@@ -1878,6 +1878,7 @@ FIELD_SITES = {
             ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
         ),
         ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
+        ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'None', ('record_seal_refused_at',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'time.time()', ('record_seal_refused_at',)),
         (
@@ -2713,6 +2714,9 @@ FIELD_SITES = {
             "'processing' if count else 'no_indexed_pending_work'",
             ('has_more', 'promoted', 'ready', 'status'),
         ),
+        ('promote_owner', 'status', "'disabled'", ('ready', 'status')),
+        ('promote_owner', 'status', "'pending'", ('ready', 'status')),
+        ('promote_owner', 'status', "'promotion_pending'", ('ready', 'status')),
     ],
     'utils/conversations/finalizer.py': [
         ('_load_admitted_conversation', 'status', 'ConversationStatus.processing', ('status',))
@@ -2762,11 +2766,11 @@ FIELD_SITES = {
         ('process_user_expression_measurement_callback', 'status', 'task_status', ('status',)),
     ],
     'utils/conversations/summary_delivery.py': [
-        ('merge_result', 'summary_completed_at', 'current', ('summary_completed_at',)),
-        ('merge_result', 'summary_completed_at', "existing['summary_completed_at']", ('summary_completed_at',)),
-        ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
-        ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
-        ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
+        ('_merge_result', 'summary_completed_at', 'current', ('summary_completed_at',)),
+        ('_merge_result', 'summary_completed_at', "existing['summary_completed_at']", ('summary_completed_at',)),
+        ('_merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('_merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('_merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),

@@ -16,6 +16,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+
+from utils.conversations import pipeline_attention  # noqa: F401 - retain dark runtime before legacy cloud stubs
+from utils.batch_pipeline import record_attention  # noqa: F401 - retain scheduling dependencies before model stubs
+from utils.episodes import pipeline_settlement  # noqa: F401 - retain real episode types before legacy model stubs
 from pydantic import BaseModel
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across the legacy models package stub

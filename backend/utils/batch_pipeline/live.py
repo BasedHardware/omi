@@ -59,6 +59,8 @@ from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
 from config.server_batch import owned as server_batch_owned, has_audio as server_batch_has_audio
+from config import pipeline_attention as pipeline_policy
+from utils.batch_pipeline import record_attention
 
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
@@ -172,9 +174,13 @@ def register_recording(
     if (conversation.get('external_data') or {}).get('server_batch_only') is True:
         snapshot['server_batch_only'] = True
 
+    enqueued_at = now
+
     def commit(tx):
+        nonlocal enqueued_at
         previous = tx.get('jobs', segment)
         if previous:
+            enqueued_at = previous.get('enqueued_at')
             return True
         generation = tx.check_privacy(uid, (conversation['id'],))
         tx.put(
@@ -205,7 +211,13 @@ def register_recording(
     if transaction is not None:
         return commit(transaction)
     assert store is not None
-    return store.run(commit)
+    registered = store.run(commit)
+    if registered:
+        if enqueued_at is not None:
+            record_attention.register(uid, conversation['id'], enqueued_at)
+        if pipeline_policy.seal_snapshot(conversation, require_content_revision=False) is not None:
+            record_attention.sealed(uid, conversation['id'], conversation, store=store, now=now)
+    return registered
 
 
 def retained_record_units(
@@ -332,6 +344,11 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         phase_shadow.observe('batch_admission', current, False, now=now)
         raise
     phase_shadow.observe('batch_admission', current, True, now=now)
+    pipeline_receipt = (
+        pipeline_policy.mode() == 'serve'
+        and await run_blocking(db_executor, record_attention.attention.serving, uid)
+        and pipeline_policy.seal_snapshot(current, require_content_revision=False) is not None
+    )
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
@@ -475,6 +492,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
+            **({'pipeline_record_barrier': record_barrier} if pipeline_receipt else {}),
             **({'language_receipts': language_receipts} if language_receipts else {}),
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
@@ -493,17 +511,26 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
     # admitting one owner only exhaust each other's contention retries. Leave
     # the busy owner's other rows due for the next pass instead.
     busy_owners = set()
+    admitted_owners = set()
 
     async def drain_one(segment):
         nonlocal privacy_blocked
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
+            await run_blocking(db_executor, record_attention.completed, segment)
             return
         owner = pending.get('owner_id')
         if owner in busy_owners:
             return
         busy_owners.add(owner)
         try:
+            cap_owner = (
+                pipeline_policy.record_fast_enabled()
+                and pipeline_policy.mode() == 'serve'
+                and await run_blocking(db_executor, record_attention.attention.serving, owner)
+            )
+            if cap_owner and owner in admitted_owners:
+                return
             try:
                 lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
             except BatchPrivacyBlocked:
@@ -514,8 +541,12 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                 privacy_blocked = not await defer_privacy_blocked(segment) or privacy_blocked
                 return
             if lease is None:
+                await run_blocking(db_executor, record_attention.defer, segment, pending.get('available_at', 0))
                 return
-            await admit_and_defer(segment, pending, lease)
+            if cap_owner:
+                admitted_owners.add(owner)
+            await run_blocking(db_executor, record_attention.defer, segment, lease)
+            await admit_and_defer(segment, pending, lease, fast_clock=cap_owner)
         finally:
             busy_owners.discard(owner)
 
@@ -525,7 +556,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             return False
         now = time.time()
         try:
-            return await run_blocking(db_executor, store.defer_privacy_blocked_record, segment, now + delay, now)
+            deferred = await run_blocking(db_executor, store.defer_privacy_blocked_record, segment, now + delay, now)
+            if deferred:
+                await run_blocking(db_executor, record_attention.defer, segment, now + delay)
+            return deferred
         except Exception as error:
             logger.warning(
                 'event=batch_live_admission outcome=privacy_defer_failed exception_type=%s', type(error).__name__
@@ -544,11 +578,21 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             return None
         lease = now + lease_seconds
         latest['available_at'] = lease
+        if pipeline_policy.record_fast_enabled() and pipeline_policy.mode() == 'serve':
+            latest['pipeline_record_lease_until'] = lease
+            latest.pop('pipeline_record_deferred', None)
         tx.put('jobs', segment, latest)
         return lease
 
-    async def admit_and_defer(segment, pending, lease):
+    async def admit_and_defer(segment, pending, lease, *, fast_clock: bool):
         nonlocal partial_count, privacy_blocked
+        attempt_started = time.monotonic()
+        instrument = pipeline_policy.mode() != 'off' and await run_blocking(
+            db_executor, record_attention.attention.admitted, pending['owner_id']
+        )
+        if instrument:
+            enqueued = pipeline_policy.seconds(pending.get('enqueued_at'))
+            record_attention.metrics.stage('record_queue', time.time() - enqueued if enqueued else None)
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
         try:
@@ -620,14 +664,24 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                 # Our own lease ends now; a later deferral written during
                 # admission (or another replica's newer lease) is kept.
                 current = latest.get('available_at', 0)
-                latest['available_at'] = max(0 if current == lease else current, now + delay)
+                retry_at = time.time() if fast_clock else now
+                latest['available_at'] = max(0 if current == lease else current, retry_at + delay)
+                latest.pop('pipeline_record_lease_until', None)
+                if pipeline_policy.record_fast_enabled() and pipeline_policy.mode() == 'serve':
+                    latest['pipeline_record_deferred'] = True
                 tx.put('jobs', segment, latest)
-                return expired
-            return False
+                return None if expired else latest['available_at'], expired
+            return None, False
 
-        expired = await run_blocking(db_executor, store.run, defer)
+        due, expired = await run_blocking(db_executor, store.run, defer)
+        if due is not None:
+            await run_blocking(db_executor, record_attention.defer, segment, due)
+        else:
+            await run_blocking(db_executor, record_attention.completed, segment)
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
+        if instrument:
+            record_attention.metrics.stage('record_admission', time.monotonic() - attempt_started)
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.
@@ -636,9 +690,12 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
 
     try:
         segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
+        full_page = len(segments) == batch_size
+        segments = await run_blocking(db_executor, record_attention.select, segments, batch_size)
         # Every replica selects the same oldest page; a per-replica order plus
         # the per-row lease keeps replicas from admitting the same rows at once.
-        random.shuffle(segments)
+        if not (pipeline_policy.record_fast_enabled() and pipeline_policy.mode() == 'serve'):
+            random.shuffle(segments)
         remaining = iter(segments)
         # Join every worker even on failure; a retry must not overlap unfinished
         # work from this pass. Across replicas the existing intake/partial CAS
@@ -649,7 +706,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         for result in results:
             if isinstance(result, BaseException):
                 raise result
-        return len(segments) == batch_size and not privacy_blocked
+        return full_page and not privacy_blocked
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
