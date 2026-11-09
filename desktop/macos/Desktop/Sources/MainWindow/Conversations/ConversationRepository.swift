@@ -560,8 +560,10 @@ final class ConversationRepository {
           current: cached)
       }
       try ensureCurrentSession(session)
-      guard let seed else { throw error }
-      return confirmedRestores[id] ?? seed
+      guard let current = conversations.first(where: { $0.id == id }) ?? confirmedRestores[id] ?? seed else {
+        throw error
+      }
+      return current
     }
   }
 

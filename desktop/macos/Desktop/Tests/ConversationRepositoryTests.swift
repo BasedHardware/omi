@@ -1133,6 +1133,24 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.conversations.first?.homeStep, "failed")
   }
 
+  func testFailedDetailWithoutCacheReturnsCurrentHomeProjection() async throws {
+    let seed = makeConversation(status: .processing, revision: 1)
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 2)
+    let remote = FakeConversationRemote(listResult: .success([seed]))
+    let pending = SuspendedConversationResults()
+    remote.detailHandler = { id in try await pending.result(for: id) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all, includeCache: false)
+    let request = Task { try await repository.detail(id: seed.id, seed: seed) }
+    await pending.waitUntilRequested(seed.id)
+    repository.replace(failed)
+    await pending.resume(seed.id, with: .failure(TestFailure.offline))
+    let detail = try await request.value
+    XCTAssertEqual(detail.homeStep, "failed")
+    XCTAssertEqual(detail.displayState, .failed)
+    XCTAssertFalse(detail.needsProcessingDetailRefresh)
+  }
+
   func testLegacyDetailAndReplacementKeepProcessingBehavior() async throws {
     let processing = makeConversation(status: .processing, revision: 1)
     let remote = FakeConversationRemote(listResult: .success([processing]))
