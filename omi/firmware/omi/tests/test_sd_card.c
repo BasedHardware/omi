@@ -792,7 +792,7 @@ static void test_boot_mount_retries_with_backoff(void)
     start = z_stub_now_ms;
     int attempts = 0;
     while (z_stub_now_ms - start < 10 * 60 * 1000) {
-        int rc = sd_mount_gated();
+        int rc = sd_mount_gated(false);
         CHECK(rc != 0);
         if (rc != -EAGAIN) {
             attempts++;
@@ -811,10 +811,24 @@ static void test_boot_mount_retries_with_backoff(void)
     CHECK(z_init_calls == before);
     sd_shutdown_in_progress = false;
 
+    /* Review finding: the card is powered off between failed retries, so
+     * is_sd_on() is false and shutdown used to skip app_sd_off(). The gate
+     * itself must close: no write, power-on or boot path may mount after
+     * sd_begin_shutdown(), even once the backoff has expired. */
+    CHECK(!is_sd_on());
+    sd_begin_shutdown();
+    z_stub_now_ms = sd_mount_retry_at_ms + 1;
+    before = z_init_calls;
+    CHECK(sd_mount_gated(true) == -ESHUTDOWN);
+    CHECK(sd_mount_gated(false) == -ESHUTDOWN);
+    CHECK(sd_boot_mount() == -ESHUTDOWN);
+    CHECK(z_init_calls == before);
+    sd_shutdown_in_progress = false;
+
     /* Recovery resets the backoff. */
     z_init_fail_remaining = 0;
     z_stub_now_ms = sd_mount_retry_at_ms;
-    CHECK(sd_mount_gated() == 0);
+    CHECK(sd_mount_gated(false) == 0);
     CHECK(sd_mount_backoff_ms == 0);
     printf("boot_mount_retries_with_backoff ok\n");
 }

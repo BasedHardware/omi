@@ -19,6 +19,7 @@ struct k_work {
 static struct k_work battery_work;
 static bool is_connected;
 static bool is_charging;
+static bool charge_known = true;
 static struct battery_critical_guard battery_critical;
 static void *current_connection;
 static uint8_t battery_percentage, bas;
@@ -42,6 +43,7 @@ int battery_get_percentage(uint8_t *percent, uint16_t mv)
 void battery_get_diagnostics(struct battery_diagnostics *d)
 {
     d->millivolts = 4000;
+    d->charge_pin = charge_known ? (is_charging ? 1U : 0U) : UINT8_MAX;
 }
 static int bt_bas_set_battery_level(uint8_t percent)
 {
@@ -98,5 +100,15 @@ int main(void)
     adc_error = 0;
     broadcast_battery_level(NULL);
     assert(shutdowns == 2);
+    /* Review finding: an unreadable charger pin must not leave a stale
+     * "charging" suppressing protection; unknown counts as not charging. */
+    battery_critical = (struct battery_critical_guard){0};
+    is_charging = true;
+    charge_known = false;
+    broadcast_battery_level(NULL);
+    broadcast_battery_level(NULL);
+    assert(shutdowns == 2);
+    broadcast_battery_level(NULL);
+    assert(shutdowns == 3);
     puts("disconnected BAS, raw diagnostics and debounced, charger-aware critical shutdown passed");
 }

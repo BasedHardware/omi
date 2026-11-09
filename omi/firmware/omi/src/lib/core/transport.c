@@ -1014,8 +1014,8 @@ void broadcast_battery_level(struct k_work *work_item)
                                          : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
     int battery_err = battery_get_millivolt(&battery_millivolt);
+    struct battery_diagnostics battery = {.charge_pin = UINT8_MAX};
     if (battery_err == 0) {
-        struct battery_diagnostics battery;
         battery_get_diagnostics(&battery);
         omi_diagnostics_set_battery_mv(battery.millivolts);
     } else {
@@ -1039,8 +1039,11 @@ void broadcast_battery_level(struct k_work *work_item)
             LOG_ERR("Error updating battery level: %d", err);
         }
         /* Debounced and never while charging (3.0.24): one sag below the
-         * threshold, or a reading on the charger, no longer powers off. */
-        if (battery_critical_should_shutdown(&battery_critical, battery_millivolt, is_charging)) {
+         * threshold, or a reading on the charger, no longer powers off. An
+         * unreadable charger pin (charge_pin unknown) counts as not charging,
+         * so a stale "charging" can never suppress protection indefinitely. */
+        bool charging = battery.charge_pin == 1U;
+        if (battery_critical_should_shutdown(&battery_critical, battery_millivolt, charging)) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
             turnoff_all();
         }

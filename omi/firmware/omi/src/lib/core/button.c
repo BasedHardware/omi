@@ -376,6 +376,9 @@ void turnoff_all()
     k_msleep(100);
 #endif
 
+    /* Close the mount gate first: a failing card is off between backoff
+     * retries, so is_sd_on() alone would let a retry power it back on. */
+    sd_begin_shutdown();
     if (is_sd_on()) {
         app_sd_off();
     }
