@@ -787,8 +787,11 @@ def input_expiring_candidates(client, namespace, now, *, after=None):
             # objects belong in the enqueue stream; replacements use their own.
             if field == 'enqueued_at' and 'audio_staged_at' in job:
                 continue
-            stamp = staged_enqueue(job)
-            if stamp is not None and stamp <= cutoff and held_input_leg(job):
+            try:
+                stamp, leg = staged_enqueue(job), held_input_leg(job)
+            except (TypeError, AttributeError):
+                continue  # Malformed eligibility metadata cannot pin the age cursor.
+            if stamp is not None and stamp <= cutoff and leg:
                 candidates.append((doc.id, job))
         cursors[field] = {'at': docs[-1].to_dict()[field], 'id': docs[-1].id} if len(docs) == 128 else None
     return sorted(candidates, key=lambda pair: (staged_enqueue(pair[1]), pair[0])), cursors

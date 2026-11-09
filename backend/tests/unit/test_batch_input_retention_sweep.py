@@ -107,15 +107,17 @@ def test_due_row_behind_long_name_cursor_fires_before_cursor_page_in_one_tick(se
     assert age.calls == [('enqueued_at', 128, None), ('audio_staged_at', 128, None)]
 
 
-def test_fresh_restage_prefix_cannot_pin_legacy_urgency_cursor(setup, monkeypatch):
+@pytest.mark.parametrize('prefix', ['fresh_restage', 'malformed_route'])
+def test_skipped_prefix_cannot_pin_legacy_urgency_cursor(setup, monkeypatch, prefix):
     client, store, age = urgent_runner(setup, monkeypatch)
     for i in range(129):
         sid = f'restaged-{i:03d}'
+        patch = {'audio_staged_at': NOW29} if prefix == 'fresh_restage' else {'stt_route': ['provider']}
         client.rows['batch_pipeline_prod_jobs', sid] = {
             **deepcopy(row(client)),
             'segment_id': sid,
             'enqueued_at': ENQUEUED - 1,
-            'audio_staged_at': NOW29,
+            **patch,
         }
     assert sweep.HeldDeadLetter(store).tick(NOW29) == {'expired': 0, 'requeued': 0}
     assert row(client)['state'] == 'quarantined'
