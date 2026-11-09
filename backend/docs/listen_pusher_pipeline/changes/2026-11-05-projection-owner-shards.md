@@ -41,7 +41,7 @@ parts.
    continuations keep their FIFO behavior. Future captures use backlog, with no
    clock-skew allowance. Tail discovery routes each owner using its freshest
    capture across the bounded pages, retaining its oldest commit for backlog.
-4. **Every non-terminal head has an exit.**
+4. **Failing and eligible blocked heads have a bounded exit.**
    - Failing heads already took the held disposition after 24 h. That bound
      is now `BATCH_PROJECTION_HEAD_DEADLINE_SECONDS`.
    - Behind `BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED` (default off),
@@ -83,3 +83,8 @@ A passive live-target stop hands the taken wake back to the shard pump while
 its local hold remains, allowing the existing durable retry score to be
 persisted immediately. The owner leaves inflight admission and a replacement
 pump still waits for that score; the local hold creates no extra request.
+
+Every delayed retry, including an unchanged privacy head or held claim, also
+hands back its shard inflight admission while retaining its local timer and
+the pump's existing durable retry policy. Drain requests from an event-loop
+caller route on `db_executor`; a Redis push failure still records local intent.

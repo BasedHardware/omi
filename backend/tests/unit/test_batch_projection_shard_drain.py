@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import contextmanager
+import threading
 
 import fakeredis
 import pytest
@@ -115,11 +116,121 @@ async def test_router_sends_foreign_owners_to_their_holder(claims):
     owner = next(f'o{n}' for n in range(1000) if pumps[1].shards.owns(owner_key(f'o{n}')))
     ids = chain(log, owner, owner, 2)
     # A recovery wake on process 0 asks for a drain of process 1's owner.
-    pumps[0].projector.request_drain(owner)
+    await asyncio.to_thread(pumps[0].projector.request_drain, owner)
     assert pumps[0].projector.drain_requests == {}
     await pumps[1].tick()
     await quiesce([pumps[1].projector])
     assert log.persist_order == ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('redis_fails', [False, True])
+async def test_async_drain_request_keeps_loop_responsive_during_redis(claims, monkeypatch, redis_fails):
+    client = fakeredis.FakeRedis()
+    shards = ProjectionShards('ns', count=1, client=lambda: client, clock=lambda: 1000.0)
+    projector = projector_for(ResultLog())
+    pump = ShardPump(projector, shards)
+    projector.router = pump.route
+    shards.refresh()
+    entered, release, completed = threading.Event(), threading.Event(), asyncio.Event()
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    threads = []
+    real_eval = client.eval
+
+    def slow_eval(*args, **kwargs):
+        threads.append(threading.current_thread().name)
+        entered.set()
+        try:
+            # Old inline routing fails immediately; do not freeze the test loop.
+            assert threading.get_ident() != loop_thread, 'Redis ran on the event loop'
+            assert release.wait(10), 'test did not release Redis'
+            if redis_fails:
+                raise ConnectionError('Redis unavailable')
+            return real_eval(*args, **kwargs)
+        finally:
+            loop.call_soon_threadsafe(completed.set)
+
+    monkeypatch.setattr(client, 'eval', slow_eval)
+    try:
+        projector.request_drain('owner')
+        assert await asyncio.to_thread(entered.wait, 10)
+        # Redis is still waiting, while this task and another loop turn run.
+        await asyncio.sleep(0)
+        assert not release.is_set()
+        assert threads and all(name.startswith('db') for name in threads)
+    finally:
+        release.set()
+        await asyncio.wait_for(completed.wait(), 10)
+        monkeypatch.setattr(client, 'eval', real_eval)
+        # Completion is signaled inside eval; fence the remainder of the router.
+        for _ in range(1000):
+            if shards.take(BACKLOG, 1) or projector.owes_drains:
+                break
+            await asyncio.sleep(0.001)
+        else:
+            pytest.fail('route did not finish or preserve its local fallback')
+    assert bool(projector.drain_requests) == redis_fails
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stop', ['privacy_unchanged', 'blocked_privacy_deleted', 'claim_held'])
+async def test_delayed_drain_returns_shard_wake_for_retry(claims, monkeypatch, stop):
+    monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: (a + b) / 2)
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', 'on')
+    now = [1000.0]
+    client = fakeredis.FakeRedis()
+    shards = ProjectionShards('ns', count=1, client=lambda: client, clock=lambda: now[0])
+    projector = projector_for(ResultLog())
+    drains = projector.ensure_drains()
+    pump = ShardPump(projector, shards, monotonic=lambda: now[0])
+
+    async def turn(owner):
+        drains.stops[owner] = stop
+        return False
+
+    monkeypatch.setattr(drains, 'run', turn)
+    monkeypatch.setattr(drains, 'privacy_head_unchanged', lambda owner: (True, False))
+    if stop == 'claim_held':
+        monkeypatch.setattr(projection_drain, 'projection_claim_held', lambda namespace, key: True)
+    shards.refresh()
+    shards.push('owner', owner_key('owner'), FRESH, 990.0)
+    try:
+        assert await pump.tick() == 1
+        if stop == 'privacy_unchanged':
+            # The admitted task rechecks a privacy head before its existing TTL.
+            drains.defer('owner', delay=300)
+            drains.privacy_heads['owner'] = ('head', 'version')
+        await quiesce([projector])
+        assert 'owner' in drains.delayed
+        assert 'owner' not in pump.inflight
+        if stop == 'claim_held':
+            # Claims keep their lane position and only use the existing local
+            # cooldown; privacy retries use the durable backlog score below.
+            assert not pump.deferring
+            assert pump.cooldown['owner'] == now[0] + projection_shard_pump.CLAIM_RETRY_SECONDS
+            return
+        assert pump.deferring
+        retry_at = pump.deferring[0][1]
+        assert await pump.tick() == 0
+        assert client.zscore(shards._lane_key(BACKLOG, 0), 'owner') == retry_at
+        # A replacement process has no local hold; the durable wake must wait
+        # until due, then be admitted and settled rather than stranded inflight.
+        drains.close()
+        monkeypatch.setattr(projection_drain, 'projection_claim_held', lambda namespace, key: False)
+        next_projector = projector_for(ResultLog())
+        next_pump = ShardPump(next_projector, shards, monotonic=lambda: now[0])
+        now[0] = retry_at - 0.001
+        assert await next_pump.tick() == 0
+        now[0] = retry_at
+        assert await next_pump.tick() == 1
+        await quiesce([next_projector])
+        await next_pump.tick()
+        assert next_pump.inflight == {}
+        assert shards.take(FRESH, 1) == shards.take(BACKLOG, 1) == []
+        next_projector.ensure_drains().close()
+    finally:
+        drains.close()
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy, kill_switch
+import asyncio
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
@@ -517,10 +518,23 @@ class Projector:
         # Sharded serving: an owner whose shard another member holds is routed
         # there as a wake instead of draining here (see projection_shards).
         router = self.router
-        if router is not None and not router(owner_id):
+        if router is None:
+            self.request_local_drain(owner_id)
             return
-        with self.handoff:
-            self.drain_requests[owner_id] = None
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self._route_drain(owner_id, router)
+        else:
+            # Routing may do bounded Redis I/O. This short handoff must not
+            # freeze an async caller, and its worker retains the local fallback.
+            from utils.executors import db_executor, submit_with_context
+
+            submit_with_context(db_executor, self._route_drain, owner_id, router)
+
+    def _route_drain(self, owner_id: str, router: Callable[[str], bool]) -> None:
+        if router(owner_id):
+            self.request_local_drain(owner_id)
 
     def request_local_drain(self, owner_id: str) -> None:
         """Queue a drain in this process, bypassing the shard router."""

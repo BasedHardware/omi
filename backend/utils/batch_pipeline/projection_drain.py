@@ -94,9 +94,9 @@ class OwnerDrains:
         self.turn_stops: dict[str, str] = {}
         self.closed = False
         # Called as ``on_idle(owner, stop)`` once an owner leaves this drain
-        # entirely (no task, queue entry, delay or continuation). Shard pumps
-        # settle or cool their wakes here. A passive live-target hold also
-        # hands its wake back, so a local timer cannot strand shard inflight state.
+        # entirely or enters a delayed retry. Shard pumps settle or cool their
+        # wakes here; the local delay/timer remains in place, but must never
+        # retain a shard inflight admission while no turn is running.
         self.on_idle: Callable[[str, str], None] | None = None
         # Optional shard admission policy; legacy productive turns keep their FIFO.
         self.yield_continuation: Callable[[str], bool] | None = None
@@ -278,7 +278,7 @@ class OwnerDrains:
         last = self.turn_stops.pop(owner, None)
         if task.exception() is not None:
             last = 'error'
-        if self.on_idle is not None and (not self.busy(owner) or passive_live_target):
+        if self.on_idle is not None and (not self.busy(owner) or owner in self.delayed or passive_live_target):
             try:
                 # Only a turn that walked to the chain end reports 'end'.
                 self.on_idle(owner, stop or last or 'unknown')
