@@ -27,8 +27,12 @@ parts.
    arriving during the drain keeps its lane position. Productive shard owners
    yield after one drain turn and re-enter backlog admission one pump tick later,
    behind already-due work; the two-slot backlog reserve applies again on every
-   admission. Legacy local continuations keep their FIFO behavior. Future
-   captures use backlog, with no clock-skew allowance. Tail discovery routes each owner using its freshest
+   admission. Redis takes only scores at or before the wall clock, before the
+   page limit, and admission checks that bound again. Persisted future retry
+   scores survive holder restarts or moves without consuming backlog reserve;
+   reading them neither mutates their score nor their sequence. Legacy local
+   continuations keep their FIFO behavior. Future captures use backlog, with no
+   clock-skew allowance. Tail discovery routes each owner using its freshest
    capture across the bounded pages, retaining its oldest commit for backlog.
 4. **Every non-terminal head has an exit.**
    - Failing heads already took the held disposition after 24 h. That bound

@@ -279,13 +279,15 @@ class ShardPump:
     def pick(self, fresh: list[Wake], backlog: list[Wake], free: int, drains) -> dict[str, list[Wake]]:
         """Fresh first, keeping ``backlog_reserve`` slots for waiting backlog."""
         now = self.monotonic()
+        due_at = self.shards.clock()
 
         settling = {w.owner_id for w in self.settling} | {w.owner_id for w, _ in self.deferring}
 
         def eligible(wake: Wake) -> bool:
             owner = wake.owner_id
             return (
-                owner not in self.inflight
+                wake.score <= due_at
+                and owner not in self.inflight
                 and owner not in settling
                 and not drains.busy(owner)
                 and owner not in self.projector.draining

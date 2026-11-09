@@ -445,6 +445,7 @@ def test_end_settles_the_wake_and_a_stuck_owner_cools_down(server, blocking_inli
     pump, shards, drains = pump_for(server, limit=2)
     now = [100.0]
     pump.monotonic = lambda: now[0]
+    shards.clock = lambda: 1000.0 + now[0] - 100.0
     shards.push('done', owner_key('done'), FRESH, 2.0)
     shards.push('stuck', owner_key('stuck'), FRESH, 1.0)
     asyncio.run(pump.tick())
@@ -453,8 +454,8 @@ def test_end_settles_the_wake_and_a_stuck_owner_cools_down(server, blocking_inli
     asyncio.run(pump.tick())
     assert shards.take(FRESH, 10) == []
     # The stuck wake waits in backlog at its retry time, not at the lane head.
-    (deferred,) = shards.take(BACKLOG, 10)
-    assert deferred.owner_id == 'stuck' and deferred.score > 1000.0
+    assert shards.take(BACKLOG, 10) == []
+    assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'stuck') > 1000.0
     assert drains.requested == ['done', 'stuck']  # stuck is cooling, not retaken
     now[0] += projection_shard_pump.STUCK_RETRY_SECONDS * 1.3
     asyncio.run(pump.tick())
@@ -497,6 +498,8 @@ def test_defer_keeps_a_wake_that_was_pushed_since_the_take(server):
     (wake,) = shards.take(FRESH, 10)
     assert shards.defer(wake, 9999.0) is True
     assert shards.take(FRESH, 10) == []
+    assert shards.take(BACKLOG, 10) == []
+    shards.clock = lambda: 9999.0
     assert [(w.owner_id, w.score) for w in shards.take(BACKLOG, 10)] == [('a', 9999.0)]
 
 
@@ -535,8 +538,8 @@ def test_stuck_owner_in_both_lanes_moves_behind_due_backlog(server, blocking_inl
     asyncio.run(pump.tick())
     assert shards.take(FRESH, 10) == []
     backlog = shards.take(BACKLOG, 10)
-    assert [wake.owner_id for wake in backlog] == ['due', 'stuck']
-    assert backlog[1].score > 1000.0
+    assert [wake.owner_id for wake in backlog] == ['due']
+    assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'stuck') > 1000.0
     assert drains.requested == ['stuck', 'due']
 
 
@@ -1007,3 +1010,65 @@ def test_future_capture_does_not_hide_a_valid_fresh_commit(server):
     (wake,) = shards.take(FRESH, 10)
     assert wake.owner_id == 'mixed' and wake.score == 990.0
     assert shards.take(BACKLOG, 10) == []
+
+
+@pytest.mark.parametrize('lane', [FRESH, BACKLOG])
+def test_take_returns_only_due_wakes_without_hiding_them_behind_future_scores(server, lane):
+    now = [1000.0]
+    shards = make(server, count=1, clock=lambda: now[0])
+    shards.refresh()
+    shards.push('due', owner_key('due'), lane, 1000.0)
+    shards.push('future', owner_key('future'), lane, 1050.0)
+    client = shards._client()
+    lane_key, seq_key = shards._lane_key(lane, 0), shards._seq_key(lane, 0)
+    before = client.zrange(lane_key, 0, -1, withscores=True), client.hgetall(seq_key)
+    assert [(w.owner_id, w.score) for w in shards.take(lane, 1)] == [('due', 1000.0)]
+    now[0] = 1049.99
+    assert [w.owner_id for w in shards.take(lane, 10)] == ['due']
+    assert (client.zrange(lane_key, 0, -1, withscores=True), client.hgetall(seq_key)) == before
+    now[0] = 1050.0
+    assert [w.owner_id for w in shards.take(lane, 10)] == (['future', 'due'] if lane == FRESH else ['due', 'future'])
+
+
+@pytest.mark.parametrize('stop', ['blocked_other', 'yielded'])
+def test_new_holder_honors_persisted_retry_without_reserving_backlog_slots(server, blocking_inline, monkeypatch, stop):
+    monkeypatch.setenv('BATCH_PROJECTION_BACKLOG_RESERVE', '2')
+    monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: 1.0)
+    now = [1000.0]
+    old, shards, old_drains = pump_for(server, limit=4)
+    shards.clock = lambda: now[0]
+    shards.push('retry', owner_key('retry'), FRESH, 990.0)
+    assert asyncio.run(old.tick()) == 1
+    old_drains.finish('retry', stop)
+    assert asyncio.run(old.tick()) == 0  # Flush the deferred wake to Redis.
+    client = shards._client()
+    lane_key, seq_key = shards._lane_key(BACKLOG, 0), shards._seq_key(BACKLOG, 0)
+    stored = client.zscore(lane_key, 'retry'), client.hget(seq_key, 'retry')
+    retry_at = stored[0]
+    assert retry_at > now[0]
+    shards.release()
+    replacement = make(server, count=1, clock=lambda: now[0])
+    replacement.refresh()
+    drains = FakeDrains(4)
+    pump = ShardPump(FakeProjector(drains), replacement)
+    assert pump.cooldown == {}  # New process has none of the old holder's state.
+    for index in range(4):
+        replacement.push(f'fresh{index}', owner_key(f'fresh{index}'), FRESH, 999.0 - index)
+    assert asyncio.run(pump.tick()) == 4
+    assert drains.requested == [f'fresh{i}' for i in range(4)]  # No premature backlog reserve.
+    assert (client.zscore(lane_key, 'retry'), client.hget(seq_key, 'retry')) == stored
+    for owner in list(drains.tasks):
+        drains.finish(owner, 'end')
+    now[0] = retry_at - 0.01
+    assert asyncio.run(pump.tick()) == 0
+    assert pump.cooldown == {}
+    now[0] = retry_at
+    assert asyncio.run(pump.tick()) == 1
+    assert drains.requested[-1] == 'retry'
+
+
+def test_pick_excludes_future_scores_before_calculating_backlog_reserve(server):
+    pump, _, drains = pump_for(server, limit=3)
+    fresh = [Wake('future-fresh', FRESH, 0, 1100.0)] + [Wake(f'fresh{i}', FRESH, 0, 999.0 - i) for i in range(3)]
+    backlog = [Wake('future-backlog', BACKLOG, 0, 1100.0)]
+    assert list(pump.pick(fresh, backlog, 3, drains)) == [f'fresh{i}' for i in range(3)]

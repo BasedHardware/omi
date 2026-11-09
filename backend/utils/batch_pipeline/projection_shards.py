@@ -89,14 +89,14 @@ redis.call('expire', KEYS[1], ARGV[4])
 redis.call('expire', KEYS[2], ARGV[4])
 return seq
 """
-# KEYS[1]: lane zset, KEYS[2]: sequence hash. ARGV[1]: 'asc' or 'desc', ARGV[2]: limit.
-# Returns member, score, sequence triples.
+# KEYS[1]: lane zset, KEYS[2]: sequence hash. ARGV: order, limit, due-at cutoff.
+# Returns due member, score, sequence triples without mutating future wakes.
 _TAKE_LUA = """
 local page
 if ARGV[1] == 'desc' then
-  page = redis.call('zrevrange', KEYS[1], 0, tonumber(ARGV[2]) - 1, 'WITHSCORES')
+  page = redis.call('zrevrangebyscore', KEYS[1], ARGV[3], '-inf', 'WITHSCORES', 'LIMIT', 0, ARGV[2])
 else
-  page = redis.call('zrange', KEYS[1], 0, tonumber(ARGV[2]) - 1, 'WITHSCORES')
+  page = redis.call('zrangebyscore', KEYS[1], '-inf', ARGV[3], 'WITHSCORES', 'LIMIT', 0, ARGV[2])
 end
 local out = {}
 for i = 1, #page, 2 do
@@ -360,13 +360,16 @@ class ProjectionShards:
     def take(self, lane: str, limit: int, shards: Iterable[int] | None = None) -> list[Wake]:
         """Read (never remove) up to ``limit`` wakes per held shard, best first.
 
-        Fresh wakes come newest capture first; backlog wakes oldest commit first.
+        Only scores at or before the wall clock are due, including after a
+        holder restart. Filter before limiting so future wakes cannot hide due
+        work. Fresh wakes come newest first; backlog wakes oldest first.
         Shards interleave so one deep shard cannot crowd out the others.
         """
         shards = sorted(self.held if shards is None else shards)
         if not shards or limit <= 0:
             return []
         try:
+            due_at = self.clock()
             pipe = self._client().pipeline(transaction=False)
             for shard in shards:
                 pipe.eval(
@@ -376,6 +379,7 @@ class ProjectionShards:
                     self._seq_key(lane, shard),
                     'desc' if lane == FRESH else 'asc',
                     limit,
+                    due_at,
                 )
             pages = pipe.execute()
         except Exception as error:
