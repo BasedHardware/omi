@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 
@@ -19,11 +20,11 @@ class ReadableGoogleCalendar {
     this.available,
   );
 
-  factory ReadableGoogleCalendar.fromJson(Map<String, dynamic> json) => ReadableGoogleCalendar(
-        json['id'] as String,
-        json['name'] as String,
-        json['primary'] as bool,
-        json['available'] as bool,
+  factory ReadableGoogleCalendar.fromGenerated(wire.GeneratedReadableCalendar generated) => ReadableGoogleCalendar(
+        generated.id,
+        generated.name,
+        generated.primary,
+        generated.available,
       );
 }
 
@@ -38,14 +39,10 @@ class GoogleCalendarSelection {
     this.selectedIds,
   );
 
-  factory GoogleCalendarSelection.fromJson(Map<String, dynamic> json) => GoogleCalendarSelection(
-        json['account_id'] as String,
-        (json['calendars'] as List)
-            .map(
-              (row) => ReadableGoogleCalendar.fromJson(row as Map<String, dynamic>),
-            )
-            .toList(),
-        (json['selected_ids'] as List).cast<String>().toSet(),
+  factory GoogleCalendarSelection.fromGenerated(wire.GeneratedCalendarSelection generated) => GoogleCalendarSelection(
+        generated.accountId,
+        generated.calendars.map(ReadableGoogleCalendar.fromGenerated).toList(),
+        generated.selectedIds.toSet(),
       );
 }
 
@@ -65,15 +62,17 @@ Future<GoogleCalendarSelection> googleCalendarSelection(
       method: selection == null ? 'GET' : 'PUT',
       body: selection == null
           ? ''
-          : jsonEncode({
-              'account_id': selection.accountId,
-              'selected_ids': selection.selectedIds.toList(),
-            }),
+          : jsonEncode(wire.GeneratedCalendarSelectionUpdate(
+              accountId: selection.accountId,
+              selectedIds: selection.selectedIds.toList(),
+            ).toJson()),
     ),
     canSend: current,
     decode: (body) {
       try {
-        return GoogleCalendarSelection.fromJson(jsonDecode(body) as Map<String, dynamic>);
+        return GoogleCalendarSelection.fromGenerated(
+          wire.GeneratedCalendarSelection.fromJson(jsonDecode(body) as Map<String, dynamic>),
+        );
       } on TypeError {
         throw const FormatException('Invalid calendar selection response');
       }

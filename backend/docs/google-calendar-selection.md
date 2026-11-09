@@ -67,7 +67,8 @@ this same authority rather than reintroducing a primary-only source.
       reload, secondary-only reads, removable inaccessible calendar, and an explicit
       Google connection entry point for legacy browser-only users
 - [x] Windows/Linux typecheck, 30 UI/transport/owner-fence tests and changed-file ESLint
-- [ ] Generated API/schema consumers and repository preflight
+- [x] Generated API/schema consumers and repository preflight; 14 schema
+      inventory and 29 Dart-generator/UTF-8 contract tests
 - [ ] Final diff review and exact-head CI; remain draft until required gates pass
 
 Provider verification and backend/app releases must be recorded separately from
@@ -84,7 +85,7 @@ selection. Once saved, the shared server reads apply it to older clients too.
 No existing imported memories, source recordings or connected credentials are
 deleted by this change.
 
-Before readiness, record live Personal and Workspace test-account results for
+Before readiness, record live Personal and Workspace account results with approved QA access for
 calendar discovery, selected secondary reads, reconnect and access revocation.
 This verifies Google's grant/admin policy boundary; synthetic contract fixtures
 do not replace it. Exact-head CI must also pass.
