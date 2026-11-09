@@ -412,10 +412,13 @@ class RegistryFixture(unittest.TestCase):
         self.assertNotIn("stale registry entry: delete it or restore the read: SPARSE_MOBILE_GATE", errors)
 
     def test_deploy_key_missing_from_registry(self) -> None:
-        self.write("backend/deploy/runtime_env/_base.yaml", "services:\n  MISSING_KILL_SWITCH:\n    value: false\n")
+        self.write(
+            "backend/deploy/runtime_env/_base.yaml",
+            "environment_shared:\n  cloud_run:\n    services:\n      backend:\n        env:\n          MISSING_KILL_SWITCH:\n            value: false\n",
+        )
         self.assertTrue(
             any(
-                "backend/deploy/runtime_env/_base.yaml:2: undeclared registry flag: MISSING_KILL_SWITCH" in e
+                "backend/deploy/runtime_env/_base.yaml:6: undeclared registry flag: MISSING_KILL_SWITCH" in e
                 for e in self.errors()
             )
         )
@@ -724,9 +727,7 @@ class RegistryFixture(unittest.TestCase):
             ".github/actions/deploy/action.yml",
             "run: gcloud run services update custom-worker --project based-hardware --update-env-vars EXAMPLE_PERCENT=10\n",
         )
-        errors = self.errors()
-        self.assertEqual(1, len(errors))
-        self.assertIn("for custom-worker/prod", errors[0])
+        self.assertEqual([], self.errors())
 
     def test_values_file_without_env_prefix_is_paired_in_each_referenced_environment(self) -> None:
         self.duplicate_fixture()
@@ -742,9 +743,23 @@ class RegistryFixture(unittest.TestCase):
             {(item.workload, item.environment) for item in declared},
         )
 
+    def test_duplicate_identity_includes_platform_even_when_workload_name_matches(self) -> None:
+        from feature_flag_registry import Declaration, duplicate_declaration_sources
+
+        declarations = [
+            Declaration("EXAMPLE_PERCENT", platform + ".yaml", 1, platform, "backend-listen", "dev", platform)
+            for platform in ("gke", "cloud_run_service", "cloud_run_job", "desktop", "action")
+        ]
+        self.assertEqual({}, duplicate_declaration_sources(declarations))
+        declarations.append(Declaration("EXAMPLE_PERCENT", "second.yaml", 1, "gke", "backend-listen", "dev", "second"))
+        self.assertEqual(
+            {("EXAMPLE_PERCENT", "gke", "backend-listen", "dev"): ["gke", "second"]},
+            duplicate_declaration_sources(declarations),
+        )
+
     def test_cloud_run_and_chart_are_different_workloads(self) -> None:
         self.duplicate_fixture()
-        self.manifest_flag(workload="backend", runtime="cloud_run")
+        self.manifest_flag(workload="backend-listen", runtime="cloud_run")
         self.chart_flag()
         self.assertEqual([], self.errors())
 
@@ -760,7 +775,22 @@ class RegistryFixture(unittest.TestCase):
         self.chart_flag(filename="prod_second_values.yaml")
         self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/prod", "\n".join(self.errors()))
 
-    def test_action_and_chart_pair_by_workload_and_environment(self) -> None:
+    def test_two_gke_charts_still_fail_alongside_same_named_cloud_run_action(self) -> None:
+        self.duplicate_fixture()
+        first = self.chart_flag("dev")
+        second = self.chart_flag("dev", filename="dev_second_values.yaml")
+        self.write(
+            ".github/actions/deploy/action.yml",
+            "run: gcloud run services update backend-listen --project based-hardware-dev --update-env-vars EXAMPLE_PERCENT=10\n",
+        )
+        errors = self.errors()
+        self.assertEqual(1, len(errors))
+        self.assertIn("for backend-listen/dev", errors[0])
+        self.assertIn(first, errors[0])
+        self.assertIn(second, errors[0])
+        self.assertNotIn(".github/actions/", errors[0])
+
+    def test_cloud_run_action_and_same_named_gke_chart_are_different_platforms(self) -> None:
         self.duplicate_fixture()
         self.chart_flag()
         self.write(
@@ -769,20 +799,23 @@ class RegistryFixture(unittest.TestCase):
         )
         self.assertEqual([], self.errors())
         self.chart_flag("dev")
-        errors = self.errors()
-        self.assertEqual(1, len(errors))
-        self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/dev", errors[0])
-        self.assertIn(".github/actions/deploy/action.yml", errors[0])
+        self.assertEqual([], self.errors())
+        from feature_flag_registry import extract_action_declarations, extract_deploy_declarations
+
+        self.assertEqual({"cloud_run_service"}, {item.platform for item in extract_action_declarations(self.root)})
+        self.assertEqual({"gke"}, {item.platform for item in extract_deploy_declarations(self.root)})
 
     def test_action_uses_its_command_not_another_target_in_the_step(self) -> None:
         self.duplicate_fixture()
-        self.chart_flag("dev")
+        self.manifest_flag("dev.overlay.yaml", runtime="cloud_run")
         self.write(
             ".github/actions/deploy/action.yml",
             "run: |\n  gcloud run services update other --update-env-vars OTHER=0\n"
             "  gcloud run services update backend-listen --update-env-vars EXAMPLE_PERCENT=10 --project based-hardware-dev\n",
         )
-        self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/dev", "\n".join(self.errors()))
+        self.assertIn(
+            "duplicate declaration: EXAMPLE_PERCENT for cloud_run/services/backend-listen/dev", "\n".join(self.errors())
+        )
 
     def test_inline_chart_entry_is_a_declaration(self) -> None:
         self.duplicate_fixture()

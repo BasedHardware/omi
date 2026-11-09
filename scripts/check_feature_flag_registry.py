@@ -276,7 +276,7 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
             errors.append(f"{declared.path}:{declared.line}: retired name redeclared: {declared.key}")
 
     duplicate_sources = duplicate_declaration_sources(declarations)
-    for (key, workload, environment), sources in duplicate_sources.items():
+    for (key, _platform, workload, environment), sources in duplicate_sources.items():
         errors.append(
             f"duplicate declaration: {key} for {workload}/{environment} appears in {', '.join(sources)}: keep one source, "
             "or declare it in the manifest gke section that validates this chart"

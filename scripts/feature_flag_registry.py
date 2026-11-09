@@ -60,6 +60,7 @@ class Read:
 
 @dataclass(frozen=True)
 class Declaration(Read):
+    platform: str
     workload: str
     environment: str
     source: str
@@ -458,14 +459,15 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
     return reads
 
 
-def _manifest_workload(parents: tuple[str, ...]) -> str | None:
+def _manifest_workload(parents: tuple[str, ...]) -> tuple[str, str] | None:
     # Keep runtime identity: Cloud Run and a GKE pod are different workloads.
     if parents[:1] == ("gke",) and len(parents) == 3 and parents[-1] == "env":
-        return parents[1]
+        return "gke", parents[1]
     if parents == ("desktop_backend", "env"):
-        return "desktop_backend"
+        return "desktop", "desktop_backend"
     if len(parents) == 4 and parents[0] == "cloud_run" and parents[1] in {"services", "jobs"} and parents[-1] == "env":
-        return "/".join(parents[:3])
+        platform = "cloud_run_service" if parents[1] == "services" else "cloud_run_job"
+        return platform, "/".join(parents[:3])
     return None
 
 
@@ -570,10 +572,14 @@ def extract_deploy_declarations(root: Path) -> list[Declaration]:
                 fields = {key.value: value for key, value in node.value}
                 key_node = fields.get("name")
                 candidates = [key_node] if isinstance(key_node, yaml.ScalarNode) else []
+                platform = "gke"
                 source = path
             else:
                 section = parents[1:] if parents[:1] in {("environment_shared",), ("overlay",)} else parents
-                workload = _manifest_workload(section) or "/".join(section) or "manifest"
+                identity = _manifest_workload(section)
+                if identity is None:
+                    continue
+                platform, workload = identity
                 source = f"backend/deploy/runtime_env#{workload}"
                 candidates = [key for key, _ in node.value if isinstance(key, yaml.ScalarNode)]
             for key_node in candidates:
@@ -589,6 +595,7 @@ def extract_deploy_declarations(root: Path) -> list[Declaration]:
                                     key,
                                     path,
                                     key_node.start_mark.line + 1,
+                                    "gke",
                                     owner,
                                     env,
                                     f"backend/deploy/runtime_env#{owner}",
@@ -596,11 +603,13 @@ def extract_deploy_declarations(root: Path) -> list[Declaration]:
                                 for owner in owners
                             )
                         else:
-                            reads.append(Declaration(key, path, key_node.start_mark.line + 1, workload, env, source))
+                            reads.append(
+                                Declaration(key, path, key_node.start_mark.line + 1, platform, workload, env, source)
+                            )
     return reads
 
 
-def _action_targets(path: str, text: str, start: int, gke_workloads: set[str]) -> tuple[str, tuple[str, ...]]:
+def _action_targets(path: str, text: str, start: int) -> tuple[str, str, tuple[str, ...]]:
     # Follow shell continuations in both directions, including flags after the env payload.
     begin = text.rfind("\n", 0, start) + 1
     while begin > 0 and text[:begin].rstrip("\n").endswith("\\"):
@@ -620,7 +629,8 @@ def _action_targets(path: str, text: str, start: int, gke_workloads: set[str]) -
         raise ValueError(f"{path}: cannot resolve workload for flag declaration; use the runtime manifest or chart")
     name = target[1]
     kind = "jobs" if "jobs" in target[0].split() else "services"
-    workload = name if kind == "services" and name in gke_workloads else f"cloud_run/{kind}/{name}"
+    platform = "cloud_run_job" if kind == "jobs" else "cloud_run_service"
+    workload = f"cloud_run/{kind}/{name}"
     if re.search(r"--project(?:=|\s+)[\"']?based-hardware(?:[\"'\s]|$)", command):
         environments = ("prod",)
     elif re.search(r"--project(?:=|\s+)[\"']?based-hardware-dev(?:[\"'\s]|$)", command):
@@ -630,20 +640,13 @@ def _action_targets(path: str, text: str, start: int, gke_workloads: set[str]) -
     else:
         # Shared actions and dispatch-selected environments can deploy to either environment.
         environments = ("dev", "prod")
-    return workload, environments
+    return platform, workload, environments
 
 
 def extract_action_declarations(root: Path) -> list[Declaration]:
     """Find ramp/allowlist literals paired with their deployed workload and environment."""
     files = list((root / ".github/actions").rglob("action.yml"))
     files.extend((root / ".github/workflows").glob("*prod*.y*ml"))
-    # Derive GKE identities from declarations, including values_file-linked
-    # releases, rather than a fixed list of service names.
-    gke_workloads = {
-        item.workload
-        for item in extract_deploy_declarations(root)
-        if not item.workload.startswith("cloud_run/") and item.workload != "desktop_backend"
-    }
     reads: list[Declaration] = []
     for file in files:
         if not file.is_file():
@@ -657,8 +660,8 @@ def extract_action_declarations(root: Path) -> list[Declaration]:
                 key, separator, _ = item.partition("=")
                 key = key.strip()
                 if separator and ("PERCENT" in key or "ALLOWLIST" in key):
-                    workload, environments = _action_targets(path, text, match.start(), gke_workloads)
-                    reads.extend(Declaration(key, path, line, workload, env, path) for env in environments)
+                    platform, workload, environments = _action_targets(path, text, match.start())
+                    reads.extend(Declaration(key, path, line, platform, workload, env, path) for env in environments)
         if path == ".github/actions/sync-backfill-lifecycle/action.yml":
             in_output = False
             for lineno, raw in enumerate(text.splitlines(), 1):
@@ -672,19 +675,25 @@ def extract_action_declarations(root: Path) -> list[Declaration]:
                     if assignment and ("PERCENT" in assignment[1] or "ALLOWLIST" in assignment[1]):
                         reads.extend(
                             Declaration(
-                                assignment[1], path, lineno, "cloud_run/services/backend-sync-backfill", env, path
+                                assignment[1],
+                                path,
+                                lineno,
+                                "cloud_run_service",
+                                "cloud_run/services/backend-sync-backfill",
+                                env,
+                                path,
                             )
                             for env in ("dev", "prod")
                         )
     return reads
 
 
-def duplicate_declaration_sources(declarations: list[Declaration]) -> dict[tuple[str, str, str], list[str]]:
+def duplicate_declaration_sources(declarations: list[Declaration]) -> dict[tuple[str, str, str, str], list[str]]:
     """Reject independent sources; overlays and values_file-validated pairs compose."""
-    sources: dict[tuple[str, str, str], set[str]] = {}
+    sources: dict[tuple[str, str, str, str], set[str]] = {}
     for declaration in declarations:
         if "PERCENT" in declaration.key or "ALLOWLIST" in declaration.key:
-            identity = (declaration.key, declaration.workload, declaration.environment)
+            identity = (declaration.key, declaration.platform, declaration.workload, declaration.environment)
             sources.setdefault(identity, set()).add(declaration.source)
     return {identity: sorted(paths) for identity, paths in sorted(sources.items()) if len(paths) > 1}
 
