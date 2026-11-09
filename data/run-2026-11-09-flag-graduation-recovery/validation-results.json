@@ -1,0 +1,26 @@
+{
+  "code_head": "33a4174a65d606fe9df3c745eb3b81f41ddd7e92",
+  "registry": {
+    "exit_code": 0,
+    "summary": "feature-flag registry: OK; existing duplicate, review-grace and backlog warnings remain unchanged"
+  },
+  "registry_tests": {
+    "exit_code": 0,
+    "passed": 59
+  },
+  "pre_deploy": {
+    "exit_code": 0,
+    "passed_pytest": 511,
+    "passed_admission_unittest": 36,
+    "mode": "hermetic only"
+  },
+  "backend_unit_suite": {
+    "state": "running",
+    "selected_files": 2721
+  },
+  "preflight": {
+    "state": "retry queued",
+    "initial_failure": "test_firestore_query_shapes.py exceeded the 300-second per-file wall budget; no assertion failure shown",
+    "retry": "OMI_CHECKS_JOBS=1 and draft PR body supplied"
+  }
+}

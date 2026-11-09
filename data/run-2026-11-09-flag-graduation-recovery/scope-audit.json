@@ -1,0 +1,302 @@
+{
+  "recovered_commit": "cb58353ace9fafc62da6e8ef89c6700bcde55d21",
+  "base": "82969e2b845b4f1c76d78f63272ad83b11cf9aa0",
+  "input_sha256": {
+    "registry-updates.json": "aab18a9748d8c6687b52520e78e79ee3cc250219217361d43311ea3df1bd4031",
+    "graduate-list.json": "4cb57aff4a5e6e41f0fcf9b0026e9d13a525559b1a4071b88fbe6e231fbc812a",
+    "retire-list.json": "b2115d88d87455496d99bdd82b2b60af5fea6ad4e8583ada0837878c2f7057bf"
+  },
+  "retirement_scope": {
+    "keys": [
+      "ACCOUNT_CUTOVER_COHORT",
+      "ACCOUNT_CUTOVER_ENFORCEMENT",
+      "AUDIO_ARCHIVE_UID_ALLOWLIST",
+      "AUDIO_CANONICAL_PACKING_ENABLED",
+      "BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY",
+      "BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED",
+      "CAPTURE_SHARED_SPEECH_MODE",
+      "CAPTURE_SHARED_SPEECH_PERCENT",
+      "CAPTURE_SHARED_SPEECH_UID_ALLOWLIST",
+      "CONVERSATION_NOTES_AGENT_UID_ALLOWLIST",
+      "DREAM_HISTORY_COMPACT_MODE",
+      "DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT",
+      "DREAM_LIBERAL_VERIFIER_MODE",
+      "DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT",
+      "EDGE_SHADOW_PERCENT",
+      "EPISODE_BOUNDARIES_MODE",
+      "EPISODE_BOUNDARIES_MODE_SERVE_PERCENT",
+      "EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S",
+      "EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT",
+      "FIRST_SUMMARY_UID_ALLOWLIST",
+      "LADDER_V1_BUDGET_ENFORCEMENT_ENABLED",
+      "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION",
+      "LIVE_CAPTURE_WINDOW_RETENTION",
+      "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION",
+      "MEDIA_NOISE_MODE",
+      "MEDIA_NOISE_MODE_SERVE_PERCENT",
+      "MEDIA_NOISE_MODE_SERVE_UID_SHA256S",
+      "MEDIA_NOISE_MODE_SHADOW_PERCENT",
+      "MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS",
+      "MEETING_NOTES_EPISODE_TIERED_ENABLED",
+      "MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS",
+      "MEETING_NOTES_EPISODE_TIER_MIN_WORDS",
+      "MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS",
+      "MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED",
+      "MOBILE_STANDARD_BATCH_UIDS",
+      "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
+      "REPEAT_WORK_REVISION_ENABLED",
+      "SPEAKER_GROUPING_MODE",
+      "STT_LANGUAGE_HINTS_MODE",
+      "STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT",
+      "STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S",
+      "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED"
+    ],
+    "changed_rows": [],
+    "rows_sha256": "0671a93c5ef01fd93dad181b0500a72a411145f3edec5d5fe7ba6ad2ebbaa7de",
+    "production_references": "No retirement-list key reference was removed or added in changed production Python modules after restoring the first-summary allowlist reader. Test references to redundant branches changed with their owning graduate."
+  },
+  "registry_only_scope": {
+    "keys": [
+      "AUDIO_ARCHIVE_PERCENT",
+      "AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT",
+      "AUDIO_ARCHIVE_STOP_PCM_ENABLED",
+      "AUDIO_ARCHIVE_STOP_PCM_PERCENT",
+      "AUDIO_CUSTODY_FRAMED_PERCENT",
+      "AUDIO_MERGE_WORKER_URL",
+      "BATCH_JOBSTORE_MODE",
+      "BATCH_LIVE_STT_RETIRE_PERCENT",
+      "BATCH_PIPELINE_SHARED_LIVE_ENABLED",
+      "CELL_STORE_MODE",
+      "DIRECTORY_ROUTING_MODE",
+      "DIRECTORY_ROUTING_NEW_OWNER_PERCENT",
+      "DREAM_STATE_PASS_MODE",
+      "ENRICHMENT_ROUTE",
+      "MOBILE_STANDARD_BATCH_ENABLED",
+      "MOBILE_STANDARD_BATCH_PERCENT",
+      "OBJECT_LAKE_READ_ENABLED",
+      "OBJECT_LAKE_WRITE_ENABLED",
+      "OBJECT_LAKE_WRITE_PERCENT",
+      "OMI_FLAGS_SOURCE",
+      "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
+      "RECORD_GAP_FILL_PERCENT",
+      "SPACES_SYNC_API_ENABLED",
+      "SYNC_SAFETY_WAL_DEDUPE_ENABLED",
+      "client_telemetry_transport_shadow",
+      "episode_f_join",
+      "proactivity_v2",
+      "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED",
+      "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT",
+      "BUCKET_AUDIO_DERIVED",
+      "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED",
+      "SYNC_DURABLE_REDRIVE_GUARD",
+      "ACTION_ITEMS_V2_MODE",
+      "ACTION_ITEMS_V2_MODE_SERVE_PERCENT",
+      "ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S",
+      "ACTION_ITEM_VALIDITY_MODE",
+      "CALLS_RECAP_MODE",
+      "CALLS_RECAP_MODE_SERVE_PERCENT",
+      "CALLS_RECAP_MODE_SERVE_UID_SHA256S",
+      "CAPTURE_COVERAGE_MODE",
+      "CAPTURE_COVERAGE_MODE_SERVE_PERCENT",
+      "CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S",
+      "CAPTURE_COVERAGE_MODE_SHADOW_PERCENT",
+      "CAPTURE_GROUP_CONTAINMENT_MODE",
+      "CLIENTS_FROM_SEGMENTS_CHUNKS_MODE",
+      "CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT",
+      "CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S",
+      "DREAM_HUNT_BACKOFF_MODE",
+      "DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT",
+      "DREAM_MATERIAL_BUDGET_MODE",
+      "DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT",
+      "DREAM_PRESCAN_MODE",
+      "DREAM_PRESCAN_MODE_SERVE_PERCENT",
+      "DREAM_REQUIRED_INTAKE_BACKLOG_COHORT",
+      "DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED",
+      "LIFECYCLE_V2_MODE",
+      "LIFECYCLE_V2_MODE_SERVE_PERCENT",
+      "LIFECYCLE_V2_MODE_SERVE_UID_SHA256S",
+      "NOTES_PACKET_V2_MODE",
+      "NOTES_PACKET_V2_MODE_SERVE_PERCENT",
+      "NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S",
+      "SONIOX_ORDERED_FINALIZE",
+      "SPEAKER_EVIDENCE_MODE",
+      "SPEAKER_EVIDENCE_MODE_SERVE_PERCENT",
+      "SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S",
+      "SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT",
+      "clients_boundary_evidence",
+      "clients_from_segments_chunks",
+      "clients_refactor",
+      "custody_capture_committed_release",
+      "LADDER_V1_LANE_METERING_ENABLED",
+      "LADDER_V1_MCP_DAILY_CAPS_ENABLED",
+      "LADDER_V1_PRO_GATES_ENABLED",
+      "LADDER_V1_RETIRE_PRO_ALIAS_ENABLED",
+      "LADDER_V1_WIRE_IDENTITY_ENABLED",
+      "LOCKED_CONTENT_RESET_RECOVERY_ENABLED",
+      "STOREFRONT_LADDER_V1_ENABLED",
+      "desktop-contextual-upsells",
+      "desktop-plan-storefront",
+      "mobile-contextual-upsells",
+      "mobile-on-device-overflow",
+      "mobile-plan-storefront",
+      "web-contextual-upsells",
+      "web-plan-storefront",
+      "summary-generation-v2",
+      "SYNC_BACKFILL_ORDER",
+      "SYNC_BACKFILL_ORDER_PERCENT",
+      "SYNC_BACKFILL_ORDER_UID_ALLOWLIST",
+      "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM",
+      "SUMMARY_DEBT_REPAIR_ENABLED",
+      "SYNC_POLL_BACKOFF_ENABLED",
+      "screen_activity_lossless_sync",
+      "screen_activity_lossless_sync_kill",
+      "HELD_CONTENT_COHORT",
+      "mobile-chat-apps",
+      "STT_PRERECORDED_LANGUAGE_GATE_PERCENT",
+      "AUDIO_ARCHIVE_SYNC_ENABLED",
+      "NOTES_TIER_ESCALATION_ENABLED",
+      "OMI_LIST_VERSION_EPOCH",
+      "STT_VOCAB_MODE",
+      "STT_VOCAB_MODE_SERVE_PERCENT",
+      "STT_VOCAB_MODE_SERVE_UID_SHA256S",
+      "STT_VOCAB_MODE_SHADOW_PERCENT"
+    ],
+    "changed_rows": [],
+    "rows_sha256": "edab0037e1945b5693da4ac359e452ea05351fdd64b82acbe2b82527c4034754"
+  },
+  "graduates": {
+    "AUDIO_ARCHIVE_COALESCE_ENABLED": {
+      "prod": "true on all 6 scanned services",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "CONVERSATION_NOTES_AGENT_PERCENT": {
+      "prod": "unset -> 100 (on_all across backend, sync, backfill, integration, batch worker, pusher, record-seal-worker in the 2026-11-08 snapshot, data/run-2026-11-08-audit-fixes/out-s1-sweep.csv)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "EPISODES_CLIENT_CHANNELS": {
+      "prod": "beta,store on run:backend (families.json _prod)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "EPISODES_PERCENT": {
+      "prod": "unset -> default 100",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "LIVE_CAPTURE_WINDOW_MERGE_UNION": {
+      "prod": "true on prod backend-listen and prod pusher; false on run:backend* Cloud Run services",
+      "disposition": "deferred",
+      "review_by": "2026-11-23",
+      "retired": null
+    },
+    "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": {
+      "prod": "true on prod backend-listen and prod pusher; false on run:backend* Cloud Run services",
+      "disposition": "deferred",
+      "review_by": "2026-11-23",
+      "retired": null
+    },
+    "REVIEW_SURFACE_MODE": {
+      "prod": "on on prod-omi-backend-listen, run:backend, run:backend-sync, run:backend-sync-backfill",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT": {
+      "prod": "100 on prod-omi-backend-listen (set out of band on 2026-11-03; the chart was moved to 100 by lead ruling)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "SERVER_BATCH_ONLY_MOBILE_PERCENT": {
+      "prod": "100 on prod-omi-backend-listen",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT": {
+      "prod": "0 on prod-omi-backend-listen",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": {
+      "prod": "true on prod backend-listen and pusher (chart values backend/charts/backend-listen/prod_omi_backend_listen_values.yaml:796-797, pusher :340-341); false on Cloud Run run services",
+      "disposition": "deferred",
+      "review_by": "2026-11-23",
+      "retired": null
+    },
+    "SONIOX_WIRE_LEDGER": {
+      "prod": "true on prod backend-listen and pusher (chart values backend/charts/backend-listen/prod_omi_backend_listen_values.yaml:792-793, pusher :336-337); false on Cloud Run run services",
+      "disposition": "deferred",
+      "review_by": "2026-11-23",
+      "retired": null
+    },
+    "SPEAKER_MATCH_SCORES_ENABLED": {
+      "prod": "true on all six scanned services (listen, pusher, run:backend, run:backend-sync, run:backend-sync-backfill, run:backend-integration)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "STT_ROUTING_MODE": {
+      "prod": "on on prod-omi-backend-listen only",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "STT_ROUTING_ON_PERCENT": {
+      "prod": "100 on prod-omi-backend-listen only",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "SYNC_DURABLE_STATUS_RECONCILIATION": {
+      "prod": "true on run:backend (families _prod; prod.overlay.yaml:895-896)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED": {
+      "prod": "false on run:backend; unset on other services",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "FIRST_SUMMARY_DEADLINE_ENABLED": {
+      "prod": "true/100 on all six scanned services (prod-omi-backend-listen, prod-omi-pusher, run:backend, run:backend-sync, run:backend-sync-backfill, run:backend-integration)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "FIRST_SUMMARY_DEADLINE_PERCENT": {
+      "prod": "100 on all six scanned services (listen, pusher, run:backend, run:backend-sync, run:backend-sync-backfill, run:backend-integration)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED": {
+      "prod": "true on run:backend-sync, run:backend-sync-backfill, run:backend-integration; false on run:backend, prod-omi-backend-listen, prod-omi-pusher",
+      "disposition": "deferred",
+      "review_by": "2026-11-23",
+      "retired": null
+    },
+    "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED": {
+      "prod": "true on run:backend-integration, run:backend-sync, run:backend-sync-backfill (families _prod; prod.overlay.yaml:1018,1405,1939); registry says default false in prod",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    },
+    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {
+      "prod": "true on run:backend-sync and run:backend-sync-backfill; unset on listen, pusher, backend and integration (prod_env.json)",
+      "disposition": "removed",
+      "review_by": null,
+      "retired": "2026-11-09"
+    }
+  },
+  "generated_at": "2026-11-09T06:19:58.325849+00:00"
+}
