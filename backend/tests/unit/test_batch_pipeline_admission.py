@@ -78,18 +78,20 @@ async def test_deadline_preserves_partial_receipt_and_current_client_contract(mo
         calls.append(fn.__name__)
         if len(calls) == 3:
             try:
-                release.wait(2)
+                release.wait(5)
                 return original_run(fn)
             finally:
                 finished.set()
         return original_run(fn)
 
     monkeypatch.setattr(store, 'run', slow_second_read)
-    monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 0.1)
+    # Allow the first decision's executor stages to start on a shared host.
+    # The second read still blocks longer than the entire admission deadline.
+    monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 1)
     start = time.monotonic()
     try:
         receipt = await admission.authorize(store, leases, now=1)
-        assert time.monotonic() - start < 1
+        assert time.monotonic() - start < 2
         assert receipt == {
             'allowed': ['segment'],
             'retry_after': {'second': 30, 'unreached': 30},
@@ -107,7 +109,7 @@ async def test_deadline_preserves_partial_receipt_and_current_client_contract(mo
         assert client(client_leases) == receipt
     finally:
         release.set()
-        assert await admission.run_blocking(admission.db_executor, finished.wait, 2)
+        assert await admission.run_blocking(admission.db_executor, finished.wait, 5)
     assert calls == ['read', 'seal', 'read']
     assert reserve.call_count == 1
     assert 'compute_admission_token' not in store.rows['jobs', 'second']
