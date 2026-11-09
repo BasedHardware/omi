@@ -417,6 +417,22 @@ def inv_mute_follows_app(boots, outcome):
     return out
 
 
+def inv_capture_after_settings(boots, outcome):
+    """The microphone starts only after the persisted mute was applied, so the
+    fail-closed default can never be the only thing standing between a muted
+    pendant and capture."""
+    out = []
+    for boot in boots:
+        log = boot.get("log", "")
+        mic = log.find("Microphone started")
+        if mic < 0:
+            continue
+        applied = [i for i in (log.find(t) for t in SETTINGS_APPLIED) if i >= 0]
+        if not applied or min(applied) > mic:
+            out.append(f"boot {boot['index']}: microphone started before settings were applied")
+    return out
+
+
 def inv_critical_battery_respects_charger(boots, outcome):
     return [f"boot {b['index']}: critical-battery shutdown while charging"
             for b in boots if "Battery critical level reached" in b.get("log", "") and b["state"].get("charging")]
@@ -466,4 +482,5 @@ INVARIANTS = {
     "mute-follows-app": inv_mute_follows_app,
     "critical-battery-respects-charger": inv_critical_battery_respects_charger,
     "sd-mount-attempts-bounded": inv_sd_mount_attempts_bounded,
+    "capture-after-settings": inv_capture_after_settings,
 }

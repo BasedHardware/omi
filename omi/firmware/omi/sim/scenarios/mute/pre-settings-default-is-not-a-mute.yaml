@@ -18,4 +18,4 @@ expect:
     - {exit: fatal, muted: 1, not_log: ["Settings initialized"]}
     - {reset: software, muted: 0, should_capture: true, sd_paused: false, log: ["Settings initialized"]}
     - {reset: power-on, safe: false, not_log: ["Settings initialized"]}
-  invariants: [mute-follows-app, mute-blocks-capture]
+  invariants: [mute-follows-app, mute-blocks-capture, capture-after-settings]

@@ -9,4 +9,4 @@ expect:
   boots:
     - {muted: 1, should_capture: false, sd_paused: true}
     - {muted: 1, should_capture: false, sd_paused: true}
-  invariants: [mute-blocks-capture]
+  invariants: [mute-blocks-capture, capture-after-settings]

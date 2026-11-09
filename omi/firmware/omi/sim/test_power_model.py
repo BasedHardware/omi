@@ -164,6 +164,13 @@ class OracleTests(unittest.TestCase):
         self.assertEqual(len(pm.inv_mute_follows_app([late], {})), 1)
         self.assertEqual(len(pm.inv_mute_blocks_capture([late], {})), 1)
 
+    def test_capture_after_settings(self):
+        good = {"index": 0, "log": "Settings initialized. muted=0\nSIM: Microphone started", "state": {}}
+        bad = {"index": 1, "log": "SIM: Microphone started\nSettings initialized. muted=1", "state": {}}
+        none = {"index": 2, "log": "SIM: Microphone started", "state": {}}
+        self.assertEqual(pm.inv_capture_after_settings([good], {}), [])
+        self.assertEqual(len(pm.inv_capture_after_settings([bad, none], {})), 2)
+
     def test_no_stuck_safe(self):
         boots = [{"index": 0, "reset": "power-on", "exit": "stop", "state": {"safe": True, "latch_reason": 1}},
                  {"index": 1, "reset": "watchdog", "exit": "stop", "state": {"safe": True, "latch_reason": 1}},

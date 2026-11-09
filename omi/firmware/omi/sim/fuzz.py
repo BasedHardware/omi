@@ -20,6 +20,7 @@ FUZZ_INVARIANTS = [
     "mute-blocks-capture",
     "poweroff-waits-release",
     "critical-battery-respects-charger",
+    "capture-after-settings",
 ]
 
 

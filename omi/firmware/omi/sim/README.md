@@ -204,8 +204,11 @@ radio, MCUboot and the signed image are not simulated.
 `no-stuck-safe` (a cold boot never comes up in SAFE except by the deliberate
 gesture), `manual-entry-needs-charger`, `manual-entry-needs-10s-hold`,
 `mute-follows-app`, `mute-blocks-capture`, `poweroff-waits-release`,
-`no-watchdog`, `critical-battery-respects-charger` and
-`sd-mount-attempts-bounded`.
+`no-watchdog`, `critical-battery-respects-charger`,
+`sd-mount-attempts-bounded` and `capture-after-settings` (the microphone
+starts only after the persisted mute was applied). Mute invariants judge a
+boot only once settings were applied; before that the RAM mute is the
+fail-closed default and nothing captures.
 
 **Fuzz lane.** `--fuzz-seeds N --fuzz-start S` runs `fuzz.py`: seed N always
 builds the same random chain of gestures, charger changes, mute writes, power
