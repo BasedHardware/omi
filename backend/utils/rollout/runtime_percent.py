@@ -25,10 +25,12 @@ import os
 from threading import RLock
 import time
 from types import MappingProxyType
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Callable, Iterable, Literal, Mapping
 from weakref import WeakSet
 
 from prometheus_client import CollectorRegistry, Gauge, REGISTRY
+from prometheus_client.metrics_core import Metric
+from prometheus_client.registry import Collector
 
 from config import rollout_cohorts as policy
 from config.policy.batch import COHORT_SALTS, cohort_bucket
@@ -318,18 +320,18 @@ def _export_values(snapshot: RampSnapshot) -> None:
         RUNTIME_PERCENT_VALUE.labels(name=name, **identity).set(value)
 
 
-class RuntimePercentCollector:
+class RuntimePercentCollector(Collector):
     """Refresh via the serving TTL on scrape, including idle processes.
 
     Describe is deliberately IO-free: registering the exporter must not read
     Firestore. Private worker registries use this same collector as Cloud Run.
     """
 
-    def describe(self):
+    def describe(self) -> Iterable[Metric]:
         for gauge in (RUNTIME_PERCENT_VALUE, RUNTIME_PERCENT_SOURCE, RUNTIME_PERCENT_ERROR_SECONDS):
             yield from gauge.describe()
 
-    def collect(self):
+    def collect(self) -> Iterable[Metric]:
         if not _export(ramp_snapshot()):
             return
         for gauge in (RUNTIME_PERCENT_VALUE, RUNTIME_PERCENT_SOURCE, RUNTIME_PERCENT_ERROR_SECONDS):
