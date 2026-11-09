@@ -102,6 +102,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            # Immutable rollout exporter identity, including supervised GPU children.
+            - name: ROLLOUT_POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
             - {name: BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS, value: {{ .Values.worker.servingMetricsMinRefreshSeconds | quote }}}
             - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
             - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
@@ -117,7 +121,6 @@ spec:
             - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
             - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
             - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
-            - {name: LADDER_V1_BUDGET_ENFORCEMENT_ENABLED, value: {{ .Values.worker.ladderBudgetEnforcement | quote }}}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:
@@ -127,7 +130,6 @@ spec:
             - {name: BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED, value: {{ .Values.worker.workerSilenceDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED, value: {{ .Values.worker.workerValidationDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED, value: {{ .Values.worker.diarizeSpeechOnlyEnabled | quote }}}
-            - {name: BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED, value: {{ .Values.worker.shortSpeechSingleEnabled | quote }}}
             - {name: BATCH_HELD_DEAD_LETTER_ENABLED, value: {{ .Values.worker.heldDeadLetterEnabled | quote }}}
             - {name: BATCH_INPUT_EXPIRING_ENABLED, value: {{ .Values.worker.inputExpiringEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}

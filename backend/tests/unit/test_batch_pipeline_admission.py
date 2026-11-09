@@ -410,41 +410,6 @@ def test_flag_off_never_parses_new_dispatch_duration(monkeypatch, enforce, durat
     gate.assert_not_called()
 
 
-@pytest.mark.parametrize('dispatch', [False, True])
-def test_ladder_rechecked_at_execution_after_queue_admission(monkeypatch, dispatch):
-    from utils import ladder_v1
-
-    store, queue, lease, reserve = setup(monkeypatch, fresh=True)
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    # A valid queued lease is not spend authority after the shared budget moves.
-    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: {'budget_percent': 100})
-    if dispatch:
-        from utils import subscription
-
-        monkeypatch.setattr(
-            subscription,
-            'resolve_transcription_allowance',
-            lambda *a, **k: SimpleNamespace(managed=False, reason='usage_budget_exhausted'),
-        )
-    receipt = authorize(store, tokens(lease), now=1)
-    # dispatch=False keeps the ladder-only resolver, whose stub snapshot has no
-    # budget_units/used_units keys, so it degrades to allowance_unavailable.
-    # Either way the durable reason mirrors the bounded DispatchReason the
-    # dispatch counter records for the same decision.
-    expected_reason = 'budget_exhausted' if dispatch else 'allowance_unavailable'
-    # An exhausted budget parks for the hold window; an unavailable allowance
-    # is potentially transient and keeps the short retry.
-    expected_retry = 1800 if dispatch else 60
-    assert receipt == {
-        'allowed': [],
-        'retry_after': {'segment': expected_retry},
-        'held_reason': {'segment': expected_reason},
-    }
-    assert 'compute_admission_token' not in store.rows['jobs', 'segment']
-    reserve.assert_not_called()
-
-
 @pytest.mark.parametrize(
     'policy, held',
     [(None, True), ({}, True), ({'provider_reason': 'none'}, True), ({'provider_reason': 'byok'}, False)],
@@ -468,7 +433,7 @@ def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
         gate.assert_not_called()
 
 
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize(
     'cohort,lanes,held',
     [

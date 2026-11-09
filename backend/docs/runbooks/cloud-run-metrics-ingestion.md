@@ -297,7 +297,9 @@ sum by (service_name, journey, outcome) (
 
 Confirm the exact normalized name in Prometheus before installing an alert; Stackdriver exporter builds names from `stackdriver`, monitored resource type, Cloud Monitoring metric type, and value type. It retains metric and monitored-resource labels. Cloud Monitoring distributions become Prometheus histograms; the exporter reconstructs `_sum` as distribution mean multiplied by count. Both bucket-based `histogram_quantile` and `_sum / _count` queries are available, but verify the normalized series names after deployment.
 
-Do not add uid, conversation, request, revision, or configuration labels. `service_name`, bounded journey/outcome labels, and the required instance identity are sufficient. Revision/configuration target labels are explicitly disabled in the checked-in `RunMonitoring` config to avoid rollout-driven series churn.
+Do not add uid, conversation, request, or configuration labels. The runtime rollout
+adoption families are the explicit revision-label exception; see
+[runtime rollout export](runtime-rollout-export.md). `service_name`, bounded journey/outcome labels, and the required instance identity are sufficient. Revision/configuration target labels are explicitly disabled in the checked-in `RunMonitoring` config to avoid rollout-driven series churn.
 
 ## Cost and cardinality
 

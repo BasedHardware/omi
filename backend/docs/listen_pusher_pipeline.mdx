@@ -372,6 +372,20 @@ never-received reservation only under the existing expired lease, quiet cutoff,
 identity and content fences. Missing/unknown markers and buffered audio stay
 protected even after archive closure when no committed span exists.
 
+`QUIET_EMPTY_EXIT_ENABLED` defaults off. When explicitly true, expired quiet
+checks may return `empty_ready` outside V2 only for exact batch-live-owned,
+proven-empty captures with no pointers/tokens/failure and an empty raw/archive
+storage proof. Cleanup repeats that proof in the expired-lease transaction.
+Other shapes follow base admission; unbounded refusals retire the check with a
+named repair/operator-review exit while preserving the row.
+Due times, dispatch and recording lease durations are unchanged.
+`BATCH_LIVE_ORPHAN_REPAIR_ENABLED` also defaults off. The digest-approved operator
+repair re-proves retained spans and atomically stamps content/window, completes
+the sealed capture barrier and registers its canonical batch job. Empty deletion
+requires a closed archive, received=false, empty storage proof and the expired-lease/consent/job
+absence transaction fences; received or unknown custody is never deleted.
+See [operator runbook](../deploy/record-orphan-repair/README.md).
+
 Server-only native records carry their marker into the immutable intake. The
 batch projector uses its existing idempotent hourly/monthly usage and fair-use
 charge chain for these captures; ordinary native live-preview records keep the
@@ -7507,12 +7521,10 @@ or zero capture exposure cannot establish savings. Paid failover remains visible
 in the admitted arm. Disabling the ramp takes effect on reconnect; drain existing
 WebSockets before claiming rollback complete.
 
-`FIRST_SUMMARY_DEADLINE_PERCENT=0` admits only explicit `FIRST_SUMMARY_UID_ALLOWLIST`
-owners (an omitted or empty allowlist at zero percent admits nobody). Positive
-values add the same percentage bucket to the retained summary allowlist
-independently of batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`. A
-positive percentage with an empty summary allowlist is cohort-only; `100` admits
-all owners. Keep existing allowlists when ramping or rolling back.
+`FIRST_SUMMARY_DEADLINE_PERCENT` admits its percentage bucket independently of
+batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`; `0` admits nobody and
+`100` admits all owners. The former `FIRST_SUMMARY_UID_ALLOWLIST` cohort was
+retired on 2026-11-09 (flag docket ruling 3) while production served 100.
 Production config sets `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
 `FIRST_SUMMARY_DEADLINE_PERCENT=100` on backend-listen, pusher, backend,
 backend-sync, backend-sync-backfill and backend-integration. This prevents
@@ -9427,9 +9439,10 @@ tick, including an error tick, updates the Unix timestamp gauge
 `omi_batch_projection_pump_last_tick_seconds`; zero means never observed.
 Scope the missing/stale alert to the dedicated pump service.
 
-`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` defaults on; only `off` skips the
-serving reconcile sweep. Owner wakes, held drains, metrics refresh, maintenance
-and recovery dispatch keep their existing behavior. The pump ignores this
+`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` defaults on; only `off` (after
+trimming and lowercasing) skips the serving reconcile sweep. Owner wakes, held
+drains, metrics refresh, maintenance and recovery dispatch keep their existing
+behavior. The pump ignores this
 serving-only switch. `BATCH_PIPELINE_MAX_OWNER_DRAINS` sets the process's
 owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
 [Change and ramp](listen_pusher_pipeline/changes/2026-11-05-projection-pump.md).
@@ -9438,7 +9451,17 @@ owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
 
 ## Batch projection drain admission
 
-`PROJECTION_DRAIN_CLAIM_AWARE` defaults on; only `off` disables it. Initial
+The deliberate off-only contract applies to
+`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP`,
+`BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED`, `PROJECTION_DRAIN_CLAIM_AWARE`,
+`PROJECTION_DRAIN_PRIVACY_BACKOFF`, and `PROJECTION_PRIVACY_REFUSAL_RESUME`.
+Only `off` after trimming whitespace and lowercasing disables these switches.
+`false`, `0`, and `no` keep them ON and emit a WARNING:
+`only 'off' disables <SWITCH>; value '<v>' keeps it ON`, with the normalized
+value. Unset and other values remain ON. This contract is pinned by tests.
+
+`PROJECTION_DRAIN_CLAIM_AWARE` defaults on; only `off` (after trimming and
+lowercasing) disables it. Initial
 owner-drain admissions use a read-only Redis claim GET and fail open on errors.
 Claim-busy re-requests through `again` back off 5–15 seconds; productive
 `more=True` continuations retain immediate FIFO progress without the peek.

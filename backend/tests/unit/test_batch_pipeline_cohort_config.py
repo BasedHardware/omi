@@ -148,7 +148,7 @@ def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, mon
         monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'])
         monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
         assert summary_guarantee.enabled('any-user')
-        monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary-owner')
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
         assert summary_guarantee.enabled('canary-owner')
         assert summary_guarantee.enabled('any-user')
         monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')

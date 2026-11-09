@@ -37,7 +37,7 @@ START = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     monkeypatch.setenv('CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED', 'false')
-    for key in (policy.FLAG, policy.PERCENT, policy.UID_ALLOWLIST):
+    for key in (policy.FLAG, policy.PERCENT):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -89,10 +89,7 @@ def test_percent_cohort_is_stable_and_allowlist_always_in(monkeypatch):
     admitted = [cid for cid in (f'conv-{index}' for index in range(400)) if plan(conversation_id=cid).run]
     assert 5 <= len(admitted) <= 40
     assert admitted == [cid for cid in (f'conv-{index}' for index in range(400)) if plan(conversation_id=cid).run]
-    monkeypatch.setenv(policy.UID_ALLOWLIST, f'someone,{OWNER}')
-    assert all(plan(conversation_id=f'conv-{index}').run for index in range(50))
     monkeypatch.setenv(policy.PERCENT, 'garbage')
-    monkeypatch.delenv(policy.UID_ALLOWLIST)
     assert not any(plan(conversation_id=f'conv-{index}').run for index in range(50))
 
 

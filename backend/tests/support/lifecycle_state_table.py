@@ -235,6 +235,13 @@ DEADLINE_ENTRIES = {
             '_complete_server_batch_capture_txn',
             'home_transcription_pending_at',
         ),
+        # The reviewed orphan owner stamps the same bounded Home hold in its
+        # canonical registration transaction, without finalization fanout.
+        entry(
+            'utils/conversations/lifecycle.py',
+            'complete_orphan_batch_capture',
+            'home_transcription_pending_at',
+        ),
     ),
     'visibility:bridge_pending': (
         entry(
