@@ -12,6 +12,13 @@ preconditions:
   - auth_ready
   - automation_bridge_ready
 steps:
+  - id: S0
+    name: Authorize from the legacy browser-only state
+    do: "Start with a disposable Google account that has no Omi Calendar grant. Open Apps, Imports, then Calendar. Activate Connect Google Calendar in the calendar selection area. Complete the browser consent, return to the same app, and activate Reload Calendars. This must reach the picker without requiring a browser-cookie read to fail or importing any events first."
+    expect:
+      text_visible:
+        - Personal
+        - Project team
   - id: S1
     name: Discover calendars from a connected grant
     do: "In a named non-production app connected to the disposable Google test account, open Apps, Imports, then Calendar. Verify Personal and Project team appear, with the primary calendar selected before any saved preference."

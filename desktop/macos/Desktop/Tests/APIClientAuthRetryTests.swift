@@ -258,6 +258,30 @@ import XCTest
       XCTAssertEqual(AuthRetryURLStub.attempts, calls)
     }
 
+    func testCalendarConnectionURLCannotUseAReplacementSession() async throws {
+      try configureRefreshableSession()
+      await establishOwnerForAuthTest("user-1")
+      let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "user-1"))
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
+      await client.setTestAuthHeader("Bearer synthetic-token")
+      AuthRetryURLStub.returnStatus(
+        200, body: "{\"auth_url\":\"https://accounts.google.com/o/oauth2/auth?state=synthetic\"}")
+      let url = try await client.googleCalendarOAuthURL(authorizationSnapshot: snapshot)
+      XCTAssertEqual(url.host, "accounts.google.com")
+      XCTAssertEqual(AuthRetryURLStub.lastRequest?.url?.path, "/v1/integrations/google_calendar/oauth-url")
+      let calls = AuthRetryURLStub.attempts
+      await transitionOwnerForAuthTest(to: nil)
+      await transitionOwnerForAuthTest(to: "user-1")
+      do {
+        _ = try await client.googleCalendarOAuthURL(authorizationSnapshot: snapshot)
+        XCTFail("An old picker must not start a connection in a replacement session")
+      } catch {}
+      XCTAssertEqual(AuthRetryURLStub.attempts, calls)
+    }
+
     func testCalendarReaderDoesNotBypassGrantFailuresThroughBrowserCookies() async throws {
       try configureRefreshableSession()
       await establishOwnerForAuthTest("user-1")

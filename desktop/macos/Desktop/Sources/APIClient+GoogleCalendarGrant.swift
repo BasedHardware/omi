@@ -59,9 +59,11 @@ extension APIClient {
 
   /// Google's consent URL for the Calendar grant. The backend owns the redirect
   /// and the CSRF state, so the desktop only has to open what it returns.
-  func googleCalendarOAuthURL() async throws -> URL {
+  func googleCalendarOAuthURL(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> URL {
     let response: IntegrationOAuthURLResponse = try await get(
-      "v1/integrations/\(googleCalendarAppKey)/oauth-url")
+      "v1/integrations/\(googleCalendarAppKey)/oauth-url", authorizationSnapshot: authorizationSnapshot)
     guard let url = URL(string: response.authUrl) else { throw APIError.invalidResponse }
     return url
   }

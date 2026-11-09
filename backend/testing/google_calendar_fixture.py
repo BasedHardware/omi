@@ -11,7 +11,7 @@ from functools import partial
 from unittest.mock import patch
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
@@ -95,6 +95,16 @@ async def calendar_fixture(uid: str = 'calendar-qa', project: str = 'demo-omi-ca
     @app.get('/v1/integrations/google_calendar')
     def google_status():
         return integration_routes.get_integration('google_calendar', uid=state['uid'])
+
+    @app.get('/v1/integrations/google_calendar/oauth-url')
+    def local_consent_url(request: Request):
+        return {'auth_url': str(request.base_url) + '__qa/consent'}
+
+    @app.get('/__qa/consent')
+    def local_consent():
+        # Synthetic consent only: never redirects to or authenticates with Google.
+        state['connected'] = True
+        return {'message': 'Synthetic Calendar connected. Return to the QA app and Reload Calendars.'}
 
     @app.post('/__qa/provider')
     def set_provider_state(values: dict):

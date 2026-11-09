@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -10,10 +11,23 @@ struct GoogleCalendarSelectionEditor: View {
   @State private var busy = false
   @State private var failed = false
   @State private var saved = false
+  @State private var needsConnection = false
+  @State private var awaitingConsent = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       if busy { ProgressView().controlSize(.small) }
+      if needsConnection || failed {
+        Text("Connect Google Calendar to choose which calendars Omi reads.")
+          .scaledFont(size: OmiType.body).foregroundColor(Ink.secondary)
+        Button("Connect Google Calendar") { Task { await connect() } }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact)).disabled(busy)
+          .accessibilityIdentifier("google-calendar-connect")
+      }
+      if awaitingConsent {
+        Text("Finish Google sign-in, then Reload Calendars.")
+          .scaledFont(size: OmiType.body).foregroundColor(Ink.secondary)
+      }
       if let data {
         let primary = data.calendars.first(where: { $0.primary })?.name ?? data.accountID
         Text("Read selected calendars. New events use \(primary).")
@@ -66,14 +80,33 @@ struct GoogleCalendarSelectionEditor: View {
     busy = true
     failed = false
     saved = false
+    awaitingConsent = false
     data = nil
     defer { busy = false }
     do {
+      let status = try await APIClient.shared.googleCalendarGrantStatus(authorizationSnapshot: owner)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
+      needsConnection = !status.connected
+      guard status.connected else { return }
       let result = try await APIClient.shared.googleCalendarSelection(authorizationSnapshot: owner)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
       authorization = owner
       data = result
       selectedIDs = result.selectedIDs
+    } catch { failed = true }
+  }
+
+  private func connect() async {
+    guard !busy, let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    busy = true
+    failed = false
+    awaitingConsent = false
+    defer { busy = false }
+    do {
+      let url = try await APIClient.shared.googleCalendarOAuthURL(authorizationSnapshot: owner)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
+      guard NSWorkspace.shared.open(url) else { throw APIError.invalidResponse }
+      awaitingConsent = true
     } catch { failed = true }
   }
 

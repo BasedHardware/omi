@@ -62,9 +62,10 @@ this same authority rather than reintroducing a primary-only source.
 - [x] Firestore emulator persistence/reconnect/account isolation integration: 2 tests
 - [x] Flutter UI/transport: 10 tests; iPhone 16 Pro simulator loopback journey:
       primary default → multiple calendars → persisted reopen → secondary-only reads
-- [x] macOS compile and 30 production transport/auth/reader/parser tests
+- [x] macOS compile and 31 production transport/auth/reader/parser tests
 - [x] macOS named QA app with local Auth/Firestore emulators: cancel, save,
-      reload, secondary-only reads and removable inaccessible calendar
+      reload, secondary-only reads, removable inaccessible calendar, and an explicit
+      Google connection entry point for legacy browser-only users
 - [x] Windows/Linux typecheck, 30 UI/transport/owner-fence tests and changed-file ESLint
 - [ ] Generated API/schema consumers and repository preflight
 - [ ] Final diff review and exact-head CI; remain draft until required gates pass
