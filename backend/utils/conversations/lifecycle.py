@@ -11,6 +11,7 @@ from __future__ import annotations
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
 from config import server_batch
+from config.episodes import home_transcription_deadline_seconds
 from config.policy import resolve_batch_policy
 from database.batch_ramp import ramp_admission_policy
 
@@ -361,6 +362,45 @@ def complete_server_batch_capture(
         lease_epoch,
         firestore_client=firestore_client,
     )
+
+
+def complete_orphan_batch_capture(
+    transaction: Any,
+    conversation_ref: Any,
+    current: Mapping[str, Any],
+    retained_patch: dict[str, Any],
+    *,
+    now: datetime,
+) -> None:
+    """Join a proven orphan's terminal capture to canonical batch registration.
+
+    The operator owns the surrounding transaction's closed-custody, privacy,
+    snapshot and job-absence reads. This owner supplies the same relevance and
+    Home-pending terminal metadata as normal server-batch finalization, without
+    finalization fanout or a second job. Exit: the canonical batch pipeline.
+    """
+    terminal = {**current, **retained_patch, 'status': 'completed'}
+    if (
+        current.get('status') != 'in_progress'
+        or not server_batch.owned(current)
+        or current.get('record_audio_closed') is not True
+        or current.get('server_batch_audio_closed') is not True
+        or current.get('server_batch_audio_received') is not True
+        or current.get('record_upload_sessions')
+        or current.get('record_upload_failed')
+        or any(current.get(key) for key in ('deleted', 'discarded', 'is_locked', 'finalization_job_id'))
+        or not server_batch.has_audio(terminal)
+    ):
+        raise LifecycleTransitionError('orphan capture completion fenced')
+    stamp_terminal_decision(terminal, path='lifecycle_terminal')
+    updates = {
+        **retained_patch,
+        'status': 'completed',
+        'relevance_decision': terminal['relevance_decision'],
+        'home_transcription_pending_at': now,
+        'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+    }
+    transaction.update(conversation_ref, updates)
 
 
 def complete(uid: str, conversation_id: str) -> bool:
