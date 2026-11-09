@@ -198,7 +198,6 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
 
 
 def test_invalid_deadlines_remain_bounded(enabled, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')
     assert flags.deadline_seconds() == 120
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '999')

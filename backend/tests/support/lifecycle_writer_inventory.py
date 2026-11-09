@@ -2819,7 +2819,6 @@ FIELD_SITES = {
         ('summary_read_payload', 'status', "row.get('status') or 'generated'", ('status',))
     ],
     'utils/dream_agent.py': [
-        ('<module>', 'status', "'elided'", ('note', 'status')),
         ('drain', 'status', "'deadline'", ('status',)),
         ('drain', 'status', "'waiting'", ('reason', 'status')),
         ('drain.worker', 'status', "'failed'", ('error_code', 'error_type', 'status')),

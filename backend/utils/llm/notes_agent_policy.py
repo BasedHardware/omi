@@ -8,7 +8,6 @@ Controls (read per call, never at import):
 
 - ``CONVERSATION_NOTES_AGENT_ENABLED``: kill switch, default on. ``false``/``off``/``0``
   returns every conversation to the one-shot path.
-- ``CONVERSATION_NOTES_AGENT_UID_ALLOWLIST``: comma-separated UIDs always in the cohort.
 - ``CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED``: default on. Off restores
   legacy lookup charging, tool schema, prompt, packet and investigation floor.
 """
@@ -21,7 +20,6 @@ from typing import Optional
 
 FLAG = 'CONVERSATION_NOTES_AGENT_ENABLED'
 LOOKUP_EFFICIENCY = 'CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED'
-UID_ALLOWLIST = 'CONVERSATION_NOTES_AGENT_UID_ALLOWLIST'
 
 # A conversation this long is worth an agent on words alone.
 AGENT_MIN_WORDS = 1500
@@ -72,10 +70,7 @@ def lookup_efficiency_enabled() -> bool:
 
 
 def in_cohort(uid: Optional[str], conversation_id: Optional[str]) -> bool:
-    """Permanent full admission; the separate retirement lane owns the allowlist."""
-    allowlist = {item.strip() for item in os.getenv(UID_ALLOWLIST, '').split(',') if item.strip()}
-    if uid and uid in allowlist:
-        return True
+    """Permanent full admission (David 2026-11-09 flag rulings)."""
     return True
 
 

@@ -27,7 +27,6 @@ from testing.parity_pack_v0.schema import RequestFingerprint
 def environment(monkeypatch):
     for key in (
         'FIRST_SUMMARY_DEADLINE_ENABLED',
-        'FIRST_SUMMARY_UID_ALLOWLIST',
         'FIRST_SUMMARY_DEADLINE_PERCENT',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_PERCENT',
@@ -71,7 +70,6 @@ def host():
 
 def test_batch_cohorts_share_bucket_and_universal_summary_survives_admission_rollback(monkeypatch):
     enable(monkeypatch, '5')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     results = []
     for index in range(1000):
         owner = f'synthetic-{index}'

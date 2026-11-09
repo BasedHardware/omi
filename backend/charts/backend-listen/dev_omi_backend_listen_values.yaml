@@ -176,8 +176,6 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
@@ -230,8 +228,6 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -484,8 +480,6 @@ env:
     value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_RESILIENT_RECONNECT
@@ -512,8 +506,6 @@ env:
     value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
-  - name: STT_MULTI_LANGUAGE_HINTS
-    value: "true"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
@@ -529,8 +521,6 @@ env:
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
-  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
     value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
@@ -678,10 +668,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION

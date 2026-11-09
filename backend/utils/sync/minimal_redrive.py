@@ -30,7 +30,6 @@ from utils.byok import set_byok_keys
 from utils.conversations import lifecycle as lifecycle_service
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionFailure, is_destructive_operation_in_progress
-from utils.sync import empty_recovery
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 from utils.sync.live_overlap import compatible_capture
 
@@ -89,11 +88,6 @@ def select_service(
         return select(req_language)
     dispatch['selected_service'] = parakeet_service(req_language)
     return dispatch['selected_service']
-
-
-def paid_recovery_enabled(redrive_mode: Optional[str]) -> bool:
-    """Minimal never buys empty-segment recovery: a double empty is silence."""
-    return redrive_mode != MINIMAL and empty_recovery.enabled()
 
 
 def segment_target(

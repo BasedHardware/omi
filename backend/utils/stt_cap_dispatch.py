@@ -18,7 +18,7 @@ from config.stt_cap_dispatch import (
     offline_admission_enabled,
     LANES,
 )
-from config.ladder_v1 import budget_enforcement_enabled
+
 from utils.observability.stt_cap_dispatch import (
     allowance_decision_reason,
     record_audio,
@@ -156,10 +156,6 @@ class LiveAdmission:
         # excludes their overlap with its billable window: held audio is metered
         # once, by recovery, when it is actually transcribed.
         self.held_spans: list[list[float]] = []
-        if budget_enforcement_enabled():
-            from database.usage_units_session import UsageUnitsSession
-
-            self.usage_cache = UsageUnitsSession()
 
     def refresh_due(self):
         if self.refreshed_at is None:

@@ -111,26 +111,6 @@ def test_owner_concurrency_accepts_on_tokens_only_after_migration(monkeypatch, t
     assert preparation_width() == 1
 
 
-@pytest.mark.parametrize(
-    'key,function',
-    [
-        ('SYNC_REPROCESS_COALESCE_ENABLED', 'coalesce_enabled'),
-        ('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'dedupe_enabled'),
-    ],
-)
-@pytest.mark.parametrize('token', ['false', 'off', '0', 'no', '', 'invalid'])
-def test_explicit_child_disable_wins_over_repeat_work_in_serve(monkeypatch, key, function, token):
-    from config import sync_reprocess
-
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    monkeypatch.setenv(key, token)
-    assert getattr(sync_reprocess, function)()  # exact legacy inheritance in shadow
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    assert not getattr(sync_reprocess, function)()
-    monkeypatch.delenv(key)
-    assert getattr(sync_reprocess, function)()
-
-
 def test_backfill_default_zero_is_gated_and_allowlist_still_wins(monkeypatch):
     from utils.sync.backfill_order import newest_first
 

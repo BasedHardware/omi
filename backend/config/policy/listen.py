@@ -56,6 +56,7 @@ class ListenSessionPolicy(PolicyPart):
     no_text_rescue_enabled: bool = False
     no_text_rescue_seconds: float = 60.0
     learned_language_profile: bool = False
+    # Retain the serialized field so existing recorded policy hashes remain valid.
     multi_language_hints: bool = True
     hintable_percent: float = 0.0
     hintable_allocated: bool = False
@@ -401,7 +402,6 @@ def resolve_listen_policy(
         no_text_rescue_enabled=enabled('STT_NO_TEXT_RESCUE_ENABLED'),
         no_text_rescue_seconds=rescue,
         learned_language_profile=enabled('STT_LEARNED_LANGUAGE_PROFILE'),
-        multi_language_hints=enabled('STT_MULTI_LANGUAGE_HINTS', 'true'),
         hintable_percent=hintable,
         hintable_allocated=bool(uid) and cohort_bucket(uid, 'stt-hintable', bits=64) < hintable,
         demand_enabled=demand.enabled,

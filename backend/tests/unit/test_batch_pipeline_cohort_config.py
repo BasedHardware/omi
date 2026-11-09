@@ -146,7 +146,6 @@ def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, mon
         assert 'FIRST_SUMMARY_UID_ALLOWLIST' not in env
         monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
         assert summary_guarantee.first_summary_pending({'uid': 'any-user'})
-        monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary-owner')
         assert summary_guarantee.first_summary_pending({'uid': 'canary-owner'})
         assert summary_guarantee.first_summary_pending({'uid': 'any-user'})
         assert summary_guarantee.first_summary_pending({'uid': 'canary-owner'})

@@ -124,9 +124,8 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             terminal_empty_disposition=boolean(env, 'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED'),
         )
     if stage == 'first_summary':
-        # Keep the independently owned preservation and allowlist readers until
-        # their lanes resolve them. Full percentage admission makes both
-        # redundant for a nonempty owner, without retiring either control here.
+        # The first-summary deadline applies to every nonempty owner. Keep the
+        # independently owned preservation reader until its lane resolves it.
         existing_deadline = (obligation or {}).get('summary_deadline_at')
         preserved = bool(
             obligation
@@ -137,11 +136,7 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             and math.isfinite(existing_deadline)
             and boolean(env, 'FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED')
         )
-        enabled = (
-            preserved
-            or member(uid, env, 'first-summary', 'FIRST_SUMMARY_UID_ALLOWLIST', explicit=flags is not None)
-            or bool(uid)
-        )
+        enabled = preserved or bool(uid)
         try:
             deadline = int(env.get('FIRST_SUMMARY_DEADLINE_SECONDS', '120'))
         except ValueError:

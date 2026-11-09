@@ -144,7 +144,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
-            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
@@ -158,7 +157,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
-            "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
@@ -241,7 +239,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
-            "MOBILE_STANDARD_BATCH_UIDS",
             # Only listen reads the mobile/web server-batch-only cohorts: server_batch.selected via
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
@@ -255,7 +252,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
-            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
@@ -279,7 +275,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_NO_TEXT_RESCUE_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
-            "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Staged sync-lineage rollout: the live revision fence runs in listen
             # transcript writes; pusher reaches no sync intake or live-write site.

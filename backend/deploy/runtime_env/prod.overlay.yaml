@@ -93,8 +93,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'true'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -181,9 +179,6 @@ overlay:
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
-        SPEAKER_GROUPING_MODE:
-          value: incumbent
-          category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -198,9 +193,6 @@ overlay:
           category: rollout
         MOBILE_STANDARD_BATCH_PERCENT:
           value: '0'
-          category: rollout
-        MOBILE_STANDARD_BATCH_UIDS:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
         STT_NO_TEXT_RESCUE_ENABLED:
           value: 'true'
@@ -295,8 +287,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'true'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -389,9 +379,6 @@ overlay:
           category: rollout
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        SPEAKER_GROUPING_MODE:
-          value: incumbent
           category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
@@ -583,12 +570,6 @@ overlay:
           # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -729,9 +710,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
             category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
@@ -874,9 +852,6 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
-            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -962,12 +937,6 @@ overlay:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -1091,9 +1060,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
             category: rollout
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -1219,9 +1185,6 @@ overlay:
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
-            category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
             category: rollout
           SYNC_BACKFILL_ENABLED:
             value: 'true'
@@ -1349,12 +1312,6 @@ overlay:
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -1454,9 +1411,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -1571,9 +1525,6 @@ overlay:
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
-            category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
             category: rollout
           SYNC_BACKFILL_ENABLED:
             value: 'true'
@@ -1728,12 +1679,6 @@ overlay:
             value: '64'
             category: reliability
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -1803,9 +1748,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -1900,9 +1842,6 @@ overlay:
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
-            category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
             category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'

@@ -7514,7 +7514,8 @@ WebSockets before claiming rollback complete.
 
 First-summary deadline admission is permanent at 100% across all producers and
 workers. Later revisions and effects-only obligations retain their existing
-coalescing policy. The former enable and percentage controls are retired.
+coalescing policy. The former enable and percentage controls were graduated and
+the `FIRST_SUMMARY_UID_ALLOWLIST` cohort was retired on 2026-11-09 (flag rulings).
 
 The scheduled backend-sync sweep is held off in production
 (`SUMMARY_DEBT_REPAIR_ENABLED=false`, deferred 2026-10-20). When enabled, it admits at most ten eligible completed server-minimum rows per two-minute
