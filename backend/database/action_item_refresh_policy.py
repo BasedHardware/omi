@@ -13,7 +13,7 @@ from hashlib import sha256
 from typing import Any
 
 from config.action_item_identity_key import identity_key
-from config.action_item_similarity import guarded_tokens_match, near_duplicate_tokens, tokens
+from config.action_item_similarity import guarded_tokens_match, near_duplicate_tokens, substitution_tokens_match, tokens
 
 LIMIT = 200
 RECEIPT = 'action_item_refresh'
@@ -75,7 +75,14 @@ def plan(
     """Return receipt, creates, partial updates and bounded counters (all reads supplied)."""
     ledger = deepcopy(receipt.get('keys') or {}) if receipt.get('generation', generation) == generation else {}
     enroll(ledger, rows)
-    counts = dict(kept_existing=len(rows), added_new=0, transferred_from_donor=0, skipped_duplicate=0, disabled=0)
+    counts = dict(
+        kept_existing=len(rows),
+        added_new=0,
+        transferred_from_donor=0,
+        skipped_duplicate=0,
+        disabled=0,
+        skipped_anchor_duplicate=0,
+    )
     creates: dict[str, dict] = {}
     updates: dict[str, dict] = {}
     if donor_rows is not None:
@@ -167,11 +174,13 @@ def plan(
                 and candidate_segments & prior_segments
                 and len(candidate_tokens & existing_tokens[task_id]) >= 3
                 and guarded_tokens_match(candidate_tokens, existing_tokens[task_id])
+                and substitution_tokens_match(candidate_tokens, existing_tokens[task_id])
             ]
             if len(anchors) == 1:
                 ledger[identity] = anchors  # Retain the original wording and remember this alias.
                 matched.add(anchors[0])
                 counts['skipped_duplicate'] += 1
+                counts['skipped_anchor_duplicate'] += 1
                 continue
             ordinal = 0
             task_id = 'refresh-' + sha256(f'{conversation_id}:{generation}:{identity}:{ordinal}'.encode()).hexdigest()

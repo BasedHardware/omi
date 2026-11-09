@@ -27,6 +27,11 @@ def guarded_tokens_match(a: frozenset[str], b: frozenset[str]) -> bool:
     return guarded(a) == guarded(b)
 
 
+def substitution_tokens_match(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Allow additions/removals, but no substitutions after known verb normalization."""
+    return not (a - b and b - a)
+
+
 def near_duplicate(left: object, right: object) -> bool:
     if identity_key(left) and identity_key(left) == identity_key(right):
         return True
@@ -43,7 +48,7 @@ def near_duplicate_tokens(a: frozenset[str], b: frozenset[str]) -> bool:
     # Substituting a recipient, object or action is not a paraphrase, even when
     # most words match. Only reordering, known verb variants and small additions
     # qualify. In particular token_set_ratio's subset=100 would be too permissive.
-    if a - b and b - a:
+    if not substitution_tokens_match(a, b):
         return False
     if (a ^ b) - _ELABORATION:
         return False

@@ -1426,7 +1426,7 @@ OMI_ENRICHMENT_EARLY_ABORT_TOTAL = Counter(
 )
 OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
     'omi_action_item_refresh_total',
-    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
+    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled|skipped_anchor_duplicate',
     ['outcome'],
 )
 

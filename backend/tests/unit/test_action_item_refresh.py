@@ -186,17 +186,18 @@ def test_edits_and_hard_deletion_after_enrollment_are_not_recreated(world):
     assert not world.queue
 
 
-def test_segment_anchor_suppresses_license_rewordings_and_enrolls_aliases(world):
+def test_segment_anchor_suppresses_license_elaborations_and_enrolls_aliases(world):
     descriptions = [
         'Contact the maintainer requesting a license for the meeting-intelligence repository',
-        'Contact the maintainer requesting help resolving the missing repository license',
-        'Ask the maintainer to provide the missing license for the repository',
+        'Contact the maintainer requesting help obtaining a license for the meeting-intelligence repository',
+        'Contact the maintainer requesting a missing license for the meeting-intelligence repository',
     ]
     original = anchored_item(descriptions[0])
     world.store.rows[task_path('original')] = deepcopy(original)
     for description in descriptions[1:]:
         result = db.reconcile(UID, 'survivor', [anchored_item(description)], expected_revision=1)
         assert result['counts']['skipped_duplicate'] == 1
+        assert result['counts']['skipped_anchor_duplicate'] == 1
         assert result['counts']['added_new'] == 0
         assert not result['pending']
         ledger = world.store.rows[conv_path('survivor')][RECEIPT]['keys']
@@ -223,6 +224,7 @@ def test_segment_anchor_reserves_other_reextracted_tasks(reverse, unchanged):
     receipt, creates, updates, counts = plan('survivor', rows, items, {}, 0)
     assert not creates and not updates
     assert counts['skipped_duplicate'] == 2
+    assert counts['skipped_anchor_duplicate'] == 1
     assert receipt['keys'][key(items[0]['description'])] == ['deck' if reverse else 'agenda']
 
 
@@ -278,8 +280,15 @@ def test_segment_anchor_guards_keep_minting(row, candidate):
         ('Do not send copies to Jamie by Friday', 'Send copies to Jamie by Friday'),
         ('Send copies to Jamie before Friday', 'Send copies to Jamie after Friday'),
         ('Send access code to Jamie by Friday', 'Share access code with Jamie by Friday'),
+        ('Email John about the quarterly report', 'Call John about the quarterly report'),
+        ('Email the quarterly report to John', 'Email the quarterly report to Sarah'),
+        ('Send the quarterly report to John', 'Send the quarterly forecast to John'),
+        (
+            'Contact the maintainer requesting a license for the meeting-intelligence repository',
+            'Contact the maintainer requesting help resolving the missing repository license',
+        ),
     ],
-    ids=['quantity', 'negation', 'time-qualifier', 'code'],
+    ids=['quantity', 'negation', 'time-qualifier', 'code', 'action', 'recipient', 'object', 'ambiguous-paraphrase'],
 )
 def test_segment_anchor_preserves_guarded_meaning(world, original, refreshed, reverse):
     if reverse:
@@ -290,6 +299,7 @@ def test_segment_anchor_preserves_guarded_meaning(world, original, refreshed, re
     result = db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
     assert result['counts']['added_new'] == 1
     assert result['counts']['skipped_duplicate'] == 0
+    assert result['counts']['skipped_anchor_duplicate'] == 0
     new_id = result['pending'][0]
     assert new_id != 'original'
     assert world.store.rows[task_path('original')] == row
@@ -299,13 +309,26 @@ def test_segment_anchor_preserves_guarded_meaning(world, original, refreshed, re
     repeated = db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
     assert repeated['counts']['added_new'] == 0
     assert repeated['counts']['skipped_duplicate'] == 1
+    assert repeated['counts']['skipped_anchor_duplicate'] == 0
+
+
+def test_anchor_suppression_count_is_emitted_separately_from_total(monkeypatch):
+    emitted = {}
+    monkeypatch.setattr(
+        flow,
+        'OMI_ACTION_ITEM_REFRESH_TOTAL',
+        SimpleNamespace(labels=lambda *, outcome: SimpleNamespace(inc=lambda value: emitted.update({outcome: value}))),
+    )
+    flow._emit({'skipped_duplicate': 3, 'skipped_anchor_duplicate': 1})
+    assert emitted['skipped_duplicate'] == 3
+    assert emitted['skipped_anchor_duplicate'] == 1
 
 
 def test_segment_anchor_consumes_target_only_once():
     row = anchored_item('Contact maintainer about repository license')
     items = [
-        anchored_item('Ask maintainer about missing repository license'),
-        anchored_item('Remind maintainer about absent repository license'),
+        anchored_item('Contact maintainer about missing repository license'),
+        anchored_item('Contact maintainer about absent repository license'),
     ]
     _, creates, _, counts = plan('survivor', {'original': row}, items, {}, 0)
     assert len(creates) == 1
