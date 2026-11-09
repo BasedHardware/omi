@@ -429,6 +429,9 @@ class ProjectionShards:
         and enough of them would fill every take page. Unless a push landed
         since the take, the wake moves behind every owner due sooner. Fails
         open (False): the wake stays where it was.
+
+        When deferring both taken lanes for an owner, defer backlog first:
+        moving fresh into backlog increments the backlog sequence.
         """
         try:
             return bool(

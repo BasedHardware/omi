@@ -121,7 +121,7 @@ class ShardPump:
         """Push one wake to the owner's shard holder. True when a holder will drain it.
 
         Audio captured within ``FRESH_CAPTURE_SECONDS`` takes the fresh lane,
-        scored by capture time; anything else is backlog, scored by commit.
+        scored by capture time capped at now; anything else is backlog, scored by commit.
         False (not engaged, shard unheld, push failed) means drain it locally.
         """
         if not self.engaged:
@@ -131,7 +131,7 @@ class ShardPump:
             return False
         now = self.shards.clock()
         if capture_at is not None and now - capture_at <= FRESH_CAPTURE_SECONDS:
-            lane, score = FRESH, float(capture_at)
+            lane, score = FRESH, min(float(capture_at), now)
         else:
             lane, score = BACKLOG, float(committed_at)
         pushed = self.shards.push(owner_id, key, lane, score)
@@ -205,7 +205,9 @@ class ShardPump:
             # A stuck head keeps its wake but gives up its place in the lane, so
             # stuck owners cannot fill the take pages ahead of due owners.
             retry_at = self.shards.clock() + delay
-            self.deferring.extend((wake, retry_at) for wake in wakes)
+            # Defer the taken backlog wake before moving fresh into backlog:
+            # that move bumps the backlog sequence and would stale its take.
+            self.deferring.extend((wake, retry_at) for wake in sorted(wakes, key=lambda wake: wake.lane != BACKLOG))
         PROJECTION_SHARD_WAKES.labels(lane=wakes[0].lane, outcome='cooled').inc()
 
     async def tick(self) -> int:

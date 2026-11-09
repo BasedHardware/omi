@@ -21,14 +21,20 @@ parts.
      to one leader paging at most 30 pages per tick, with no per-row pre-read.
 3. **Fresh first.** Commits of audio captured under 6 h ago take the `fresh`
    lane, newest capture first. Two drain slots per process stay reserved for
-   backlog while backlog waits. A stuck owner moves behind due owners.
+   backlog while backlog waits. A stuck owner moves behind due owners,
+   including when it has wakes in both lanes: defer its taken backlog wake
+   before moving fresh into backlog, preserving both sequence checks. A push
+   arriving during the drain keeps its lane position. Future capture scores
+   are capped at now. Tail discovery routes each owner using its freshest
+   capture across the bounded pages, retaining its oldest commit for backlog.
 4. **Every non-terminal head has an exit.**
    - Failing heads already took the held disposition after 24 h. That bound
      is now `BATCH_PROJECTION_HEAD_DEADLINE_SECONDS`.
    - Behind `BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED` (default off),
      never-passing `ProjectionBlocked` heads on a closed allowlist take the
      same held disposition once the deadline lapses. Audio is kept and the
-     reviewed redrive owns the unit.
+     reviewed redrive owns the unit. Each exact allowlisted message has its
+     own bounded episode token; changing refusals starts a fresh deadline.
    - Prod enablement needs David's approval.
 
 All new switches default to today's behavior. Shards apply to the serving

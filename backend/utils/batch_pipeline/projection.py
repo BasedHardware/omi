@@ -210,6 +210,9 @@ def blocked_head_deadline_eligible(error: BaseException) -> bool:
 
 def blocked_head_type(error: BaseException) -> str:
     """Bounded, log-safe episode token for a deadline-eligible refusal."""
+    message = str(error)
+    if message in BLOCKED_HEAD_DEADLINE_MESSAGES:
+        return f'ProjectionBlocked:message:{message.replace(" ", "_")}'
     return f'ProjectionBlocked:{projection_block_reason(error)}'
 
 
@@ -544,7 +547,8 @@ class Projector:
         Every commit path pushes a wake except the GPU worker's own merge,
         which has no Redis. This pages pending rows committed since the last
         pass, oldest first, and hands each owner to ``route`` once per call
-        with the row's ``committed_at`` and ``capture_at``. A short page
+        with its oldest ``committed_at`` and freshest known ``capture_at``
+        across the bounded pages. A short page
         restarts the next pass ``slack_seconds`` before its newest row (commit
         stamps precede their transaction), never earlier than
         ``overlap_seconds`` ago; a full page resumes at its cursor.
@@ -553,7 +557,7 @@ class Projector:
         floor = (now - overlap_seconds, '')
         start = self.tail_after or floor
         counts = {'pages': 0, 'rows': 0, 'owners': 0}
-        seen: set[str] = set()
+        owners: dict[str, tuple[float, float | None]] = {}
         newest = None
         for _ in range(max(1, pages)):
             rows, after = self.store.store.projection_page_owners(limit=100, after=start, states=('pending',))
@@ -561,10 +565,10 @@ class Projector:
             counts['rows'] += len(rows)
             for _segment_id, owner_id, committed_at, capture_at in rows:
                 newest = committed_at if newest is None else max(newest, committed_at)
-                if owner_id in seen:
-                    continue
-                seen.add(owner_id)
-                route(owner_id, committed_at, capture_at)
+                oldest, freshest = owners.get(owner_id, (committed_at, None))
+                if capture_at is not None and (freshest is None or capture_at > freshest):
+                    freshest = capture_at
+                owners[owner_id] = (min(oldest, committed_at), freshest)
             if after is None:
                 start = None
                 break
@@ -574,7 +578,9 @@ class Projector:
             restart = floor[0] if newest is None else max(floor[0], newest - slack_seconds)
             start = (max(restart, (self.tail_after or floor)[0]), '')
         self.tail_after = start
-        counts['owners'] = len(seen)
+        for owner_id, (committed_at, capture_at) in owners.items():
+            route(owner_id, committed_at, capture_at)
+        counts['owners'] = len(owners)
         return counts
 
     def discover_owners(

@@ -521,6 +521,50 @@ def test_owner_in_both_lanes_drains_once_and_settles_both(server, blocking_inlin
     assert shards.take(FRESH, 10) == [] and shards.take(BACKLOG, 10) == []
 
 
+@pytest.mark.parametrize('reserve', [0, 1])
+def test_stuck_owner_in_both_lanes_moves_behind_due_backlog(server, blocking_inline, monkeypatch, reserve):
+    monkeypatch.setenv('BATCH_PROJECTION_BACKLOG_RESERVE', str(reserve))
+    monkeypatch.setattr(projection_shard_pump, 'MAX_TAKE', 1)
+    pump, shards, drains = pump_for(server, limit=1)
+    shards.push('stuck', owner_key('stuck'), FRESH, 990.0)
+    shards.push('stuck', owner_key('stuck'), BACKLOG, 1.0)
+    shards.push('due', owner_key('due'), BACKLOG, 500.0)
+    asyncio.run(pump.tick())
+    assert {wake.lane for wake in pump.inflight['stuck']} == {FRESH, BACKLOG}
+    drains.finish('stuck', 'blocked_other')
+    asyncio.run(pump.tick())
+    assert shards.take(FRESH, 10) == []
+    backlog = shards.take(BACKLOG, 10)
+    assert [wake.owner_id for wake in backlog] == ['due', 'stuck']
+    assert backlog[1].score > 1000.0
+    assert drains.requested == ['stuck', 'due']
+
+
+@pytest.mark.parametrize('lane', [FRESH, BACKLOG])
+def test_dual_lane_defer_preserves_a_push_during_the_drain(server, blocking_inline, lane):
+    pump, shards, drains = pump_for(server, limit=1)
+    shards.push('a', owner_key('a'), FRESH, 990.0)
+    shards.push('a', owner_key('a'), BACKLOG, 1.0)
+    asyncio.run(pump.tick())
+    shards.push('a', owner_key('a'), lane, 995.0)
+    drains.finish('a', 'blocked_other')
+    asyncio.run(pump.tick())
+    # New work retains its lane position even though the old turn stopped short.
+    assert [(w.owner_id, w.score) for w in shards.take(lane, 10)] == [('a', 995.0 if lane == FRESH else 1.0)]
+
+
+@pytest.mark.parametrize('source', ['direct', 'committed'])
+def test_future_capture_wake_score_never_exceeds_now(server, source):
+    pump, shards, _ = pump_for(server)
+    shards.refresh()
+    if source == 'direct':
+        assert pump.wake('future', 1000.0 + 3600, 999.0)
+    else:
+        pump.committed('future', [{'capture_at': 1000.0 + 3600, 'committed_at': 999.0}])
+    (wake,) = shards.take(FRESH, 10)
+    assert wake.owner_id == 'future' and wake.score == 1000.0
+
+
 def test_commit_wakes_pick_the_lane_from_capture_age(server, monkeypatch):
     monkeypatch.setattr(projection_shard_pump, 'FRESH_CAPTURE_SECONDS', 3600.0)
     pump, shards, _ = pump_for(server)
@@ -591,6 +635,33 @@ def test_tail_discovery_wakes_gpu_commits_fresh_and_follows_the_newest_row(serve
     assert real.tail_after == (996.0 - projection_shard_pump.TAIL_SLACK_SECONDS, '')
     pump.backstop()
     assert calls == [(940.0, ''), None, (986.0, ''), None]
+
+
+@pytest.mark.parametrize('first_capture', [None, 1000.0 - 7 * 3600, 980.0, 995.0])
+@pytest.mark.parametrize('split_pages', [False, True])
+def test_tail_discovery_uses_the_owners_freshest_capture(server, first_capture, split_pages):
+    shards = make(server, count=1)
+    shards.refresh()
+    rows = [('old', 'gpu', 995.0, first_capture), ('fresh', 'gpu', 996.0, 990.0)]
+    pages = iter([(rows[:1], (995.0, 'old')), (rows[1:], None)] if split_pages else [(rows, None)])
+    store = Mock()
+    store.store.projection_page_owners.side_effect = lambda **kwargs: next(pages)
+    real = projection.Projector(store, Mock(), clock=lambda: 1000.0)
+    real.store = store
+    pump = ShardPump(real, shards)
+    routed = []
+
+    def route(owner, committed, capture):
+        routed.append((owner, committed, capture))
+        assert pump.wake(owner, capture, committed)
+
+    counts = real.discover_tail(route, pages=2, overlap_seconds=60.0, slack_seconds=10.0)
+    expected_capture = max(first_capture or 990.0, 990.0)
+    assert routed == [('gpu', 995.0, expected_capture)]
+    assert counts == {'pages': 2 if split_pages else 1, 'rows': 2, 'owners': 1}
+    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('gpu', expected_capture)]
+    assert shards.take(BACKLOG, 10) == []
+    assert real.tail_after == (986.0, '')
 
 
 def test_a_failed_take_turns_the_process_back_to_the_sweep(server):
@@ -736,7 +807,9 @@ def test_eligible_blocked_head_is_held_after_the_deadline(monkeypatch):
     assert log.results[ids[0]]['projection_blocked_since'] == 1000.0
     projector.project_owner(BURST)
     assert log.results[ids[0]]['projection_state'] == 'pending'
-    assert log.results[ids[0]]['projection_block_type'] == 'ProjectionBlocked:other'
+    assert log.results[ids[0]]['projection_block_type'] == projection.blocked_head_type(
+        ProjectionBlocked('validated VAD speech accounting required')
+    )
     log.results[ids[0]]['projection_blocked_since'] = 1000.0 - 3601
     projector.project_owner(BURST)
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
@@ -756,7 +829,46 @@ def test_a_stamp_from_another_failure_restarts_the_blocked_clock(monkeypatch):
     row = log.results[ids[0]]
     assert row['projection_state'] == 'pending'
     assert row['projection_blocked_since'] == 1000.0
-    assert row['projection_block_type'] == 'ProjectionBlocked:other'
+    assert row['projection_block_type'] == projection.blocked_head_type(
+        ProjectionBlocked('recovery result requires recovery handoff')
+    )
+
+
+@pytest.mark.parametrize('message_a', sorted(projection.BLOCKED_HEAD_DEADLINE_MESSAGES))
+def test_changed_message_refusal_gets_a_fresh_deadline(monkeypatch, message_a):
+    monkeypatch.setenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', '3600')
+    message_b = next(message for message in sorted(projection.BLOCKED_HEAD_DEADLINE_MESSAGES) if message != message_a)
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    real_session = log.session
+    refusal = [message_a]
+
+    def session(sid, *args, **kwargs):
+        if refusal[0] is not None:
+            raise ProjectionBlocked(refusal[0])
+        return real_session(sid, *args, **kwargs)
+
+    log.session = session
+    projector = walker(log)
+    now = [1000.0]
+    projector.clock = lambda: now[0]
+    projector.project_owner(BURST)
+    row = log.results[ids[0]]
+    first_type = row['projection_block_type']
+    assert row['projection_blocked_since'] == 1000.0
+    hold = Mock(return_value=True)
+    monkeypatch.setattr(projector, '_hold_failing_head', hold)
+    # A's expired episode must not hold a newly observed B refusal.
+    now[0] = 4601.0
+    refusal[0] = message_b
+    projector.project_owner(BURST)
+    assert row['projection_state'] == 'pending'
+    assert row['projection_blocked_since'] == 4601.0
+    assert row['projection_block_type'] != first_type
+    hold.assert_not_called()
+    projector.project_owner(BURST)
+    assert row['projection_blocked_since'] == 4601.0
 
 
 def test_a_walk_past_a_held_head_reports_the_chain_end(monkeypatch):
@@ -766,7 +878,12 @@ def test_a_walk_past_a_held_head_reports_the_chain_end(monkeypatch):
     blocked_session(
         log, ids, 'validated VAD speech accounting required', refusals=1
     )  # The test session refuses; the real refusal is in assignment.
-    log.results[ids[0]].update(projection_blocked_since=1000.0 - 86401, projection_block_type='ProjectionBlocked:other')
+    log.results[ids[0]].update(
+        projection_blocked_since=1000.0 - 86401,
+        projection_block_type=projection.blocked_head_type(
+            ProjectionBlocked('validated VAD speech accounting required')
+        ),
+    )
     from contextlib import contextmanager
 
     @contextmanager
