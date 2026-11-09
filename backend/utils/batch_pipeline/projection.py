@@ -210,10 +210,11 @@ def blocked_head_deadline_eligible(error: BaseException) -> bool:
 
 def blocked_head_type(error: BaseException) -> str:
     """Bounded, log-safe episode token for a deadline-eligible refusal."""
+    reason = projection_block_reason(error)
     message = str(error)
     if message in BLOCKED_HEAD_DEADLINE_MESSAGES:
-        return f'ProjectionBlocked:message:{message.replace(" ", "_")}'
-    return f'ProjectionBlocked:{projection_block_reason(error)}'
+        return f'ProjectionBlocked:{reason}:message:{message.replace(" ", "_")}'
+    return f'ProjectionBlocked:{reason}'
 
 
 # Result-row fields stamping a bounded-retry head's first failure. Written

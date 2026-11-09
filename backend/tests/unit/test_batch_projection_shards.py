@@ -835,18 +835,27 @@ def test_a_stamp_from_another_failure_restarts_the_blocked_clock(monkeypatch):
 
 
 @pytest.mark.parametrize('message_a', sorted(projection.BLOCKED_HEAD_DEADLINE_MESSAGES))
-def test_changed_message_refusal_gets_a_fresh_deadline(monkeypatch, message_a):
+@pytest.mark.parametrize('change', ['message', 'reason'])
+def test_changed_message_refusal_gets_a_fresh_deadline(monkeypatch, message_a, change):
     monkeypatch.setenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', '3600')
-    message_b = next(message for message in sorted(projection.BLOCKED_HEAD_DEADLINE_MESSAGES) if message != message_a)
+    message_b = (
+        next(message for message in sorted(projection.BLOCKED_HEAD_DEADLINE_MESSAGES) if message != message_a)
+        if change == 'message'
+        else message_a
+    )
     log = ResultLog()
     ids = chain(log, BURST, 'a', 1)
     real_session = log.session
     refusal = [message_a]
+    reason = ['invalid_recording_clock' if change == 'reason' else None]
 
     def session(sid, *args, **kwargs):
         if refusal[0] is not None:
-            raise ProjectionBlocked(refusal[0])
+            error = ProjectionBlocked(refusal[0])
+            if reason[0] is not None:
+                error.block_reason = reason[0]
+            raise error
         return real_session(sid, *args, **kwargs)
 
     log.session = session
@@ -862,6 +871,8 @@ def test_changed_message_refusal_gets_a_fresh_deadline(monkeypatch, message_a):
     # A's expired episode must not hold a newly observed B refusal.
     now[0] = 4601.0
     refusal[0] = message_b
+    if change == 'reason':
+        reason[0] = 'invalid_recording_identity'
     projector.project_owner(BURST)
     assert row['projection_state'] == 'pending'
     assert row['projection_blocked_since'] == 4601.0

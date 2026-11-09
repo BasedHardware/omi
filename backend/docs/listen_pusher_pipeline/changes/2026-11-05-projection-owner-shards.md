@@ -34,7 +34,8 @@ parts.
      never-passing `ProjectionBlocked` heads on a closed allowlist take the
      same held disposition once the deadline lapses. Audio is kept and the
      reviewed redrive owns the unit. Each exact allowlisted message has its
-     own bounded episode token; changing refusals starts a fresh deadline.
+     own bounded episode token, retaining the closed reason code as well;
+     changing either component starts a fresh deadline.
    - Prod enablement needs David's approval.
 
 All new switches default to today's behavior. Shards apply to the serving
