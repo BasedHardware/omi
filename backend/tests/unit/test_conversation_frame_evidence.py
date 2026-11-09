@@ -37,7 +37,9 @@ def test_conversation_frame_deletion_outboxes_before_metadata_and_retries_failed
     from utils.other import lake_wipe
 
     monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', lambda *args: None)
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
     events = []
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
@@ -91,7 +93,9 @@ def test_conversation_frame_deletion_defaults_to_sync_sources_deleter(monkeypatc
     from utils.other import lake_wipe
 
     monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', lambda *args: None)
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
     events = []
     merge_mod = ModuleType("utils.conversations.merge_conversations")
     merge_mod.delete_conversation_with_sync_sources = lambda uid, cid, **kwargs: events.append(
@@ -191,7 +195,9 @@ def test_lake_dark_deletion_still_purges_candidate_bindings(monkeypatch):
     def forbidden(*args):
         raise AssertionError('lake-dark delete performed IO')
 
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(
         object_lake,
         'delete_entity_upload_candidates',
@@ -211,7 +217,9 @@ def test_lake_failure_prevents_doc_delete(monkeypatch):
     events = []
     _stub_frame_delete(monkeypatch, events)
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
 
     def unavailable(*args):
         raise object_lake.LakeFetchError('lake down')

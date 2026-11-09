@@ -156,7 +156,7 @@ def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(mon
     with _delete_client(monkeypatch) as client:
         monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
         monkeypatch.setattr(
-            conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {}
+            conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
         )
         deleted = MagicMock()
         monkeypatch.setattr(
@@ -269,7 +269,9 @@ def _real_lake_delete(monkeypatch, tmp_path):
     )
     doc.create({'id': 'conversation-1'})
     monkeypatch.setattr(
-        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: doc.get().to_dict()
+        conversation_frame_evidence.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *args, **kwargs: doc.get().to_dict(),
     )
     deleted = MagicMock(side_effect=lambda *args: store.rows.pop(doc.path, None))
     monkeypatch.setattr(

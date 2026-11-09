@@ -156,7 +156,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
         'conversations_db': SimpleNamespace(
-            get_conversation_raw_snapshot=lambda *args: {'sync_merged_from': ['donor']}
+            get_conversation_raw_snapshot=lambda *args, **kwargs: {'sync_merged_from': ['donor']}
         ),
         'object_lake': SimpleNamespace(LakeFetchError=type('LakeFetchError', (Exception,), {})),
         'os': SimpleNamespace(getenv=lambda *args: 'canonical'),

@@ -394,7 +394,7 @@ def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, 
     lake.delete_space_entity('owner', 'parent')
     pointer.clear_memo()
     events = []
-    monkeypatch.setattr(conversations_db, 'get_conversation_raw_snapshot', lambda uid, cid: rows.get(cid))
+    monkeypatch.setattr(conversations_db, 'get_conversation_raw_snapshot', lambda uid, cid, **kwargs: rows.get(cid))
     monkeypatch.setattr(
         conversations_db, 'get_conversation', Mock(side_effect=AssertionError('decoded deletion inventory'))
     )
