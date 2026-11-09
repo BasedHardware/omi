@@ -1302,10 +1302,38 @@ async def test_live_target_backoff_grows_caps_and_blocks_sweep_requests(drain_ti
         drains.request([BURST] * 20)
         await settle(projector)
         assert projector.drain_step.call_count == turn
-        retry()  # simulated expiry requests exactly one new turn
+        retry()  # expiry only re-admits; it never starts a turn on its own
+        await settle(projector)
+        assert projector.drain_step.call_count == turn and not drains.delayed
+        drains.request([BURST] * 20)  # the next sweep request runs exactly one turn
         await settle(projector)
     drains.close()
     assert not drains.live_target_attempts and not drains.delayed
+
+
+@pytest.mark.asyncio
+async def test_live_target_retries_never_exceed_the_sweep_cadence(drain_timers):
+    # 2026-11-09 readback: an expiry wake retried blocked owners every 30-300 s
+    # and doubled owner-chain conflicts. Without sweep requests, expired holds
+    # must start no turns at all; each sweep request starts at most one.
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    turns = 1
+    for _sweep in range(10):
+        assert projector.drain_step.call_count == turns
+        _delay, retry, _handle = drain_timers.pop()
+        retry()
+        await settle(projector)
+        # Expiry alone starts nothing and asks the serving loop for nothing.
+        assert projector.drain_step.call_count == turns
+        assert not drain_timers and not drains.delayed and not drains.queue
+        assert not list(projector.drain_requests)
+        drains.request([BURST])
+        await settle(projector)
+        turns += 1
+    assert projector.drain_step.call_count == turns
+    drains.close()
 
 
 @pytest.mark.asyncio
@@ -1317,6 +1345,7 @@ async def test_live_target_attempts_reset_after_progress_or_other_stop(drain_tim
     assert drains.live_target_attempts[BURST] == 1
     projector.drain_step.return_value = projection.Walk([], advanced, False, stop)
     drain_timers.pop()[1]()
+    drains.request([BURST])
     await settle(projector)
     assert not drains.live_target_attempts and not drains.delayed
     projector.drain_step.return_value = projection.Walk([], [], False, 'head_awaiting_live_target')
@@ -1338,7 +1367,8 @@ async def test_live_target_attempt_state_and_delays_are_bounded(monkeypatch, dra
     drains.request(['overflow'])
     await settle(projector)
     assert list(drains.delayed) == list(drains.live_target_attempts) == ['first']
-    assert list(projector.drain_requests) == ['overflow']
+    # A passive hold that cannot be taken keeps today's behavior: no extra wake.
+    assert not list(projector.drain_requests)
     assert PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get() == before
     # Expire a timer without running its owner yet, then admit another owner.
     monkeypatch.setattr(drains, 'launch', lambda: None)
@@ -1450,6 +1480,7 @@ async def test_live_target_attempts_belong_to_each_owner(drain_timers):
     delay, retry, _ = drain_timers.pop()
     assert delay == 30
     retry()
+    drains.request(['first'])
     await settle(projector)
     assert drain_timers.pop()[0] == 60
     drains.request(['second'])
@@ -1474,5 +1505,7 @@ async def test_live_target_defer_refusal_preserves_active_rerequest(monkeypatch,
     assert projector.drain_step.call_count == 2
     assert list(drains.delayed) == ['already-delayed']
     assert not drains.live_target_attempts and len(drain_timers) == 1
-    assert list(projector.drain_requests) == [BURST]
+    # The refused passive hold adds no serving-loop wake; the active
+    # re-request alone produced the second turn.
+    assert not list(projector.drain_requests)
     drains.close()
