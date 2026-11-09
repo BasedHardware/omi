@@ -212,33 +212,33 @@ class TestVectorDbFindSimilarMemoriesDefensive:
         results = vector_db.find_similar_memories("uid-1", "query", threshold=0.8)
         assert results == []
 
-    def test_find_similar_memories_logs_warning_on_unhandled_match_exception(self, monkeypatch, caplog):
-        """When an individual match raises an unexpected exception during processing, it is logged and skipped."""
+    def test_find_similar_memories_failing_metadata_to_dict_raises(self, monkeypatch):
+        """When an individual match has metadata whose to_dict() raises, the failure is not dropped into {} and propagates."""
         monkeypatch.setattr(vector_db, "index", self.mock_index)
         monkeypatch.setattr(vector_db, "embeddings", self.mock_embeddings)
 
-        class ExceptionRaisingMatch:
-            @property
-            def metadata(self):
-                raise RuntimeError("failing metadata property")
-
-            @property
-            def score(self):
-                return 0.95
+        class BrokenMetadata:
+            def to_dict(self):
+                raise RuntimeError("failing metadata to_dict")
 
         self.mock_index.query.return_value = {
             "matches": [
-                ExceptionRaisingMatch(),
-                {"id": "vec-valid", "score": 0.90, "metadata": {"memory_id": "valid-1"}},
+                {"id": "vec-broken", "score": 0.95, "metadata": BrokenMetadata()},
             ]
         }
 
-        with caplog.at_level("WARNING"):
-            results = vector_db.find_similar_memories("uid-1", "query", threshold=0.8)
+        with pytest.raises(RuntimeError, match="failing metadata to_dict"):
+            vector_db.find_similar_memories("uid-1", "query", threshold=0.8)
 
-        assert len(results) == 1
-        assert results[0]["memory_id"] == "valid-1"
-        assert "find_similar_memories: skipping malformed or unhandled match" in caplog.text
+    def test_extract_query_matches_failing_to_dict_raises(self):
+        """When response.to_dict() raises, _extract_query_matches does not drop the failure into []."""
+
+        class BrokenResponse:
+            def to_dict(self):
+                raise RuntimeError("failing response to_dict")
+
+        with pytest.raises(RuntimeError, match="failing response to_dict"):
+            vector_db._extract_query_matches(BrokenResponse())
 
 
 # ===========================================================================
