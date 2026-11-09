@@ -1,0 +1,19 @@
+id: safe/hold-12s-without-charger-boots-normal
+summary: >
+  A long power-on hold off the charger neither enters SAFE nor powers the
+  pendant straight back off (the button FSM never saw the press begin).
+committee: [1]
+tags: [baseline-bug]
+initial: {charging: false}
+timeline:
+  - {t: 0, hold: 12000}
+end: 20000
+expect:
+  boot_count: 1
+  boots:
+    - {exit: stop, safe: false, is_off: false, log: ["Device initialized successfully"]}
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {safe: true, latch_reason: 2}

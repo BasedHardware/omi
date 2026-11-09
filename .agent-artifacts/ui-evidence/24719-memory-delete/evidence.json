@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-memory-delete-refusal.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 16 Pro iOS 26.5 synthetic component harness: production MemoryItem and shared Undo deletion helper restore the selected row and show failure after a loopback HTTP 409 refusal. Swipe/Undo/retry and offline reopen separately passed in integration_test/memory_deletion_recovery_test.dart.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

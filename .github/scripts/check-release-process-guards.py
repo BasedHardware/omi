@@ -1209,6 +1209,10 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
         spec = importlib.util.spec_from_file_location("cv1_release_guard_smoke", helper)
         release = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(release)
+        # The smoke exercises packaging, not the simulator: pin a synthetic
+        # scenario catalog that the staged report below matches exactly.
+        catalog = {f"suite/s{i}" for i in range(release.SIM_MIN_SCENARIOS)}
+        release.sim_catalog = lambda root=None: catalog
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build, out = root / "build", root / "assets"
@@ -1232,7 +1236,32 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
                 "workflow": ".github/workflows/firmware_release.yml",
                 "repository": "BasedHardware/omi",
             }
-            release.stage(build, out, "9.8.7", False, context)
+            # Staging fails closed without a passing simulator report for this SHA/version.
+            rows = [{"id": name, "verdict": "pass"} for name in sorted(catalog)]
+            report = root / "sim-report.json"
+            report.write_text(
+                json.dumps(
+                    {
+                        "kind": "omi-cv1-sim-report",
+                        "schema_version": 1,
+                        "verdict": "pass",
+                        "mode": "current",
+                        "source_sha": context["sha"],
+                        "firmware_version": "9.8.7",
+                        "selection": ["*"],
+                        "counts": {"scenarios": len(rows), "passed": len(rows), "failed": 0},
+                        "failed": [],
+                        "scenarios": rows,
+                        "fuzz": {"verdict": "pass", "seeds": release.SIM_MIN_FUZZ_SEEDS},
+                    }
+                )
+            )
+            try:
+                release.stage(build, root / "unproven", "9.8.7", False, context, None)
+                return ["firmware release staging must refuse a build without a simulator report"]
+            except ValueError:
+                pass
+            release.stage(build, out, "9.8.7", False, context, report)
             ota = out / "Omi_CV1_OTA_v9.8.7.zip"
             with zipfile.ZipFile(ota) as archive:
                 if archive.read("omi.signed.bin") != image or json.loads(archive.read("manifest.json")) != manifest:

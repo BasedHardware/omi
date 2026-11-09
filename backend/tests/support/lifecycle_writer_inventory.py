@@ -1216,9 +1216,18 @@ FIELD_SITES = {
         ('_complete_unstampable_orphan_conversation_txn', 'status', "'completed'", ('status',)),
     ],
     'database/conversation_quiet_checks.py': [
+        # Dark quiet-check retirement names the orphan-repair exit; it does
+        # not terminalize the capture or create another arm site.
+        ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('exit', 'reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('status',)),
+        (
+            '_evaluate_quiet_check.evaluate',
+            'status',
+            "'quiet_done'",
+            ('last_failure_code', 'reconcile_after_at', 'status', 'updated_at'),
+        ),
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
@@ -2718,6 +2727,27 @@ FIELD_SITES = {
         ('_load_admitted_conversation', 'status', 'ConversationStatus.processing', ('status',))
     ],
     'utils/conversations/lifecycle.py': [
+        # Reviewed orphan completion: one in-memory relevance snapshot and
+        # one persisted patch with bounded Home-pending metadata.
+        (
+            'complete_orphan_batch_capture',
+            'home_transcription_deadline_at',
+            'now + timedelta(seconds=home_transcription_deadline_seconds())',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        (
+            'complete_orphan_batch_capture',
+            'home_transcription_pending_at',
+            'now',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        (
+            'complete_orphan_batch_capture',
+            'status',
+            "'completed'",
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        ('complete_orphan_batch_capture', 'status', "'completed'", ('status',)),
         (
             'get_finalization_status',
             'status',
@@ -2733,7 +2763,7 @@ FIELD_SITES = {
                 'terminal',
                 'terminal_outcome',
             ),
-        )
+        ),
     ],
     'utils/conversations/late_meeting_notes.py': [
         (
@@ -4146,6 +4176,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('database/stuck_backfill.py', '_close_txn'): 'unclassified',
         ('utils/conversations/late_meeting_notes.py', 'refresh_notes_after_evidence'): 'unclassified',
         ('utils/conversations/lifecycle.py', 'complete'): 'owner',
+        ('utils/conversations/lifecycle.py', 'complete_orphan_batch_capture'): 'owner',
         ('utils/conversations/lifecycle.py', 'fail_and_discard_processing'): 'owner',
         ('utils/conversations/lifecycle.py', 'transition'): 'owner',
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',

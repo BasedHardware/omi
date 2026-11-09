@@ -47,6 +47,7 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
@@ -91,7 +92,6 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
@@ -279,6 +279,7 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
@@ -298,7 +299,6 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
@@ -552,6 +552,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
@@ -613,7 +614,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'
@@ -925,6 +925,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
@@ -1328,6 +1329,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
@@ -1687,6 +1689,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
           # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
           BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
@@ -1735,6 +1738,8 @@ overlay:
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          # 2026-11-09 David (relay 3e764e): enable the scheduled repair owner until the long-term fix.
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
           # Activated at runtime 2026-10-27 02:07Z (lead 5da7dc/ebc45a) after the 5% unsupported-language held
           # loop; declared here so a train carries the serving value instead of resetting it to false.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'true', category: ops_kill}
@@ -1783,7 +1788,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'

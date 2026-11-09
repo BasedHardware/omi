@@ -422,6 +422,8 @@ def start_serving_from_env():
                 logging.getLogger(__name__).error(
                     'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
                 )
+            else:
+                metrics.projection_pump_last_success.set(time.time())
             finally:
                 metrics.projection_pump_last_tick.set(time.time())
                 logging.getLogger(__name__).info(
@@ -496,10 +498,18 @@ def start_serving_from_env():
                 pass
 
     async def run():
-        if pump_enabled:
-            await projection_pump()
-        else:
-            await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        from utils.batch_pipeline.projection_drain import set_recurring_sweep
+
+        # Owner drains hold live-target owners passively only while this loop
+        # will sweep them again.
+        set_recurring_sweep('pump' if pump_enabled else 'serving')
+        try:
+            if pump_enabled:
+                await projection_pump()
+            else:
+                await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        finally:
+            set_recurring_sweep(None)
 
     return stop, start_background_task(
         run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
