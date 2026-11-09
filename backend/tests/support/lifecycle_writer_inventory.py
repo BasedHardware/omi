@@ -1868,6 +1868,7 @@ FIELD_SITES = {
         ('finish.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
     ],
     'database/batch_pipeline_record_lease_recovery.py': [
+        ('prepare_recovery', 'record_audio_closed', 'False', ('record_audio_closed',)),
         ('prepare_recovery', 'record_audio_closed', 'False', ('record_audio_closed', 'record_audio_partial')),
         ('prepare_recovery', 'record_audio_partial', 'mark', ('record_audio_closed', 'record_audio_partial')),
         (

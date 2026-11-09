@@ -393,7 +393,8 @@ STATES = (
             'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
             'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
             'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
-            'the existing process/pod-death repair proof remains its exit. Off-mode live tokens never expire by age; the leased per-token view is separate. '
+            'the existing process/pod-death repair proof remains its exit. Off-mode frame tokens never expire by age; '
+            'serve-created custody tokens retain their own lease exit after rollback. The leased per-token view is separate. '
             'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
             'general live-producer dwell visibility remains required',
         ),
@@ -438,7 +439,8 @@ STATES = (
             note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
             'clears token map and re-arms hourly inventory; late frames re-activate via renew_record_token_lease. '
             'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
-            'only after durable acceptance in finish. Never deletes audio.',
+            'only after durable acceptance in finish, including after rollback. Recovery is independent of '
+            'conversation status; uncaptured input reopens for normal admission of the newer revision. Never deletes audio.',
         ),
         row(
             'record_audio',
