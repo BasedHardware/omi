@@ -1878,6 +1878,7 @@ FIELD_SITES = {
                 'available_at',
                 'conversation_id',
                 'enqueued_at',
+                'lease_recovery',
                 'merge_pending',
                 'owner_id',
                 'owner_key',

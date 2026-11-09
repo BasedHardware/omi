@@ -47,7 +47,10 @@ the exact socket token with fresh clocks, bump revision and increment late_appen
 The existing partial continuation processes newly retained audio, including an
 interior gap when the old tail already reached finished_at. A distinct durable
 coordinator preserves completed/leased original work and immutable projection
-bindings. It uses the same privacy, payer, admission and annotated-text guards
+bindings. A not-yet-admitted original pending obligation is reused instead.
+Continuation waits for an older full intake's completed publication ledger;
+an older full projection cannot overwrite a newer partial interior fill.
+It uses the same privacy, payer, admission and annotated-text guards
 as ordinary partial continuation. No completeness is invented: recovery carries
 a partial marker and retains the existing partial continuation/retirement exits.
 Off remains the old path; complete-seal shadow frame observations only count.

@@ -31,7 +31,11 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
     original_ref = jobs.document(original)
     original_job = original_ref.get(transaction=tx).to_dict() or {}
     # Existing partial captures retain their coordinator and sample coverage.
-    ref = original_ref if original_job.get('partial_coordinator') else jobs.document(recovery_segment(uid, cid))
+    ref = (
+        original_ref
+        if original_job.get('partial_coordinator') or original_job.get('state') in {'record_pending', 'partial_retired'}
+        else jobs.document(recovery_segment(uid, cid))
+    )
     job = original_job if ref == original_ref else ref.get(transaction=tx).to_dict() or {}
     generation = assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
     policy = (
@@ -82,6 +86,7 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
         'policy_source': 'admission',
         'merge_pending': False,
         'partial_coordinator': True,
+        'lease_recovery': ref != original_ref,
         'partial_reason': mark['reason'],
     }
     if job.get('partial_run'):

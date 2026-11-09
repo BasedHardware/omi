@@ -30,6 +30,19 @@ def continuation_refusal(store, pending):
             return 'byok_refused'
         if job.get('state') != 'record_pending':
             return 'state_changed'
+        if job.get('lease_recovery'):
+            # A full projection of the old sealed inventory must settle before
+            # a partial fill, otherwise that older full pass could erase it.
+            content, original = record_identity(pending['owner_id'], pending['conversation_id'])
+            intake = tx.get('intakes', 'bp_' + content)
+            ledger = tx.get('content', f"{pending['owner_id']}/{content}")
+            if intake:
+                if ledger.get('status') != 'completed':
+                    return 'state_changed'
+            else:
+                previous = tx.get('jobs', original)
+                if previous and previous.get('state') != 'committed':
+                    return 'state_changed'
         return None
 
     return store.run(read)

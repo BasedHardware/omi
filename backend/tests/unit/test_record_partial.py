@@ -1126,3 +1126,37 @@ def test_crashed_post_seal_producer_has_partial_finish_exit_on_recovery_coordina
     recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
     assert recovery['state'] == 'record_pending' and recovery['partial_coordinator']
     assert source[0].run(lambda tx: tx.get('jobs', original['segment_id'])) == original
+
+
+@pytest.mark.parametrize('old_state', ['record_pending', 'committed'])
+def test_post_seal_recovery_preserves_old_work_and_waits_for_full_publication(source, monkeypatch, old_state):
+    from database.batch_pipeline_record_lease_recovery import recovery_segment
+    from database.record_partial import continuation_refusal
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    assert finish(source) == 'partial_finished'
+    original = pending(source)
+    original.update(state=old_state, partial_coordinator=False)
+    source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
+    source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    renew_record_token_lease(
+        'synthetic',
+        'record',
+        source='frames',
+        session='resumed',
+        producer={'pod': 'resumed', 'process_started_at': 100},
+        firestore_client=source[1],
+    )
+    if old_state == 'record_pending':
+        assert pending(source)['partial_coordinator']
+        assert not source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+        return
+    recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    content = original['record_content_id']
+    source[0].run(lambda tx: tx.put('intakes', 'bp_' + content, {'segment_ids': [original['segment_id']]}))
+    source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'processing'}))
+    assert continuation_refusal(source[0], recovery) == 'state_changed'
+    source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}))
+    assert continuation_refusal(source[0], recovery) is None
+    assert pending(source) == original
