@@ -481,8 +481,10 @@ changes start fresh scoped state. A custom endpoint's serve death opens
 that endpoint's local target breaker and does not bench the family default.
 The Redis fleet/cost namespaces still include the credential in their
 digests, so shared state still starts fresh on rotation.
-Routing snapshots retain health scores, selection benches and family account
-benches. In-memory views reset on an identity boundary instead of
+While `STT_ROUTING_MODE=off`, snapshots return a neutral score with zero
+samples and merge only family account benches — local and cached selection
+benches and scores are ignored without being erased, so toggling back on
+retains routing state. In-memory views reset on an identity boundary instead of
 mixing identities, and in-flight writes cannot populate a new identity's
 cache. v7/v1 and older namespaces are never read, migrated or backfilled.
 Raw URLs and credentials never enter Redis paths, logs or metrics.
@@ -568,12 +570,16 @@ cost also does so because it appears first. A more expensive endpoint receives
 only overflow/failover traffic. No ramp routes users away from a healthy,
 capable, unconstrained Parakeet target to exercise an expensive endpoint.
 
-Cost routing is permanent at 100 percent after the 2026-11-09 graduation.
-The old language-arm/primary pin does not supersede capability and cost.
-`PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws windowed
-Parakeet; health, capacity and account gates remain authoritative.
-Rollback of this graduation requires a source revert. No deployment or
-production qualification is part of these local test results.
+Production and development remain `STT_ROUTING_MODE=shadow` and
+`STT_ROUTING_ON_PERCENT=0` on merge. Observe proposed/static primary agreement,
+health transitions and outcomes first; then set `on` with percentages 5 → 25 →
+100. The router cohort is `sha256("stt-routing-on:" + uid)` and never changes
+Parakeet's allocation cohort. In active routing the old language-arm/primary
+pin does not supersede capability and cost. `STT_ROUTING_ON_PERCENT=0`,
+`STT_ROUTING_MODE=shadow`, or `off` restore static selection after the runtime
+configuration deployment. `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws
+windowed Parakeet. No deployment or production qualification is part of these
+local test results.
 
 New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `capability|cost_primary|benched_skip|ramp_skip|capacity_skip|failover`,

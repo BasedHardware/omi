@@ -40,6 +40,8 @@ def record_change(
 ):
     if authority not in {'user', 'dream'}:
         raise ValueError('agent_invalid_authority')
+    if authority == 'dream':
+        store.require_enabled(uid)
     from database.conversations import guard_match_score_size
 
     patch = {**patch, **{field: firestore.DELETE_FIELD for field in PROJECTION_FAMILY_FIELDS}}

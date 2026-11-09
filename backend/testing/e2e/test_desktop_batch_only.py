@@ -29,15 +29,17 @@ def remote(client, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'platform,source,byok,consent,disabled',
+    'platform,source,mobile_percent,byok,consent,disabled',
     [
-        ('macos', 'desktop', False, True, True),
-        ('windows', 'desktop', False, True, True),
-        ('ios', 'phone', False, True, True),
-        ('android', 'omi', False, True, True),
-        ('macos', 'desktop', True, True, True),
-        ('macos', 'desktop', False, False, True),
-        ('macos', 'desktop', False, True, False),
+        ('macos', 'desktop', '0', False, True, True),
+        ('windows', 'desktop', '0', False, True, True),
+        ('ios', 'phone', '0', False, True, True),
+        ('android', 'omi', '0', False, True, True),
+        ('ios', 'phone', '100', False, True, True),
+        ('android', 'omi', '100', False, True, True),
+        ('macos', 'desktop', '0', True, True, True),
+        ('macos', 'desktop', '0', False, False, True),
+        ('macos', 'desktop', '0', False, True, False),
     ],
 )
 def test_native_desktop_custody_or_exact_live_rollback(
@@ -49,8 +51,10 @@ def test_native_desktop_custody_or_exact_live_rollback(
     disabled,
     platform,
     source,
+    mobile_percent,
     byok,
     language='en',
+    auto_percent='0',
     learned=None,
 ):
     from config.server_batch import owned
@@ -84,6 +88,8 @@ def test_native_desktop_custody_or_exact_live_rollback(
         monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
         monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
         monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+        monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', mobile_percent)
+        monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', auto_percent)
         monkeypatch.setattr(runtime, 'PUSHER_ENABLED', True)
         if byok:
             monkeypatch.setattr(runtime, 'get_byok_keys', lambda: {'soniox': 'synthetic-test-key'})
@@ -125,13 +131,13 @@ def test_native_desktop_custody_or_exact_live_rollback(
         row = user.collection('conversations').document(session['conversation_id']).get().to_dict()
         assert row is not None
         decoded = prepare_conversation_for_read(row, test_uid)
-        language_admitted = language == 'en' or learned == {'en': 100}
+        language_admitted = language == 'en' or (auto_percent == '100' and learned == {'en': 100})
         if (
             disabled
             and consent
             and not byok
             and language_admitted
-            and platform in {'macos', 'windows', 'ios', 'android'}
+            and (platform in {'macos', 'windows'} or mobile_percent == '100')
         ):
             assert owned(row)
             if language is None:
@@ -162,9 +168,11 @@ def test_native_desktop_custody_or_exact_live_rollback(
 
 @pytest.mark.parametrize('platform', ['ios', 'android'])
 @pytest.mark.parametrize('language', ['auto', None])
-@pytest.mark.parametrize('learned', [{'en': 100}, {'en': 50, 'ja': 50}])
+@pytest.mark.parametrize(
+    'auto_percent,learned', [('0', {'en': 100}), ('100', {'en': 100}), ('100', {'en': 50, 'ja': 50})]
+)
 def test_auto_mobile_preserves_original_custody_and_exclusions(
-    client, test_uid, monkeypatch, remote, platform, learned, language
+    client, test_uid, monkeypatch, remote, platform, auto_percent, learned, language
 ):
     # The auto/multi-language variants need the harness's multi-language live
     # vendor (Modulate), which the default registry withdraws (ramp 0); run
@@ -181,7 +189,9 @@ def test_auto_mobile_preserves_original_custody_and_exclusions(
         True,
         platform,
         'omi',
+        '100',
         False,
         language=language,
+        auto_percent=auto_percent,
         learned=learned,
     )

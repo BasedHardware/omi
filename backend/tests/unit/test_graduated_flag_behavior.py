@@ -3,7 +3,6 @@
 import pytest
 
 from config import audio_archive, episodes, server_batch, summary_guarantee
-from config.policy.listen import resolve_listen_policy, routing_enabled
 from config.policy.stages import resolve_stage_policy
 from utils.llm.notes_agent_policy import plan_notes_agent
 
@@ -15,12 +14,8 @@ def test_retired_admission_knobs_cannot_withhold_graduated_behavior(monkeypatch,
         'AUDIO_ARCHIVE_PERCENT',
         'EPISODES_PERCENT',
         'EPISODES_CLIENT_CHANNELS',
-        'SERVER_BATCH_ONLY_MOBILE_PERCENT',
-        'SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT',
         'FIRST_SUMMARY_DEADLINE_ENABLED',
         'FIRST_SUMMARY_DEADLINE_PERCENT',
-        'STT_ROUTING_MODE',
-        'STT_ROUTING_ON_PERCENT',
         'CONVERSATION_NOTES_AGENT_PERCENT',
     ):
         monkeypatch.setenv(key, value)
@@ -31,16 +26,10 @@ def test_retired_admission_knobs_cannot_withhold_graduated_behavior(monkeypatch,
     assert episodes.client_channel_admitted('beta')
     assert episodes.client_channel_admitted('store')
     assert not episodes.client_channel_admitted('unknown')
-    assert server_batch.selected('owner', 'ios', 'omi')
-    assert server_batch.selected('owner', 'android', 'omi')
-    assert server_batch.auto_selected('owner', 'web')
     assert not server_batch.selected('owner', 'ios', 'phone_call')
     assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert resolve_stage_policy('owner', 'first_summary', flags={}).first_summary_enabled
     assert not resolve_stage_policy('', 'first_summary', flags={}).first_summary_enabled
-    policy = resolve_listen_policy('owner', flags={})
-    assert policy.routing_on and policy.routing_on_percent == 100
-    assert routing_enabled('owner')
     assert plan_notes_agent(uid='owner', conversation_id='conversation', words=2000).run
 
 

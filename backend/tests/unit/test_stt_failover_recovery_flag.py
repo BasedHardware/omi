@@ -62,6 +62,7 @@ ENV = 'STT_FAILOVER_RECOVERY_ENABLED'
 @pytest.fixture(autouse=True)
 def _isolated_stt_state(monkeypatch):
     enabled_live_targets(monkeypatch)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     fleet = FleetHealth()
     for module in (live_health, live_chain, live_session, streaming):
         monkeypatch.setattr(module, 'health', fleet)

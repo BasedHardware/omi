@@ -30,6 +30,7 @@ def _capture_background_tasks(monkeypatch):
 
 
 def test_transcript_schedule_without_a_loop_records_bounded_drop_reason(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)
     labels = {'write_path': 'transcript_result', 'kind': 'result'}
     before_attempted = _value(FLEET_HEALTH_WRITE_ATTEMPTED, **labels)
@@ -46,6 +47,7 @@ def test_transcript_schedule_without_a_loop_records_bounded_drop_reason(monkeypa
 
 
 def test_raising_write_counters_do_not_break_record_or_schedule(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
 
     def raise_counter_error(**_labels):
         raise RuntimeError('synthetic metrics failure')
@@ -61,6 +63,7 @@ def test_raising_write_counters_do_not_break_record_or_schedule(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_raising_attempt_counter_does_not_block_background_schedule(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
 
     def raise_counter_error(**_labels):
         raise RuntimeError('synthetic metrics failure')
@@ -81,6 +84,7 @@ async def test_raising_attempt_counter_does_not_block_background_schedule(monkey
 
 @pytest.mark.asyncio
 async def test_transcript_written_counter_increments_only_after_pipeline_commit(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     labels = {'write_path': 'transcript_result', 'kind': 'result'}
     attempted_before = _value(FLEET_HEALTH_WRITE_ATTEMPTED, **labels)
     written_before = _value(FLEET_HEALTH_WRITE_WRITTEN, **labels)
@@ -122,6 +126,7 @@ async def test_transcript_written_counter_increments_only_after_pipeline_commit(
 
 @pytest.mark.asyncio
 async def test_transcript_post_commit_cleanup_error_stays_written_only(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     labels = {'write_path': 'transcript_result', 'kind': 'result'}
     written_before = _value(FLEET_HEALTH_WRITE_WRITTEN, **labels)
     dropped_labels = {**labels, 'reason': 'redis_error'}
@@ -167,6 +172,7 @@ async def test_transcript_post_commit_cleanup_error_stays_written_only(monkeypat
 async def test_cost_result_backoff_does_not_slide_or_mark_local_state_unreconciled(monkeypatch):
     from utils.stt.live_gate import GateState
 
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)
     health._redis_retry_at = 1005.0
     health._cost_local[('soniox', 'all')] = GateState(stage=0)
@@ -188,6 +194,7 @@ async def test_cost_result_backoff_does_not_slide_or_mark_local_state_unreconcil
 
 @pytest.mark.asyncio
 async def test_transcript_redis_backoff_uses_reason_label(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)
     health._redis_retry_at = 1001.0
     labels = {'write_path': 'transcript_result', 'kind': 'result', 'reason': 'redis_backoff'}
@@ -205,6 +212,7 @@ async def test_transcript_redis_backoff_uses_reason_label(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cost_result_identity_change_is_counted_with_its_write_path(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)
     monkeypatch.setattr(health, '_check_identity', lambda: 'current')
     labels = {'write_path': 'cost_routing_result', 'kind': 'result'}
@@ -225,6 +233,8 @@ async def test_cost_result_identity_change_is_counted_with_its_write_path(monkey
 @pytest.mark.asyncio
 async def test_cost_result_written_counter_increments_after_a_cas_commit(monkeypatch):
     from utils.stt.live_gate import GateState
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
 
     class Redis:
         async def mget(self, keys):
@@ -262,6 +272,7 @@ async def test_cost_result_written_counter_increments_after_a_cas_commit(monkeyp
 
 @pytest.mark.asyncio
 async def test_cost_bench_redis_error_uses_bounded_path_and_reason_labels(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)
     monkeypatch.setattr(health, '_check_identity', lambda: 'stable')
 
@@ -286,6 +297,7 @@ async def test_cost_bench_redis_error_uses_bounded_path_and_reason_labels(monkey
 
 @pytest.mark.asyncio
 async def test_cost_bench_commit_then_identity_change_records_commit_and_drop(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)
     monkeypatch.setattr(health, '_check_identity', lambda: 'stable')
 
@@ -325,6 +337,8 @@ async def test_cost_bench_post_commit_identity_check_error_is_not_a_drop(monkeyp
     from dataclasses import replace
 
     from utils.stt.live_gate import GateState
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
 
     class Redis:
         committed = False

@@ -160,6 +160,8 @@ def fallback_count():
 
 async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=False, source=None):
     if router_on:
+        monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+        monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
         live_session.health._cost_local[('modulate-velma-2', 'all')] = GateState(
             stage=0, until=live_session.health._clock() + 300, generation=1
         )
@@ -305,7 +307,7 @@ async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, ord
         # A late callback from the failed replay leg cannot duplicate text.
         raws[0]._stream_transcript([{'text': 'synthetic', 'start': 0, 'end': 1, 'speaker': 'speaker_0'}])
         assert len(base.emitted) == 1
-        assert len(actual._stt_failed_providers) + len(actual._stt_failed_targets) == 2
+        assert len(actual._stt_failed_providers) == 2
         assert not actual.host.state.stt_terminal_failure
         assert REPLAY_CLOSED.labels(source='parakeet', successor=first_family)._value.get() == closed_before + 1
         assert raws[0]._ws.closed and raws[0]._send_task.done() and raws[0]._recv_task.done()

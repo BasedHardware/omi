@@ -230,6 +230,7 @@ async def test_lexical_partial_page_does_not_advance_when_other_collection_used_
 def turn_store(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(dream_turns.firestore, 'transactional', lambda fn: fn)
     return DreamFirestore()
 

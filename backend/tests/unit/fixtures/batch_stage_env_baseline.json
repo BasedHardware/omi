@@ -29,6 +29,13 @@
       "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
+      "path": "database/batch_pipeline_projection.py",
+      "function": "ProjectionStore.run",
+      "name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
       "path": "database/batch_pipeline_shadow_hook.py",
       "function": "_shadow_mode",
       "name": "BATCH_JOBSTORE_MODE",

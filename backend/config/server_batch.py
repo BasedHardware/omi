@@ -18,6 +18,7 @@ MARKER = 'server_batch_only'
 PREVIEW_CUSTODY_MARKER = 'listen_preview_batch_custody'
 AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
 SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
+AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
 WEB_COHORT_SALT = 'server_batch_web_v1'
 # Fixed policy vocabulary, independent of operator input; Japanese is measured
 # but can never enter the experiment.
@@ -61,7 +62,13 @@ def continuation_language(host, capture: Mapping | None = None):
 
 
 def auto_selected(owner_id: str, platform: str | None) -> bool:
-    return bool(owner_id and platform in {'ios', 'android', 'web'})
+    percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0'))
+    return bool(
+        platform in {'ios', 'android', 'web'}
+        and owner_id
+        and percent > 0
+        and cohort_bucket(owner_id, AUTO_COHORT_SALT) < percent
+    )
 
 
 def enabled() -> bool:
@@ -73,7 +80,8 @@ def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
         return False
     platform = platform or ('macos' if source == 'desktop' else None)
     if platform in {'ios', 'android'}:
-        return bool(owner_id)
+        percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0'))
+        return bool(owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent)
     if platform == 'web':
         percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_WEB_PERCENT', '0'))
         return bool(owner_id and percent > 0 and cohort_bucket(owner_id, WEB_COHORT_SALT) < percent)

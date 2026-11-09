@@ -100,7 +100,7 @@ from utils.stt.live_metrics import (
     provider_family,
 )
 from config.live_stt_registry import routing_on
-from config.policy.listen import current_listen_policy, listen_value
+from config.policy.listen import current_listen_policy, routing_mode_raw, listen_value
 from routers.listen.policy import initialize_session_policy
 from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
@@ -419,13 +419,22 @@ class ListenSessionRuntime:
         self._cost_routing_arm: str | None = None
         self._routing_cohort: RoutingCohort | None = None
         if managed_chain_enabled(self):
+            policy = getattr(self.state, 'listen_policy', None)
+            if policy is not None:
+                self._cost_routing_arm = policy.routing_arm
+                self._routing_cohort = RoutingCohort(policy.routing_cohort)
+                return
             try:
                 self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
             except (ValueError, TypeError):
                 # Selection owns invalid-config diagnostics and static fallback.
                 # A cohort metric must never prevent that serving path running.
                 self._cost_routing_arm = 'control'
-            arm = 'on' if self._cost_routing_arm == 'on' else 'off'
+            arm = (
+                'on'
+                if self._cost_routing_arm == 'on'
+                else 'shadow' if routing_mode_raw().lower() == 'shadow' else 'off'
+            )
             self._routing_cohort = RoutingCohort(arm)
 
     def _record_session_transcript_outcome(self) -> None:

@@ -28,6 +28,7 @@ def db(monkeypatch):
             'last_changed_at': NOW,
         }
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID + ',' + OTHER)
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)

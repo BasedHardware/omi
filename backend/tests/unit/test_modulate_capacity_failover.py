@@ -14,7 +14,7 @@ from tests.unit.test_parakeet_window_live import runtime, _flush_capture
 from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
 from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.observability import fallback
-from utils.stt import live_session, live_chain, live_router, parakeet_window as window, streaming as st
+from utils.stt import live_chain, live_router, parakeet_window as window, streaming as st
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, WINDOW_ADMISSION
 
 
@@ -26,6 +26,8 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def serving(monkeypatch, runtime):
     enabled_live_targets(monkeypatch)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox'])
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
@@ -89,10 +91,6 @@ async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(re
         check=True,
     ).stdout
     source = source.replace('fallback_reason_for_typed_death', 'fallback_metric_reason')
-    source = source.replace(
-        'from utils.stt.live_health import health, bounded_language, mode as routing_mode',
-        "from utils.stt.live_health import health, bounded_language\nrouting_mode = lambda: 'off'",
-    )
     namespace = {'__name__': f'historical_chain_{revision}'}
     exec(compile(source, f'{revision}/live_chain.py', 'exec'), namespace)
     # Historical source predates the additive cohort label. Bind its counter
@@ -116,15 +114,8 @@ async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(re
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('previous_soniox', [True])
+@pytest.mark.parametrize('previous_soniox', [False, True])
 async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(monkeypatch, previous_soniox):
-    # Exercise the router's static availability fallback under simultaneous capacity refusal.
-    connect_chain = live_session.connect_configured_chain
-
-    async def static_availability_fallback(**kwargs):
-        return await connect_chain(**{**kwargs, '_routing_static': True})
-
-    monkeypatch.setattr(live_session, 'connect_configured_chain', static_availability_fallback)
     admission = window.WindowAdmission()
     monkeypatch.setattr(window, 'admission', admission)
     releases = [admission.acquire() for _ in range(8)]
@@ -152,7 +143,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
     overflow_before = WINDOW_ADMISSION.labels(outcome='overflow')._value.get()
     try:
         tasks = [asyncio.create_task(actual._failover_stt_socket()) for actual in actuals]
-        await asyncio.wait_for(started.wait(), timeout=2)
+        await started.wait()
         await asyncio.sleep(0)
         release_probe.set()
         assert await asyncio.gather(*tasks) == [True] * 35
@@ -226,7 +217,7 @@ def test_exhausted_children_have_a_zero_baseline_before_the_first_burst(monkeypa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('previous_soniox', [True])
+@pytest.mark.parametrize('previous_soniox', [False, True])
 async def test_window_origin_modulate_ring_pressure_replays_exactly_once_on_soniox(monkeypatch, previous_soniox):
     actual, _, _, legs, capture = await setup_chain(monkeypatch)
     try:

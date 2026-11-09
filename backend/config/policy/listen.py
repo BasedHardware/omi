@@ -182,11 +182,40 @@ def window_allocation(uid: str | None) -> bool:
 
 
 def routing_enabled(uid: str | None) -> bool:
-    return bool(uid)
+    if not uid:
+        return False
+    policy = current_listen_policy.get()
+    if policy is not None:
+        if not policy.routing_percent_valid and policy.routing_mode_raw.lower() == 'on':
+            raise ValueError('invalid recorded routing percent')
+        return policy.routing_on
+    env = os.environ
+    return (
+        env.get('STT_ROUTING_MODE', 'off').lower() == 'on'
+        and bool(uid)
+        and (cohort_bucket(uid, 'stt-routing-on', bits=64) < _routing_percent(env))
+    )
+
+
+def _routing_percent(env):
+    value = float(env.get('STT_ROUTING_ON_PERCENT', '0'))
+    if not math.isfinite(value) or not 0 <= value <= 100:
+        raise ValueError('invalid STT_ROUTING_ON_PERCENT')
+    return value
 
 
 def routing_targets_json():
     return os.environ.get('STT_ROUTING_TARGETS_JSON', '')
+
+
+def routing_mode_raw():
+    policy = current_listen_policy.get()
+    return policy.routing_mode_raw if policy is not None else os.environ.get('STT_ROUTING_MODE', 'off')
+
+
+def routing_mode():
+    value = routing_mode_raw().strip().lower()
+    return value if value in {'off', 'shadow', 'on'} else 'off'
 
 
 def routing_timeout():
@@ -306,6 +335,11 @@ def resolve_listen_policy(
             number('STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE', 'paid_spillover_deepgram_per_minute', 30, integer=True)
         ),
     }
+    mode = env.get('STT_ROUTING_MODE', 'off')
+    try:
+        percent, percent_valid = _routing_percent(env), True
+    except ValueError:
+        percent, percent_valid = 0.0, False
     try:
         window, window_parse_valid = _window_percent(env), True
     except ValueError:
@@ -342,10 +376,10 @@ def resolve_listen_policy(
     return ListenSessionPolicy(
         source_role=source_role(env, 'listen'),
         invalid_fields=tuple(invalid_fields),
-        routing_mode_raw='on',
-        routing_on_percent=100.0,
-        routing_percent_valid=True,
-        routing_on=bool(uid),
+        routing_mode_raw=mode,
+        routing_on_percent=percent,
+        routing_percent_valid=percent_valid,
+        routing_on=mode.lower() == 'on' and bool(uid) and cohort_bucket(uid, 'stt-routing-on', bits=64) < percent,
         routing_targets_json=env.get('STT_ROUTING_TARGETS_JSON', ''),
         routing_disruption_gate=gate,
         routing_redis_timeout_seconds=min(0.1, max(0.01, _number(env, 'STT_ROUTING_REDIS_TIMEOUT_SECONDS', 0.075))),

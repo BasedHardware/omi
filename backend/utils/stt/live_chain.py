@@ -24,7 +24,7 @@ from utils.stt.live_signal import provider_observation
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
-from utils.stt.live_health import health, bounded_language
+from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
     connecting_target,
     permitted_target,
@@ -204,6 +204,7 @@ async def connect_configured_chain(
     failed_targets = failed_targets if failed_targets is not None else set()
     candidates = [primary_service, *ordered]
     decision_started = time.perf_counter()
+    mode = routing_mode()
     fleet_states = {}
     active = False
     canary = False
@@ -316,9 +317,9 @@ async def connect_configured_chain(
 
     routing_decision: dict = {}
     gate_states: dict[str, GateState] = {}
-    if routing_uid and not _routing_static:
+    if mode != 'off' and routing_uid and not _routing_static:
         try:
-            canary = True
+            canary = routing_on(routing_uid)
             last_resorts = []
             proposed = propose(
                 health,
@@ -333,32 +334,33 @@ async def connect_configured_chain(
                 decision=routing_decision,
             )
             gate_states = routing_decision.get('states') or {}
-            active = True
-            # An override endpoint does not replace the configured family
-            # endpoint unless that endpoint is itself in the target chain.
-            # Registry withdrawal/capability/ramp exclusions also own the
-            # default endpoint. Re-appending it as a "legacy" tail would
-            # bypass the very exclusion the policy just decided.
-            routes = [(STTService(target.family), target) for target in proposed]
-            routes.extend((STTService(target.family), target) for target in last_resorts)
-            # Preserve every permitted configured endpoint, even when the
-            # proposal omitted it for capacity or health. Hard withdrawals
-            # were already applied by configured_candidates. A custom
-            # endpoint must never consume the family's default tail.
-            for service in configured_candidates:
-                if any(s == service and (t is None or t.endpoint is None) for s, t in routes):
-                    continue
-                target, _ = route_target(service)
-                if (
-                    routing_decision.get('exclude_benched')
-                    and routes
-                    and gate_states.get(target.id, GateState()).stage == 0
-                ):
-                    # The escape keeps a benched family out while a
-                    # stage>0 route can serve; it must not return as tail.
-                    COST_DECISION.labels(target=target.id, reason='benched_skip').inc()
-                    continue
-                routes.append((service, target if targets and target in targets else None))
+            if canary:
+                active = True
+                # An override endpoint does not replace the configured family
+                # endpoint unless that endpoint is itself in the target chain.
+                # Registry withdrawal/capability/ramp exclusions also own the
+                # default endpoint. Re-appending it as a "legacy" tail would
+                # bypass the very exclusion the policy just decided.
+                routes = [(STTService(target.family), target) for target in proposed]
+                routes.extend((STTService(target.family), target) for target in last_resorts)
+                # Preserve every permitted configured endpoint, even when the
+                # proposal omitted it for capacity or health. Hard withdrawals
+                # were already applied by configured_candidates. A custom
+                # endpoint must never consume the family's default tail.
+                for service in configured_candidates:
+                    if any(s == service and (t is None or t.endpoint is None) for s, t in routes):
+                        continue
+                    target, _ = route_target(service)
+                    if (
+                        routing_decision.get('exclude_benched')
+                        and routes
+                        and gate_states.get(target.id, GateState()).stage == 0
+                    ):
+                        # The escape keeps a benched family out while a
+                        # stage>0 route can serve; it must not return as tail.
+                        COST_DECISION.labels(target=target.id, reason='benched_skip').inc()
+                        continue
+                    routes.append((service, target if targets and target in targets else None))
         except CostHealthUnavailable as error:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
             routes, active = fallback_routes(error.states)

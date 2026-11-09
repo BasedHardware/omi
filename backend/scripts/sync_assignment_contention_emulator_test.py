@@ -74,8 +74,20 @@ def main():
         return db.assign_sync_conversation(uid, chunk(index), firestore_client=client)
 
     try:
-        # Contention always retries with a fresh transaction after graduation.
+        # Default-off must preserve the existing failure boundary and write nothing.
+        os.environ.pop('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', None)
         transport._wrapped_methods[transport.batch_get_documents] = aborted_read
+        try:
+            persist(0)
+        except Aborted:
+            pass
+        else:
+            raise AssertionError('default-off unexpectedly replayed the read abort')
+        assert not list(user.collection('conversations').stream())
+
+        os.environ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED'] = 'true'
+        injected = False
+        transactions.clear()
         persist(0)
         assert len(set(transactions)) == 2, 'retry must use a fresh transaction id'
         transport._wrapped_methods[transport.batch_get_documents] = original
@@ -90,7 +102,7 @@ def main():
             uid, active[0]['transcript_segments'], bool(active[0].get('transcript_segments_compressed'))
         )
         assert sorted(s['id'] for s in segments) == ['segment-0', 'segment-1', 'segment-2']
-        print('PASS: fresh transaction retry, concurrent append, replay; 3/3 unique segments')
+        print('PASS: default-off failure, fresh transaction retry, concurrent append, replay; 3/3 unique segments')
     finally:
         transport._wrapped_methods[transport.batch_get_documents] = original
         for name in ['conversations', 'sync_assignment']:

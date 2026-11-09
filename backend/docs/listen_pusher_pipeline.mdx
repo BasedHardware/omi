@@ -258,13 +258,17 @@ defines OD/Spot floors, rollout qualification, drain and rollback.
 
 `SERVER_BATCH_ONLY_ENABLED` defaults true; set false to restore live STT on
 new sessions. `SERVER_BATCH_ONLY_PLATFORMS` defaults `macos,windows` and may
-also name `linux`. An empty list disables desktop admission. Mobile admission is permanent at 100% and remains nested in the existing batch
-cohort. It does not expand batch admission itself.
+also name `linux`. An empty list disables desktop admission. Mobile uses
+`SERVER_BATCH_ONLY_MOBILE_PERCENT` (default 0); its unsalted owner hash is
+nested in the existing batch cohort, so selecting 50% while batch admits 25%
+can suppress at most the batch-admitted 25%. This knob does not expand batch
+admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
 Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
 cohort keyed on authenticated `client_platform=web`; persisted source may be
 `unknown`. It uses the existing server-side pusher custody path, with no client
-WAL or new endpoint. Auto/multi/undeclared web capture requires a learned profile
+WAL or new endpoint. Auto/multi/undeclared web capture additionally requires
+`SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT` (default 0) and a learned profile
 whose expected languages are all supported. A declared unsupported language
 stays live. Expand web 5 → 25 → 100 only after the web deploy is live; the Infra
 Rollout Coordinator completes expansion within 3 days, with clean web suppression
@@ -276,7 +280,7 @@ a named Parakeet-supported language (or an admitted unsupported language below) 
 single-channel capture outside onboarding/phone calls. Storage-disabled,
 unselected multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
 sessions retain their live behavior. Auto/multi/undeclared mobile and web sessions
-require a learned supported-only profile; automatic-language admission is permanent. The
+require the separate AUTO-language cohort and learned supported-only profile. The
 session's language profile must agree
 with that named primary; missing profiles or a primary mismatch stay live. For
 supported declarations, expected languages must all be Parakeet-supported.
@@ -1255,9 +1259,10 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
-Cost-ordered, capability-filtered live routing is permanent for every managed
-session (David 2026-11-09). The mode and percentage controls are retired.
-Fleet health remains a binary gate on
+When `STT_ROUTING_MODE=shadow`, listen computes the cost-ordered, capability-
+filtered primary against static selection and counts agreement without changing
+connections. `on` applies that policy only to the stable UID cohort selected by
+`STT_ROUTING_ON_PERCENT` (default zero). Fleet health is a binary gate on
 classified provider errors and completed text, with shared
 5%/25%/100% recovery trials. The existing Parakeet allocation hash and capacity
 admission stay intact. Redis refresh/write work stays off connect with a 75 ms
@@ -6952,8 +6957,8 @@ NX/300-second token lease with one-second connect/read timeouts. Token-checked r
 or Redis unavailability can allow overlap, so Firestore privacy, predecessor ordering and
 assignment receipts remain authoritative. No Firestore lookup is added. Both projection and
 batch assignment then use the existing bounded five-attempt fresh-transaction contention
-retry with jitter, retaining the existing expired-transaction restart. Legacy and batch assignment always use the bounded contention retry after
-graduation on 2026-11-09. No STT or admission path is changed.
+retry with jitter, retaining the existing expired-transaction restart. Legacy assignment retains its separate `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED`
+control. No STT or admission path is changed.
 
 With the control enabled, silence persistence can discover another projector's receipt after its initial check. Resume
 all post-persist obligations and durable completion; a replay alone is never client completion.
@@ -7881,8 +7886,9 @@ acknowledgement belongs only to the legacy post-persistence callback. The shared
 synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
 the kill switch on every sync-intake service; classification remains internal.
 
-Historical routing-off rollout (2026-10-18), superseded by permanent routing
-on 2026-11-09: recovery and account quarantine remain enforced. Rollback and baseline outcome watches live in
+Production routing-off rollout (2026-10-18): backend-listen restores static
+selection with `STT_ROUTING_MODE=off`; recovery and account quarantine remain
+enforced. Rollback and baseline outcome watches live in
 [the routing runbook](runbooks/live-stt-routing.md#production-routing-off-rollout-2026-10-18).
 Transport-open and settlement are independent: their arithmetic difference is
 an accounting diagnostic, not a serving-failure abort.
@@ -7947,10 +7953,7 @@ content/client completion on the deployed release before expanding admission.
 
 
 
-### Historical static-routing first-text comparison
-
-The mode/percentage experiment below ended with permanent routing on 2026-11-09.
-The retired controls no longer select a static comparison arm.
+### Static-routing first-text comparison
 
 Ship the instrumented binary with prod listen on/100 first. After at least
 60 minutes on that image, a separate stage-1 change keeps `STT_ROUTING_MODE=on`

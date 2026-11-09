@@ -44,6 +44,7 @@ def harness(monkeypatch):
     db = DreamFirestore()
     monkeypatch.setattr(store, 'client', lambda: db)
     monkeypatch.setattr(store.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(review, 'dream_visible', lambda uid: True)
     monkeypatch.setattr(review.speakers, 'get_prompts', lambda uid: SimpleNamespace(prompts=[]))
     monkeypatch.setattr(

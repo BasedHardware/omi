@@ -23,8 +23,8 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
-  "count": 264,
+  "budget": 163,
+  "count": 266,
   "names": {
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
@@ -255,6 +255,8 @@
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {"seeded": "2026-10-25"},
     "STT_RESILIENT_RECONNECT": {"seeded": "2026-10-25"},
     "STT_ROUTING_DISRUPTION_GATE": {"seeded": "2026-10-25"},
+    "STT_ROUTING_MODE": {"seeded": "2026-10-25"},
+    "STT_ROUTING_ON_PERCENT": {"seeded": "2026-10-25"},
     "STT_ROUTING_TARGETS_JSON": {"seeded": "2026-10-25"},
     "STT_SERVICE_MODELS": {"seeded": "2026-10-25"},
     "STT_SHED_CONNECT_FAILURES": {"seeded": "2026-10-25"},
@@ -293,8 +295,6 @@
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
-    "STT_ROUTING_MODE": {"on": "2026-11-09", "replaced_by": null},
-    "STT_ROUTING_ON_PERCENT": {"on": "2026-11-09", "replaced_by": null},
     "SYNC_DURABLE_STATUS_RECONCILIATION": {"on": "2026-11-09", "replaced_by": null},
     "SYNC_LEGACY_COMPLETION_CONVERGENCE": {"on": "2026-11-09", "replaced_by": null},
     "DREAM_NO_PROGRESS_STOP_MODE": {"on": "2026-11-09", "replaced_by": null},

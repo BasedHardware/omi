@@ -15,7 +15,7 @@ from typing import Any, Callable
 import redis.asyncio as aioredis
 
 from config.live_stt_registry import registry
-from config.policy.listen import routing_timeout
+from config.policy.listen import routing_mode, routing_timeout
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config import live_stt_state
 from utils.executors import start_background_task
@@ -85,6 +85,9 @@ end
 redis.call('DEL', KEYS[1], KEYS[2])
 return 1
 """
+
+
+mode = routing_mode
 
 
 def bounded_language(language: str | None) -> str:
@@ -291,6 +294,8 @@ class FleetHealth(CostHealthMixin):
             LEG_TRANSCRIPT_OUTCOME.labels(provider=provider, language=lang, outcome=outcome).inc()
         except Exception:
             pass
+        if mode() == 'off':
+            return
         identity = self._check_identity()
         scope = scoped_identity(provider, endpoint)
         with self._lock:
@@ -387,6 +392,9 @@ class FleetHealth(CostHealthMixin):
 
     def schedule(self, coroutine: Any, *, write_path: str, kind: str) -> None:
         """Best-effort result write; account/selection benches use the retry map."""
+        if mode() == 'off':
+            coroutine.close()
+            return
         record_fleet_health_write_attempted(write_path=write_path, kind=kind)
         try:
             loop = asyncio.get_running_loop()
@@ -433,9 +441,10 @@ class FleetHealth(CostHealthMixin):
                 )
 
     def quarantine(self, provider: str, kind: str, seconds: float, *, endpoint: str | None = None) -> None:
-        # Account quarantine withdraws rejected credentials on every pod,
-        # independently of selection benches.
-        if (provider not in PROVIDERS) or (kind not in {'account', 'selection'}):
+        # Account quarantine is a mode-independent hard exclusion: a quota/auth
+        # rejection must withdraw the credential on every pod even while the
+        # cost-routing kill switch is off. Selection benches stay routing-only.
+        if provider not in PROVIDERS or kind not in {'account', 'selection'} or (mode() == 'off' and kind != 'account'):
             return
         self._check_identity()
         bench_identity = provider if kind == 'account' else scoped_identity(provider, endpoint)
@@ -521,8 +530,8 @@ class FleetHealth(CostHealthMixin):
 
     def _drain_pending_benches(self) -> None:
         """Start bounded Redis attempts without waiting on the connection path."""
-        # Flush pending account and selection benches.
-
+        # Off mode still flushes pending account benches; selection stays routing-only.
+        account_only = mode() == 'off'
         try:
             loop = asyncio.get_running_loop()
             self._loop = loop
@@ -545,6 +554,8 @@ class FleetHealth(CostHealthMixin):
                 if len(self._bench_providers_in_flight) >= WRITE_IN_FLIGHT_LIMITS['bench']:
                     break
                 if bench_identity in self._bench_providers_in_flight:
+                    continue
+                if account_only and kind != 'account':
                     continue
                 if kind == 'selection' and self._account_bench_until(scope_family(bench_identity)) > now:
                     continue
@@ -599,10 +610,23 @@ class FleetHealth(CostHealthMixin):
         local = {provider: self._local_score(scopes[provider], lang) for provider in providers}
         if not providers:
             return local
-        # Keep shared account quarantine authoritative alongside selection state.
-
+        # Scores and interests are routing state; a shared account quarantine
+        # must still exclude targets while the routing kill switch is off.
+        routing_off = mode() == 'off'
         now = self._clock()
         with self._lock:
+            if routing_off:
+                result: dict[str, ProviderState] = {}
+                for provider in providers:
+                    deadlines = [
+                        until
+                        for benches in (self._benches, self._cached_benches)
+                        for kind, until in (benches.get(provider, ('', 0.0)),)
+                        if kind == 'account' and until > now
+                    ]
+                    until = max(deadlines, default=0.0)
+                    result[provider] = ProviderState(0.5, 0, 'account' if until else None, until)
+                return result
             for provider in providers:
                 key = scopes[provider], lang
                 if key not in self._interests and len(self._interests) >= LOCAL_KEYS_CAP:
@@ -634,8 +658,10 @@ class FleetHealth(CostHealthMixin):
 
     async def refresh_once(self) -> None:
         """One bounded Redis batch off the connection path, including probe leases."""
-        # Refresh shared account benches, selection state and probe leases.
-
+        # Off mode keeps only shared account benches readable: account
+        # quarantine is a mode-independent hard exclusion. Scores, selection
+        # benches and probe leases are cost-routing state and stay unread.
+        routing_off = mode() == 'off'
         identity = self._check_identity()
         self._loop = asyncio.get_running_loop()
         self._drain_pending_benches()
@@ -646,10 +672,13 @@ class FleetHealth(CostHealthMixin):
             self._interests = {
                 key: seen for key, seen in self._interests.items() if now - seen <= INTEREST_STALE_SECONDS
             }
-            interests = sorted(self._interests)
-            selection_scopes = {scope for scope, _lang in interests} | {
-                item for item, kind in self._pending_benches if kind == 'selection'
-            }
+            interests = [] if routing_off else sorted(self._interests)
+            selection_scopes = (
+                set()
+                if routing_off
+                else {scope for scope, _lang in interests}
+                | {item for item, kind in self._pending_benches if kind == 'selection'}
+            )
         identities = sorted(set(PROVIDERS) | selection_scopes)
         bucket = int(now // SCORE_BUCKET_SECONDS)
         keys: list[str] = []
@@ -657,7 +686,8 @@ class FleetHealth(CostHealthMixin):
             for index in range(SCORE_BUCKETS):
                 keys.extend(self._score_keys(scope, lang, bucket - index))
         for bench_identity in identities:
-            keys.append(_selection_state_key(bench_identity))
+            if not routing_off:
+                keys.append(_selection_state_key(bench_identity))
             keys.append(live_stt_state.fleet_state_key(scope_family(bench_identity), account=True))
         probe_keys = {
             (bench_identity, account): (
@@ -688,8 +718,12 @@ class FleetHealth(CostHealthMixin):
             benches: dict[str, tuple[str, float]] = {}
             selections: dict[str, tuple[str, float]] = {}
             for bench_identity in identities:
-                raw_endpoint, raw_account = values[cursor], values[cursor + 1]
-                cursor += 2
+                if routing_off:
+                    raw_endpoint, raw_account = None, values[cursor]
+                    cursor += 1
+                else:
+                    raw_endpoint, raw_account = values[cursor], values[cursor + 1]
+                    cursor += 2
                 parsed = {}
                 for account_flag, raw_state in ((False, raw_endpoint), (True, raw_account)):
                     state = str(raw_state or '').split(':', 1)
@@ -710,8 +744,13 @@ class FleetHealth(CostHealthMixin):
                     return
                 self._cached_scores = scores
                 self._cached_benches = benches
-                self._cached_selection_benches = selections
+                if not routing_off:
+                    self._cached_selection_benches = selections
                 self._cache_at = self._clock()
+                if routing_off:
+                    # Off mode loads shared benches only to enforce account
+                    # exclusion; probe leases remain cost-routing state.
+                    return
                 expired = {bench_identity for bench_identity, (_, until) in benches.items() if until <= self._clock()}
                 self._probe_ready = {
                     bench_identity: lease_until
@@ -746,7 +785,8 @@ class FleetHealth(CostHealthMixin):
     async def refresh_forever(self) -> None:
         while True:
             await self.refresh_once()
-            await self.refresh_cost_once()
+            if mode() != 'off':
+                await self.refresh_cost_once()
             await asyncio.sleep(CACHE_REFRESH_SECONDS)
 
     def try_admit_recovery_probe(self, provider: str, *, endpoint: str | None = None) -> bool:

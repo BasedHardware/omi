@@ -38,13 +38,16 @@ async def finish_runtime(runtime):
 
 @pytest.mark.parametrize(
     'mode,percent,expected',
-    [('on', '100', 'on')],
+    [('off', '0', 'off'), ('shadow', '0', 'shadow'), ('on', '100', 'on'), ('on', '0', 'off'), ('on', 'invalid', 'off')],
 )
 async def test_runtime_pins_cohort_before_initialization(monkeypatch, mode, percent, expected):
+    monkeypatch.setenv('STT_ROUTING_MODE', mode)
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', percent)
     monkeypatch.setattr(runtime_module, 'managed_chain_enabled', lambda _: True)
     runtime = _runtime(terminal=True)
     runtime._capture_cost_routing_arm()
     assert runtime._routing_cohort.arm == expected
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     before = value(expected, 'transcript', 'no_transcript')
     with patch.object(runtime_module, 'record_live_session_transcript_outcome'):
         runtime._record_session_transcript_outcome()
@@ -129,6 +132,7 @@ async def test_runtime_terminal_after_text_uses_existing_recovery_gate(monkeypat
 
 @pytest.mark.parametrize('family', ['soniox', 'modulate', 'deepgram', 'parakeet'])
 def test_paid_audio_counts_accepted_live_replay_and_successor_sends(monkeypatch, family):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     cohort = RoutingCohort('on')
     token = current_routing_cohort.set(cohort)
     recv = SimpleNamespace(

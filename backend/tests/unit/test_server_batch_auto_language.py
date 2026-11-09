@@ -24,6 +24,8 @@ from utils.stt.language_gate import SelfVerdict
 def admission_env(monkeypatch):
     monkeypatch.setenv('HOSTED_PUSHER_API_URL', 'http://pusher.invalid')
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
+    monkeypatch.delenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', raising=False)
     monkeypatch.delenv('SERVER_BATCH_ONLY_ENABLED', raising=False)
 
 
@@ -40,9 +42,12 @@ def mobile(language='auto', expected=('en',)):
 
 
 @pytest.mark.parametrize('language', ['auto', 'multi', '', None])
-def test_auto_is_admitted_without_guessing_english(monkeypatch, language):
+def test_auto_is_dark_then_admitted_without_guessing_english(monkeypatch, language):
     h, row = mobile(language)
     h.batch_record_capture = {}  # No previous durable admission can bypass the new percentage.
+    assert not server_batch.request_eligible(h)
+    assert not server_batch.eligible(row, 'owner', batch_admitted=True)
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     assert server_batch.request_eligible(h)
     assert server_batch.eligible(row, 'owner', batch_admitted=True)
     assert not server_batch.suppress_live(h)  # Custody must be reserved first.
@@ -50,14 +55,25 @@ def test_auto_is_admitted_without_guessing_english(monkeypatch, language):
     assert server_batch.suppress_live(h)
 
 
+@pytest.mark.parametrize('raw', ['0', '-1', 'invalid', 'nan'])
+def test_bad_percent_cannot_admit_auto(monkeypatch, raw):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', raw)
+    h, row = mobile()
+    h.batch_record_capture = {}
+    assert not server_batch.request_eligible(h)
+    assert not server_batch.eligible(row, 'owner', batch_admitted=True)
+
+
 @pytest.mark.parametrize('expected', [(), ('en', 'ja'), ('ja',), ('en', 'unknown')])
 def test_expected_unsupported_or_missing_languages_keep_live(monkeypatch, expected):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     h, _ = mobile(expected=expected)
     assert not server_batch.request_eligible(h)
     assert not server_batch.suppress_live(h)
 
 
 def test_profile_must_be_learned_and_mobile_and_nested(monkeypatch):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     h, row = mobile()
     h.language_profile.source = 'declared'
     assert not server_batch.request_eligible(h)
@@ -69,6 +85,7 @@ def test_profile_must_be_learned_and_mobile_and_nested(monkeypatch):
 
 @pytest.mark.parametrize('excluded', ['private', 'byok', 'custom', 'call', 'multi_channel', 'onboarding', 'pusher'])
 def test_rulings_apply_even_to_reserved_auto_capture(monkeypatch, excluded):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     h, _ = mobile()
     if excluded == 'private':
         h.private_cloud_sync_enabled = False
@@ -96,10 +113,11 @@ def test_owned_auto_survives_percentage_rollback(monkeypatch):
     assert not server_batch.request_eligible(h)
 
 
-def test_continuation_lookup_requires_prior_ownership_for_suppression(monkeypatch):
+def test_continuation_lookup_can_find_prior_owner_after_both_percentages_roll_back(monkeypatch):
     h, row = mobile()
     h.batch_record_capture = None
-    assert server_batch.request_eligible(h)
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0')
+    assert not server_batch.request_eligible(h)
     assert server_batch.request_eligible(h, existing_capture=True)
     assert not server_batch.suppress_live(h)  # A lookup permission is never ownership.
     h.batch_record_capture = row
@@ -113,6 +131,8 @@ def test_missing_query_language_is_not_a_declared_english_route(monkeypatch):
     h.language_profile.primary = 'en'
     h.batch_record_capture = None
     assert server_batch.request_language(h) == ''
+    assert not server_batch.request_eligible(h)
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     assert server_batch.request_eligible(h)
     assert server_batch.capture_language(h) == 'multi'
     assert h.language == 'en'  # Legacy live provider choice is unchanged.
@@ -120,15 +140,32 @@ def test_missing_query_language_is_not_a_declared_english_route(monkeypatch):
     h.batch_record_capture = row
     assert server_batch.suppress_live(h)
     assert server_batch.continuation_language(h, row) == 'multi'
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0')
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0')
     assert server_batch.request_eligible(h, existing_capture=True)
     assert server_batch.suppress_live(h)
+
+
+def test_auto_percentage_samples_inside_mobile_instead_of_reusing_its_hash(monkeypatch):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '5')
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '1')
+    mobile_count = joint = auto_outside_mobile = 0
+    for index in range(10000):
+        owner = f'synthetic-cohort-{index}'
+        selected = server_batch.selected(owner, 'ios', 'omi')
+        automatic = server_batch.auto_selected(owner, 'ios')
+        mobile_count += selected
+        joint += selected and automatic
+        auto_outside_mobile += automatic and not selected
+    assert auto_outside_mobile > 0
+    assert 0 < joint < mobile_count * 0.05  # Shared hashing admits 20%, not ~1%.
 
 
 @pytest.mark.parametrize(
     'change,reason',
     [
         ('private', 'private_sync_off'),
-        ('auto', 'capture_not_owned'),
+        ('auto', 'language_auto'),
         ('language', 'language_unsupported'),
         ('profile', 'profile_mismatch'),
         ('unowned', 'capture_not_owned'),

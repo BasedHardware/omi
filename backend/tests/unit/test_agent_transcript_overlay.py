@@ -194,8 +194,9 @@ def test_shared_authority_requires_dream_verification_but_user_applies_with_undo
     assert seen()['transcript_segments'][0]['text'].startswith('Qorby plans')
 
 
-def test_user_request_updates_populated_title_and_keeps_undo(store, monkeypatch):
+def test_user_request_updates_populated_title_with_review_disabled_and_keeps_undo(store, monkeypatch):
     seen, _ = setup(store, monkeypatch)
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
     operation = correction(
         kind='title', target='conversations/one', before='Qorby workshop', after='Owner chosen title'
@@ -208,6 +209,20 @@ def test_user_request_updates_populated_title_and_keeps_undo(store, monkeypatch)
     assert change['before'] == 'Qorby workshop' and change['after'] == 'Owner chosen title'
     review_changes.set_undone(UID, change['change_id'], True)
     assert seen()['structured']['title'] == 'Qorby workshop'
+    with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+        review_store.require_enabled(UID)
+
+
+def test_user_authority_does_not_grant_review_access_to_another_owner(monkeypatch):
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
+    with review_store.user_request_authority(UID):
+        review_store.require_enabled(UID)
+        with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+            review_store.require_enabled('synthetic-other-owner')
+        with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+            review_store.require_enabled()
+    with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+        review_store.require_enabled(UID)
 
 
 @pytest.mark.asyncio
@@ -288,6 +303,7 @@ def test_manual_edit_keeps_capture_and_restores_projection_invalidations(store, 
     seen, original = setup(store, monkeypatch)
     raw = store.rows[('users', UID, 'conversations', 'one')]
     raw['client_processing'] = {'synthetic': True}
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
     assert (
         conversations.update_conversation_segment_text(
             UID, 'one', 'segment-one', 'Owner corrected synthetic workshop text.', firestore_client=store

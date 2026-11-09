@@ -481,6 +481,7 @@ def test_failed_dial_preserves_preroll_through_actual_buffer_retry(monkeypatch):
 @pytest.mark.parametrize('recovery', ['false', 'true'])
 def test_managed_idle_close_does_not_claim_health_or_breaker(monkeypatch, recovery):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', recovery)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
 
     async def run():
         socket, idle, gate, _, _, tick = build(monkeypatch)
@@ -696,6 +697,9 @@ def test_capture_and_wall_continuity_with_socket_reset(monkeypatch, elapsed):
 @pytest.mark.parametrize('mode', ['shadow', 'on'])
 def test_routed_idle_close_keeps_cost_evidence_and_circuits_unchanged(monkeypatch, mode):
     from config.live_stt_registry import Target
+
+    monkeypatch.setenv('STT_ROUTING_MODE', mode)
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
 
     async def run():
         _, idle, gate, _, _, tick = build(monkeypatch)

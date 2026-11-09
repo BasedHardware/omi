@@ -847,6 +847,7 @@ class Projector:
                 before_assign=session.prepare,
                 validate_plan=session.validate_plan,
                 after_assign=lambda transaction, planned: session.persist(transaction, planned),
+                retry_contention=session.policy.projection_contention,
                 timing=session.policy.projection_timing,
                 **self._index_options(hint),
             )
@@ -1052,6 +1053,7 @@ class Projector:
                                 before_assign=session.prepare,
                                 validate_plan=session.validate_plan,
                                 after_assign=persisted,
+                                retry_contention=policy.projection_contention,
                                 timing=policy.projection_timing,
                                 **self._index_options(hint),
                             )

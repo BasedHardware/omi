@@ -324,6 +324,8 @@ async def test_half_open_429_releases_probe_slot_without_extending_bench(monkeyp
 async def test_router_on_target_429_releases_target_probe_without_bench(monkeypatch):
     """Under an active router, a 429 against the selected target releases the
     target circuit's probe — no selection bench, no fleet quarantine."""
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps([{'id': 'soniox-b', 'family': 'soniox', 'cost_per_audio_hour': 0.05}]),

@@ -1,5 +1,6 @@
-"""Review and entity pages. All storage is scoped to the auth uid."""
+"""Default-off Review and entity pages. All storage is scoped to the auth uid."""
 
+import os
 import re
 from datetime import datetime
 from typing import Literal
@@ -33,7 +34,13 @@ from utils.other import endpoints as auth
 from utils.speaker_tag_prompts.service import TagPromptInvalid
 from utils.task_intelligence.task_links import TaskLinkValidationError
 
-router = APIRouter()
+
+def require_review_surface():
+    if os.environ.get('REVIEW_SURFACE_MODE', 'off').strip().lower() != 'on':
+        raise HTTPException(status_code=404, detail='review_surface_disabled')
+
+
+router = APIRouter(dependencies=[Depends(require_review_surface)])
 ReadUser = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'review:read'))
 WriteUser = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'review:write'))
 

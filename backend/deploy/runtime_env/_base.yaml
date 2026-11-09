@@ -271,8 +271,12 @@ environment_shared:
           category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           category: rollout
+        STT_ROUTING_MODE:
+          category: rollout
         STT_ROUTING_REDIS_TIMEOUT_SECONDS:
           value: '0.075'
+          category: rollout
+        STT_ROUTING_ON_PERCENT:
           category: rollout
         STT_ROUTING_TARGETS_JSON:
           value: ''
@@ -474,6 +478,9 @@ environment_shared:
           category: storage_retention
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           category: ops_kill
+        REVIEW_SURFACE_MODE:
+          value: 'on'
+          category: rollout
         BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
           value: 'false'
           category: rollout
@@ -1241,6 +1248,9 @@ environment_shared:
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
             category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
+            category: rollout
           BUCKET_OBJECT_LAKE:
             category: storage_retention
           OBJECT_LAKE_KMS_KEY:
@@ -1561,6 +1571,8 @@ environment_shared:
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             provisional: true
             value: '2592000'
+            category: rollout
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
@@ -1920,6 +1932,8 @@ environment_shared:
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             provisional: true
             value: '2592000'
+            category: rollout
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true

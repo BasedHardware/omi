@@ -284,6 +284,7 @@ def test_outcome_children_are_queryable_from_process_start_without_increments():
 def test_router_canary_counts_admission_arm_once_even_after_config_change(monkeypatch):
     runtime = _runtime(terminal=True)
     runtime._cost_routing_arm = 'on'
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     counter = COST_CANARY_OUTCOME.labels(arm='on', outcome='no_transcript', demand_cohort='ineligible')
     before = counter._value.get()
     assert _outcome(runtime) == 'no_transcript'
@@ -300,3 +301,16 @@ def test_ineligible_session_has_no_router_canary_vote():
     before = [counter._value.get() for counter in counters]
     assert _outcome(runtime) == 'transcribed'
     assert [counter._value.get() for counter in counters] == before
+
+
+@pytest.mark.parametrize('percent', ['broken', 'NaN', '101'])
+def test_invalid_router_percent_cannot_abort_session_telemetry(monkeypatch, percent):
+    from routers.listen import runtime as runtime_module
+
+    runtime = _runtime(delivered=True)
+    monkeypatch.setattr(runtime_module, 'managed_chain_enabled', lambda host: True)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', percent)
+    runtime._capture_cost_routing_arm()
+    assert runtime._cost_routing_arm == 'control'
+    assert _outcome(runtime) == 'transcribed'

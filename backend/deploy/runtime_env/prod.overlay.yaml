@@ -53,8 +53,8 @@ overlay:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
-        # Fleet-off live residual goes to batch, not Soniox (David 11-03). Auto-language
-        # batch admission is permanent. Rollback: UNSUPPORTED '' and HINTABLE 100.
+        # Fleet-off live residual goes to batch, not Soniox (David 11-03). The listen chart pins
+        # SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT at the serving 100. Rollback: UNSUPPORTED '' and HINTABLE 100.
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh', category: ops_kill}
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -108,6 +108,10 @@ overlay:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
+        STT_ROUTING_MODE:
+          value: 'on'
+        STT_ROUTING_ON_PERCENT:
+          value: '100'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
@@ -989,6 +993,9 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'true'
+            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
           HOSTED_DIARIZATION_API_URL:
@@ -1044,6 +1051,9 @@ overlay:
             category: reliability
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
+            category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
@@ -1360,6 +1370,9 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'true'
+            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
           HOSTED_DIARIZATION_API_URL:
@@ -1873,6 +1886,9 @@ overlay:
             category: rollout
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
+            category: rollout
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED:
             value: 'true'

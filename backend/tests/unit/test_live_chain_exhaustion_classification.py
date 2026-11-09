@@ -52,6 +52,8 @@ def serving(monkeypatch, runtime):
     no fleet snapshot, no capacity state — so provider selection yields a
     candidate and the rebuild reaches the (mocked) connect. ``runtime``
     (imported fixture) pins the provider env keys and fresh circuits."""
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox'])
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
