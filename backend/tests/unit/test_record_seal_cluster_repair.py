@@ -1615,17 +1615,17 @@ def test_invalid_job_clock_is_repaired_but_excluded_from_age_metrics(monkeypatch
     monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', mode)
     now = 1800000000
     monkeypatch.setattr(cluster, 'datetime', SimpleNamespace(now=lambda _: datetime.fromtimestamp(now, timezone.utc)))
-    docs = [pending_job(0, bad_clock), pending_job(1, now - 1000)]
+    docs = [pending_job(0, bad_clock), pending_job(1, now - 10000)]
     rows, _, _ = cluster.discover_jobs(OrderedJobsClient(docs), budget=SweepBudget(60))
     assert dict(rows) == {
         'users/synthetic/conversations/capture-0': None,
-        'users/synthetic/conversations/capture-1': 1000,
+        'users/synthetic/conversations/capture-1': 10000,
     }
     report, children, _, order, progress = scheduling(rows)
     assert order == [path for path, _ in rows]
     assert report['dispositions'] == {'sealed': 2}
     assert all(child.reaped for child in children)
-    assert report['oldest_unsealed_seconds'] == report['oldest_seal_age_seconds'] == 1000
+    assert report['oldest_unsealed_seconds'] == report['oldest_seal_age_seconds'] == 10000
     assert report['invalid_clock_rows'] == 1
     assert ['seal_age_seconds' in row for row in progress] == [age is not None for _, age in rows]
     json.dumps(report, allow_nan=False)
