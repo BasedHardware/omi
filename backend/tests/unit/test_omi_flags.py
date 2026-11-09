@@ -198,11 +198,30 @@ def test_dual_read_scrape_exports_all_outcomes_before_any_evaluation():
         text=True,
         timeout=30,
     )
-    samples = {line for line in result.stdout.splitlines() if line.startswith('omi_flag_dual_read_')}
+    samples = {line for line in result.stdout.splitlines() if line.startswith('omi_flag_dual_read_total{')}
     assert samples == {
         f'omi_flag_dual_read_total{{flag="proactivity_v2",outcome="{outcome}"}} 0.0'
         for outcome in ('match', 'mismatch', 'omi_absent', 'omi_error')
     }
+
+
+def test_flag_metric_import_preserves_created_series_for_other_collectors():
+    # Exercise this module independently of the shared exporter's existing policy.
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            'from utils import omi_flag_metrics; '
+            'from prometheus_client import Counter, generate_latest; '
+            'Counter("unrelated_probe_total", "Unrelated collector"); '
+            'print(generate_latest().decode())',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert 'unrelated_probe_created ' in result.stdout
 
 
 def test_proactivity_default_source_is_posthog(store, monkeypatch):

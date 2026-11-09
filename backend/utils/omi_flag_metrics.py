@@ -1,9 +1,6 @@
 """Bounded server flag comparison telemetry, registered by the shared exporter."""
 
-from prometheus_client import Counter, disable_created_metrics
-
-# Four idle series per evaluator key; no per-user labels or _created companions.
-disable_created_metrics()
+from prometheus_client import Counter
 
 OMI_FLAG_DUAL_READ_TOTAL = Counter(
     'omi_flag_dual_read_total',
