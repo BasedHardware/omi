@@ -1122,6 +1122,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nimi päivitetty onnistuneesti!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lue valitut kalenterit. Uudet tapahtumat käyttävät kalenteria $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenteriasetukset';
 
   @override

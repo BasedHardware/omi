@@ -352,6 +352,7 @@
     "enterYourName": "Adınızı girin",
     "nameCannotBeEmpty": "İsim boş olamaz",
     "nameUpdatedSuccessfully": "İsim başarıyla güncellendi!",
+    "calendarReadSelectionHelp": "Seçili takvimleri oku. Yeni etkinlikler {calendar} takvimini kullanır.",
     "calendarSettings": "Takvim ayarları",
     "calendarProviders": "Takvim Sağlayıcıları",
     "macOsCalendar": "macOS Takvimi",

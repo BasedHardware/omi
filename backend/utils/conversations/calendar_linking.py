@@ -228,6 +228,7 @@ async def get_overlapping_calendar_event(
     events: List[Dict[str, Any]] = []
     try:
         events = await get_google_calendar_events(
+            uid=uid,
             access_token=str(access_token),
             time_min=search_start,
             time_max=search_end,
@@ -240,6 +241,7 @@ async def get_overlapping_calendar_event(
             if new_token:
                 try:
                     events = await get_google_calendar_events(
+                        uid=uid,
                         access_token=new_token,
                         time_min=search_start,
                         time_max=search_end,

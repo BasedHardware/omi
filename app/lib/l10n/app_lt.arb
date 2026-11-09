@@ -314,6 +314,7 @@
     "calculatingETA": "Skaičiuojama…",
     "calendarIntegration": "Kalendoriaus Integracija",
     "calendarProviders": "Kalendoriaus teikėjai",
+    "calendarReadSelectionHelp": "Skaityti pasirinktus kalendorius. Naujiems įvykiams naudojamas {calendar}.",
     "calendarSettings": "Kalendoriaus nustatymai",
     "cancel": "Atšaukti",
     "cancelAtPeriodEnd": "Jūsų planas bus atšauktas {date}.",

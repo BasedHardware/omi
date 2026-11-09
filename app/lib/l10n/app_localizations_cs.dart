@@ -1125,6 +1125,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Jméno úspěšně aktualizováno!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Číst vybrané kalendáře. Nové události používají $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Nastavení kalendáře';
 
   @override

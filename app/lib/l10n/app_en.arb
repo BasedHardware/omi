@@ -1243,6 +1243,15 @@
     "enterYourName": "Enter your name",
     "nameCannotBeEmpty": "Name cannot be empty",
     "nameUpdatedSuccessfully": "Name updated successfully!",
+    "calendarReadSelectionHelp": "Read selected calendars. New events use {calendar}.",
+    "@calendarReadSelectionHelp": {
+        "description": "Explains that read/import choices do not change the primary calendar used for new events",
+        "placeholders": {
+            "calendar": {
+                "type": "String"
+            }
+        }
+    },
     "calendarSettings": "Calendar settings",
     "calendarProviders": "Calendar Providers",
     "macOsCalendar": "macOS Calendar",

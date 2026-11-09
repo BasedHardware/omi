@@ -352,6 +352,7 @@
     "enterYourName": "Nhập tên của bạn",
     "nameCannotBeEmpty": "Tên không được để trống",
     "nameUpdatedSuccessfully": "Đã cập nhật tên thành công!",
+    "calendarReadSelectionHelp": "Đọc các lịch đã chọn. Sự kiện mới sử dụng {calendar}.",
     "calendarSettings": "Cài đặt lịch",
     "calendarProviders": "Nhà cung cấp lịch",
     "macOsCalendar": "Lịch macOS",

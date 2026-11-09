@@ -1124,6 +1124,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'نام با موفقیت به‌روزرسانی شد!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از $calendar استفاده می‌کنند.';
+  }
+
+  @override
   String get calendarSettings => 'تنظیمات تقویم';
 
   @override

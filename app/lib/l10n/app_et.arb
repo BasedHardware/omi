@@ -352,6 +352,7 @@
     "enterYourName": "Sisestage oma nimi",
     "nameCannotBeEmpty": "Nimi ei saa olla tühi",
     "nameUpdatedSuccessfully": "Nimi edukalt uuendatud!",
+    "calendarReadSelectionHelp": "Loe valitud kalendreid. Uued sündmused kasutavad kalendrit {calendar}.",
     "calendarSettings": "Kalendri seaded",
     "calendarProviders": "Kalendri pakkujad",
     "macOsCalendar": "macOS kalender",

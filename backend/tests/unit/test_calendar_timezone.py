@@ -10,6 +10,8 @@ from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
+from testing.import_isolation import stub_modules
+
 import pytest
 
 os.environ.setdefault(
@@ -34,43 +36,8 @@ class _AutoMockModule(ModuleType):
         return mock
 
 
-def _register(name):
-    mod = sys.modules.get(name)
-    if not isinstance(mod, _AutoMockModule):
-        mod = _AutoMockModule(name)
-        sys.modules[name] = mod
-        if "." in name:
-            parent_name, attr = name.rsplit(".", 1)
-            setattr(_register(parent_name), attr, mod)
-    return mod
-
-
-# Stub the heavy imports calendar_tools pulls at module load.
-for _name in [
-    "httpx",
-    "langchain_core",
-    "langchain_core.tools",
-    "langchain_core.runnables",
-    "database",
-    "database.users",
-    "database.notifications",
-    "models",
-    "models.calendar_mutation",
-    "utils",
-    "utils.conversations",
-    "utils.executors",
-    "utils.http_client",
-    "utils.integration_telemetry",
-    "utils.log_sanitizer",
-    "utils.retrieval",
-    "utils.retrieval.tools",
-    "utils.retrieval.tools.integration_base",
-    "utils.retrieval.tools.google_utils",
-]:
-    _register(_name)
-
-# Passthrough @tool decorator so the tool stays a plain callable.
-sys.modules["langchain_core.tools"].tool = lambda func=None, **kw: (func if func is not None else (lambda f: f))
+calendar_tools = None
+model_text = None
 
 
 def _load_module_from_file(module_name, file_path):
@@ -81,21 +48,56 @@ def _load_module_from_file(module_name, file_path):
     return mod
 
 
-model_text = _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
-_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
-_load_module_from_file(
-    "utils.conversations.datetime_utils",
-    BACKEND_DIR / "utils" / "conversations" / "datetime_utils.py",
-)
-_load_module_from_file(
-    "utils.retrieval.tools.calendar_render",
-    BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py",
-)
+@pytest.fixture(scope="module", autouse=True)
+def _calendar_module():
+    global calendar_tools, model_text
+    names = [
+        "httpx",
+        "langchain_core",
+        "langchain_core.tools",
+        "langchain_core.runnables",
+        "database",
+        "database.users",
+        "database.notifications",
+        "models",
+        "models.calendar_mutation",
+        "utils",
+        "utils.conversations",
+        "utils.executors",
+        "utils.http_client",
+        "utils.integration_telemetry",
+        "utils.log_sanitizer",
+        "utils.retrieval",
+        "utils.retrieval.tools",
+        "utils.retrieval.tools.integration_base",
+        "utils.retrieval.tools.google_utils",
+        "database.google_calendar_preferences",
+    ]
+    stubs = {name: _AutoMockModule(name) for name in names}
+    stubs["database.google_calendar_preferences"].get_selections = lambda _uid: {}
+    stubs["langchain_core.tools"].tool = lambda func=None, **kw: (func if func is not None else (lambda f: f))
+    with stub_modules(stubs):
+        model_text = _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+        _load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
+        _load_module_from_file(
+            "utils.conversations.datetime_utils",
+            BACKEND_DIR / "utils" / "conversations" / "datetime_utils.py",
+        )
+        _load_module_from_file(
+            "utils.retrieval.tools.calendar_render",
+            BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py",
+        )
 
-calendar_tools = _load_module_from_file(
-    "utils.retrieval.tools.calendar_tools",
-    BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_tools.py",
-)
+        _load_module_from_file(
+            "utils.retrieval.google_calendar_selection", BACKEND_DIR / "utils/retrieval/google_calendar_selection.py"
+        )
+
+        calendar_tools = _load_module_from_file(
+            "utils.retrieval.tools.calendar_tools",
+            BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_tools.py",
+        )
+        yield
+
 
 # 22:00 UTC == 15:00 in America/Los_Angeles (PDT, UTC-7 in June).
 _UTC_INSTANT = datetime(2026, 6, 30, 22, 0, 0, tzinfo=timezone.utc)

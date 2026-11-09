@@ -352,6 +352,7 @@
     "enterYourName": "이름을 입력하세요",
     "nameCannotBeEmpty": "이름은 비워둘 수 없습니다",
     "nameUpdatedSuccessfully": "이름이 성공적으로 업데이트되었습니다!",
+    "calendarReadSelectionHelp": "선택한 캘린더를 읽습니다. 새 일정은 {calendar}에 생성됩니다.",
     "calendarSettings": "캘린더 설정",
     "calendarProviders": "캘린더 제공업체",
     "macOsCalendar": "macOS 캘린더",

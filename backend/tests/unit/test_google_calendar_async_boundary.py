@@ -39,7 +39,9 @@ def calendar_route_harness() -> Iterator[SimpleNamespace]:
 
     calendar_tools = _module("utils.retrieval.tools.calendar_tools", get_google_calendar_events=get_events)
     calendar_linking = _module("utils.conversations.calendar_linking", select_capture_gaps=MagicMock())
-    google_utils = _module("utils.retrieval.tools.google_utils", refresh_google_token=refresh_token)
+    google_utils = _module(
+        "utils.retrieval.tools.google_utils", refresh_google_token=refresh_token, GoogleAPIError=Exception
+    )
     calendar_utils = _module(
         "utils.conversations.calendar_utils",
         extract_attendees=lambda _event: (["Ada"], ["ada@example.com"]),

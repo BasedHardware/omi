@@ -1110,6 +1110,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get nameUpdatedSuccessfully => '이름이 성공적으로 업데이트되었습니다!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '선택한 캘린더를 읽습니다. 새 일정은 $calendar에 생성됩니다.';
+  }
+
+  @override
   String get calendarSettings => '캘린더 설정';
 
   @override

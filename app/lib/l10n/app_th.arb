@@ -352,6 +352,7 @@
     "enterYourName": "ใส่ชื่อของคุณ",
     "nameCannotBeEmpty": "ชื่อต้องไม่ว่างเปล่า",
     "nameUpdatedSuccessfully": "อัปเดตชื่อสำเร็จ!",
+    "calendarReadSelectionHelp": "อ่านปฏิทินที่เลือก กิจกรรมใหม่จะใช้ {calendar}",
     "calendarSettings": "การตั้งค่าปฏิทิน",
     "calendarProviders": "ผู้ให้บริการปฏิทิน",
     "macOsCalendar": "ปฏิทิน macOS",

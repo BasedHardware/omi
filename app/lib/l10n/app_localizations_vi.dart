@@ -1127,6 +1127,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Đã cập nhật tên thành công!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Đọc các lịch đã chọn. Sự kiện mới sử dụng $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Cài đặt lịch';
 
   @override

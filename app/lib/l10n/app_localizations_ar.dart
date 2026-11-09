@@ -1114,6 +1114,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'تم تحديث الاسم بنجاح!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'اقرأ التقاويم المحددة. تستخدم الأحداث الجديدة $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'إعدادات التقويم';
 
   @override

@@ -352,6 +352,7 @@
     "enterYourName": "अपना नाम दर्ज करें",
     "nameCannotBeEmpty": "नाम खाली नहीं हो सकता",
     "nameUpdatedSuccessfully": "नाम सफलतापूर्वक अपडेट किया गया!",
+    "calendarReadSelectionHelp": "चुने गए कैलेंडर पढ़ें। नए इवेंट {calendar} में बनेंगे।",
     "calendarSettings": "कैलेंडर सेटिंग्स",
     "calendarProviders": "कैलेंडर प्रदाता",
     "macOsCalendar": "macOS कैलेंडर",

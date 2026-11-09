@@ -1824,6 +1824,9 @@ struct ImportConnectorSheet: View {
       .disabled(isRunning || isDisconnecting)
 
       if connector.id == "calendar", calendarHasRevocableGrant {
+        if calendarGrantConnected {
+          GoogleCalendarSelectionEditor()
+        }
         Button {
           beginCalendarDisconnectConfirmation()
         } label: {

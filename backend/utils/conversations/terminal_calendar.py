@@ -36,6 +36,7 @@ def calendar_retains(uid: str, row: Mapping[str, Any]) -> bool | None:
     events = asyncio.run(
         asyncio.wait_for(
             get_google_calendar_events(
+                uid=uid,
                 access_token=token,
                 time_min=start - timedelta(minutes=30),
                 time_max=end + timedelta(minutes=30),

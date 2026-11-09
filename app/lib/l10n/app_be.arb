@@ -1225,6 +1225,7 @@
     "enterYourName": "Уведзіце ваше імя",
     "nameCannotBeEmpty": "Імя не можа быць пустым",
     "nameUpdatedSuccessfully": "Імя паспяхова абноўлена!",
+    "calendarReadSelectionHelp": "Чытаць выбраныя календары. Новыя падзеі выкарыстоўваюць {calendar}.",
     "calendarSettings": "Налады календара",
     "calendarProviders": "Паставальнікі календара",
     "macOsCalendar": "Календар macOS",

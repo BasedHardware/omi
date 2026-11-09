@@ -1131,6 +1131,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Το όνομα ενημερώθηκε επιτυχώς!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Ανάγνωση επιλεγμένων ημερολογίων. Τα νέα συμβάντα χρησιμοποιούν το $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Ρυθμίσεις ημερολογίου';
 
   @override

@@ -1225,6 +1225,7 @@
     "enterYourName": "اپنا نام درج کریں",
     "nameCannotBeEmpty": "نام خالی نہیں ہو سکتا",
     "nameUpdatedSuccessfully": "نام کامیابی سے اپ ڈیٹ ہو گیا!",
+    "calendarReadSelectionHelp": "منتخب کیلنڈرز پڑھیں۔ نئے ایونٹس {calendar} استعمال کریں گے۔",
     "calendarSettings": "کیلنڈر کی ترتیبات",
     "calendarProviders": "کیلنڈر فراہم کنندگان",
     "macOsCalendar": "macOS کیلنڈر",

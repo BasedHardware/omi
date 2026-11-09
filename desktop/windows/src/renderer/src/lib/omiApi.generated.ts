@@ -1015,6 +1015,18 @@ export interface CalendarOnboardingStatusResponse {
   state: string;
 }
 
+export interface CalendarSelection {
+  account_id: string;
+  calendars: Array<ReadableCalendar>;
+  selected_ids: Array<string>;
+  write_calendar_id?: string;
+}
+
+export interface CalendarSelectionUpdate {
+  account_id: string;
+  selected_ids: Array<string>;
+}
+
 export interface CampaignAttributionResponse {
   campaign_id: string;
   checkout_url: string;
@@ -4506,6 +4518,13 @@ export interface ReadRolloutCapabilities {
   shadow_artifacts_enabled: boolean;
 }
 
+export interface ReadableCalendar {
+  available: boolean;
+  id: string;
+  name: string;
+  primary: boolean;
+}
+
 export interface RebuildResponse {
   edges_count: number;
   nodes_count: number;
@@ -6788,6 +6807,8 @@ export interface OmiApiSchemas {
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
+  "CalendarSelection": CalendarSelection;
+  "CalendarSelectionUpdate": CalendarSelectionUpdate;
   "CampaignAttributionResponse": CampaignAttributionResponse;
   "CampaignSnapshotResponse": CampaignSnapshotResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
@@ -7234,6 +7255,7 @@ export interface OmiApiSchemas {
   "QuestionOption": QuestionOption;
   "RateMessageRequest": RateMessageRequest;
   "ReadRolloutCapabilities": ReadRolloutCapabilities;
+  "ReadableCalendar": ReadableCalendar;
   "RebuildResponse": RebuildResponse;
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
@@ -8322,6 +8344,24 @@ export interface OmiApiPaths {
       operationId: "get_calendar_capture_gaps_v1_calendar_capture_gaps_get";
       responses: {
         "200": Array<CalendarCaptureGap>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/calendar/google/calendars": {
+    get: {
+      operationId: "list_readable_google_calendars_v1_calendar_google_calendars_get";
+      responses: {
+        "200": CalendarSelection;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    put: {
+      operationId: "save_google_calendar_selection_v1_calendar_google_calendars_put";
+      responses: {
+        "200": CalendarSelection;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14600,6 +14640,46 @@ export async function get_calendar_capture_gaps_v1_calendar_capture_gaps_get(que
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_readable_google_calendars_v1_calendar_google_calendars_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarSelection> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/google/calendars`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function save_google_calendar_selection_v1_calendar_google_calendars_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CalendarSelectionUpdate, init?: OmiApiClientInit): Promise<CalendarSelection> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/google/calendars`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -23870,4 +23950,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 545 client methods generated.
+// Total: 547 client methods generated.

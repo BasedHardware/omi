@@ -1117,6 +1117,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'อัปเดตชื่อสำเร็จ!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'อ่านปฏิทินที่เลือก กิจกรรมใหม่จะใช้ $calendar';
+  }
+
+  @override
   String get calendarSettings => 'การตั้งค่าปฏิทิน';
 
   @override
