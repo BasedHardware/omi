@@ -569,7 +569,9 @@ def delete_entity_upload_candidates(space_id: str, entity_id: str, *, firestore_
             row = snapshot.to_dict() or {}
             # Admission is fenced, but settlement can race storage IO. Retry any
             # changed state rather than erase discovery we have not checked.
-            if snapshot.exists and row == purged_row:
+            if snapshot.exists:
+                if row != purged_row:
+                    raise LakeFetchError('Lake upload candidate changed; retry deletion')
                 transaction.delete(candidate)
                 return 1
             return 0
@@ -774,7 +776,9 @@ def delete_space_upload_candidates(space_id: str, *, firestore_client=None) -> i
             if status != 'running':
                 raise LakeWriteFenced('Candidate purge requires running account wipe')
             snapshot = candidate.get(transaction=transaction)
-            if snapshot.exists and snapshot.to_dict() == purged_row:
+            if snapshot.exists:
+                if snapshot.to_dict() != purged_row:
+                    raise LakeFetchError('Lake upload candidate changed; retry deletion')
                 transaction.delete(candidate)
                 return 1
             return 0

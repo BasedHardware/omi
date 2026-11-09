@@ -647,10 +647,8 @@ def test_delayed_candidate_creation_refused_after_owner_purge(storage, monkeypat
 def test_candidate_absence_verification_failure_is_retryable(storage, monkeypatch):
     _, store = storage
     put()
-    from tests.unit.fixtures.lake_firestore import CandidateDocument
-
     monkeypatch.setattr(StrictFirestoreTransaction, 'delete', lambda self, ref: None)
-    store.collection('account_deletions').document('s').set({'wipe_status': 'running'})
+    store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
     with pytest.raises(lake.LakeFetchError, match='remain after purge'):
         lake.delete_space_upload_candidates('s')
 
@@ -666,7 +664,7 @@ def test_settlement_of_one_same_key_request_leaves_other_inflight(storage):
     lake.assert_space_uploads_quiescent('s')
     lake._settle_upload_candidate(bucket.name, key, one)
     lake.assert_space_uploads_quiescent('s')
-    store.collection('account_deletions').document('s').set({'wipe_status': 'running'})
+    store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
     assert lake.delete_space_upload_candidates('s') == 1
     lake._settle_upload_candidate(bucket.name, key, one)
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)

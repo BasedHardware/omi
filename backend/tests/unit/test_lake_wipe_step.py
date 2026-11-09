@@ -740,3 +740,31 @@ def test_erasure_api_has_no_clock_or_expiry_parameters():
         assert not {'now', 'erase_expired', 'schedule_repurge'} & inspect.signature(fn).parameters.keys()
     assert not hasattr(config, 'put_quiescence_seconds')
     assert not hasattr(config, 'wipe_drain_seconds')
+
+
+@pytest.mark.parametrize('scope', ['conversation', 'account'])
+def test_changed_candidate_requires_retry_before_success(world, monkeypatch, scope):
+    bucket, store = world
+    space_keys.get_or_create_space_key('owner')
+    key = 'v1/spaces/owner/transcript/c/racing-settlement'
+    attempt = record_candidate(bucket.name, key)
+    purge = lake._delete_candidate_object
+
+    def settle_after_absence(row):
+        purge(row)
+        lake._settle_upload_candidate(bucket.name, key, attempt)
+        monkeypatch.setattr(lake, '_delete_candidate_object', purge)
+
+    monkeypatch.setattr(lake, '_delete_candidate_object', settle_after_absence)
+    marker(store)
+    operation = (
+        (lambda: lake_wipe.destroy_owner_lake_keys('owner'))
+        if scope == 'account'
+        else (lambda: lake_wipe.purge_conversation_lake_objects('owner', 'c'))
+    )
+    with pytest.raises(lake.LakeFetchError, match='candidate changed'):
+        operation()
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert space_keys.get_space_keys('owner') is not None
+    operation()
+    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
