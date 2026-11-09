@@ -713,3 +713,28 @@ def test_class_3_on_to_off_keeps_existing_grants_and_stops_new_resets(monkeypatc
     job = redrive(20000)
     assert job['attempt'] == 2 and job['held_redrives'] == 2
     assert job['held_redrive_last_attempt'] == 2  # the old grant's record, not a new one
+
+
+def test_single_unit_looping_alert_routes_unmuted_and_is_on_the_reviewed_import_list():
+    """Coordinator ruling 15:48Z: the single-unit loop must notify someone.
+
+    One looping unit stays below the volume alert's threshold, so this rule is
+    the only notice. It must reach the unmuted Telegram page route (not the
+    agent tier muted by omi-tier-silent), and its UID must be on the live
+    alert gate that the monitoring workflow imports and reads back.
+    """
+    import json
+    from pathlib import Path
+
+    monitoring = Path(__file__).resolve().parents[2] / 'charts/monitoring'
+    uid = 'omi-backlog-held-redrive-unit-looping'
+    rule = backlog_alert(uid)
+    combined = {r['uid']: r for r in json.loads((monitoring / 'alert-rules.json').read_text(encoding='utf-8'))}
+    assert combined[uid] == rule
+    settings = rule['notification_settings']
+    assert settings['receiver'] == 'Omi - Services Alerting (Telegram)'
+    assert 'omi-tier-silent' not in (settings.get('mute_time_intervals') or [])
+    assert rule['labels']['tier'] == 'page' and rule['labels']['audience'] == 'human'
+    assert not rule['isPaused']
+    gate = json.loads((monitoring / 'live-alert-gate.json').read_text(encoding='utf-8'))['uids']
+    assert uid in gate

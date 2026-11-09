@@ -32957,8 +32957,8 @@
       "impact": "product",
       "severity": "warning",
       "instatus_component": "speech-processing",
-      "tier": "agent",
-      "audience": "agent",
+      "tier": "page",
+      "audience": "human",
       "owner": "dazheng"
     },
     "isPaused": false,
@@ -32970,9 +32970,7 @@
       "group_wait": "5m",
       "group_interval": "1h",
       "repeat_interval": "24h",
-      "mute_time_intervals": [
-        "omi-tier-silent"
-      ]
+      "mute_time_intervals": []
     },
     "record": null
   }

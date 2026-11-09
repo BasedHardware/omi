@@ -51,7 +51,9 @@ keeps main's retained held loop (attempt at the cap) and the spent-budget
 signal, so a fresh budget never sustains an unbounded loop. The nightly scan and committed
 poll and `/redrive-dead` re-drives record `held_redrive_budget_spent` at or over 3 re-drives.
 Alerts: `omi-backlog-held-redrive-unit-looping` (one unit, last 8 days) and
-`omi-backlog-held-redrive-budget-spent` (volume). There is no terminal stop in core;
+`omi-backlog-held-redrive-budget-spent` (volume). The single-unit alert is a page:
+it is unmuted on `Omi - Services Alerting (Telegram)` and on `live-alert-gate.json`,
+because one looping unit stays under the volume threshold. There is no terminal stop in core;
 it ships in the follow-up branch behind its own default-off switch.
 
 ## Metrics
