@@ -7,7 +7,7 @@ from collections.abc import Mapping
 import math
 import os
 
-from config.rollout_cohorts import in_rollout_cohort, runtime_percent
+from config.rollout_cohorts import runtime_percent
 from typing import Any
 
 from config.batch_pipeline import in_percent_cohort
@@ -30,7 +30,7 @@ def enabled(uid: str | None = None, *, include_admitted_context: bool = True) ->
         env_percent = float('nan')
     # Runtime source (`rollout_cohorts/_ramp`); the env value is the fail-safe default.
     percent = runtime_percent('first-summary', env_default=env_percent)
-    if uid is None or in_rollout_cohort(uid, 'first-summary'):
+    if uid is None:
         return True
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False

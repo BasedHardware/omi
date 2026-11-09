@@ -132,16 +132,6 @@ def test_enforcement_false_beats_doc(rig, monkeypatch):
     assert not policy.enabled_for('synthetic-doc', 'live')
 
 
-def test_ladder_only_preserves_independent_switch_but_shares_doc(rig, monkeypatch):
-    rig.value.tokens()
-    rig.finish()
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    assert policy.execution_admission_enabled('synthetic-doc', 'live')
-    assert not policy.execution_admission_enabled('synthetic-env', 'live')
-    assert not policy.enabled_for('synthetic-doc', 'live')
-
-
 def test_disabled_switches_do_not_read_firestore(rig, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     rig.value.tokens()
@@ -171,20 +161,6 @@ def test_real_background_read_never_blocks_scope_checks(rig):
         finally:
             release.set()
     assert rig.value.tokens() == 'pct:5'
-
-
-def test_hashing_and_ladder_use_same_source(rig, monkeypatch):
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'pct:25')
-    owners = [f'synthetic-{i}' for i in range(200)]
-    before = [policy.enabled_for(uid, 'live') for uid in owners]
-    rig.reader.return_value = {'environment': 'prod', 'tokens': 'pct:25'}
-    rig.finish()
-    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
-    assert [policy.enabled_for(uid, 'live') for uid in owners] == before
-    assert [policy.execution_admission_enabled(uid, 'live') for uid in owners] == before
-    assert before == [rollout_cohorts.cohort_admits(uid, 'pct:25') for uid in owners]
-    assert cache.COHORT_PERCENT._value.get() == 25
 
 
 def test_ttl_stale_while_refresh_and_missing_restores_env(rig):

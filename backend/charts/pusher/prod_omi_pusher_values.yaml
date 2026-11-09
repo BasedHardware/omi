@@ -148,8 +148,6 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_PERCENT
@@ -178,8 +176,6 @@ env:
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
@@ -204,8 +200,6 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -325,10 +319,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
@@ -366,8 +356,6 @@ env:
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: SPEAKER_GROUPING_MODE
-    value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE

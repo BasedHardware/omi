@@ -32,11 +32,6 @@ def paid_recovery_limit() -> int:
         return 0
 
 
-def language_only_enabled() -> bool:
-    """Operator qualification mode: classify one canonical unit; never run the GPU chain."""
-    return os.getenv('BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY', 'false').strip().lower() == 'true'
-
-
 def language_probe_limit() -> int:
     """Fleet-wide hourly attempt cap; malformed settings deny new probes."""
     try:

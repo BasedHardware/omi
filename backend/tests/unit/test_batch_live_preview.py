@@ -27,7 +27,6 @@ from testing.parity_pack_v0.schema import RequestFingerprint
 def environment(monkeypatch):
     for key in (
         'FIRST_SUMMARY_DEADLINE_ENABLED',
-        'FIRST_SUMMARY_UID_ALLOWLIST',
         'FIRST_SUMMARY_DEADLINE_PERCENT',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_PERCENT',
@@ -72,7 +71,7 @@ def host():
 def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback(monkeypatch):
     enable(monkeypatch, '5')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '5')
     results = []
     for index in range(1000):
@@ -97,13 +96,10 @@ def test_summary_kill_allowlist_legacy_global_and_invalid(monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     assert summary_guarantee.enabled('synthetic')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', ' synthetic-allowed ')
-    assert summary_guarantee.enabled('synthetic-allowed')
-    assert not summary_guarantee.enabled('synthetic')
     for invalid in ('nan', 'inf', '-1', '101', 'bad'):
         monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', invalid)
         assert not summary_guarantee.enabled('synthetic')
-        assert summary_guarantee.enabled('synthetic-allowed')
+        assert not summary_guarantee.enabled('synthetic-allowed')
         monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', invalid)
         assert not batch_live_preview.selected('synthetic')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')

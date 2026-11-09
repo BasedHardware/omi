@@ -141,8 +141,7 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             preserved
             or master
             and (
-                member(uid, env, 'first-summary', 'FIRST_SUMMARY_UID_ALLOWLIST', explicit=flags is not None)
-                or bool(uid)
+                bool(uid)
                 and cohort_bucket(uid, COHORT_SALTS['first-summary'])
                 < parse_percent(env.get('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
             )
