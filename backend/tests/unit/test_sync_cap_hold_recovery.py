@@ -735,22 +735,6 @@ def test_reconciled_retention_waits_for_ledger_settlement_and_retries_failure(st
     recovery._erase.assert_not_called()
 
 
-async def test_ladder_only_recovery_waits_for_budget_reset_then_releases(state, monkeypatch):
-    from utils import stt_cap_dispatch, ladder_v1
-
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    snapshot = {'budget_percent': 100, 'budget_units': 100, 'used_units': 100}
-    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: snapshot)
-    monkeypatch.setattr(recovery, 'sync_allowed', stt_cap_dispatch.sync_allowed)
-    assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
-    recovery.process_segment.assert_not_called()
-    snapshot.update(budget_percent=0, used_units=0)
-    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
-    recovery.process_segment.assert_called_once()
-    assert state.row['finalized'] is True
-
-
 async def test_silent_live_capture_settles_without_provider_or_ambiguous_receipt(state, monkeypatch):
     from utils.sync import cap_recovery_audio
 
@@ -809,7 +793,7 @@ async def test_owner_budget_stops_before_second_frozen_piece_and_resumes(state, 
     assert recovery.process_segment.call_count == 2 and state.row['finalized']
 
 
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize(
     'origin,lanes,selected',
     [

@@ -19,15 +19,12 @@ from database.rollout_cohorts import (
 KEYS = {
     'batch-pipeline': 'BATCH_PIPELINE_UID_ALLOWLIST',
     'batch-pipeline-recovery': 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
-    'first-summary': 'FIRST_SUMMARY_UID_ALLOWLIST',
-    'audio-archive': 'AUDIO_ARCHIVE_UID_ALLOWLIST',
     'dream-agent': 'DREAM_AGENT_UID_ALLOWLIST',
     'speaker-grouping-shadow': 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST',
     'stt-live-demand': 'STT_LIVE_DEMAND_UID_ALLOWLIST',
     'sync-lineage-resolve': 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
     'transcription-final-pass': 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST',
     'transcription-shadow': 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
-    'mobile-standard-batch': 'MOBILE_STANDARD_BATCH_UIDS',
 }
 CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 # A missing key on a participating host is a real empty cohort (lineage is
@@ -35,9 +32,9 @@ CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-
 ALL_HOSTS = frozenset('cloud-run/' + name for name in CLOUD_RUN_HOSTS) | {'helm/backend-listen', 'helm/pusher'}
 HOSTS = {
     'stt-live-demand': {'helm/backend-listen'},
-    'mobile-standard-batch': {'helm/backend-listen'},
     'sync-lineage-resolve': ALL_HOSTS - {'helm/pusher'},
 }
+MIGRATABLE = frozenset(KEYS) | {'batch-pipeline-shadow', 'messaging-telegram', 'messaging-imessage'}
 LIMIT = 450  # A single bounded atomic seed; refuse to truncate a larger live cohort.
 
 
@@ -144,7 +141,7 @@ def cohort_sources(sources, name):
 
 def inventory(sources):
     desired, conflicts = {}, {}
-    for name in COHORT_ENVS:
+    for name in MIGRATABLE:
         rows = cohort_sources(sources, name)
         desired[name] = rows[0]
         if any(row != rows[0] for row in rows[1:]):
@@ -208,7 +205,7 @@ def migrate(args, *, client_factory, live_reader=read_live):
     sources = live_reader(args.environment, args.kube_context)
     desired, conflicts = inventory(sources)
     if conflicts:
-        for name in sorted(COHORT_ENVS):
+        for name in sorted(MIGRATABLE):
             rows = cohort_sources(sources, name)
             print(
                 f'{name}: sources={len(rows)} min_members={min(len(r.members) for r in rows)} '

@@ -52,24 +52,6 @@ def test_dark_defaults_and_no_shape_change_when_merge_is_disabled(monkeypatch):
     assert 'title_provenance' not in result.model_dump()
 
 
-def test_first_summary_provenance_is_cohort_scoped_when_merge_is_disabled(monkeypatch):
-    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
-    """PFS-F1: the gate being on somewhere must not stamp every owner's minimum."""
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
-    row = SimpleNamespace(transcript_segments=[])
-    assert flags.enabled() and not flags.enabled('outside-owner')
-    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()
-    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid=None).model_dump()
-    assert 'title_provenance' not in build_deterministic_minimum_structured(row).model_dump()
-
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
-    assert build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()['title_provenance'] == (
-        'server_minimum'
-    )
-
-
 def test_server_title_provenance_is_not_a_model_or_manual_title(enabled):
     result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]), uid='u')
     assert result.model_dump()['title_provenance'] == 'server_minimum'
@@ -219,17 +201,6 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
         assert delivery.repair_fenced({**row, 'finalization_job_id': 'new-generation'})
     finally:
         delivery.REPAIR_CONTEXT.reset(token)
-
-
-def test_allowlist_and_invalid_deadline_fail_closed(enabled, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    assert not flags.enabled('canary') and not flags.enabled('other')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary')
-    assert flags.enabled('canary') and not flags.enabled('other')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')
-    assert flags.deadline_seconds() == 120
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '999')
-    assert flags.deadline_seconds() == 120
 
 
 def test_local_only_minimum_is_explicitly_blocked_not_retried_as_empty(enabled):

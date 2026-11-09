@@ -206,7 +206,6 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
     capsys.readouterr()
     assert calls == ['crop', 'inference', 'crop', 'inference']
     for name, value in (
-        ('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'true'),
         ('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false'),
         ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true'),
         ('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true'),

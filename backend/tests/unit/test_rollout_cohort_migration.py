@@ -48,12 +48,12 @@ def test_live_dry_run_reads_sources_but_never_firestore_or_uids(tier, capsys, en
     factory.assert_not_called()
     output = capsys.readouterr().out
     assert 'private-one' not in output and 'private-two' not in output
-    assert len(output.splitlines()) == len(migration.COHORT_ENVS)
+    assert len(output.splitlines()) == len(migration.MIGRATABLE)
     assert all('writes=0' in line for line in output.splitlines())
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-@pytest.mark.parametrize('name', sorted(migration.COHORT_ENVS))
+@pytest.mark.parametrize('name', sorted(migration.MIGRATABLE))
 def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, environment, name):
     desired, _ = migration.inventory(sources())
 
@@ -167,7 +167,7 @@ def test_seed_atomic_leaf_merge_and_rerun_is_idempotent(monkeypatch, environment
         assert set(call.args[1]['cohorts']) == {environment}
         flags = call.args[1]['cohorts'][environment]
         assert 'messaging-telegram' not in flags and 'batch-pipeline-shadow' not in flags
-        assert set(flags) == set(migration.COHORT_ENVS) - {'messaging-telegram', 'batch-pipeline-shadow'}
+        assert set(flags) == set(migration.MIGRATABLE) - {'messaging-telegram', 'batch-pipeline-shadow'}
         assert set(flags.values()) == {True}
     batch.commit.assert_called_once_with(timeout=15.0, retry=None)
 

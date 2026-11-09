@@ -40,7 +40,7 @@ from config.summary_guarantee import (
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
-from config.repeat_work import revision_reuse
+
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
@@ -474,7 +474,7 @@ def mark_update(
         from config.demand_processing import enabled
 
         demand_enabled = enabled(uid)
-        if demand_enabled or revision_reuse():
+        if demand_enabled:
             # Keep demand's processing headroom when both policies are enabled;
             # revision reuse alone retains its upstream one-hour ceiling.
             row['first_pending_at'] = row.get('first_pending_at', current)
