@@ -6,6 +6,7 @@ import math
 import json
 import os
 from pathlib import Path
+import select
 import subprocess
 import sys
 import time
@@ -1185,39 +1186,55 @@ def test_profile_measures_deltas_and_bounds_worst_case_ipc():
     assert len(json.dumps(result).encode()) < 1024
 
 
+@pytest.mark.parametrize('startup_delay', [0, 0.5])
 @pytest.mark.parametrize('checkpoint,expected', [(True, 'walk'), (False, 'unknown')])
-def test_killed_child_reports_last_received_stage(checkpoint, expected):
+def test_killed_child_reports_last_received_stage(checkpoint, expected, startup_delay):
     children, events = [], []
+    ready_read, ready_write = os.pipe()
     code = (
         'import os,time\n'
+        + f'time.sleep({startup_delay})\n'
         + (
             'os.write(1, b\'{"stage":"walk","stage_ms":{"proof":12},"chunks":2,"bytes":99}\\n\')\n'
             if checkpoint
             else ''
         )
+        + f'os.write({ready_write}, b"1"); os.close({ready_write})\n'
         + 'time.sleep(30)\n'
     )
-
-    def launch(*_):
-        child = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        child = subprocess.Popen(
+            [sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, pass_fds=(ready_write,)
+        )
         children.append(child)
-        return child
-
-    report = cluster.coordinate(
-        [('private', 100)],
-        workers=1,
-        row_seconds=0.3,
-        run_seconds=5,
-        mode='apply',
-        launch=launch,
-        progress=events.append,
-    )
-    assert report['dispositions'] == {'budget_exhausted': 1}
-    assert events[0]['stage'] == expected
-    assert report['disposition_elapsed_ms']['budget_exhausted'] == events[0]['elapsed_ms']
-    assert children[0].returncode is not None and children[0].stdout.closed
-    if checkpoint:
-        assert events[0]['chunks'] == 2 and events[0]['bytes'] == 99
+        os.close(ready_write)
+        ready_write = None
+        # This is an IPC timeout test. Ensure the fixture emitted its profile
+        # before starting the coordinator's unchanged 0.3s row budget; host
+        # contention can otherwise spend that entire budget booting Python.
+        assert select.select([ready_read], [], [], 30)[0], 'fixture child did not become ready'
+        assert os.read(ready_read, 1) == b'1'
+        report = cluster.coordinate(
+            [('private', 100)],
+            workers=1,
+            row_seconds=0.3,
+            run_seconds=5,
+            mode='apply',
+            launch=lambda *_: child,
+            progress=events.append,
+        )
+        assert report['dispositions'] == {'budget_exhausted': 1}
+        assert events[0]['stage'] == expected
+        assert report['disposition_elapsed_ms']['budget_exhausted'] == events[0]['elapsed_ms']
+        assert child.returncode is not None and child.stdout.closed
+        if checkpoint:
+            assert events[0]['chunks'] == 2 and events[0]['bytes'] == 99
+    finally:
+        if ready_write is not None:
+            os.close(ready_write)
+        os.close(ready_read)
+        for child in children:
+            cluster.stop(child)
 
 
 def test_ipc_tolerates_old_partial_oversized_and_untrusted_profiles():
