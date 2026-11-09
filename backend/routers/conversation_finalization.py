@@ -29,7 +29,7 @@ from utils.conversations.finalizer import (
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (

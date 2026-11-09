@@ -691,7 +691,7 @@ async def test_sync_reprocess_response_preserves_status_and_logs_busy_without_id
     from utils.batch_pipeline import enrichment
 
     async def run(executor, func, *args, **kwargs):
-        expected = finalization_router.postprocess_executor if deadline == 'true' else finalization_router.sync_executor
+        expected = finalization_router.postprocess_executor
         assert executor is expected
         return func(*args, **kwargs)
 

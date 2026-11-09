@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import math
 from typing import Literal, overload
 
-from config.policy.batch import COHORT_SALTS, parse_percent, cohort_bucket
 from config.policy.parts import PolicyPart, boolean, member, policy_environment, source_role
 
 
