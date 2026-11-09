@@ -7484,12 +7484,10 @@ or zero capture exposure cannot establish savings. Paid failover remains visible
 in the admitted arm. Disabling the ramp takes effect on reconnect; drain existing
 WebSockets before claiming rollback complete.
 
-`FIRST_SUMMARY_DEADLINE_PERCENT=0` admits only explicit `FIRST_SUMMARY_UID_ALLOWLIST`
-owners (an omitted or empty allowlist at zero percent admits nobody). Positive
-values add the same percentage bucket to the retained summary allowlist
-independently of batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`. A
-positive percentage with an empty summary allowlist is cohort-only; `100` admits
-all owners. Keep existing allowlists when ramping or rolling back.
+`FIRST_SUMMARY_DEADLINE_PERCENT` admits its percentage bucket independently of
+batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`; `0` admits nobody and
+`100` admits all owners. The former `FIRST_SUMMARY_UID_ALLOWLIST` cohort was
+retired on 2026-11-09 (flag docket ruling 3) while production served 100.
 Production config sets `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
 `FIRST_SUMMARY_DEADLINE_PERCENT=100` on backend-listen, pusher, backend,
 backend-sync, backend-sync-backfill and backend-integration. This prevents

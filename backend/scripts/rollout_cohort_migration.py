@@ -69,6 +69,16 @@ def _json_command(argv):
     return json.loads(result.stdout)
 
 
+def _serving_container(containers):
+    """The Cloud Run ingress container: the only one, or the only one that declares ports (sidecars do not)."""
+    if len(containers) == 1:
+        return containers[0]
+    ingress = [container for container in containers if container.get('ports')]
+    if len(ingress) != 1:
+        raise ValueError('ambiguous serving container')
+    return ingress[0]
+
+
 def read_live(environment, kube_context, *, command=_json_command):
     """Read the actually serving Cloud Run revision and installed Helm release values."""
     project = 'based-hardware' if environment == 'prod' else 'based-hardware-dev'
@@ -80,10 +90,7 @@ def read_live(environment, kube_context, *, command=_json_command):
         if len(traffic) != 1 or traffic[0]['percent'] != 100:
             raise ValueError('split Cloud Run traffic requires a separate migration')
         revision = command(['gcloud', 'run', 'revisions', 'describe', traffic[0]['revisionName'], *base])
-        containers = revision['spec']['containers']
-        if len(containers) != 1:
-            raise ValueError('ambiguous serving container')
-        sources['cloud-run/' + host] = _env(containers[0].get('env', []))
+        sources['cloud-run/' + host] = _env(_serving_container(revision['spec']['containers']).get('env', []))
     for host in ('backend-listen', 'pusher'):
         release = f'{environment}-omi-{host}'
         values = command(

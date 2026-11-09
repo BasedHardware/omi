@@ -27,7 +27,6 @@ from testing.parity_pack_v0.schema import RequestFingerprint
 def environment(monkeypatch):
     for key in (
         'FIRST_SUMMARY_DEADLINE_ENABLED',
-        'FIRST_SUMMARY_UID_ALLOWLIST',
         'FIRST_SUMMARY_DEADLINE_PERCENT',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_PERCENT',

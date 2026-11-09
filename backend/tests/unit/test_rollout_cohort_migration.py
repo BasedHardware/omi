@@ -252,6 +252,30 @@ def test_live_cli_reads_serving_revision_and_installed_helm_values():
     assert all('--all' in call and 'explicit-context' in call for call in calls if call[0] == 'helm')
 
 
+def test_live_cli_reads_the_ingress_container_beside_a_sidecar():
+    app = {
+        'name': 'backend-1',
+        'ports': [{'containerPort': 8080}],
+        'env': [{'name': 'DREAM_AGENT_UID_ALLOWLIST', 'value': 'private-one'}],
+    }
+    collector = {'name': 'collector', 'env': [{'name': 'DREAM_AGENT_UID_ALLOWLIST', 'value': 'other'}]}
+
+    def command(argv, containers):
+        if argv[0] == 'helm':
+            return {'env': []}
+        if argv[2] == 'services':
+            return {'status': {'traffic': [{'percent': 100, 'revisionName': 'serving-revision'}]}}
+        return {'spec': {'containers': containers}}
+
+    result = migration.read_live('prod', 'ctx', command=lambda argv: command(argv, [collector, app]))
+    expected = {'DREAM_AGENT_UID_ALLOWLIST': 'private-one'}
+    assert all(result[f'cloud-run/{host}'] == expected for host in migration.CLOUD_RUN_HOSTS)
+    # Two port-bearing containers (or none) stay ambiguous rather than guessing.
+    for containers in ([app, dict(collector, ports=[{'containerPort': 4317}])], [collector, dict(app, ports=[])]):
+        with pytest.raises(ValueError, match='ambiguous serving container'):
+            migration.read_live('prod', 'ctx', command=lambda argv, c=containers: command(argv, c))
+
+
 def test_live_cli_requires_tier_and_sanitizes_command_errors(tier, capsys):
     reader = MagicMock(side_effect=RuntimeError('private-one credential payload'))
     argv = ['--seed-live', '--project', 'based-hardware', '--environment', 'prod', '--kube-context', 'explicit-context']
