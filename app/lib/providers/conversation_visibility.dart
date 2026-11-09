@@ -18,6 +18,7 @@ extension _ConversationVisibility on ConversationProvider {
   }
 
   void _updateConversationProjections(ServerConversation conversation) {
+    conversation = _withHomeProcessingProjection(conversation);
     if (conversation.isMergedDonor) _mergedAwayConversationIds.add(conversation.id);
     if (conversation.deleted || conversation.isMergedDonor) {
       conversations.removeWhere((row) => row.id == conversation.id);
