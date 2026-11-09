@@ -140,8 +140,8 @@ def test_null_settled_due_is_excluded_from_numeric_sweep(debt_store):
 def test_repair_tick_global_lease_and_bounded_cursor(debt_store):
     client, uid, tasks, ref, row = debt_store
     first = repair.tick(now=220, client=client)
-    assert first == {'scanned': 1, 'admitted': 1, 'errors': 0}
-    assert repair.tick(now=221, client=client) == {'scanned': 0, 'admitted': 0, 'errors': 0}
+    assert first == {'scanned': 1, 'admitted': 1, 'errors': 0, 'expired_seen': 0}
+    assert repair.tick(now=221, client=client) == {'scanned': 0, 'admitted': 0, 'errors': 0, 'expired_seen': 0}
     assert len(tasks) == 1
 
 
