@@ -66,7 +66,7 @@ Freeze the time for a page and keep the same arguments for dry-run and apply:
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 export HELD_INPUT_AS_OF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-backend/.venv/bin/python backend/scripts/redrive_staging_inputs.py \
+OMI_ENV_STAGE=prod backend/.venv/bin/python backend/scripts/redrive_staging_inputs.py \
   --as-of "$HELD_INPUT_AS_OF" --page-size 128
 ```
 
@@ -77,7 +77,7 @@ then use the digest from the fresh dry-run:
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh prod-operator
-backend/.venv/bin/python backend/scripts/redrive_staging_inputs.py \
+OMI_ENV_STAGE=prod backend/.venv/bin/python backend/scripts/redrive_staging_inputs.py \
   --as-of "$HELD_INPUT_AS_OF" --page-size 128 \
   --apply --approve-plan-sha256 '<approved plan_sha256>'
 ```
@@ -95,7 +95,7 @@ For pagination, use a private directory and separate input/output cursor files:
 
 ```bash
 install -d -m 700 /Volumes/Ephemeral/scratch/held-input-redrive
-backend/.venv/bin/python backend/scripts/redrive_staging_inputs.py \
+OMI_ENV_STAGE=prod backend/.venv/bin/python backend/scripts/redrive_staging_inputs.py \
   --as-of "$HELD_INPUT_AS_OF" --page-size 128 \
   --next-cursor-file /Volumes/Ephemeral/scratch/held-input-redrive/next.json
 ```
