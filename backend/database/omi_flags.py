@@ -114,7 +114,11 @@ _UNCHECKED: Any = object()
 
 
 def _rule_identity(rule: dict[str, Any] | None) -> tuple[bool, Any]:
-    return (rule is not None, (rule or {}).get('version'))
+    # Every write_rule write stamps the global version; a rule written another way is compared whole.
+    if rule is None:
+        return (False, None)
+    version = rule.get('version')
+    return (True, ('version', version) if version is not None else ('rule', rule))
 
 
 def write_rule(

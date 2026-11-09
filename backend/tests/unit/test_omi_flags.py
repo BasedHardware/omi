@@ -585,6 +585,9 @@ def _fake_flag_client(stored):
         (None, None, False),
         ({'active': True, 'version': 6}, None, True),
         (None, {'active': True, 'version': 5}, True),
+        ({'active': True, 'rollout_percentage': 100}, {'active': True, 'rollout_percentage': 100}, False),
+        ({'active': False, 'rollout_percentage': 100}, {'active': True, 'rollout_percentage': 100}, True),
+        ({'active': True, 'version': 5}, {'active': True}, True),
     ],
 )
 def test_write_rule_refuses_when_stored_rule_changed_since_read(monkeypatch, stored, expected, stale):
