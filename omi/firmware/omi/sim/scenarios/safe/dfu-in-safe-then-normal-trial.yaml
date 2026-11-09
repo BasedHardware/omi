@@ -1,0 +1,19 @@
+id: safe/dfu-in-safe-then-normal-trial
+summary: >
+  A completed image-0 upload in SAFE writes TRIAL and clears the RAM latch;
+  the phone's reset boots normally and the 60 s trial stamps GOOD.
+committee: [1]
+tags: [guard]
+build: dfu-finish
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 10600}
+  - {t: 20000, power: soft_reset}
+end: 90000
+expect:
+  boot_count: 2
+  boots:
+    # The completed upload clears the RAM latch for the next boot; this session stays SAFE.
+    - {safe: true, latched: false, log: ["BOOTSTATE: active=1 count=1 reason=2", "omi/bootstate=TRIAL",
+                                         "Safe mode DFU finished: fresh trial on next boot"]}
+    - {reset: software, safe: false, log: ["Device initialized successfully", "omi/bootstate=GOOD"]}

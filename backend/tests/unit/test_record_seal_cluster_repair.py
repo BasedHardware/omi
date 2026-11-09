@@ -1607,3 +1607,62 @@ def test_jobs_age_indexes_are_owned_once_by_batch_registry_in_both_stages():
         ]
         assert sum(r.signature == requirement.signature for r in INDEX_REQUIREMENTS) == 1
         assert manifest.count(requirement.to_manifest()) == 1
+
+
+@pytest.mark.parametrize('mode', ['off', 'on'])
+@pytest.mark.parametrize('bad_clock', [0, -100])
+def test_invalid_job_clock_is_repaired_but_excluded_from_age_metrics(monkeypatch, mode, bad_clock):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', mode)
+    now = 1800000000
+    monkeypatch.setattr(cluster, 'datetime', SimpleNamespace(now=lambda _: datetime.fromtimestamp(now, timezone.utc)))
+    docs = [pending_job(0, bad_clock), pending_job(1, now - 10000)]
+    rows, _, _ = cluster.discover_jobs(OrderedJobsClient(docs), budget=SweepBudget(60))
+    assert dict(rows) == {
+        'users/synthetic/conversations/capture-0': None,
+        'users/synthetic/conversations/capture-1': 10000,
+    }
+    report, children, _, order, progress = scheduling(rows)
+    assert order == [path for path, _ in rows]
+    assert report['dispositions'] == {'sealed': 2}
+    assert all(child.reaped for child in children)
+    assert report['oldest_unsealed_seconds'] == report['oldest_seal_age_seconds'] == 10000
+    assert report['invalid_clock_rows'] == 1
+    assert ['seal_age_seconds' in row for row in progress] == [age is not None for _, age in rows]
+    json.dumps(report, allow_nan=False)
+
+
+def test_all_invalid_clocks_keep_summary_finite_and_count_attempts():
+    report, _, _, order, progress = scheduling([('zero-clock', None)], outcomes={'zero-clock': (2, 'sealed', 0)})
+    assert order == ['zero-clock']
+    assert report['invalid_clock_rows'] == 1
+    assert report['oldest_unsealed_seconds'] == report['oldest_seal_age_seconds'] == 0
+    assert 'seal_age_seconds' not in progress[0]
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize('clock', [0, -1, None, True, 'old', float('nan'), float('inf'), -float('inf')])
+def test_metric_clock_rejects_nonpositive_nonfinite_or_nonnumeric(clock):
+    assert not cluster.valid_metric_clock(clock)
+
+
+@pytest.mark.parametrize('bad_stamp', [0, -100])
+def test_invalid_conversation_finish_clock_preserves_selection(monkeypatch, bad_stamp):
+    now = 1800000000
+    monkeypatch.setattr(cluster.time, 'time', lambda: now)
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.select.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [
+        SimpleNamespace(
+            reference=SimpleNamespace(path=path),
+            to_dict=lambda stamp=stamp: {'finished_at': datetime.fromtimestamp(stamp, timezone.utc)},
+        )
+        for path, stamp in [('invalid', bad_stamp), ('normal', now - 1000)]
+    ]
+    rows, saturated, cursor = cluster.discover(
+        SimpleNamespace(collection_group=lambda _: query), budget=SweepBudget(60)
+    )
+    assert rows == [('invalid', None), ('normal', 1000)]
+    assert saturated is False and cursor is None

@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import logging
 import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -199,8 +200,9 @@ async def test_pump_only_sweeps_and_hands_drains_to_loop(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure', ['build', 'sweep', 'followups', 'drains'])
-async def test_pump_logs_failure_and_runs_next_tick(monkeypatch, caplog, failure):
+@pytest.mark.parametrize('failure', ['build', 'projector', 'sweep', 'followups', 'index', 'drains'])
+@pytest.mark.parametrize('prior_success', [False, True])
+async def test_pump_logs_failure_and_runs_next_tick(monkeypatch, caplog, failure, prior_success):
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PUMP_SWEEP_PAGES', '1')
     projector = SimpleNamespace(
@@ -211,42 +213,64 @@ async def test_pump_logs_failure_and_runs_next_tick(monkeypatch, caplog, failure
         start_drains=Mock(),
         has_async_followups=False,
         owes_followups=failure == 'followups',
+        owes_index=failure == 'index',
+        schedule_index_flush=Mock(),
         start_followups=AsyncMock(),
     )
     service = SimpleNamespace(projector=projector)
     factory = Mock(return_value=service)
     target = {
         'build': factory,
+        'projector': factory,
         'sweep': projector.sweep,
         'followups': projector.start_followups,
+        'index': projector.schedule_index_flush,
         'drains': projector.start_drains,
     }[failure]
-    target.side_effect = [RuntimeError('synthetic'), None if failure != 'build' else service]
+    success = service if target is factory else None
+    failed = SimpleNamespace(projector=None) if failure == 'projector' else RuntimeError('synthetic')
+    target.side_effect = ([success] if prior_success else []) + [failed, success]
     monkeypatch.setattr(serving, 'serving_for_stage', factory)
     monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
     ticks = []
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    monkeypatch.setattr(serving, '_metrics', lambda: metrics)
+    tick_metric = 'omi_batch_projection_pump_last_tick_seconds'
+    success_metric = 'omi_batch_projection_pump_last_success_seconds'
+    assert registry.get_sample_value(tick_metric) == registry.get_sample_value(success_metric) == 0
+    clock = iter([100.0, 200.0, 300.0] if prior_success else [200.0, 300.0])
+    now = [0.0]
+
+    def wall_clock():
+        return now[0]
+
+    # Both gauges see the same wall-clock time within a tick. No real sleeping.
+    now[0] = next(clock)
+    monkeypatch.setattr(serving, 'time', SimpleNamespace(time=wall_clock, monotonic=time.monotonic))
 
     async def wait_for(awaitable, *, timeout):
         ticks.append(timeout)
-        if len(ticks) == 2:
+        assert registry.get_sample_value(tick_metric) == now[0]
+        expected_success = 300.0 if now[0] == 300.0 else (100.0 if prior_success else 0.0)
+        assert registry.get_sample_value(success_metric) == expected_success
+        if now[0] == 300.0:
             runtime[0].set()
             return await awaitable
+        now[0] = next(clock)
         awaitable.close()
         raise asyncio.TimeoutError
 
     monkeypatch.setattr(
         serving, 'asyncio', SimpleNamespace(Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError)
     )
-    metrics = Mock()
-    monkeypatch.setattr(serving, '_metrics', lambda: metrics)
     caplog.set_level(logging.INFO, logger=serving.__name__)
     runtime = serving.start_serving_from_env()
     await asyncio.wait_for(runtime[1], timeout=5)
-    assert metrics.projection_pump_last_tick.set.call_count == 2
-    assert len(ticks) == 2
-    assert factory.call_count == 2
+    assert len(ticks) == 2 + int(prior_success)
+    assert factory.call_count == len(ticks)
     assert 'event=batch_projection_pump outcome=retry exception_type=RuntimeError' in caplog.text
-    assert caplog.text.count('event=batch_projection_pump outcome=tick') == 2
+    assert caplog.text.count('event=batch_projection_pump outcome=tick') == len(ticks)
     assert projector.start_drains.call_count >= 1
 
 
@@ -283,14 +307,20 @@ async def test_idle_pump_stops_during_tick_sleep_without_starting_drains(monkeyp
         return fn(*args)
 
     monkeypatch.setattr(serving, 'run_blocking', run_blocking)
+    from utils.batch_pipeline import projection_drain
+
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', None)
     runtime = serving.start_serving_from_env()
     try:
         await asyncio.wait_for(swept.wait(), timeout=5)
+        # A live pump marks its recurring sweep, so live-target holds may be passive.
+        assert projection_drain.recurring_sweep_active()
     finally:
         await serving.stop_serving(runtime)
     projector.sweep.assert_called_once()
     projector.start_drains.assert_not_called()
     assert runtime[1].done()
+    assert not projection_drain.recurring_sweep_active()
 
 
 @pytest.mark.asyncio
@@ -306,6 +336,7 @@ async def test_pump_starts_followups_without_serving_sweeps_or_maintenance(monke
     metrics = QueueMetrics(registry)
     monkeypatch.setattr(serving, '_metrics', lambda: metrics)
     assert registry.get_sample_value('omi_batch_projection_pump_last_tick_seconds') == 0
+    assert registry.get_sample_value('omi_batch_projection_pump_last_success_seconds') == 0
     loop_thread = threading.get_ident()
     calls = []
     projector = SimpleNamespace(has_async_followups=False, owes_followups=False, owes_drains=False, owes_index=False)
@@ -362,6 +393,7 @@ async def test_pump_starts_followups_without_serving_sweeps_or_maintenance(monke
     }
     assert calls == expected[hint]
     assert registry.get_sample_value('omi_batch_projection_pump_last_tick_seconds') > 0
+    assert registry.get_sample_value('omi_batch_projection_pump_last_success_seconds') > 0
     projector.start_drains.assert_not_called()
     for forbidden in (service.reconcile, service.reconcile_async, service._maintain, service.dispatch_recovery):
         forbidden.assert_not_called()

@@ -111,8 +111,15 @@ or explicit user deletion; storage pressure cannot evict them.
 state and ledger shape and pins each answer in `tests/fixtures/custody_status_shapes.json`,
 which the phone replays through its terminal policy (`app/test/unit/custody_status_shapes_test.dart`).
 
-Owner drains with zero progress waiting on `live_target_not_persisted` retry
-after 30, 60, 120, 240, then at most 300 seconds per owner, counted by
+Owner drains with zero progress waiting on `live_target_not_persisted` are held
+out of admission for 30, 60, 120, 240, then at most 300 seconds per owner. The
+hold is passive: its expiry only re-admits the owner for the next ordinary
+request (the sweep) and never wakes it, so retries are never more frequent than
+the sweep (an active wake doubled owner-chain conflicts on 2026-11-09). The hold is
+passive only while this process runs a recurring sweep (the serving loop with
+`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` on, or the projection pump), signalled by
+the runtime itself; otherwise (serving off, sweep off, one-off reconcile requests)
+it keeps its expiry and overflow wake, so no owner is stranded. Known pre-existing edge (lead2 8567be): with no serving runtime, a `defer()` overflow past `MAX_DELAYED_OWNERS` only queues `request_drain`, which nothing consumes until the next reconcile; it needs serving off plus a manual reconcile burst over 1,024 owners. Counted by
 `omi_batch_projection_live_target_backoffs_total`; progress or any other stop
 resets the bounded process-local attempt state. Only
 `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` disables this backoff (restoring
