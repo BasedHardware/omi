@@ -9,6 +9,7 @@ import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
 from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
 from dependencies import get_current_user_id
+from models.connector_access import ConnectorAccess, connector_access
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 from utils.dev_cache import invalidate_developer_cache
@@ -33,6 +34,18 @@ def get_mcp_keys(uid: str = Depends(get_current_user_id)):
     keys, repairs = mcp_api_key_db.get_mcp_keys_for_user_with_repair_info(uid)
     record_api_key_repairs(key_kind="mcp", operation="list", repairs=repairs, log=logger)
     return keys
+
+
+@mcp_router.get(
+    "/v1/mcp/keys/scopes",
+    response_model=ConnectorAccess,
+    tags=["mcp"],
+    summary="Get Key Scope Contract",
+    operation_id="get_mcp_key_scope_contract",
+)
+def get_mcp_key_scope_contract(uid: str = Depends(get_current_user_id)):
+    # Separate from the released bare-array list response; available with no keys.
+    return connector_access("mcp_api_key")
 
 
 @mcp_router.post(

@@ -15,7 +15,7 @@ from typing import Any, Literal, Mapping, TypedDict
 from google.cloud import firestore
 from config.server_batch import owned as server_batch_owned
 
-from database import conversations as conversations_db
+from database import conversations as conversations_db, transcript_pointer
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database.people_stats_cache import invalidate_people_stats_cache
@@ -276,7 +276,6 @@ def tombstone_and_delete_empty_conversation(
         client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
     )
     session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
-    transaction = client.transaction()
 
     @firestore.transactional
     def _delete_empty(transaction: Any) -> bool:
@@ -356,7 +355,7 @@ def tombstone_and_delete_empty_conversation(
         transaction.delete(conversation_ref)
         return True
 
-    deleted = _delete_empty(transaction)
+    deleted = transcript_pointer.run_preloaded_transactional(client, _delete_empty)
     if deleted:
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
         invalidate_people_stats_cache(uid)

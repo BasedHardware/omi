@@ -809,3 +809,21 @@ async def test_source_deleted_followup_is_terminal_without_backoff_or_content_wo
     f.projector.store.mark_enrichment.assert_not_called()
     f.projector.store.ready.assert_not_called()
     f.projector.load_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tail_handoff_waits_behind_discovery_and_reaches_complete_content(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    f.projector.followups = f.runner
+    f.projector.store.store.projection_pending.return_value = ['head']
+    f.projector.owe_followups(['later'])
+    f.projector.owe_followups(['later'])
+    assert f.projector.chain_followups == ['later']
+    await f.projector.start_followups()
+    while f.runner.tasks:
+        await asyncio.wait_for(asyncio.gather(*list(f.runner.tasks.values())), 2)
+    assert [call.args[0] for call in f.projector.complete_content.call_args_list] == ['head', 'later']
+    assert not f.runner.owed and not f.projector.chain_followups

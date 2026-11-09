@@ -118,9 +118,10 @@ runtimeConfigMapName: dev-omi-backend-config
 env:
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
-  # Default off. 512 MiB is a proposed canary size, not enabled here.
+  # Dev-only canary (lead2 2afa3e, 2026-11-08): 512 MiB byte-budgeted custody admission.
+  # Prod stays '0' (off). Rollback: set back to '0'. Gate: dev mem p99 <75% and no kills over 30 min.
   - name: PUSHER_STORAGE_PCM_BUDGET_MB
-    value: '0'
+    value: '512'
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

@@ -34,10 +34,11 @@ FRESH_CAPTURE_LAG_SECONDS = 600.0
 
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
+RECORD_DEAD_LETTER_SECONDS = 14 * 86400
 
 
 def batch_held_dead_letter_enabled() -> bool:
-    """Ship-on held deadlines/expiry; manual requeue remains available when off."""
+    """Ship-on record/held deadlines and expiry; manual requeue remains available when off."""
     from config.policy.kill_switches import kill_switch
 
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
@@ -54,6 +55,11 @@ def projection_source_deleted_enabled() -> bool:
 def projection_ghost_settle_enabled() -> bool:
     """Default OFF: normalize aged ghost hints; production enable needs David."""
     return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
+
+
+def projection_restorable_cap_expiry_enabled() -> bool:
+    """Default OFF: allow the existing one-time expiry CAS for restorable capped holds."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED')
 
 
 def projection_ghost_settle_cohort() -> tuple[str, bool]:
@@ -712,6 +718,11 @@ def projection_drain_privacy_backoff_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_drain_live_target_backoff_enabled() -> bool:
+    """Default on; only off disables bounded awaiting-live-target owner backoff."""
+    return kill_switch('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF')
 
 
 def projection_privacy_refusal_resume_enabled() -> bool:

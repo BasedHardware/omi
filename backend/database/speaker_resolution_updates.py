@@ -5,7 +5,7 @@ import logging
 from typing import Callable, Optional
 from google.cloud import firestore
 import config.speaker_match_scores as match_scores
-from database import conversations
+from database import conversations, transcript_pointer
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -76,7 +76,10 @@ def persist_speaker_resolution_if_current(
         )
         patch['transcript_segments'] = conversations.apply_manual_assignments(patch['transcript_segments'], receipt)
         prepared = conversations.encode_conversation_for_write(
-            uid, patch, current.get('data_protection_level') or 'standard'
+            uid,
+            dict(patch, id=conversation_data['id']),
+            current.get('data_protection_level') or 'standard',
+            conversation_state=current,
         )
         identities = None
         if on_committed_identity is not None:
@@ -96,7 +99,7 @@ def persist_speaker_resolution_if_current(
         transaction.update(ref, {key: prepared[key] for key in fields if key in prepared})
         return True, 'done', identities
 
-    written, reason, identities = persist(client.transaction())
+    written, reason, identities = transcript_pointer.run_preloaded_transactional(client, persist)
     observe('cas_committed' if written else 'cas_refused', reason)
     if written:
         if on_committed_identity is not None:

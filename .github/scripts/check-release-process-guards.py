@@ -1250,7 +1250,7 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
             }
             (root / "cv1-validated-run.json").write_text(json.dumps({"run": run, "workflow_id": 42}))
             tag_ref = json.dumps({"object": {"type": "commit", "sha": context["sha"]}})
-            responses = ["", tag_ref, "", json.dumps({"draft": True, "tag_name": "Omi_CV1_v9.8.7"}), tag_ref, ""]
+            responses = ["", tag_ref, "", json.dumps({"isDraft": True, "tagName": "Omi_CV1_v9.8.7"}), tag_ref, ""]
             env = {
                 "VERSION_INPUT": "9.8.7",
                 "PUBLISH": "publish",

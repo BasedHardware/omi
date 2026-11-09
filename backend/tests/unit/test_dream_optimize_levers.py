@@ -29,11 +29,10 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
     for name in dream_levers.PER_OWNER:
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name + '_SERVE_PERCENT', raising=False)
-    # Retired 2026-10-30 from the 10-29 shadow day: idle-skip and no-progress default off.
+    # Idle skip remains off; the no-progress lever has been retired.
     assert dream_levers.arms('owner-a') == {
         'idle_skip': 'off',
         'material_budget': 'shadow',
-        'no_progress_stop': 'off',
         'history_compact': 'shadow',
         'hunt_backoff': 'shadow',
         'prescan': 'shadow',
@@ -68,7 +67,7 @@ def test_lever_errors_fail_open_to_off(monkeypatch):
         raise RuntimeError('parse')
 
     monkeypatch.setattr(dream_levers.refactor_modes, 'mode', broken)
-    assert dream_levers.arm(dream_levers.NO_PROGRESS_STOP_MODE_ENV, 'owner-a') == 'off'
+    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'off'
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'off'
 
 
@@ -452,24 +451,16 @@ def _idle_reader(count):
     return model
 
 
-@pytest.mark.parametrize('arm', ['shadow', 'serve'])
-def test_no_progress_stop(runtime, monkeypatch, arm):
-    monkeypatch.setenv(dream_levers.NO_PROGRESS_STOP_MODE_ENV, arm)
-    monkeypatch.setenv('DREAM_NO_PROGRESS_BATCHES', '3')
-    monkeypatch.setenv('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', '0.1')
+def test_no_progress_retirement_keeps_normal_completion(runtime, monkeypatch):
     limits = SessionLimits(bucket='light', turns=32, tools=32, read_bytes=640000, read_call_bytes=64000, tokens=400000)
     owner_records = EvidenceRecords(records(runtime))
     _scripted(owner_records, limits, monkeypatch)
     count = []
     report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['no_progress_stop']
     assert report['status'] == 'complete', report
-    assert lever['arm'] == arm and lever['fired'] and lever['batch'] == 3
-    if arm == 'serve':
-        assert report['stop_reason'] == 'no_progress' and len(count) == 3
-    else:
-        assert report['stop_reason'] == 'finished' and len(count) == 13
-        assert lever['staged_after'] == 0 and lever['tokens_after'] > 0
+    assert report['stop_reason'] == 'finished' and len(count) == 13
+    assert report['token_limit'] == limits.tokens
+    assert 'no_progress_stop' not in report['levers']
 
 
 def test_material_budget_serve_shrinks_limits(runtime, monkeypatch):

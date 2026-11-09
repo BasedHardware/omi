@@ -102,7 +102,7 @@ def test_app_wire_rejects_unavailable_link(store, monkeypatch, batch):
 def test_tool_error_is_visible_and_does_not_write(store, monkeypatch):
     monkeypatch.setattr(service, 'clock_for_uid', lambda *_: None)
     result = service.create_action_item_text('owner', 'Buy milk', conversation_id='foreign-only')
-    assert 'Error' in result and 'unavailable' in result
+    assert 'Error' in result and 'not found' in result
     store[2].assert_not_called()
 
 
@@ -112,7 +112,7 @@ def test_langchain_tool_uses_the_same_source_boundary(store, monkeypatch):
         {'description': 'Buy milk', 'conversation_id': 'foreign-only'},
         config={'configurable': {'user_id': 'owner'}},
     )
-    assert 'Error' in result and 'unavailable' in result
+    assert 'Error' in result and 'not found' in result
     store[2].assert_not_called()
 
 

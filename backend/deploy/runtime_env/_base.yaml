@@ -124,7 +124,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           category: rollout
-          category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -617,7 +616,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           category: rollout
-          category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -1024,7 +1022,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
-            category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
@@ -1420,7 +1417,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
-            category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
@@ -1536,10 +1532,6 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
-            category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            provisional: true
-            value: 'false'
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
@@ -1796,7 +1788,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
-            category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
@@ -1906,10 +1897,6 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
-            category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            provisional: true
-            value: 'false'
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
@@ -2143,7 +2130,6 @@ environment_shared:
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            category: rollout
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
