@@ -58,17 +58,18 @@ void main() {
     expect(server.countOf('DELETE', path), 0);
 
     server.failNext('DELETE', path, status: 503);
+    server.failNext('DELETE', path, status: 503); // The real HTTP adapter retries a 5xx once.
     await swipe();
     await tester.pump(const Duration(seconds: 6));
     await waitFor(tester, () => provider.memories.isNotEmpty);
-    expect(server.countOf('DELETE', path), 1);
+    expect(server.countOf('DELETE', path), 2);
     expect(find.text('Failed to delete items'), findsOneWidget);
     expect(server.memories, hasLength(1));
 
     await swipe();
     await tester.pump(const Duration(seconds: 6));
     await waitFor(tester, () => SharedPreferencesUtil().confirmedMemoryDeletionIds.contains(row.id));
-    expect(server.countOf('DELETE', path), 2);
+    expect(server.countOf('DELETE', path), 3);
     expect(server.memories, isEmpty);
     expect(provider.memories, isEmpty);
     expect(SharedPreferencesUtil().cachedMemories, isEmpty);

@@ -76,9 +76,8 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
     final id = deletedMemory.id;
     var succeeded = true;
     var persistenceFailed = false;
-    if (deletion.serverMemory == null && prefs.pendingMemories.any((row) => row.id == pendingId)) {
-      prefs.removePendingMemory(pendingId, ownerUid: deletion.ownerUid);
-    } else {
+    final localOnly = deletion.serverMemory == null && prefs.pendingMemories.any((row) => row.id == pendingId);
+    if (!localOnly) {
       try {
         succeeded = await _deleteMemoryRequest(id);
       } catch (error) {

@@ -15,7 +15,7 @@ class _WriteFault extends InMemorySharedPreferencesStore {
   @override
   Future<bool> setValue(String type, String key, Object value) async {
     if (rejectMarker && key.contains('confirmedMemoryDeletes')) throw StateError('Marker write failed');
-    if (!rejectMarker && key.contains('cachedMemories:')) {
+    if (!rejectMarker && (key.contains('cachedMemories:') || key.contains('pendingMemories:'))) {
       if (throwCache) throw StateError('Cache write failed');
       return false;
     }
@@ -43,6 +43,7 @@ void main() {
         final store = _WriteFault({
           'flutter.uid': 'owner-a',
           'flutter.cachedMemories:owner-a': encoded,
+          'flutter.pendingMemories:owner-a': encoded,
           'flutter.cachedMemories:owner-b': [jsonEncode(_row('deleted', 'owner-b').toJson())],
         }, rejectMarker: rejectMarker, throwCache: throwCache);
         SharedPreferences.setMockInitialValues({});
@@ -55,6 +56,7 @@ void main() {
         SharedPreferences.setMockInitialValues(disk);
         await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
         expect(prefs.cachedMemories.map((row) => row.id), ['keep']);
+        expect(prefs.pendingMemories.map((row) => row.id), ['keep']);
         if (!rejectMarker) {
           prefs.cachedMemories = [_row('deleted', 'owner-a'), _row('keep', 'owner-a')];
           expect(prefs.cachedMemories.map((row) => row.id), ['keep']);

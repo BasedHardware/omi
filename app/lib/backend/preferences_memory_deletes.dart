@@ -1,3 +1,5 @@
+// Owner-scoped deletion receipts protect memory caches and pending drafts.
+// A confirmed delete stays hidden even when one projection write fails.
 part of 'preferences.dart';
 
 extension MemoryDeletionPreferences on SharedPreferencesUtil {
@@ -44,13 +46,19 @@ extension MemoryDeletionPreferences on SharedPreferencesUtil {
     } catch (error) {
       Logger.debug('Memory deletion marker write failed: ${error.runtimeType}');
     }
-    final cacheKey = _userScopedKey('cachedMemories', ownerUid);
-    try {
-      if (await saveStringList(
-          cacheKey, getStringList(cacheKey).where((row) => !SharedPreferencesUtil._hasId(row, id)).toList())) return;
-    } catch (error) {
-      Logger.debug('Memory deletion cache write failed: ${error.runtimeType}');
+    var projectionsSaved = true;
+    for (final projection in ['cachedMemories', 'pendingMemories']) {
+      final key = _userScopedKey(projection, ownerUid);
+      try {
+        if (!await saveStringList(
+            key, getStringList(key).where((row) => !SharedPreferencesUtil._hasId(row, id)).toList())) {
+          projectionsSaved = false;
+        }
+      } catch (error) {
+        Logger.debug('Memory deletion projection write failed: ${error.runtimeType}');
+        projectionsSaved = false;
+      }
     }
-    if (!markerSaved) throw StateError('Could not persist confirmed memory deletion');
+    if (!markerSaved && !projectionsSaved) throw StateError('Could not persist confirmed memory deletion');
   }
 }

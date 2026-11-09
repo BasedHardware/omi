@@ -1380,16 +1380,19 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
+    final deleted = confirmedMemoryDeletionIds;
     return _decodeCachedList(
       _userScopedKey('pendingMemories', ownerUid),
       (json) => Memory.fromJson(json),
-    ).where((memory) => memory.uid == ownerUid).toList();
+    ).where((memory) => memory.uid == ownerUid && !deleted.contains(memory.id)).toList();
   }
 
   set pendingMemories(List<Memory> value) {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return;
-    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    final deleted = confirmedMemoryDeletionIds;
+    final List<String> memories =
+        value.where((row) => !deleted.contains(row.id)).map((row) => jsonEncode(row.toJson())).toList();
     saveStringList(_userScopedKey('pendingMemories', ownerUid), memories);
   }
 
