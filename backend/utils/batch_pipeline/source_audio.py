@@ -18,6 +18,17 @@ from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline import leaf_timings
 from utils.other.raw_audio import decode_capture
 
+try:
+    from pydub.exceptions import CouldntDecodeError  # type: ignore[reportAssignmentType]
+except Exception:  # pragma: no cover - pydub stub environments (import isolation)
+    # The import-isolation stubs stand in for the pydub package with a flat
+    # module, so the submodule import fails there. The decode arms cannot run
+    # against a stubbed pydub anyway; the fallback keeps the fault-vocabulary
+    # tuple shape intact for the boundary and the parity grids.
+    class CouldntDecodeError(Exception):
+        """Fallback stand-in when the pydub package is stubbed."""
+
+
 MAGIC = b'OMIRECORD1\n'
 MAX_SOURCE_BYTES = 256 * 1024 * 1024
 MAX_REFERENCES = 4096
@@ -60,6 +71,58 @@ class RetainedAudioOutsideAdmittedSource(ValueError):
     """
 
 
+# The decoder wrap sites below convert exactly these fault classes into
+# ``RetainedAudioInvalid``. Every class in this tuple is deterministic on the
+# pinned stored bytes and metadata: a retry re-reads the same generation,
+# re-decodes the same payload and fails the same way, so the fault must end
+# the GPU chain at the fetch_decode boundary with the family token instead of
+# walking the bounded retry ladder anonymously (the sensor's bare
+# error_class=OpusError/KeyError/audioop.error cohort at fetch_decode rides
+# the ladder five times on identical bytes and quarantines
+# stage=unknown worker_reason=unclassified). ``ValueError`` keeps its
+# historical message pass-through; the newer classes carry the decoder's own
+# text the same way — the boundary reads the type, never the message, and no
+# message ever reaches a log line. ``RuntimeError`` is deliberately absent:
+# the native opus binding raises it when libopus itself is missing, which is
+# a deploy configuration fault rather than a bytes fault and must stay loud
+# and unclassified. Memoized because resolving the optional native binding on
+# every decode call would dominate the happy path on cold interpreters.
+#
+# Failure-Class: FC-non-value-decoder-fault-burns-retry-ladder
+_DECODER_FAULT_TYPES: tuple[type[BaseException], ...] | None = None
+
+
+def decoder_fault_types() -> tuple[type[BaseException], ...]:
+    """Deterministic retained-decoder fault classes, opus binding optional."""
+    global _DECODER_FAULT_TYPES
+    if _DECODER_FAULT_TYPES is None:
+        faults: list[type[BaseException]] = [
+            ValueError,
+            KeyError,
+            TypeError,
+            struct.error,
+            audioop.error,
+            CouldntDecodeError,
+            # A stored channels=0 or an absurd stored sample rate drives the
+            # pydub resampler into arithmetic faults that are just as
+            # deterministic on the pinned metadata as any parse failure.
+            ZeroDivisionError,
+            OverflowError,
+        ]
+        from utils.other import audio_opus
+
+        opus_error = getattr(audio_opus.opuslib, 'OpusError', None) if audio_opus.opuslib is not None else None
+        if isinstance(opus_error, type) and issubclass(opus_error, BaseException):
+            # Binding resolved on this host: its OpusError is a deterministic
+            # bytes fault. A stubbed binding exposes a non-class attribute,
+            # which must never enter the except tuple; when unresolved, the
+            # arms cannot start here and their ``RuntimeError`` keeps
+            # escaping untyped.
+            faults.append(opus_error)
+        _DECODER_FAULT_TYPES = tuple(faults)
+    return _DECODER_FAULT_TYPES
+
+
 def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
         raise RetainedAudioInvalid('invalid retained audio size')
@@ -88,7 +151,7 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
             raise RetainedAudioInvalid('retained capture checksum mismatch')
         try:
             return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
-        except ValueError as error:
+        except decoder_fault_types() as error:
             raise RetainedAudioInvalid(str(error)) from error
     if '.opus' in path:
         # Existing legacy chunk codec, shared with playback. Import is lazy in
@@ -97,7 +160,7 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
 
         try:
             return leaf_timings.call('decode', decode_opus_to_pcm, raw, sample_rate=16000)
-        except ValueError as error:
+        except decoder_fault_types() as error:
             raise RetainedAudioInvalid(str(error)) from error
     rate = ref.get('sample_rate', 16000)
     try:
@@ -114,7 +177,12 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
         raise RetainedAudioInvalid('invalid retained PCM') from None
     if len(raw) % 2 or not 8000 <= rate <= 48000:
         raise RetainedAudioInvalid('invalid retained PCM')
-    return leaf_timings.call('decode', audioop.ratecv, raw, 2, 1, rate, 16000, None)[0] if rate != 16000 else raw
+    if rate != 16000:
+        try:
+            return leaf_timings.call('decode', audioop.ratecv, raw, 2, 1, rate, 16000, None)[0]
+        except decoder_fault_types() as error:
+            raise RetainedAudioInvalid(str(error)) from error
+    return raw
 
 
 def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str]) -> None:
