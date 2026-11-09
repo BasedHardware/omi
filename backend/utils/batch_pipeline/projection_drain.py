@@ -19,10 +19,12 @@ from typing import TYPE_CHECKING
 
 from config.batch_pipeline import (
     max_owner_drains,
+    projection_pump_enabled,
     projection_drain_claim_aware_enabled,
     projection_drain_live_target_backoff_enabled,
     projection_drain_privacy_backoff_enabled,
     projection_drain_privacy_backoff_seconds,
+    serving_projection_sweep_enabled,
 )
 from database.batch_pipeline_projection_claim import projection_claim_held
 from utils.batch_pipeline.metrics import (
@@ -237,8 +239,11 @@ class OwnerDrains:
         attempt = min(self.live_target_attempts.get(owner, 0) + 1, 5)
         # Passive hold (2026-11-09 readback): an expiry wake re-requested blocked
         # owners every 30-300 s, faster than the sweep that found them before,
-        # and doubled owner-chain conflicts. Expiry now only re-admits the owner.
-        if not self.defer(owner, delay=min(30 * 2 ** (attempt - 1), 300), wake=False):
+        # and doubled owner-chain conflicts. Expiry only re-admits the owner
+        # while a sweep path is active to re-request it; with both sweep paths
+        # off, the hold keeps its wake so no owner is stranded.
+        passive = serving_projection_sweep_enabled() or projection_pump_enabled()
+        if not self.defer(owner, delay=min(30 * 2 ** (attempt - 1), 300), wake=not passive):
             return False
         self.live_target_attempts.pop(owner, None)
         if len(self.live_target_attempts) >= MAX_DELAYED_OWNERS:

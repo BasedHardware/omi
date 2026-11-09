@@ -1337,6 +1337,41 @@ async def test_live_target_retries_never_exceed_the_sweep_cadence(drain_timers):
 
 
 @pytest.mark.asyncio
+async def test_live_target_hold_keeps_its_wake_when_no_sweep_path_runs(monkeypatch, drain_timers):
+    # Luna B1: with the serving sweep off and no pump, nothing else re-requests
+    # a held owner, so the hold must keep its expiry wake and overflow wake.
+    monkeypatch.setattr(projection_drain, 'serving_projection_sweep_enabled', lambda: False)
+    monkeypatch.setattr(projection_drain, 'projection_pump_enabled', lambda: False)
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    assert projector.drain_step.call_count == 1
+    drains.request(['overflow'])
+    await settle(projector)
+    assert list(projector.drain_requests) == ['overflow']
+    _delay, retry, _handle = drain_timers.pop(0)
+    retry()
+    await settle(projector)
+    assert projector.drain_step.call_count == 3  # expiry woke BURST without a sweep request
+    drains.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('sweep,pump', [(True, False), (False, True)])
+async def test_live_target_hold_is_passive_while_any_sweep_path_runs(monkeypatch, drain_timers, sweep, pump):
+    monkeypatch.setattr(projection_drain, 'serving_projection_sweep_enabled', lambda: sweep)
+    monkeypatch.setattr(projection_drain, 'projection_pump_enabled', lambda: pump)
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    drain_timers.pop()[1]()
+    await settle(projector)
+    assert projector.drain_step.call_count == 1 and not list(projector.drain_requests)
+    drains.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('stop,advanced', [('head_awaiting_live_target', ['row']), ('head_error', []), ('end', [])])
 async def test_live_target_attempts_reset_after_progress_or_other_stop(drain_timers, stop, advanced):
     projector, drains = live_target_drain()
