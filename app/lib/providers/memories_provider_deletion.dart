@@ -79,7 +79,8 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
     final localOnly = deletion.serverMemory == null && prefs.pendingMemories.any((row) => row.id == pendingId);
     if (!localOnly) {
       try {
-        succeeded = await _deleteMemoryRequest(id);
+        succeeded = await (_deleteMemoryRequest?.call(id) ??
+            deleteMemoryServer(id, canSend: () => _ownsMemoryDeletion(deletion)));
       } catch (error) {
         Logger.debug('MemoriesProvider: memory deletion failed: ${error.runtimeType}');
         succeeded = false;
@@ -133,9 +134,12 @@ extension _MemoriesProviderDeletion on MemoriesProvider {
   Future<Memory?> _trackMemoryCreation(Memory draft) async {
     final existing = _memoryCreations[draft.id];
     if (existing != null) return existing;
-    final request =
-        Future<Memory?>.sync(() => _createMemoryRequest(draft.content, draft.visibility.name, draft.category.name))
-            .catchError((Object error) {
+    final generation = _sessionGeneration;
+    final request = Future<Memory?>.sync(() =>
+            _createMemoryRequest?.call(draft.content, draft.visibility.name, draft.category.name) ??
+            createMemoryServer(draft.content, draft.visibility.name, draft.category.name,
+                canSend: () => generation == _sessionGeneration && SharedPreferencesUtil().uid == draft.uid))
+        .catchError((Object error) {
       Logger.debug('MemoriesProvider: memory sync failed: ${error.runtimeType}');
       return null;
     });

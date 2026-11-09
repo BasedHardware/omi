@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -6,8 +8,23 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/memories/widgets/memory_item.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 
 import 'journeys/support/hermetic_boot.dart';
+import 'journeys/support/fixture_backend.dart';
+
+class _PausedAuthGateway extends ScriptableGateway {
+  _PausedAuthGateway() : super(user: const AuthUserSnapshot(uid: JourneyFixtureBackend.fixtureUid));
+  final started = Completer<void>();
+  final response = Completer<RefreshedAuthToken?>();
+
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() {
+    if (!started.isCompleted) started.complete();
+    return response.future;
+  }
+}
 
 /// Real swipe/Undo UI, HTTP adapter and persisted owner projection on loopback.
 /// No production accounts, recordings, credentials or backend are used.
@@ -102,6 +119,39 @@ void main() {
       expect(server.countOf('DELETE', path), 1);
       expect(provider.memories, hasLength(status == 404 ? 0 : 1));
       expect(failures, status == 404 ? 0 : 1);
+    });
+  }
+  for (final action in ['create', 'delete']) {
+    testWidgets('retired owner cannot send a memory $action after delayed authentication', (tester) async {
+      final server = await JourneyHermeticBoot.start();
+      addTearDown(JourneyHermeticBoot.stop);
+      final provider = MemoriesProvider();
+      addTearDown(provider.dispose);
+      await tester.runAsync(() => provider.createMemory('Synthetic authentication fence'));
+      final row = provider.memories.single;
+      final path = action == 'create' ? '/v3/memories' : '/v3/memories/${row.id}';
+      final method = action == 'create' ? 'POST' : 'DELETE';
+      final countBefore = server.countOf(method, path);
+      final gateway = _PausedAuthGateway();
+      AuthService.installLocalHarnessTokenGateway(gateway);
+      SharedPreferencesUtil().tokenExpirationTime = 1;
+      late Future<dynamic> operation;
+      if (action == 'create') {
+        operation = provider.createMemory('Must not cross the owner boundary');
+      } else {
+        await provider.deleteMemory(row);
+        operation = provider.confirmPendingDeletion(id: row.id);
+      }
+      await tester.runAsync(() => gateway.started.future.timeout(const Duration(seconds: 5)));
+      provider.clearUserData();
+      SharedPreferencesUtil().uid = 'replacement-owner';
+      gateway.response.complete(RefreshedAuthToken(
+        token: JourneyHermeticBoot.fixtureToken,
+        expirationTime: DateTime.now().add(const Duration(hours: 1)),
+      ));
+      await tester.runAsync(() => operation);
+      expect(server.countOf(method, path), countBefore, reason: 'retired work must stop before HTTP dispatch');
+      expect(provider.memories, isEmpty);
     });
   }
 }

@@ -74,9 +74,9 @@ class MemoriesProvider extends ChangeNotifier {
   ReadRetry _memoriesReadRetry;
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final FetchLedgerHistoryCursorRequest? _fetchLedgerHistoryCursorRequest;
-  final Future<bool> Function(String) _deleteMemoryRequest;
+  final Future<bool> Function(String)? _deleteMemoryRequest;
   final Future<bool> Function() _deleteAllMemoriesRequest;
-  final Future<Memory?> Function(String, String, String) _createMemoryRequest;
+  final Future<Memory?> Function(String, String, String)? _createMemoryRequest;
   final Future<bool> Function(String, String) _updateMemoryVisibilityRequest;
   final ReviewMemoryRequest _reviewMemoryRequest;
   final EditMemoryRequest _editMemoryRequest;
@@ -128,9 +128,9 @@ class MemoriesProvider extends ChangeNotifier {
             fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
         _fetchLedgerHistoryCursorRequest = fetchLedgerHistoryCursorRequest ??
             (fetchMemoriesRequest == null && fetchLedgerHistoryRequest == null ? getLedgerHistory : null),
-        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _deleteMemoryRequest = deleteMemoryRequest,
         _deleteAllMemoriesRequest = deleteAllMemoriesRequest ?? deleteAllMemoriesServer,
-        _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _createMemoryRequest = createMemoryRequest,
         _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
         _editMemoryRequest = editMemoryRequest ?? editMemoryServer,

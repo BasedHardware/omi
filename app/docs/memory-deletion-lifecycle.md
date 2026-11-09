@@ -24,8 +24,10 @@ memories, not conversation or recording-file deletion.
   means the requested row is already absent; 403 and server errors remain failures.
 - Retirement: account clear/delete-all invalidates every captured generation.
   No late rollback, indexing, cache write or error callback reaches the replacement
-  session. Disposal stops UI publication, while an already-submitted success may
-  still retire the same owner's cache.
+  session. The same owner predicate reaches the real HTTP adapter and is checked
+  again after authentication waits and before each retry. Disposal stops UI
+  publication, while an already-submitted success may still retire the same
+  owner's cache.
 
 ## Verification checklist
 
@@ -35,7 +37,8 @@ memories, not conversation or recording-file deletion.
 - Cache regressions: refused/throwing writes, process-style preferences reload,
   stale cache writers and identical IDs under another owner.
 - Simulator integration: real `MemoryItem` swipe and Undo, loopback HTTP refusal,
-  visible error, successful retry, offline reopen, 404 and 403.
+  visible error, successful retry, offline reopen, 404 and 403. Paused-authentication
+  create/delete scenarios prove that a retired operation dispatches no HTTP write.
 - Run the existing progressive-load, ledger correction, visibility, delete-all,
   session-generation and nonblocking Spotlight tests, then repository preflight
   and current-commit CI before readiness.
