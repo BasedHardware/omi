@@ -72,12 +72,13 @@ struct ContentView: View {
                 else {
                     var dataLeft = pcmBuffer!.dataInt()
                     
-                    // TODO: this is ugly, must implement proper background sending
-                    while !dataLeft.isEmpty {
-                        let block = dataLeft.prefix(160)
-                        bleManager.writeAudio(block)
-                        usleep(7_000)
-                        dataLeft = dataLeft.dropFirst(160)
+                    Task {
+                        while !dataLeft.isEmpty {
+                            let block = dataLeft.prefix(160)
+                            bleManager.writeAudio(block)
+                            try? await Task.sleep(nanoseconds: 7_000_000)
+                            dataLeft = dataLeft.dropFirst(160)
+                        }
                     }
                 }
             }
