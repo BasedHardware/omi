@@ -20,6 +20,7 @@ from config.summary_guarantee import (
     REPAIR_ADMISSION_LIMIT,
 )
 from database._client import get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.summary_debt_queries import due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
@@ -31,7 +32,7 @@ CURSOR = 'maintenance/summary_debt_repair_v1'
 
 def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
     """Reuse the same obligation; no new finalization generation is admitted."""
-    if not enabled(uid):
+    if account_deletion_blocks_user_work(uid) or not enabled(uid):
         return False
     admitted = False
     blocked_receipt: Row | None = None
@@ -59,12 +60,17 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             outbox = client.collection(reprocess.COLLECTION).document(document_id)
             prior = outbox.get(transaction=transaction)
             old: Row | None = prior.to_dict() if prior.exists else None
-            if old and (
-                old.get('lease_until', 0) > now
-                or old.get('summary_seen')
-                or old.get('summary_blocked_reason') == 'empty_output_exhausted'
-            ):
+            from utils.enrichment.age_gate import expired, parked, park_row
+
+            if old and parked(old):
                 return {}, True
+            if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
+                return {}, True
+            if old and old.get('summary_blocked_reason') == 'empty_output_exhausted':
+                # The conversation's transactional revision writer reopened its
+                # debt. Its current eligibility is authoritative; reopen the
+                # matching dormant outbox in this same admission transaction.
+                old = {**old, 'summary_blocked_reason': None, 'summary_empty_failures': 0}
             new, _ = operation(old)
             new['first_pending_at'] = min(new['first_pending_at'], row['summary_first_pending_at'])
             new['summary_deadline_at'] = min(new.get('summary_deadline_at', due), due)
@@ -73,6 +79,9 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             new['summary_lane'] = row.get('summary_lane', 'unknown')
             new['summary_repair'] = True
             new['summary_expected_revision'] = row.get('sync_content_revision')
+            if expired(new, row.get('created_at'), now=now):
+                transaction.set(outbox, park_row(new, now=now))
+                return {}, True
             # A repair wake must not invalidate an earlier delivery still
             # waiting for capacity. Leases and the conversation owner fence
             # duplicates; later revisions rotate the token as before.
@@ -132,6 +141,12 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         parts = snapshot.reference.path.split('/')
         if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations' or not enabled(parts[1]):
             continue
+        if account_deletion_blocks_user_work(parts[1]):
+            continue
+        from utils.enrichment.age_gate import expired
+
+        if expired({'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current):
+            continue  # Historical debt cannot consume the bounded fresh-admission budget.
         overdue += 1
         oldest = max(oldest, current - row['summary_due_at'])
         if attempts >= REPAIR_ADMISSION_LIMIT:

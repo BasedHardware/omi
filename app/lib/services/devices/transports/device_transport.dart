@@ -31,3 +31,13 @@ enum DeviceTransportState { disconnected, connecting, connected, disconnecting }
 abstract interface class CaptureSubscriptionErrors {
   Stream<Object> get audioSubscriptionErrors;
 }
+
+/// Pendant audio that reached a transport while no capture listener held the
+/// stream. The GATT notification subscription outlives Dart listeners, and a
+/// legacy pendant does not write its own storage while subscribed, so these
+/// packets exist nowhere else. Capture installs [sink] and persists them.
+class OrphanAudioRoute {
+  static void Function(String deviceId, List<int> packet)? sink;
+
+  static void deliver(String deviceId, List<int> packet) => sink?.call(deviceId, packet);
+}

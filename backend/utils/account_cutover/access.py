@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Mapping, Optional
 
 from fastapi import HTTPException
 from fastapi import WebSocketException
+
+from config.account_cutover import cutover_enforcement_enabled
 
 from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
@@ -20,15 +21,6 @@ from utils.executors import db_executor, run_blocking
 logger = logging.getLogger(__name__)
 
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
-
-# Default off so accounts remaining legacy keep current main auth latency and
-# behavior until operators enable enforcement after the bridge release.
-_ENFORCEMENT_ENV = 'ACCOUNT_CUTOVER_ENFORCEMENT'
-
-
-def cutover_enforcement_enabled() -> bool:
-    return os.getenv(_ENFORCEMENT_ENV, 'off').strip().lower() in {'1', 'true', 'on', 'yes'}
-
 
 # Auth, bootstrap, and cutover control remain reachable while product traffic
 # is fenced. Path matching is prefix-based and intentionally narrow.

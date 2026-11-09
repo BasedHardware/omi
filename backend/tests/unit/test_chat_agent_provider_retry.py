@@ -515,6 +515,11 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
     assert callback_data['answer'] == 'managed answer'
     assert seen['system'].startswith('SYSTEM')
     assert '<url_fetching_instructions>' in seen['system']
+    # Applies after any remote/base prompt and reaches the serving model, not
+    # only an unused inline fallback prompt (#20629).
+    assert '<transcript_recall>' in seen['system']
+    assert 'transcript_query' in seen['system'] and 'transcript_cursor' in seen['system']
+    assert 'user pushback' in seen['system']
     assert seen['messages'] == [{'role': 'user', 'content': 'hello'}]
     assert [schema['function']['name'] for schema in seen['schemas']] == ['perplexity_web_search_tool']
 
@@ -813,6 +818,68 @@ def _run_openai(agentic_mod, scripts, safety_guard=None, get_llm_error=None, too
             )
 
     return go, full_response
+
+
+@pytest.mark.parametrize('found', [False, True])
+@pytest.mark.parametrize('question', ['Search transcripts for the invoice amount.', 'Check again, it must be there.'])
+async def test_transcript_recall_withholds_invented_follow_on_without_evidence(
+    agentic_mod, monkeypatch, found, question
+):
+    from utils.retrieval.transcript_recall import UNVERIFIED_TRANSCRIPT_ANSWER, begin_transcript_recall
+
+    model = _FakeChatModel(
+        [
+            [
+                _openai_chunk(
+                    tool_calls=[
+                        {
+                            'index': 0,
+                            'id': 'search-1',
+                            'name': 'search_conversations_tool',
+                            'args': '{"query":"invoice","transcript_query":"invoice"}',
+                        }
+                    ]
+                )
+            ],
+            [_openai_chunk('The invoice was 999 dollars[1].')],
+        ]
+    )
+    monkeypatch.setattr(agentic_mod, 'get_llm', lambda *a, **k: model)
+
+    async def execute(_name, _input, _registry, configurable):
+        state = begin_transcript_recall(configurable)
+        state.found = found
+        return 'Source [1]: invoice 999 dollars.' if found else 'No matching transcript excerpts on this page.'
+
+    monkeypatch.setattr(agentic_mod, '_execute_tool', execute)
+    guard = MagicMock()
+    guard.should_warn_user.return_value = None
+    guard.get_stats.return_value = {}
+    callback = agentic_mod.AsyncStreamingCallback()
+    persisted = []
+    result = await agentic_mod._run_openai_agent_stream(
+        'SYSTEM',
+        [{'role': 'user', 'content': question}],
+        [],
+        {'search_conversations_tool': MagicMock()},
+        callback,
+        persisted,
+        guard,
+        {},
+    )
+    assert result is None
+    answer = ''.join(persisted)
+    streamed = []
+    while not callback.queue.empty():
+        event = callback.queue.get_nowait()
+        if isinstance(event, str) and event.startswith('data: '):
+            streamed.append(event[6:])
+    assert ''.join(streamed) == answer
+    if found:
+        assert answer == 'The invoice was 999 dollars[1].'
+    else:
+        assert answer == UNVERIFIED_TRANSCRIPT_ANSWER
+        assert '999' not in answer
 
 
 OPENAI_TERMINAL_EXITS = {

@@ -400,7 +400,7 @@ def test_explicit_scoped_speaker_ids_keep_padded_provider_labels_distinct():
     assert deepgram.speaker_id != modulate.speaker_id
 
 
-def test_internal_speaker_identity_fields_persist_without_widening_client_schema():
+def test_recording_voice_scope_is_public_but_identification_status_stays_internal():
     segment = TranscriptSegment(
         text="Owner statement",
         speaker="SPEAKER_00",
@@ -417,7 +417,8 @@ def test_internal_speaker_identity_fields_persist_without_widening_client_schema
 
     assert payload['speaker_id_scope'] == "connection-a:0"
     assert payload['speaker_identity_status'] == "no_match"
-    assert 'speaker_id_scope' not in properties
+    assert 'speaker_id_scope' in properties
+    assert 'speaker_id_scope' not in TranscriptSegment.model_json_schema().get('required', [])
     assert 'speaker_identity_status' not in properties
 
 
@@ -594,16 +595,16 @@ def test_segments_as_string_uses_configured_user_name():
 
     assert "Stephen: Hi, this is me." in rendered
     assert "User:" not in rendered
-    assert "Speaker 1: Nice to meet you." in rendered
+    assert "Speaker A: Nice to meet you." in rendered
 
 
 def test_segments_as_string_defaults_to_user_when_name_missing():
-    """No configured name (None) falls back to the generic 'User' label — unchanged behavior."""
+    """No configured name (None) falls back to the 'You' label."""
     segs = [_segment("Hello.", speaker="SPEAKER_00", is_user=True, start=0.0, end=1.0)]
 
     rendered = TranscriptSegment.segments_as_string(segs, user_name=None)
 
-    assert rendered.startswith("User: Hello.")
+    assert rendered.startswith("You: Hello.")
 
 
 def test_segments_as_string_labels_missing_speaker_id_as_unknown():

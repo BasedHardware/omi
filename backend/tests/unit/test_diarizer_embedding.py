@@ -1,4 +1,5 @@
 """Tests for diarizer embedding.py"""
+
 import io
 import importlib.util
 import sys
@@ -13,6 +14,7 @@ import pytest
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MODULE_PATH = BACKEND_DIR / "diarizer" / "embedding.py"
 
+
 def _load_module():
     fake_torch = ModuleType("torch")
     fake_torch.cuda = SimpleNamespace(is_available=lambda: False)
@@ -23,10 +25,12 @@ def _load_module():
     fake_torchaudio.load = MagicMock(return_value=("waveform", 16000))
 
     fake_fastapi = ModuleType("fastapi")
+
     class HTTPException(Exception):
         def __init__(self, status_code, detail=None):
             self.status_code = status_code
             self.detail = detail
+
     fake_fastapi.HTTPException = HTTPException
     fake_fastapi.UploadFile = object
 
@@ -66,6 +70,7 @@ def _load_module():
         spec.loader.exec_module(module)
         return module
 
+
 def test_get_audio_duration_from_file_wave_success():
     mod = _load_module()
     mock_wave = MagicMock()
@@ -76,6 +81,7 @@ def test_get_audio_duration_from_file_wave_success():
         duration = mod._get_audio_duration_from_file("dummy.wav")
         assert duration == 2.0
 
+
 def test_get_audio_duration_from_file_wave_zero_framerate():
     mod = _load_module()
     mock_wave = MagicMock()
@@ -84,6 +90,7 @@ def test_get_audio_duration_from_file_wave_zero_framerate():
     with patch.object(mod.wave, "open", MagicMock(return_value=MagicMock(__enter__=MagicMock(return_value=mock_wave)))):
         duration = mod._get_audio_duration_from_file("dummy.wav")
         assert duration == 0.0
+
 
 def test_get_audio_duration_from_file_fallback_to_torchaudio():
     mod = _load_module()
@@ -97,6 +104,7 @@ def test_get_audio_duration_from_file_fallback_to_torchaudio():
     assert duration == 3.0
     mod.torchaudio.info.assert_called_once_with("dummy.mp3")
 
+
 def test_get_audio_duration_from_file_fallback_zero_sample_rate():
     mod = _load_module()
     mod.wave.open = MagicMock(side_effect=wave.Error)
@@ -107,6 +115,7 @@ def test_get_audio_duration_from_file_fallback_zero_sample_rate():
     duration = mod._get_audio_duration_from_file("dummy.mp3")
     assert duration == 0.0
 
+
 def test_get_audio_duration_from_file_all_fail():
     mod = _load_module()
     mod.wave.open = MagicMock(side_effect=wave.Error)
@@ -115,11 +124,13 @@ def test_get_audio_duration_from_file_all_fail():
     duration = mod._get_audio_duration_from_file("dummy.mp3")
     assert duration == 0.0
 
+
 def test_validate_audio_duration_success():
     mod = _load_module()
     mod.MIN_EMBEDDING_AUDIO_DURATION = 0.5
     with patch.object(mod, "_get_audio_duration_from_file", return_value=1.0):
         mod._validate_audio_duration("dummy.wav")  # Should not raise
+
 
 def test_validate_audio_duration_too_short():
     mod = _load_module()
@@ -129,6 +140,7 @@ def test_validate_audio_duration_too_short():
             mod._validate_audio_duration("dummy.wav")
         assert exc.value.status_code == 422
         assert exc.value.detail["error"] == "audio_too_short"
+
 
 def test_embedding_endpoint_success():
     mod = _load_module()
@@ -146,6 +158,7 @@ def test_embedding_endpoint_success():
 
     np.testing.assert_allclose(result, [1.1, 2.2], rtol=1e-5)
     mod.embedding_inference.assert_called_once_with({"waveform": "wf", "sample_rate": 16000})
+
 
 def test_embedding_endpoint_v2_success():
     mod = _load_module()

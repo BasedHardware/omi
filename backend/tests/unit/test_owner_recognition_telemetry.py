@@ -594,7 +594,7 @@ def _wire_sync_store(monkeypatch, store):
         return pipeline.conversations_db.prepare_conversation_for_read(deepcopy(plain), uid)
 
     monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', _get)
-    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *args, **kwargs: True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'rule_discard_outcome', lambda *args, **kwargs: 'discarded')
     return lifecycle, pipeline
 
 
@@ -639,7 +639,6 @@ def _stub_sync_enrichment(monkeypatch, store):
 
     monkeypatch.setattr(module.conversations_db, 'update_conversation', _update)
     monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda _uid: [0.2, 0.3])
-    monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
 
 
 def test_sync_intake_then_first_enrichment_counts_once(monkeypatch):
@@ -670,6 +669,8 @@ def test_sync_intake_then_first_enrichment_counts_once(monkeypatch):
 
 
 def test_promoted_sync_fragment_counts_once(monkeypatch):
+    # The promotion metric covers the legacy fragment-discard rollback.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     store = StrictFirestore()
     lifecycle, pipeline = _wire_sync_store(monkeypatch, store)
     _stub_sync_enrichment(monkeypatch, store)
@@ -733,8 +734,11 @@ def _desktop_projection() -> ClientProcessing:
 
 
 def _stub_desktop_terminal(monkeypatch):
+    from utils.conversations import relevance_io
+
+    # Owner-recognition witnesses use synthetic captures, without episode I/O.
+    monkeypatch.setattr(relevance_io, 'occasion_retention', lambda *args, **kwargs: None)
     module = process_conversation_mod
-    monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(module, 'link_duplicate_captures', lambda *args, **kwargs: None)
     monkeypatch.setattr(module.lifecycle_service, 'create_completed_conversation', lambda *args, **kwargs: True)
     monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', lambda *args, **kwargs: True)
@@ -756,7 +760,6 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module, '_save_action_items', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
-    monkeypatch.setattr(module, 'conversation_apps_opt_in_only', lambda: False)
     monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
 
 

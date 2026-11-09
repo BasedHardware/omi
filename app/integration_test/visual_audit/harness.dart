@@ -97,8 +97,33 @@ class LoopbackOnly extends HttpOverrides {
 
 const _surface = ValueKey('audit-surface');
 
+/// Device walk. [app/scripts/demo_walk.sh] sets this so each [AuditRun.pump] pushes a real route
+/// on one navigator. Providers stay above that navigator: a sheet opened from a page (the plans
+/// sheet) looks up through the overlay, which is not a child of the page route. PNG capture leaves
+/// this false and is unchanged.
+bool auditWalkMode = false;
+
+/// How long a walk holds each captured frame, in wall-clock time. `OMI_DEMO_WALK_HOLD_MS` overrides
+/// it (the hermetic check uses a short hold).
+Duration get auditWalkShotHold =>
+    Duration(milliseconds: int.tryParse(Platform.environment['OMI_DEMO_WALK_HOLD_MS'] ?? '') ?? 1600);
+
 /// 390x844 logical pixels, captured at 2x.
 const auditViewport = Size(390, 844);
+
+void walkLog(String message) {
+  stdout.writeln(message);
+  stdout.flush();
+  // A piped `flutter test` can hold stdout. The recorder polls this file instead.
+  final marker = Platform.environment['OMI_DEMO_WALK_MARKER'];
+  if (marker == null || marker.isEmpty) return;
+  if (message == 'DEMO_WALK_READY' || message == 'DEMO_WALK_DONE') {
+    File(marker).writeAsStringSync('$message\n', flush: true);
+  }
+}
+
+/// The app's fonts, for a walk that pumps pages outside `flutter test`'s font setup.
+Future<void> loadAuditFonts() => _loadFonts();
 
 /// Loads the app's fonts (FontManifest) plus Roboto from the pinned Flutter SDK, instead of the
 /// test font's placeholder glyphs, so text metrics and overflow match the app.
@@ -151,29 +176,73 @@ class AuditRun {
   /// roster. [providers] come last, so they win the lookup for the types they seed.
   Future<void> pump(Widget page, {List<SingleChildWidget> providers = const [], bool scaffold = true}) async {
     OmiColors.active = OmiColors.forBrightness(_auditLight ? Brightness.light : Brightness.dark);
+    if (auditWalkMode) {
+      await _walkPump(page, providers: providers, scaffold: scaffold);
+      return;
+    }
     tester.view.physicalSize = auditViewport;
     tester.view.devicePixelRatio = 1;
-    await tester.pumpWidget(MultiProvider(
-      providers: [..._suite.providers(), ...providers],
-      child: RepaintBoundary(
-        key: _surface,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          navigatorKey: globalNavigatorKey,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          // The app's own theme at this revision; Android font metrics (Roboto).
-          theme: _auditLight ? buildOmiTheme(brightness: Brightness.light) : _suite.theme(),
-          home: scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page,
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [..._suite.providers(), ...providers],
+        child: RepaintBoundary(
+          key: _surface,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            navigatorKey: globalNavigatorKey,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            // The app's own theme at this revision; Android font metrics (Roboto).
+            theme: _auditLight ? buildOmiTheme(brightness: Brightness.light) : _suite.theme(),
+            home: scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page,
+          ),
         ),
       ),
-    ));
+    );
+    await settle();
+  }
+
+  /// Pushes [page] so the route animation plays. The suite's providers wrap the navigator once;
+  /// [providers] wrap only this page, so they win for the page and a sheet still sees the suite.
+  Future<void> _walkPump(Widget page, {required List<SingleChildWidget> providers, required bool scaffold}) async {
+    final body = scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page;
+    final wrapped = providers.isEmpty ? body : MultiProvider(providers: providers, child: body);
+    var nav = globalNavigatorKey.currentState;
+    if (nav == null) {
+      // A host test has no phone screen. A booted simulator keeps its own size.
+      if (!Platform.isIOS && !Platform.isAndroid) {
+        tester.view.physicalSize = auditViewport;
+        tester.view.devicePixelRatio = 1;
+      }
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: _suite.providers(),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            navigatorKey: globalNavigatorKey,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            theme: _auditLight ? buildOmiTheme(brightness: Brightness.light) : _suite.theme(),
+            home: const SizedBox.shrink(),
+          ),
+        ),
+      );
+      nav = globalNavigatorKey.currentState;
+      if (nav == null) throw StateError('Demo walk host installed without a navigator');
+    }
+    nav.push(MaterialPageRoute<void>(builder: (_) => wrapped));
+    // Wall-clock: a live binding paints the push while this wait runs.
+    await Future<void>.delayed(const Duration(milliseconds: 480));
+    await tester.pump();
     await settle();
   }
 
   /// Pumps a neutral host whose only job is to open [open] (a sheet or dialog), then opens it.
-  Future<void> pumpHost(void Function(BuildContext context) open,
-      {List<SingleChildWidget> providers = const [], Color? background}) async {
+  Future<void> pumpHost(
+    void Function(BuildContext context) open, {
+    List<SingleChildWidget> providers = const [],
+    Color? background,
+  }) async {
     await pump(
       Scaffold(
         backgroundColor: background,
@@ -190,9 +259,20 @@ class AuditRun {
   }
 
   /// Gives loopback I/O real event-loop turns, then finishes finite animations.
+  /// Six turns, not one long wait: each turn yields the event loop so loopback
+  /// responses (sub-millisecond locally) can land and the pump between turns
+  /// advances fake frame time. This helper runs several times per scenario, so
+  /// the per-turn delay dominated the smoke suite's wall time at 80 ms x 6.
   Future<void> settle() async {
+    if (auditWalkMode) {
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+      await tester.pump();
+      final error = tester.takeException();
+      if (error != null) throw error;
+      return;
+    }
     for (var i = 0; i < 6; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump(const Duration(milliseconds: 200));
     }
   }
@@ -216,6 +296,29 @@ class AuditRun {
   Future<void> shot(String action, {String? step}) async {
     await tester.pump();
     expect(tester.takeException(), isNull, reason: 'Capture must not hide layout or runtime errors');
+    if (auditWalkMode) {
+      if (!_walkReadyAnnounced) {
+        _walkReadyAnnounced = true;
+        // The recorder starts when it sees this line. Stay on the first painted page until it does.
+        walkLog('DEMO_WALK_READY');
+        await Future<void>.delayed(const Duration(seconds: 3));
+        await tester.pump();
+      }
+      final hold = auditWalkShotHold;
+      if (hold > Duration.zero) {
+        await Future<void>.delayed(hold);
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: 'Walk hold surfaced $action');
+      }
+      final name = step == null ? scenario.id : '${scenario.id}-$step';
+      _shots.add({
+        'scenario': scenario.id,
+        'file': '$name.png',
+        'action': action,
+        'captured_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      return;
+    }
     final name = step == null ? scenario.id : '${scenario.id}-$step';
     expect(_shots.any((s) => s['file'] == '$name.png'), isFalse, reason: 'duplicate capture name $name');
     if (_write) {
@@ -245,14 +348,33 @@ class AuditRun {
     if (max <= 0) return;
     var i = 1;
     for (var offset = step; offset < max && i < letters.length - 1; offset += step, i++) {
-      position.jumpTo(offset);
-      await settle();
+      await _moveScroll(position, offset);
       await shot('$action (scrolled ${offset.round()} of ${max.round()} px)', step: letters[i]);
     }
-    position.jumpTo(max);
-    await settle();
+    await _moveScroll(position, max);
     await shot('$action (bottom, ${max.round()} px)', step: letters[i]);
   }
+
+  Future<void> _moveScroll(ScrollPosition position, double offset) async {
+    if (auditWalkMode) {
+      position.animateTo(offset, duration: const Duration(milliseconds: 640), curve: Curves.easeOut);
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await tester.pump();
+      return;
+    }
+    position.jumpTo(offset);
+    await settle();
+  }
+}
+
+bool _walkReadyAnnounced = false;
+
+/// Runs one registered scenario on the walk navigator. The suite's providers must include the
+/// demo billing catalog when a later tap opens the plans sheet.
+Future<void> driveWalkScenario(WidgetTester tester, AuditSuite suite, AuditScenario scenario) async {
+  final server = JourneyHermeticBoot.backend;
+  if (server == null) throw StateError('Demo walk requires JourneyHermeticBoot.start');
+  await scenario.run(AuditRun._(tester, scenario, server, suite, <Map<String, Object?>>[], false));
 }
 
 Directory? _outputDir;
@@ -280,9 +402,9 @@ void runAuditScenarios(AuditSuite suite, {List<AuditScenario>? only, Directory? 
       // timers before tearDowns run, and 16 s of fake time outlasts the pooled HTTP client's 15 s
       // idle timer. A live binding would wait in real time and does not check timers.
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(tester.binding is AutomatedTestWidgetsFlutterBinding
-          ? const Duration(seconds: 16)
-          : const Duration(seconds: 1));
+      await tester.pump(
+        tester.binding is AutomatedTestWidgetsFlutterBinding ? const Duration(seconds: 16) : const Duration(seconds: 1),
+      );
       expect(shots, isNotEmpty, reason: '${scenario.id} captured nothing');
       if (output == null) return;
       for (final shot in shots) {

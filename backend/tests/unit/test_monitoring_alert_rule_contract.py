@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 
 import yaml
+from prometheus_client import CollectorRegistry
+from utils.lifecycle_metrics import PhaseMetrics
 
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / "backend/charts/monitoring"
@@ -92,6 +94,49 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
         "combined": _rules(MONITORING / "alert-rules.json"),
         "split": _split_rules(),
     }
+
+
+def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_page():
+    for export_name, rules in _all_rule_exports().items():
+        assert 'omi-batch-queue-uncommitted-2h' not in rules
+        late = rules['omi-batch-unit-unpublished-2h']
+        nodes = {node['refId']: node for node in late['data']}
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        selector = '{namespace="prod-omi-backend"}'
+        assert nodes['A']['model']['expr'] == (
+            'max(omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+        )
+        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
+        assert (
+            nodes['F']['model']['expr']
+            == f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) or vector(1e9)'
+        )
+        blind = rules['omi-batch-queue-safety-blind']
+        expr = blind['data'][0]['model']['expr']
+        assert expr == (
+            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
+            f' + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector})) or vector(0))'
+            f' + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector})) or vector(0))'
+        )
+        for rule in (late, blind):
+            assert rule['for'] == '5m'
+            assert rule['labels']['tier'] == 'page'
+            assert rule['labels']['audience'] == 'human'
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert not rule['notification_settings']['mute_time_intervals']
+
+
+def test_pusher_db_saturation_sums_task_kinds_and_tracks_configured_capacity():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-pusher-db-executor-saturated']
+        assert rule['for'] == '10m', export_name
+        assert rule['data'][0]['model']['expr'] == (
+            'sum without (task) (omi_executor_task_active{job="pusher-metrics",executor="db"}) '
+            '/ omi_executor_max_workers{job="pusher-metrics",executor="db"}'
+        ), export_name
+        assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0.99], 'type': 'gt'}
 
 
 COUNTER_FN_ON_GAUGE_DEBT = {
@@ -1257,17 +1302,19 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Cloud Logging declarations, queried directly through GMP (never the local exporter).
+    "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy": "batch-projection/log-metrics.json",
     # deepgram self-hosted deployment exporter
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
 
-# These backend counters are owned by legacy-retirement PR #22422 and are not
-# in this alert-only base yet. Remove the pending allowance once that producer
-# lands; until then it permits the alert to arrive before the M3 rollout.
-PENDING_BACKEND_ALERT_METRICS = {
-    "omi_reason_total": "legacy-retirement PR #22422",
-    "omi_reason_unknown_total": "legacy-retirement PR #22422",
-}
+# Backend counters whose alert may arrive before the producer lands. Both reason
+# counters are now declared by utils/observability/reasons.py (#22422), so none pend.
+PENDING_BACKEND_ALERT_METRICS = {}
 
 _METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
 _PROMQL_KEYWORDS = frozenset(
@@ -1330,7 +1377,7 @@ _PROMQL_KEYWORDS = frozenset(
         "timestamp",
     }
 )
-_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|without|group_left|group_right)\s*\([^)]*\)")
+_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|ignoring|without|group_left|group_right)\s*\([^)]*\)")
 _HISTOGRAM_SUFFIXES = ("_bucket", "_sum", "_count")
 
 
@@ -1340,7 +1387,17 @@ def _declared_backend_metric_names() -> set[str]:
         text = str(path)
         if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
             continue
-        names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        names |= set(_METRIC_DECLARATION.findall(source))
+        # Resolve the bounded lifecycle helper's literal prefixes through its
+        # real collector, rather than allowlisting names no producer emits.
+        for prefix in re.findall(r"PhaseMetrics\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", source):
+            registry = CollectorRegistry()
+            PhaseMetrics(prefix, ['state'], registry=registry)
+            names.update(metric.name for metric in registry.collect())
+        if path == REPO / 'backend/utils/executors.py':
+            # This helper constructs/reuses registered Gauge objects with fixed names.
+            names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
     return names
 
 
@@ -1866,6 +1923,29 @@ def test_live_stt_capacity_full_and_provider_terminal_alerts_are_per_target_and_
         assert term["C"]["expression"] == "$A >= 30 && $B > 0.75", export_name
 
 
+def test_local_delivery_and_sync_budget_siblings_cover_reasons_the_capacity_rules_lost():
+    # 2026-10-22: P34 (#23074) moved Soniox/Modulate local delivery deaths off
+    # capacity_full, and Modulate's 429 "Insufficient credits" paged nothing
+    # until #23234 typed it provider_budget_exhausted on sync jobs.
+    for export_name, rules in _all_rule_exports().items():
+        local = rules["omi-stt-local-delivery-exhausted"]
+        assert local["labels"]["severity"] == "warning", export_name
+        assert local["for"] == "30m", export_name
+        nodes = {node["refId"]: node["model"] for node in local["data"]}
+        assert (
+            'reason=~"send_queue_full|replay_send_stalled|delivery_expired",outcome="exhausted"' in nodes["B"]["expr"]
+        ), export_name
+        assert nodes["C"]["expression"] == "$A >= 100 && $B > 0.02", export_name
+        budget = rules["omi-sync-provider-budget-exhausted"]
+        assert budget["labels"]["severity"] == "critical", export_name
+        assert budget["for"] == "5m", export_name
+        assert budget["data"][0]["datasourceUid"] == "gmp-cloud-run", export_name
+        nodes = {node["refId"]: node["model"] for node in budget["data"]}
+        assert 'outcome="provider_budget_exhausted"' in nodes["A"]["expr"], export_name
+        assert "backend-sync|backend-sync-backfill" in nodes["A"]["expr"], export_name
+        assert nodes["C"]["expression"] == "$A >= 3", export_name
+
+
 def test_chat_journey_rules_require_a_failure_floor_before_firing():
     # 2026-10-19: ~22 chat terminals in a quiet half hour with 4 provider
     # rejects drove success to 0.81; the floor keeps that from paging.
@@ -1878,3 +1958,234 @@ def test_chat_journey_rules_require_a_failure_floor_before_firing():
             nodes = {node["refId"]: node["model"] for node in rules[uid]["data"]}
             assert nodes["E"]["expr"] == failures, f"{export_name}:{uid}"
             assert nodes["C"]["expression"] == gate, f"{export_name}:{uid}"
+
+
+def test_live_stt_session_exhaustion_and_availability_escape_alerts():
+    # 2026-10-20: a listen roll benched Soniox; with no target at stage 100 the
+    # router's availability escape served benched Modulate and session
+    # exhaustion ran 6-11% for over an hour with no alert.
+    for export_name, rules in _all_rule_exports().items():
+        ratio = {node["refId"]: node["model"] for node in rules["omi-stt-chain-exhausted-ratio"]["data"]}
+        assert "omi_stt_chain_exhausted_total" in ratio["B"]["expr"], export_name
+        assert ratio["C"]["expression"] == "$A >= 600 && $B > 0.08", export_name
+        assert "[60m]" in ratio["B"]["expr"], export_name
+        assert rules["omi-stt-chain-exhausted-ratio"]["for"] == "20m", export_name
+        escape = rules["omi-stt-no-full-stage-target"]
+        expr = escape["data"][0]["model"]["expr"]
+        assert "min by (target)" in expr and "== 100" in expr, export_name
+        # NaN is a pristine GateState (stage 100) and must count as full.
+        assert "!=" in expr, export_name
+        assert escape["data"][1]["model"]["expression"] == "$A == 0", export_name
+        assert escape["for"] == "10m", export_name
+        assert escape["noDataState"] == "OK", export_name
+
+
+def test_sync_failure_reason_and_firestore_commit_exhaustion_alerts():
+    # 2026-10-16: the fresh-lane switch raised sync upstream_error ~8x and went
+    # unnoticed for 5 days; Firestore Commit RESOURCE_EXHAUSTED windows expire
+    # in-flight transactions. Both must key on their real labels.
+    for export_name, rules in _all_rule_exports().items():
+        sync = {node["refId"]: node["model"] for node in rules["omi-sync-failure-reason-step"]["data"]}
+        assert "sum by (namespace, outcome)" in sync["A"]["expr"], export_name
+        assert "[7d] offset 60m" in sync["B"]["expr"], export_name
+        # 2026-10-21: #22977 split internal failures out of upstream_error; a relabel
+        # must not page, so a reason also needs the service's total failure share up.
+        assert sync["C"]["expression"] == "$A >= 50 && $B > 3 && $G > 1.5", export_name
+        assert "sum by (namespace) (" in sync["G"]["expr"], export_name
+        assert "[7d] offset 60m" in sync["G"]["expr"], export_name
+        assert "backend-integration" not in sync["A"]["expr"], export_name
+        ceiling = rules["omi-sync-total-failure-share-ceiling"]
+        ceiling_nodes = {node["refId"]: node["model"] for node in ceiling["data"]}
+        assert ceiling_nodes["C"]["expression"] == "$A > 0.08 && $B >= 200", export_name
+        assert "sum by (namespace)" in ceiling_nodes["A"]["expr"], export_name
+        assert ceiling["labels"]["severity"] == "warning", export_name
+        assert ceiling["for"] == "30m", export_name
+        assert rules["omi-sync-failure-reason-step"]["labels"]["severity"] == "critical", export_name
+        fs = rules["omi-firestore-commit-resource-exhausted"]
+        filters = fs["data"][0]["model"]["timeSeriesList"]["filters"]
+        assert "Commit" in filters and "RESOURCE_EXHAUSTED" in filters, export_name
+        assert fs["data"][2]["model"]["expression"] == "$B > 10", export_name
+        assert fs["for"] == "5m", export_name
+
+
+def test_backfill_queue_wait_warning_uses_dispatched_histogram_and_sustained_p95():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-sync-backfill-queue-wait-high']
+        assert rule['data'][0]['datasourceUid'] == 'gmp-cloud-run'
+        assert rule['data'][0]['model']['expr'] == (
+            'histogram_quantile(0.95, sum by (le) (rate(omi_sync_queue_wait_seconds_bucket{'
+            'project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics",'
+            'namespace=~"backend-sync|backend-sync-backfill",lane="backfill"}[30m])))'
+        )
+        assert rule['data'][1]['model']['expression'] == '$A > 1800'
+        assert rule['for'] == '30m' and rule['labels']['severity'] == 'warning'
+        assert rule['noDataState'] == 'OK' and not rule['isPaused']
+        assert rule['labels']['owner'] == 'planscost'
+        assert rule['notification_settings'] == {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'group_by': ['alertname'],
+            'group_wait': '5m',
+            'group_interval': '1h',
+            'repeat_interval': '24h',
+            'mute_time_intervals': ['omi-tier-silent'],
+        }
+
+
+def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
+    specs = {
+        'omi-finalization-byok-dwell-info': (
+            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
+            259200,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-stock': (
+            'max(listen_finalization_jobs{status="dead_letter"})',
+            1000,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-age': (
+            'max(listen_finalization_oldest_dead_letter_age_seconds)',
+            604800,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-byok-abandoned': (
+            'max(listen_finalization_byok_session_abandoned_last_24h)',
+            0,
+            'agent',
+            '0s',
+        ),
+    }
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (expr, threshold, tier, pending) in specs.items():
+            rule = rules[uid]
+            assert rule['data'][0]['model']['expr'] == expr, (export_name, uid)
+            assert rule['data'][0]['datasourceUid'] == 'prometheus'
+            assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+            assert rule['for'] == pending
+            assert rule['noDataState'] == 'NoData'
+            assert rule['execErrState'] == 'KeepLast'
+            assert not rule['isPaused']
+            assert rule['labels'] == {
+                'severity': 'critical' if tier == 'page' else 'warning',
+                'instatus_component': 'speech-processing',
+                'alert_identity': uid,
+                'component': 'speech-processing',
+                'impact': 'user-experience',
+                'tier': tier,
+                'audience': 'human' if tier == 'page' else 'agent',
+                'owner': 'two-lane-lead',
+            }
+            assert rule['annotations']['runbook'] == 'backend/docs/listen_finalization_jobs.mdx'
+            assert rule['annotations']['safe_next_action']
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert ('mute_time_intervals' in rule['notification_settings']) == (tier != 'page')
+
+
+def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions():
+    specs = {
+        'omi-record-pending-dwell': ('omi_batch_record_pending', '', 7200, '10m'),
+        'omi-enrichment-fresh-dwell': ('omi_enrichment_obligation', '{lane="fresh"}', 3600, '10m'),
+        'omi-finalization-byok-dwell-page': ('omi_finalization_byok', '', 259200, '1h'),
+    }
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    for rules in _all_rule_exports().values():
+        for uid, (prefix, selector, threshold, pending) in specs.items():
+            freshness = 900 if prefix == 'omi_batch_record_pending' else 1200
+            page = rules[uid]
+            assert page['data'][0]['model']['expr'] == (
+                f'max({prefix}_new_oldest_age_seconds{selector} and ignoring(state, lane) '
+                f'(time() - {prefix}_observed_at_seconds < {freshness}))'
+            )
+            assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [threshold]
+            assert page['for'] == pending
+            assert page['noDataState'] == 'OK'
+            assert page['labels']['tier'] == 'page'
+            if prefix != 'omi_finalization_byok':
+                assert '2026-11-04T09:27Z' in page['annotations']['scope']
+            assert not page['notification_settings']['mute_time_intervals']
+            for suffix in ('', '-stale', '-blind'):
+                rule = rules[uid + suffix]
+                assert rule['uid'] in gate
+                assert rule['annotations']['evidence_date'] == '2026-11-04'
+                assert rule['annotations']['intended_final_threshold']
+                if suffix:
+                    assert rule['labels']['tier'] == 'agent'
+                    assert rule['noDataState'] == 'Alerting'
+                    assert prefix in rule['data'][0]['model']['expr']
+    assert 'omi-record-nojob-dwell' not in gate
+    assert {'omi-record-nojob-stock', 'omi-record-nojob-blind', 'omi-finalization-dead-letter-stock'} <= gate
+
+
+def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    ids = {
+        'omi-finalization-pair-drift',
+        'omi-finalization-pair-stock',
+        'omi-finalization-pair-drift-stale',
+        'omi-finalization-pair-drift-blind',
+        'omi-enrichment-summary-repair-stock',
+        'omi-enrichment-repair-stock-stale',
+    }
+    assert ids <= gate
+    for rules in _all_rule_exports().values():
+        page = rules['omi-finalization-pair-drift']
+        assert page['data'][0]['model']['expr'] == (
+            'max((sum without(kind) (omi_finalization_pair_new_mismatch)) and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and '
+            '(time() - omi_finalization_pair_observed_at_seconds < 2100))'
+        )
+        assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [25]
+        assert page['for'] == '30m' and page['noDataState'] == 'OK'
+        assert page['labels']['tier'] == 'page'
+        assert not page['notification_settings']['mute_time_intervals']
+        assert '2026-11-04T09:27Z' in page['annotations']['scope']
+        assert 'job.created_at' in page['annotations']['scope']
+        assert rules['omi-finalization-pair-drift-stale']['data'][0]['model']['expr'] == (
+            '(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9)'
+        )
+        for uid in ids:
+            rule = rules[uid]
+            assert rule['annotations']['evidence_date'] == '2026-11-04'
+            assert rule['annotations']['intended_final_threshold']
+            if uid != page['uid']:
+                assert rule['labels']['tier'] == 'agent'
+                assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+            if uid.endswith(('-stale', '-blind')):
+                assert rule['noDataState'] == 'Alerting'
+        stock = rules['omi-finalization-pair-stock']
+        assert stock['data'][0]['model']['expr'] == (
+            'max((sum without(kind) (omi_finalization_pair_mismatch)) and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds))'
+        )
+        assert rules['omi-finalization-pair-drift-blind']['data'][0]['model']['expr'] == (
+            'max(omi_finalization_pair_scan_truncated and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and '
+            '(time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)'
+        )
+        repair = rules['omi-enrichment-summary-repair-stock']
+        assert repair['data'][0]['model']['expr'] == 'max(omi_enrichment_summary_repair_count)'
+        assert repair['data'][2]['model']['conditions'][0]['evaluator']['params'] == [100]
+        assert 'not retry attempts or a retry cap' in repair['annotations']['scope']
+
+
+def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_unique_expiry_rate():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-batch-held-expired-volume']
+        nodes = {node['refId']: node['model'] for node in rule['data']}
+        assert nodes['A']['expr'] == (
+            'max(omi_batch_held_expired_units and '
+            '(time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)'
+        ), export_name
+        assert nodes['B']['expr'] == 'sum(increase(omi_batch_held_expired_total[30m])) or vector(0)'
+        assert nodes['C']['expr'] == '(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)'
+        assert nodes['D']['expression'] == '($A > 100 && $C < 900) || $B > 10'
+        assert rule['labels']['tier'] == rule['labels']['audience'] == 'agent'
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        assert rule['for'] == '5m' and not rule['isPaused']
+        assert 'legacy' in rule['annotations']['scope']
+        assert 'projection_state=quarantine_held with held_expired_reason=held_expired' in rule['annotations']['scope']
+        assert 'restorable' in rule['annotations']['safe_next_action']
+        assert 'Never delete' in rule['annotations']['safe_next_action']

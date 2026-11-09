@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api/recording_speakers.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -41,10 +42,15 @@ class MockCaptureExternalActions extends NoopCaptureExternalActions {
   Completer<bool>? assignmentCompleter;
   int assignmentCalls = 0;
   int? assignedSpeaker;
+  (String, String)? assignedVoice;
+  List<String>? assignedIds;
   @override
-  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId, {int? speakerId}) async {
+  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId,
+      {int? speakerId, (String, String)? voice}) async {
     assignmentCalls++;
     assignedSpeaker = speakerId;
+    assignedVoice = voice;
+    assignedIds = ids;
     return assignmentCompleter == null ? assignmentResult : await assignmentCompleter!.future;
   }
 
@@ -168,6 +174,7 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     final gate = Completer<void>();
     gates.add(gate);
@@ -198,6 +205,7 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async =>
       null;
 }
@@ -217,6 +225,7 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     openCalls++;
     return null;
@@ -437,6 +446,151 @@ void main() {
     provider.dispose();
   });
 
+  test('live whole-recording rename fences reused ids across reconnect scopes', () async {
+    final actions = MockCaptureExternalActions()..assignmentResult = true;
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'scoped',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [],
+    }));
+    final a = _segment('a', 'first')..speakerIdScope = 'stream:1';
+    final b = _segment('b', 'reconnect')..speakerIdScope = 'stream:2';
+    provider.onSegmentReceived([a, b]);
+    await Future<void>.delayed(Duration.zero);
+    expect(await provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a', 'b'], applyToSpeaker: true), isTrue);
+    expect(a.personId, 'maya');
+    expect(b.personId, isNull);
+    expect(actions.assignedIds, ['a']);
+    expect(actions.assignedVoice, ('stream:1', 'SPEAKER_0'));
+    final later = _segment('later', 'same scope')..speakerIdScope = 'stream:1';
+    final other = _segment('other', 'another reconnect')..speakerIdScope = 'stream:2';
+    provider.onSegmentReceived([later, other]);
+    await Future<void>.delayed(Duration.zero);
+    expect(later.personId, 'maya');
+    expect(other.personId, isNull);
+    provider.dispose();
+  });
+
+  test('live renames queue while the first is in flight and both persist', () async {
+    final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'queued',
+      'started_at': null,
+      'finished_at': null,
+      'created_at': '2026-09-21T00:00:00Z',
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    expect(await provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['missing']), isFalse);
+    final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['b']);
+    expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
+    await Future<void>.delayed(Duration.zero);
+    expect(actions.assignmentCalls, 1);
+    actions.assignmentCompleter!.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(actions.assignmentCalls, 2);
+    expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
+    provider.dispose();
+  });
+
+  test('overlapping live renames stay protected until the last save finishes', () async {
+    final firstGate = Completer<bool>();
+    final secondGate = Completer<bool>();
+    final actions = MockCaptureExternalActions()..assignmentCompleter = firstGate;
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'overlap',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    await Future<void>.delayed(Duration.zero);
+    final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a']);
+    actions.assignmentCompleter = secondGate;
+    firstGate.complete(true);
+    expect(await first, isTrue);
+    expect(provider.taggingSegmentIds, contains('a'));
+    expect(provider.segments.single.personId, 'sam');
+    secondGate.complete(true);
+    expect(await second, isTrue);
+    expect(provider.taggingSegmentIds, isEmpty);
+    expect(provider.segments.single.personId, 'sam');
+    provider.dispose();
+  });
+
+  test('overlapping failed live saves restore committed labels and keep each error specific', () async {
+    for (final firstSaved in [false, true]) {
+      final firstGate = Completer<bool>();
+      final secondGate = Completer<bool>();
+      final actions = MockCaptureExternalActions()..assignmentCompleter = firstGate;
+      final provider = CaptureProvider(
+          externalActions: actions,
+          inProgressConversationLoader: () async {},
+          conversationLocationCapture: _CountingConversationLocationCapture());
+      provider.applyInProgressConversation(ServerConversation.fromJson({
+        'id': 'failed-overlap',
+        'created_at': '2026-09-21T00:00:00Z',
+        'started_at': null,
+        'finished_at': null,
+        'structured': {},
+        'status': 'in_progress',
+        'transcript_segments': [_segment('a', 'one').toJson()],
+      }));
+      provider.onSegmentReceived([_segment('a', 'one')]);
+      await Future<void>.delayed(Duration.zero);
+      final outcomes = <({bool saved, int lines, bool stale, bool limited, bool partial, bool coverageComplete})>[];
+      final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a'], onSettled: outcomes.add);
+      await Future<void>.delayed(Duration.zero);
+      final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a'], onSettled: outcomes.add);
+      actions.assignmentCompleter = secondGate;
+      if (firstSaved) {
+        firstGate.complete(true);
+      } else {
+        firstGate.completeError(const StaleSpeakerException());
+      }
+      expect(await first, firstSaved);
+      expect(provider.segments.single.personId, 'sam');
+      expect(provider.taggingSegmentIds, contains('a'));
+      expect(outcomes.single.stale, !firstSaved);
+      if (firstSaved) {
+        secondGate.completeError(const StaleSpeakerException());
+      } else {
+        secondGate.complete(false);
+      }
+      expect(await second, isFalse);
+      expect(provider.segments.single.personId, firstSaved ? 'maya' : null);
+      expect(provider.taggingSegmentIds, isEmpty);
+      expect(outcomes.last.stale, firstSaved);
+      provider.dispose();
+    }
+  });
+
   test('manual save requires acknowledgment and respects selected scope', () async {
     final actions = MockCaptureExternalActions();
     final conversation = ServerConversation.fromJson({
@@ -464,6 +618,10 @@ void main() {
     expect(provider.segments.first.personId, 'new');
     expect(provider.segments.last.personId, isNull);
     expect(actions.assignedSpeaker, isNull);
+    provider.onSegmentReceived([_segment('a', 'individual revision')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.first.personId, 'new');
+    expect(provider.segments.last.personId, isNull);
     expect(await provider.assignSpeakerToConversation(0, 'user', 'Me', ['a', 'b'], applyToSpeaker: true), isTrue);
     expect(actions.assignedSpeaker, 0);
     expect(provider.segments.every((s) => s.isUser && s.personId == null), isTrue);
@@ -471,6 +629,44 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.segments.last.isUser, isTrue);
     expect(provider.segments.last.personId, isNull);
+    // The newest live line is revised after its first delivery. A stale wire
+    // label must not replace the manual choice made for this voice.
+    provider.onSegmentReceived([_segment('c', 'later revised')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.text, 'later revised');
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.speakerLabelSource, 'manual');
+    provider.onMessageEventReceived(TranslationEvent(segments: [_segment('c', 'translated')]));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'manual-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('c', 'server refresh').toJson()],
+    }));
+    expect(provider.segments.single.isUser, isTrue);
+    provider.onSegmentReceived([
+      _segment('c', 'another acknowledged manual edit')
+        ..personId = 'another-person'
+        ..speakerLabelSource = 'manual'
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.single.isUser, isFalse);
+    expect(provider.segments.single.personId, 'another-person');
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'next-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('different-scope', 'another voice').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('next-line', 'new scope')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.every((s) => !s.isUser && s.personId == null), isTrue);
     provider.dispose();
   });
 

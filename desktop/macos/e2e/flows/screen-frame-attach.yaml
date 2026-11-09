@@ -10,6 +10,10 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/RewindFrameLoader.swift
   - desktop/macos/Desktop/Sources/Chat/ChatAttachment.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+RecentFrameStaging.swift
+  # Picked videos stage on this same composer/attachment path; their on-device sampling is
+  # unit-tested in ChatVideoSamplerTests, not driven by this flow.
+  - desktop/macos/Desktop/Sources/Chat/ChatVideoSampler.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+VideoAttachments.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextFallbackPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/RecentScreensMenuContent.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift

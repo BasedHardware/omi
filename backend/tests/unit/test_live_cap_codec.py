@@ -3,6 +3,8 @@
 import math
 import struct
 import wave
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -30,3 +32,19 @@ def test_full_minute_of_noise_obeys_encoded_size_ceiling(tmp_path):
     path = str(tmp_path / 'noise.opus')
     codec.encode(path, noise, 16000)
     assert (tmp_path / 'noise.opus').stat().st_size <= codec.MAX_OBJECT_BYTES
+
+
+def test_both_encoder_passes_allow_slow_encoding_with_original_twenty_second_timeout(tmp_path, monkeypatch):
+    timeouts = []
+
+    def slow_encoder(command, **kwargs):
+        timeouts.append(kwargs['timeout'])
+        if kwargs['timeout'] < 9:
+            raise codec.subprocess.TimeoutExpired(command, kwargs['timeout'])
+        # Model a nine-second encode without spending nine wall-clock seconds.
+        Path(command[-1]).write_bytes(b'opus' * (10 if len(timeouts) == 1 else 1))
+        return SimpleNamespace(stdout=b'')
+
+    monkeypatch.setattr(codec.subprocess, 'run', slow_encoder)
+    codec.encode(str(tmp_path / 'slow.opus'), b'\0' * 32000, 16000, max_bytes=16)
+    assert timeouts == [20, 20]

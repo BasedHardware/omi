@@ -26,6 +26,7 @@ and serial (the simulation is single-threaded).
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 from typing import Any, Callable, TypeVar
 
 from database.batch_pipeline_privacy import (
@@ -34,7 +35,19 @@ from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
     privacy_owner_key,
 )
+
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from database.batch_pipeline_store import (
+    ADMISSIBLE_READY_SCAN_LIMIT,
+    OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    is_admissible_ready,
+    is_policy_hold,
+    is_queue_dispositioned,
+)
+
+# Mirrors the recovery protocol's state names without binding to its enum.
+# The shared queue predicate import creates no Firestore client.
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
 
@@ -113,13 +126,25 @@ class SimTransaction:
         return deepcopy({**base, **self.patches.get(address, {})})
 
     def put(self, table: str, key: str, value: dict) -> None:
+        # Same refusals as FirestoreTransaction.put/patch (conformance: tests/integration/test_store_conformance.py).
+        if table == 'conversations':
+            raise ValueError('conversation admission requires a field patch, never a document set')
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
+        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
+            raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
+
+    def defer_set(self, ref: Any, value: dict) -> None:
+        # Same surface as FirestoreTransaction.defer_set; the sim has no Firestore document to join.
+        raise NotImplementedError('joining Firestore documents need the Firestore transaction')
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        return self.store.ready_predecessor(owner_key, priority, segment_id)
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key, ready_only=True)
@@ -193,43 +218,96 @@ class SimStore:
         return [segment_id for _, segment_id in candidates[: max(1, min(limit, 100))]]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
-        values = [
-            row['enqueued_at']
-            for (table, _), row in self.rows.items()
-            if table == 'jobs'
-            and row.get('priority') == priority
-            and (row.get('state') == 'ready' if ready_only else row.get('merge_pending'))
-        ]
-        return min(values) if values else None
+        if ready_only:
+            values = [
+                row['enqueued_at']
+                for (table, _), row in self.rows.items()
+                if table == 'jobs' and row.get('priority') == priority and row.get('state') == 'ready'
+            ]
+            return min(values) if values else None
+        # Mirrors database.batch_pipeline_store.oldest: a bounded FIFO prefix walked past policy holds.
+        rows = sorted(
+            (row['enqueued_at'], key, row)
+            for (table, key), row in self.rows.items()
+            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending')
+        )
+        for enqueued_at, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
+            if not is_queue_dispositioned(row) and not is_policy_hold(row):
+                return enqueued_at
+        return float('nan') if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        """Mirrors database.batch_pipeline_store.ready_for_capacity."""
+        return sum(
+            1
+            for segment_id in self._by_state.get('ready', ())
+            if (row := self.rows[('jobs', segment_id)]).get('priority') == priority
+            and row.get('merge_pending') is True
+            and (row.get('compute_decision') or {}).get('outcome') in {'unattempted', 'allowed'}
+            and row.get('available_at', float('inf')) <= now
+        )
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        """Mirrors database.batch_pipeline_store.oldest_admissible_ready."""
+        rows = sorted(
+            (row['enqueued_at'], segment_id, row)
+            for segment_id in self._by_state.get('ready', ())
+            if (row := self.rows[('jobs', segment_id)]).get('priority') == priority
+        )
+        for enqueued_at, _, row in rows[:ADMISSIBLE_READY_SCAN_LIMIT]:
+            if is_admissible_ready(row, now):
+                return enqueued_at
+        return None
 
     def oldest_retry(self, priority: int) -> float | None:
-        values = [
-            row['retry_started_at']
-            for (table, _), row in self.rows.items()
+        rows = sorted(
+            (row['retry_started_at'], key, row)
+            for (table, key), row in self.rows.items()
             if table == 'jobs' and row.get('priority') == priority and 'retry_started_at' in row
-        ]
-        return min(values) if values else None
+        )
+        for started, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
+            if not is_queue_dispositioned(row) and not is_policy_hold(row):
+                return started
+        return float('nan') if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+            return False
+        self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+        return True
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        from config.batch_pipeline import control_candidate_fanout
+
+        if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
+            raise ValueError('bounded priority and pool required')
         prefix = f'p{priority}_'
-        best = None
-        for key in self._controls:
-            row = self.rows[('control', key)]
-            if not row.get(prefix + 'active'):
-                continue
-            service = row.get(prefix + 'service')
-            available = row.get(prefix + pool + '_available_at')
-            if service is None or available is None or service < 0 or available > now:
-                continue
-            candidate = (service, available, key)
-            if best is None or candidate < best:
-                best = candidate
-        return best[2] if best else None
+        rows = [(self.rows['control', key], key) for key in self._controls]
+        rows = [
+            (row, key)
+            for row, key in rows
+            if row.get(prefix + 'active')
+            and row.get(prefix + 'service', -1) >= 0
+            and row.get(prefix + pool + '_available_at', float('inf')) <= now
+        ]
+        rows.sort(key=lambda v: (v[0][prefix + 'service'], v[0][prefix + pool + '_available_at'], v[1]))
+        rows = rows[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            rows.sort(key=lambda v: (v[0][prefix + 'service'], hashlib.sha256(f'{worker_id}:{v[1]}'.encode()).digest()))
+        return [key for _, key in rows]
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
         job = self.rows.get(('jobs', segment_id), {})
-        if job.get('state') not in {'leased', 'retry'}:
+        if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
             return False
         if not self.customer.blocked(
             job['owner_id'],
@@ -237,10 +315,10 @@ class SimStore:
             job.get('privacy_generation'),
         ):
             return False
-        self.apply(
-            ('jobs', segment_id),
-            {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now},
-        )
+        revoked = {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now}
+        if job['state'] in PROVIDER_STATES:
+            revoked['merge_pending'] = False
+        self.apply(('jobs', segment_id), revoked)
         return True
 
     # -- Query helpers --------------------------------------------------
@@ -254,6 +332,56 @@ class SimStore:
             if best is None or candidate < best:
                 best = candidate
         return deepcopy(self.rows[('jobs', best[1])]) if best else None
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        """Only a ready row in this owner's priority FIFO can be the live predecessor; two matches fail closed."""
+        matches = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('priority') == priority
+            and row.get('state') == 'ready'
+            and row.get('next') == segment_id
+        )
+        return deepcopy(self.rows[('jobs', matches[0])]) if len(matches) == 1 else None
+
+    def projection_pending(self, limit: int = 100) -> list[str]:
+        return self.projection_page(limit)[0]
+
+    def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
+        """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""
+        matches = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'results'
+            and row.get('owner_key') == owner_key
+            and 'previous_segment_id' in row  # Firestore equality never matches a missing field
+            and row['previous_segment_id'] == previous
+        )
+        return matches[0] if len(matches) == 1 else None
+
+    def projection_page(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+    ) -> tuple[list[str], Any]:
+        """Keyset page over results awaiting projection, ordered (committed_at, key); mirrors the Firestore scan."""
+        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
+
+        states = PROJECTION_DISCOVERY_STATES if states is None else states
+        if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
+            raise ValueError('projection discovery states must be drain states')
+        wanted = set(states)
+        ordered = sorted(
+            (row['committed_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'results' and row.get('projection_state') in wanted and 'committed_at' in row
+        )
+        if after is not None:
+            ordered = [entry for entry in ordered if entry > (after[0], after[1])]
+        size = max(1, min(limit, 100))
+        page = ordered[:size]
+        cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
+        return [key for _, key in page], cursor
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # Firestore excludes rows without the ordered field, and orders ties by document name.
@@ -285,6 +413,8 @@ class SimStore:
         return owners
 
     def service_frontier(self, priority: int) -> float:
+        if priority not in (0, 1, 2):
+            raise ValueError('bounded priority required')
         name = f'p{priority}_service'
         values = [self.rows[('control', key)][name] for key in self._controls if name in self.rows[('control', key)]]
         return max(values) if values else 0.0
@@ -341,7 +471,11 @@ class SimStore:
 
         key = hash_owner(owner_id)
         removed = 0
-        for (table, segment_id), job in sorted(self.rows.items()):
+        touched: list[tuple[str, str]] = []  # production purge re-copies these to the A2 shadow after commit
+        for table, segment_id in sorted(self.rows):
+            # Earlier deletions may repair this row's next pointer. Production
+            # _delete_job re-reads its snapshot inside each transaction too.
+            job = self.rows.get((table, segment_id), {})
             if table != 'jobs' or job.get('owner_key') != key:
                 continue
             binding = job.get('projection_binding') or {}
@@ -361,6 +495,8 @@ class SimStore:
                 continue
             queue_key = f"{job['priority']}_{key}"
             queue = self.rows.get(('queues', queue_key))
+            touched += [('jobs', segment_id), ('results', segment_id), ('queues', queue_key)]
+            touched.append(('control', scheduler_control_key(key)))
             predecessors = [
                 other_id
                 for (other_table, other_id), other in sorted(self.rows.items())
@@ -384,6 +520,7 @@ class SimStore:
                     self.apply(('queues', queue_key), queue)
             for predecessor in predecessors:
                 self.mutate('jobs', predecessor, lambda row, nxt=job.get('next', ''): row.update(next=nxt))
+                touched.append(('jobs', predecessor))
             self.delete('jobs', segment_id)
             if ('results', segment_id) in self.rows:
                 if conversation_id is not None:
@@ -391,6 +528,9 @@ class SimStore:
                 else:
                     self.delete('results', segment_id)
             removed += 1
+        from database.batch_pipeline_shadow_hook import mirror_refresh
+
+        mirror_refresh(self.namespace, touched)
         return removed
 
     def mutate(self, table: str, key: str, update: Callable[[dict[str, Any]], None]) -> None:

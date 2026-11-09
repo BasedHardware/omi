@@ -8,6 +8,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 ACTIVE: weakref.WeakSet[Any] = weakref.WeakSet()
 CLOSING: set[asyncio.Task[Any]] = set()
+SHUTDOWN_DELIVERY_SECONDS = 28.0
 
 
 async def flush_active(*, timeout: float = 30.0) -> None:
@@ -29,7 +30,7 @@ async def flush_active(*, timeout: float = 30.0) -> None:
         task.add_done_callback(observe_publication)
     if not tasks:
         return
-    _, pending = await asyncio.wait(tasks, timeout=timeout)
+    _, pending = await asyncio.wait(tasks, timeout=min(timeout, SHUTDOWN_DELIVERY_SECONDS))
     for task in pending:
         task.cancel()
     # Do not gather cancellation-resistant sinks here. Retained tasks observe

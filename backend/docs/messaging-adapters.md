@@ -1,4 +1,4 @@
-# Telegram and iMessage adapters (Stage B)
+# Telegram, iMessage and WhatsApp adapters (Stage B)
 
 This adds real providers to the [foundation](messaging-channels.md). The feature,
 provider flags and exact UID cohort remain off/empty by default.
@@ -30,8 +30,54 @@ receipt events cannot re-execute a turn. iMessage replies request `iMessage` ser
 Provider fallback behavior still needs confirmation with the sandbox/account.
 
 `IMessageProvider` keeps Linq-specific parsing, verification and API calls replaceable.
-`OMI_IMESSAGE_PROVIDER=linq` selects the implemented provider. Sendblue is an interface
-extension, not an untested implementation pretending to be supported.
+`OMI_IMESSAGE_PROVIDER=linq` selects Linq and `keiki` selects Keiki. Sendblue is an
+interface extension, not an untested implementation pretending to be supported.
+
+### Keiki (iMessage and WhatsApp, 2026-10-30)
+
+[Keiki](https://onkeiki.com/docs/external-harness.md) owns the line (a Photon-backed
+iMessage number, or our own WhatsApp Cloud API number) and Omi runs the turn. Each channel
+is one Keiki agent with `harness: external`, push mode, its `dispatchUrl` set to
+`/v1/messaging/webhooks/<channel>` and `steering_config.midTurnStrategy: queue`.
+
+- Keiki pushes one signed `keiki.turn` per debounced batch. It becomes one inbox row whose
+  `provider_message_id` is the turn ID, so a re-dispatch dedupes. The contact's
+  conversation ID (E.164, or `wa:` for WhatsApp) is both the user and chat ID.
+- `Keiki-Signature` is an HMAC-SHA256 of `<t>.<raw body>` with the agent signing secret.
+  Requests outside 300 s fail, several `v1` values are accepted during rotation, and an
+  event naming another agent ID is a 401.
+- Replies, typing and tapbacks use the turn-scoped API under a `kts1` credential signed
+  with the same secret, so no turn token is stored. `/messages` is never retried after a
+  5xx: Keiki reports that outcome as unknown. A refused thread falls back to a plain reply
+  with the same idempotency key.
+- The gateway settles the Keiki turn (`/complete`) when its row completes or fails, and
+  after an undo reply. A lease miss leaves the turn open. Held-back, silent, quiet-loop,
+  group and other-service turns settle without a reply. Reactions, cancellations and
+  arrivals are acknowledged and ignored.
+- `queue` steering keeps the inbox FIFO authoritative: a newer message waits at Keiki
+  until the open turn settles, so Keiki channels do not supersede a reply in progress.
+- Files (Keiki channels 0.1.6, 2026-10-31): each turn message carries
+  `attachments[{id, filename, mimeType, size, url}]`. Omi downloads through
+  `GET {turnUrl}/attachments/{id}` with the turn credential, which lasts the whole turn
+  (the payload `url` expires in 15 minutes), and feeds the shared media path: voice notes
+  are transcribed, and images and documents become chat files. Keiki's own
+  `[Voice note: …; attachment_id=…]` annotation is dropped from the text. GIFs read as a
+  reaction. An annotation with no `attachments` entry still gets the unsupported-file reply.
+  Outbound files upload as raw bytes to `POST {turnUrl}/attachments?filename=…`, then go
+  out through the `send_file` action with that `attachmentId`; iMessage does not offer Ogg.
+- Deferred replies and Omi-initiated messages are not delivered on Keiki channels; a
+  closed turn refuses them (`409 turn_closed`).
+- A declined turn is settled in the background after the webhook is acknowledged. A failed
+  settle increments `FAILURES{reason="settle_failed"}`; the turn then stays open until
+  Keiki's deadline (ten minutes), blocking that contact's next turn. Expired rows settle
+  their turn as failed. A turn whose reply was delivered but whose row then failed is
+  still settled `failed`; Keiki shows nothing to the contact for that.
+- Line health is Keiki's (fewer than 50 new conversations per line per day, about
+  400–500 active users per line). Omi spreads new links across the `lines` list in
+  `OMI_MESSAGING_LINK_TARGETS`; see the channel runbook for adding or closing a line. The
+  link target's `provider` in
+  `OMI_MESSAGING_LINK_TARGETS` and in the app's `mobile-chat-apps` flag payload must be
+  `keiki`, or minted proofs name the wrong audience.
 
 ## Runtime configuration
 
@@ -49,9 +95,15 @@ Production bindings are declared only for Cloud Run `backend`.
 | `LINQ_API_KEY` / `LINQ_WEBHOOK_SECRET` | runtime secrets |
 | `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | 3; accepted range 1–5 |
 | `OMI_IMESSAGE_CONTACT_CARD` | off; enable only after configuring the Linq contact card |
+| `OMI_WHATSAPP_ENABLED` / `OMI_WHATSAPP_PROVIDER` | off / keiki |
+| `KEIKI_IMESSAGE_AGENT_ID` / `KEIKI_WHATSAPP_AGENT_ID` | the Keiki agent each channel answers for |
+| `KEIKI_IMESSAGE_SIGNING_SECRET` / `KEIKI_WHATSAPP_SIGNING_SECRET` | runtime secrets (`whsec_…` from `POST /developer/agents/:id/harness/signing-secret`) |
+| `KEIKI_API_BASE` | `https://onkeiki.com/api/v1` |
+| `OMI_WHATSAPP_MAX_SEND_RECEIVE_RATIO` | 3; accepted range 1–5 |
 
-The actual registered routes are `/v1/messaging/webhooks/telegram` and
-`/v1/messaging/webhooks/imessage`; setup-guide `/v1/channels/...` paths were placeholders.
+The actual registered routes are `/v1/messaging/webhooks/telegram`,
+`/v1/messaging/webhooks/imessage` and `/v1/messaging/webhooks/whatsapp`; setup-guide
+`/v1/channels/...` paths were placeholders.
 Startup/periodic recovery drains only pending jobs. Failed running jobs remain fenced.
 Handled worker failures, including a finished turn's CancelledError, release the
 lease. In-flight task cancellation and process loss keep the lease for operator
@@ -65,6 +117,11 @@ accepts only HTTPS `cdn.linqapp.com`. Redirects and credentials in URLs fail. Fi
 bounded at 20 MB. Voice bytes enter Omi's existing prerecorded STT before the turn.
 Photos/documents enter `FileChatTool.upload` and the existing per-user chat file collection;
 file IDs join the channel session so `search_files_tool` can find them.
+Videos (including Telegram video notes) are read as stills plus speech, in parallel
+(`utils/media/video_frames.py`): up to six distinct frames become one numbered contact
+sheet stored as the chat file, every sampled frame is kept in a filmstrip for
+`search_files_tool(start_seconds=, end_seconds=)`, and the clip itself is not stored.
+A muted clip still answers from its frames; a picture-less clip falls back to its transcript.
 
 Outbound files are looked up under the current principal UID; metadata and size must match.
 A model-supplied path or URL is never accepted. Telegram chooses document/photo/voice.
@@ -261,6 +318,15 @@ production-state changes are performed by this PR.
 A busy surface lease requeues the inbox head and does not wake that same head.
 The lease holder wakes the oldest pending row on release. The thirty-second
 pending drain covers a leaked lease. That avoids a claim/wake spin.
+
+A newer plain message replaces a running reply that nobody has seen yet. Enqueue
+stamps a content-free `supersedes` flag on each row (false for commands, button
+callbacks, link proofs and album parts). While a turn streams, a side task checks
+every `SUPERSEDE_POLL_SECONDS` for a newer flagged pending row, using the same
+`status`/`created_at` index as the drain. The turn stops at its next frame only if
+the sink has delivered nothing and no tool wrote anything. It sends no apology,
+completes its row and releases the lease, so the newer message is answered next
+with the replaced one still in the session history. Otherwise the queue stays FIFO.
 
 For the October 11 burst, logs establish the callback's canonical cleanup at
 09:17:36 / 09:22:34 UTC and two provider failures at 09:24:39 / 09:25:06. Task creation

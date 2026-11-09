@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.stt_provider_policy import SONIOX_PROVIDER
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import streaming as st
 from utils.stt.language_policy import (
     MAX_DETECTION_CHARS,
@@ -221,6 +222,7 @@ def test_explicit_parakeet_preference_keeps_existing_fallback_order(monkeypatch)
 @pytest.mark.parametrize('configured_order', [True, False])
 @pytest.mark.asyncio
 async def test_failed_preferred_soniox_falls_into_normal_chain(monkeypatch, configured_order):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setattr('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     monkeypatch.setattr(st, '_soniox_circuit', ProviderCircuitBreaker(failure_threshold=2, cooldown_seconds=30))
@@ -397,3 +399,40 @@ def test_full_detector_queue_records_one_undetermined_segment():
     segment = {'text': 'a' * 24}
     observations.observe(segment, 'soniox', lambda _coro, name: pytest.fail(f'unexpected spawn: {name}'))
     assert observations.counts == {'undetermined': 1}
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'misspelled'])
+def test_single_language_hint_overlay_leaves_existing_hints_unchanged(monkeypatch, caplog, mode):
+    monkeypatch.setenv('STT_LANGUAGE_HINTS_MODE', mode)
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'false')
+    profile = LiveLanguageProfile.create('en', multi=True, uid='synthetic-account')
+    with caplog.at_level('INFO'):
+        assert soniox_hints('multi', profile) == []
+    if mode != 'off':
+        assert 'hint=en' in caplog.text
+    assert 'synthetic-account' not in caplog.text
+
+
+def test_single_language_hint_overlay_serves_only_its_cohort(monkeypatch):
+    from config.refactor_modes import uid_digest
+
+    monkeypatch.setenv('STT_LANGUAGE_HINTS_MODE', 'shadow')
+    monkeypatch.setenv('STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S', uid_digest('synthetic-account'))
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'false')
+    profile = LiveLanguageProfile.create('en', multi=True, uid='synthetic-account')
+    control = LiveLanguageProfile.create('en', multi=True, uid='synthetic-control')
+    assert soniox_hints('multi', profile) == ['en']
+    assert soniox_hints('multi', control) == []
+    monkeypatch.setenv('STT_LANGUAGE_HINTS_MODE', 'off')
+    assert soniox_hints('multi', profile) == []
+
+
+@pytest.mark.parametrize('multi_switch', ['true', 'false'])
+def test_new_hint_mode_never_redefines_multi_language_switch(monkeypatch, multi_switch):
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'false')
+    monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', multi_switch)
+    monkeypatch.setenv('STT_LANGUAGE_HINTS_MODE', 'off')
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='synthetic-account')
+    expected = soniox_hints('multi', profile)
+    monkeypatch.setenv('STT_LANGUAGE_HINTS_MODE', 'serve')
+    assert soniox_hints('multi', profile) == expected

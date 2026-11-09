@@ -1,3 +1,10 @@
+// The home page: capture start/stop entry point, permission gating,
+// foreground-service lifecycle, and on-device transcription wiring.
+//
+// Foreground-service and location decisions read actual system permission
+// state rather than the stored flag (the OS may have revoked a granted
+// permission), and the static FGS call here stays an App UI handoff -- capture
+// ownership belongs to CaptureSessionOwner (app/lib/services/capture/OWNERSHIP.md).
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
@@ -7,6 +14,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -107,6 +116,34 @@ class _HomePageProduct extends StatefulWidget {
 
 class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
+  bool _homeTrialSheetArmed = SharedPreferencesUtil().homeTrialSheetPending;
+  bool _homeTrialSheetChecking = false;
+
+  /// Pocket's placement: the trial paywall once more, on the first tap in Home, for a reader who
+  /// declined both sign-up offers. Fires at most once per device; a paid or ineligible reader
+  /// never sees it.
+  Future<void> _showHomeTrialSheetOnce() async {
+    if (!_homeTrialSheetArmed || _homeTrialSheetChecking) return;
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) {
+      // Eligibility is unknown until the subscription loads: wait for it rather than spend the offer.
+      _homeTrialSheetChecking = true;
+      await usage.fetchSubscription().timeout(const Duration(seconds: 6), onTimeout: () {});
+      _homeTrialSheetChecking = false;
+      if (!mounted) return;
+      // Still unknown (the request failed or is slow): stay armed so the next tap tries again.
+      if (usage.subscription == null) return;
+    }
+    setState(() => _homeTrialSheetArmed = false);
+    SharedPreferencesUtil().homeTrialSheetPending = false;
+    if (!usage.showSubscriptionUI) return;
+    if (usage.subscription?.subscription.plan.isPaid == true) return;
+    if (usage.subscription?.trialEligible != true) return;
+    PlatformManager.instance.analytics.track('Home Trial Sheet Shown', properties: {'source': 'home_first_tap'});
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    await routeToPage(context, const TrialPaywallPage(source: 'home_first_tap'));
+  }
 
   @override
   void initState() {
@@ -130,7 +167,13 @@ class _HomePageProductState extends State<_HomePageProduct> {
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    final home = HomePage(navigateToRoute: _navigateToRoute);
+    if (!_homeTrialSheetArmed) return home;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _showHomeTrialSheetOnce(),
+      child: home,
+    );
   }
 }
 
@@ -181,7 +224,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
   Timer? _announcementTimer;
-  final List<Timer> _prewarmTimers = [];
+  Timer? _homeWidgetFreshnessTimer;
 
   void _ensurePageInitialized(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
@@ -205,31 +248,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (!mounted || _pages[pageIndex] != null) return;
       setState(() => _ensurePageInitialized(pageIndex));
     });
-    // addPostFrameCallback does not schedule a frame by itself. Background
-    // prewarming often runs while the UI is idle, so explicitly request one.
+    // Navigation may happen between frames; request the skeleton/destination frame.
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  void _prewarmRemainingTabs(int selectedIndex) {
-    for (final timer in _prewarmTimers) {
-      timer.cancel();
-    }
-    _prewarmTimers.clear();
-    var delay = const Duration(milliseconds: 350);
-    for (var index = 0; index < _pages.length; index++) {
-      if (index == selectedIndex) continue;
-      final pageIndex = index;
-      _prewarmTimers.add(
-        Timer(delay, () {
-          if (!mounted) return;
-          _schedulePageInitialization(pageIndex);
-        }),
-      );
-      delay += const Duration(milliseconds: 180);
-    }
-  }
-
   List<Widget> _buildPages(int selectedIndex) {
+    _schedulePageInitialization(selectedIndex);
     return [
       for (var index = 0; index < _pages.length; index++)
         TickerMode(
@@ -385,8 +409,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Heal phone-mic sessions that went silent while another app played
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
         captureProvider.onAppResumed();
+        _scheduleHomeWidgetFreshness(context.read<ActionItemsProvider>());
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
+        if (context.read<HomeProvider>().selectedIndex == HomeProvider.tasksTab) {
+          unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+        }
       }
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
@@ -454,7 +482,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     _ensurePageInitialized(homePageIdx);
     WidgetsBinding.instance.addObserver(this);
-    _prewarmRemainingTabs(homePageIdx);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Android needs a foreground service to keep capture/location work alive.
@@ -654,13 +681,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _startHomeWidgets() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _homeWidgets != null) return;
+      final tasks = context.read<ActionItemsProvider>();
+      _scheduleHomeWidgetFreshness(tasks);
       _homeWidgets = HomeWidgetsPublisher(
         devices: context.read<DeviceProvider>(),
-        tasks: context.read<ActionItemsProvider>(),
+        tasks: tasks,
         conversations: context.read<ConversationProvider>(),
         l10n: () => context.l10n,
         dates: () => OmiDateFormat.of(context),
       )..start();
+    });
+  }
+
+  void _scheduleHomeWidgetFreshness(ActionItemsProvider tasks) {
+    _homeWidgetFreshnessTimer?.cancel();
+    // Admit optional freshness between frames, after animations/scroll settling.
+    // scheduleTask(Priority.idle) repeatedly posts zero-delay timers while an
+    // animation is active; a bounded check avoids that work (and fake-clock spin).
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    _homeWidgetFreshnessTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      // A repeating animation (e.g. a fresh conversation status indicator)
+      // may never let the scheduler go idle; freshness is still worth more
+      // than waiting for quiescence indefinitely, so admit it at the deadline.
+      final pastDeadline = DateTime.now().isAfter(deadline);
+      final scheduler = SchedulerBinding.instance;
+      if ((!pastDeadline && (scheduler.hasScheduledFrame || scheduler.transientCallbackCount > 0))) return;
+      timer.cancel();
+      _homeWidgetFreshnessTimer = null;
+      unawaited(tasks.ensureLoaded(showShimmer: false));
     });
   }
 
@@ -737,7 +789,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               context.read<ConversationProvider>().upsertConversation(row);
               unawaited(context.read<LocalRecordingsProvider>().refresh());
             },
-            recordings: () => context.read<LocalRecordingsProvider>().recordings,
           );
           unawaited(_onDeviceRunner!.start());
         }
@@ -831,11 +882,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           HomeTabSwitcher(
                             trailing: onHome ? null : _buildTasksActions(context),
                             onTabTap: (index, isRepeat) {
+                              if (index == HomeProvider.tasksTab) {
+                                unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+                              }
                               if (isRepeat) {
                                 _scrollToTop(index);
                               } else {
-                                // Change pages immediately. If background prewarming has not
-                                // finished, the destination paints a skeleton for one frame.
+                                // Change pages immediately; an unvisited destination paints
+                                // the existing skeleton for one frame before mounting.
                                 context.read<HomeProvider>().setIndex(index);
                                 _schedulePageInitialization(index);
                               }
@@ -937,7 +991,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           mainAxisSize: MainAxisSize.min,
           children: [
             HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
+              semanticLabel: context.l10n.taskIntegrations,
               icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
               onTap: () {
                 OmiHaptics.selection();
@@ -1051,10 +1105,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     OmiFeedback.bottomClearance = null;
     _announcementTimer?.cancel();
     _announcementTimer = null;
-    for (final timer in _prewarmTimers) {
-      timer.cancel();
-    }
-    _prewarmTimers.clear();
+    _homeWidgetFreshnessTimer?.cancel();
+    _homeWidgetFreshnessTimer = null;
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from config.batch_pipeline import RecordOwnerContention
+from config.policy import BatchUnitPolicy
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_store import FirestoreTransaction
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -228,6 +229,8 @@ async def test_finalizer_reloads_contention_inside_attempt_and_defers_without_bu
 async def test_desktop_record_origin_uses_the_escape_language(
     monkeypatch, conversation_language, user_language, source, live_record, expected
 ):
+    # Pin record-origin behavior on the original admission path.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import audio_unit
@@ -269,7 +272,9 @@ async def test_desktop_record_origin_uses_the_escape_language(
         conversation_id='record',
         client_device_id='mac-1',
         client_platform='macos',
-        policy=SimpleNamespace(live_record_enabled=live_record),
+        policy=BatchUnitPolicy(
+            batch_enabled=True, live_record_enabled=live_record
+        ),  # integration intake uses dataclasses.replace (contract (c))
     )
     if expected is None:
         assert outcome is None and not bindings

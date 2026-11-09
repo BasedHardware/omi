@@ -8,7 +8,8 @@ from collections.abc import ValuesView
 from datetime import timedelta, timezone
 from typing import TYPE_CHECKING
 
-from utils.conversation_continuity import DEFAULT_GAP_SECONDS
+from models.conversation_continuity import DEFAULT_GAP_SECONDS
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 
 if TYPE_CHECKING:
     from google.cloud.firestore_v1 import transaction as firestore_transaction
@@ -40,11 +41,16 @@ class AssignmentIndex:
     def write(self, result: dict, replaced: set[str]) -> None:
         keys = ('id', 'started_at', 'finished_at', 'source', 'client_device_id', 'is_locked')
         entry = {key: result.get(key) for key in keys}
+        if result.get(SYNC_CLOCK_RUN_FIELD):
+            # Only estimated-clock rows carry a run; absent equals device-clocked.
+            entry[SYNC_CLOCK_RUN_FIELD] = result[SYNC_CLOCK_RUN_FIELD]
         occupied = set(days_for(result))
         for day, rows in self.buckets.items():
             rows = [row for row in rows if row['id'] not in replaced]
             if day in occupied:
                 rows.append(entry)
+            self.buckets[day] = rows
             self.transaction.set(self.collection.document(day), {'entries': sorted(rows, key=lambda row: row['id'])})
         recent = [row for row in self.recent if row['id'] not in replaced] + [entry]
+        self.recent = recent[-128:]
         self.transaction.set(self.recent_ref, {'entries': recent[-128:]})

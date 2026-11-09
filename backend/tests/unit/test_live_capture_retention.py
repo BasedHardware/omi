@@ -42,7 +42,7 @@ async def drain(monkeypatch, receiver):
 def setup(monkeypatch, enabled, provider):
     monkeypatch.setenv(FLAG, 'true' if enabled else 'false')
     monkeypatch.setenv('LIVE_SPEAKER_CAPTURE_CLOCK', 'true')
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
+
     receiver = _receiver(monkeypatch, v2=False, conversation='c')
     receiver.host.stt_service = SimpleNamespace(value=provider)
     _, callback, epoch = build_stt_callbacks(receiver)

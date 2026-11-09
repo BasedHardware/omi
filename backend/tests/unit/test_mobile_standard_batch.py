@@ -8,6 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from starlette.datastructures import UploadFile
 from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from config.policy import BatchUnitPolicy
+from config.policy.ramp import owner_load
+from database import batch_ramp
+from utils.batch_pipeline import intake as batch_intake
 
 import pytest
 
@@ -193,6 +198,45 @@ def mobile_sync_router():
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('start,end', [(None, None), (20, 10), (0, float('nan'))])
+async def test_partial_ramp_unknown_incoming_audio_keeps_real_upload_on_legacy(
+    mobile_sync_router, monkeypatch, start, end
+):
+    module, jobs, bytes_io = mobile_sync_router
+    monkeypatch.setenv('BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS', 'on')
+    candidate = BatchUnitPolicy(batch_enabled=True, batch_percent=5)
+    module.resolve_batch_policy = MagicMock(return_value=candidate)
+    module.registered_record_response = AsyncMock(return_value=None)
+    incoming = []
+
+    def classify(uid, policy, *, incoming_audio_seconds, **kwargs):
+        incoming.append(incoming_audio_seconds)
+        return batch_ramp.ramp_admission_policy(uid, policy, incoming_audio_seconds=incoming_audio_seconds)
+
+    module.ramp_admission_policy = classify
+    monkeypatch.setattr(
+        batch_ramp,
+        'read_owner_load',
+        lambda uid, **kwargs: owner_load([], [], 100000, incoming_audio_seconds=kwargs['incoming_audio_seconds']),
+    )
+    store = MemoryStore()
+    monkeypatch.setattr(batch_intake, 'FirestoreStore', lambda *args: store)
+    monkeypatch.setattr(batch_intake, 'current_stage', lambda: 'dev')
+    module.accept_batch_upload = AsyncMock(wraps=batch_intake.accept_upload)
+    response = await module.sync_local_files_v2(
+        files=[UploadFile(filename='synthetic.opus', file=bytes_io(b'synthetic'))],
+        uid='test-uid',
+        audio_start_seconds=start,
+        audio_end_seconds=end,
+    )
+    assert response.status_code == 202
+    assert incoming == [None]
+    assert not module.create_sync_job.call_args.kwargs['policy'].batch_enabled
+    assert not module.accept_batch_upload.call_args.kwargs['policy'].batch_enabled
+    assert not store.rows
 
 
 @pytest.mark.asyncio

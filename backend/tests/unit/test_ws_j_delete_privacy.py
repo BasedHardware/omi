@@ -214,7 +214,7 @@ class _DocRef:
         self._db = db
         self.path = path
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_kwargs):
         if self.path not in self._db.docs:
             return _Snapshot(None, exists=False, doc_id=self.path.rsplit("/", 1)[-1], reference=self)
         return _Snapshot(
@@ -980,6 +980,13 @@ def _tombstoned_evidence_paths(db: "_FakeDb", uid: str) -> list[str]:
 
 
 def _stub_delete_side_effects(monkeypatch) -> None:
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    def defer_normalization(*args, **kwargs):
+        # These fixtures test deletion/evidence identity, with no model service.
+        raise PromotionFlexDeferred('synthetic model unavailable')
+
+    monkeypatch.setattr('utils.memory.required_intake.normalize', defer_normalization)
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),

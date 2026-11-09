@@ -15,32 +15,89 @@ from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import (
+    MIN_IDLE_CLOSE_SECONDS,
+    IdleCohortSettings,
     VAD_HANGOVER_SECONDS,
-    idle_max_closes_per_hour,
+    cohort_armed,
     idle_no_frames_seconds,
-    idle_rearm_seconds,
+    idle_settings_for,
 )
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics
 from utils.stt.replay_delivery import abort_replay_socket
+from utils.stt.live_reason import LOCAL_DELIVERY_SEND_QUEUE_FULL
 from utils.stt.live_metrics import soniox_idle_metrics
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.provider_stream_end import US_TIMEOUT, begin_stream_close, note_stream_close_intent
+from utils.observability.demand_cohort import current_transport_origin
+from config.live_stt_idle import idle_reopen_cost_reselect_enabled
 
-IDLE_DRAIN_SECONDS = 2.0
+# Soniox returns the final tokens of the last utterance only after
+# ``finalize`` and end-of-audio, and the receive loop flushes the last
+# committed word only when the drain completes. Two seconds cut most drains
+# short. Listen session-end finalize (all providers, so an upper bound on the
+# Soniox drain) finished for 28% within 2 s, 98.5% within 10 s and 99.5% within
+# 20 s (prod, 12h to 2026-11-01 17:22Z). No finite cap keeps every final:
+# omi_soniox_idle_drains_total{outcome="timeout"} shows what remains. The cap
+# stays below the onset buffer, so speech that resumes during the drain is held
+# for the reopen, not failed over.
+IDLE_DRAIN_SECONDS = 20.0
+# PCM retained while the transport is closed (VAD pre-roll included); at most
+# about 1 MB of 16 kHz PCM per socket, and only while a drain or reopen is pending.
+ONSET_BUFFER_SECONDS = 30
+# Before a leg has heard any speech there are no words to finalize and no
+# speaker scope to split, so a silent session start closes at the threshold
+# floor instead of paying the full VAD wait. The first onset reopens it.
+PRE_SPEECH_CLOSE_SECONDS = MIN_IDLE_CLOSE_SECONDS
 _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 
 
 class SonioxIdleBudget:
-    """Session-owned churn limits, retained through leg rotation/recovery."""
+    """Session-owned churn limits, retained through leg rotation/recovery.
 
-    def __init__(self):
-        self.rearm_seconds = idle_rearm_seconds()
-        self.max_closes_per_hour = idle_max_closes_per_hour()
+    The arm and effective values resolve once, on first use, so the live
+    receiver can hand identity over lazily (``uid_provider``): the provider is
+    consulted at most once and only while the cohort knobs can assign an arm
+    (``cohort_armed``), so identity-bypass and unauthenticated paths never
+    touch ``request.uid`` and a provider-less budget is plain control.
+    """
+
+    def __init__(self, uid: str | None = None, uid_provider: Callable[[], str | None] | None = None):
+        self._uid = uid
+        self._uid_provider = uid_provider
+        self._settings: IdleCohortSettings | None = None
         self.rearm_at = 0.0
         self.close_times: deque[float] = deque()
+
+    def _resolve(self) -> IdleCohortSettings:
+        if self._settings is None:
+            uid = self._uid
+            if uid is None and self._uid_provider is not None and cohort_armed():
+                try:
+                    uid = self._uid_provider()
+                except AttributeError:
+                    uid = None  # host without identity: control, no arm requirement
+            self._settings = idle_settings_for(uid)
+        return self._settings
+
+    @property
+    def arm(self) -> str:
+        return self._resolve().arm
+
+    @property
+    def close_seconds(self) -> float:
+        return self._resolve().close_seconds
+
+    @property
+    def rearm_seconds(self) -> float:
+        return self._resolve().rearm_seconds
+
+    @property
+    def max_closes_per_hour(self) -> int:
+        return self._resolve().max_closes_per_hour
 
     def reserve_close(self, now: float) -> bool:
         """Spend one rolling-hour slot shared by every planned-close trigger.
@@ -79,6 +136,10 @@ class IdleSonioxSocket(STTSocket):
         self._closed = False
         self._dead = False
         self.idle_reopen_failed = False
+        self.idle_cost_reselect_requested = False
+        self._cost_reselect_managed = False
+        self._cost_reselect_onset = False
+        self._failback_due: Callable[[], bool] = lambda: False
         self._reason: str | None = None
         self._silent_since: float | None = None
         self._idle_since: float | None = None
@@ -102,6 +163,7 @@ class IdleSonioxSocket(STTSocket):
         self._last_frame_at = time.monotonic()
         self._last_speech_at = float('-inf')  # No speech seen yet on this leg.
         self._close_trigger = 'vad'
+        self._refusal_counted = False
         self._watchdog: asyncio.Task[None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
         self._start_watchdog()
@@ -143,27 +205,49 @@ class IdleSonioxSocket(STTSocket):
         if output.is_speech or output.audio_to_send:
             # Speech or its hangover tail: the word boundary is not settled yet.
             self._last_speech_at = now
+            self._refusal_counted = False  # any VAD mode: the next refused episode counts
         if mode != 'active' or self._finishing or self.is_connection_dead:
             return
         if output.is_speech:
+            if self._silent_since is not None:
+                # The same clock the close threshold reads, so the histogram
+                # prices any threshold whether this gap stayed open or closed.
+                self._metrics.silence_gaps.observe(now - self._silent_since)
             self._silent_since = None
         elif self._silent_since is None:
             self._silent_since = now
-        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._seconds:
+        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._threshold():
             # ``audio_to_send`` is non-empty through the VAD hangover, so a
             # close can only start after the gate released the word boundary.
             if not self._idle_budget.reserve_close(now):
+                self._count_refusal(now)
                 return
             # Reserve before scheduling so repeated VAD callbacks cannot spend
             # the same rolling-hour slot. These limits belong to the logical
             # session and survive each replacement transport.
-            self._begin_idle_close(now, 'vad')
+            self._begin_idle_close(now, 'vad' if self._heard_speech() else 'pre_speech')
+
+    def _heard_speech(self) -> bool:
+        return self._last_speech_at != float('-inf')
+
+    def _threshold(self) -> float:
+        return self._seconds if self._heard_speech() else min(self._seconds, PRE_SPEECH_CLOSE_SECONDS)
+
+    def _count_refusal(self, now: float) -> None:
+        # Once per idle episode: VAD calls this per frame and the watchdog per
+        # retry, but a refused episode keeps one paid socket open on keepalives.
+        if self._refusal_counted:
+            return
+        self._refusal_counted = True
+        self._metrics.close_refusals.labels(reason='rearm' if now < self._idle_budget.rearm_at else 'cap').inc()
 
     def _begin_idle_close(self, now: float, trigger: str) -> None:
         # Fence death publication before any await. The logical leg stays
         # alive while the paid transport finishes its last committed text.
         self._close_trigger = trigger
+        self._refusal_counted = False
         self._transport._planned_close = True
+        note_stream_close_intent(self._transport, US_TIMEOUT)
         self._idle_since = now
         self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
 
@@ -194,6 +278,7 @@ class IdleSonioxSocket(STTSocket):
             return due - now
         if not self._idle_budget.reserve_close(now):
             # Re-arm floor or the shared hourly cap: retry when a slot can open.
+            self._count_refusal(now)
             budget = self._idle_budget
             retry = budget.rearm_at - now
             if budget.close_times and len(budget.close_times) >= budget.max_closes_per_hour:
@@ -224,6 +309,7 @@ class IdleSonioxSocket(STTSocket):
         task = create_named_task(transport.drain_and_close(), name='soniox_idle_drain')
         try:
             done, _ = await asyncio.wait({task}, timeout=IDLE_DRAIN_SECONDS)
+            self._metrics.drains.labels(outcome='drained' if done else 'timeout').inc()
             if not done:
                 task.cancel()
                 await abort_replay_socket(transport, timeout=0.5)
@@ -238,7 +324,9 @@ class IdleSonioxSocket(STTSocket):
             # Avoided time starts only after the transport is actually closed.
             self._idle_closed_at = time.monotonic()
             self._metrics.closes.inc()
+            self._metrics.cohort_closes.labels(arm=self._idle_budget.arm).inc()
             self._metrics.closes_by_trigger.labels(trigger=self._close_trigger).inc()
+            self._metrics.cohort_closes_by_trigger.labels(arm=self._idle_budget.arm, trigger=self._close_trigger).inc()
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
         self._last_frame_at = time.monotonic()
@@ -246,14 +334,24 @@ class IdleSonioxSocket(STTSocket):
             # Gated sends carry only speech, hangover or pre-roll; ungated sends
             # cannot be classified, so both count as unsettled audio.
             self._last_speech_at = self._last_frame_at
+            self._refusal_counted = False
         if self._finishing or self.is_connection_dead:
             return False
         if self._idle_since is not None:
             # The serving send boundary awaits complete_send before accepting
-            # this frame. Retain at most ten seconds, including VAD pre-roll.
-            if len(self._pending) + len(data) > self._rate * 2 * 10:
-                self._dead, self._reason = True, 'capacity_full'
+            # this frame. Retain at most ONSET_BUFFER_SECONDS, including VAD pre-roll.
+            if len(self._pending) + len(data) > self._rate * 2 * ONSET_BUFFER_SECONDS:
+                # The idle wrapper's own pending buffer filled: a local bound,
+                # never vendor capacity.
+                self._dead, self._reason = True, LOCAL_DELIVERY_SEND_QUEUE_FULL
                 return False
+            if data and not self._pending:
+                # Pin the dispatch decision before the cap wrapper accounts
+                # this send. Pending PCM has not reached the closed vendor;
+                # a managed successor owns its one funded dispatch instead.
+                self._cost_reselect_onset = self._cost_reselect_managed and (
+                    idle_reopen_cost_reselect_enabled() or self._failback_due()
+                )
             self._pending.extend(data)
             if self._wire_epoch is not None:
                 audio = observed_audio(data, self._wire_epoch, capture_spans.get())
@@ -273,6 +371,47 @@ class IdleSonioxSocket(STTSocket):
         if self._reopen_task is None or self._reopen_task.done():
             self._reopen_task = create_named_task(self._resume(), name='soniox_idle_reopen')
         return await self._reopen_task
+
+    @property
+    def idle_reopen_pending(self) -> bool:
+        return self._idle_since is not None and bool(self._pending)
+
+    def set_cost_reselect_managed(self, enabled: bool, failback_due: Callable[[], bool] | None = None) -> None:
+        self._cost_reselect_managed = enabled
+        if failback_due is not None:
+            self._failback_due = failback_due
+
+    @property
+    def idle_reopen_cost_reselect_pending(self) -> bool:
+        return self.idle_reopen_pending and self._cost_reselect_onset
+
+    @property
+    def defer_admission_charge(self) -> bool:
+        return self.idle_reopen_cost_reselect_pending
+
+    async def request_cost_reselect(self) -> bool:
+        """Flush old text before yielding the retained onset to managed handoff.
+
+        This is a planned transport boundary, not provider-failure evidence.
+        The serving owner takes the pending PCM through its existing retry or
+        ordered-tail path; no new socket is opened from inside the old writer.
+        """
+        if self._close_task is not None:
+            await self._close_task
+            self._close_task = None
+        if self._finishing:
+            return False
+        if self._transport.is_connection_dead:
+            return False  # A real rejection during drain keeps its typed failure.
+        self._account_avoided()
+        self.idle_cost_reselect_requested = True
+        self._dead, self._reason = True, 'normal_close'
+        return False
+
+    def note_cost_reopened(self) -> None:
+        self._idle_budget.rearm_at = time.monotonic() + self._idle_budget.rearm_seconds
+        self._metrics.reopens.inc()
+        self._metrics.cohort_reopens.labels(arm=self._idle_budget.arm).inc()
 
     async def _resume(self) -> bool:
         started = time.monotonic()
@@ -294,7 +433,11 @@ class IdleSonioxSocket(STTSocket):
         callback = self._socket_callback(offset, self._socket_epoch)
 
         try:
-            self._transport = await self._connect(callback)
+            origin_token = current_transport_origin.set('idle_reopened')
+            try:
+                self._transport = await self._connect(callback)
+            finally:
+                current_transport_origin.reset(origin_token)
             if self._wire_epoch is not None:
                 self._transport.set_wire_ledger(self._wire_epoch)
             if self._capture_axis_ledger is not None:
@@ -337,6 +480,7 @@ class IdleSonioxSocket(STTSocket):
             if accepted:
                 self._resumed_audio = data
                 self._metrics.reopens.inc()
+                self._metrics.cohort_reopens.labels(arm=self._idle_budget.arm).inc()
                 self._start_watchdog()
                 record_stt_provider_connect(provider='soniox', outcome=CONNECT_SUCCESS)
             return accepted
@@ -347,13 +491,18 @@ class IdleSonioxSocket(STTSocket):
             from utils.stt.live_chain import failure_reason
 
             self._metrics.failures.inc()
+            self._metrics.cohort_failures.labels(arm=self._idle_budget.arm).inc()
             self._dead = True
-            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='other')
+            # A reopen failure the classifier cannot name degrades to typed
+            # connection_lost, never the ``other`` metric token: this latch is
+            # the leg's death reason on every later failover hop (P59).
+            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='connection_lost')
             self.idle_reopen_failed = True
             record_stt_provider_connect(provider='soniox', outcome=CONNECT_FAILURE, reason=self._reason)
             return False
         finally:
             self._metrics.latency.observe(time.monotonic() - started)
+            self._metrics.cohort_latency.labels(arm=self._idle_budget.arm).observe(time.monotonic() - started)
 
     def _socket_callback(self, offset: float, epoch: int) -> Any:
         def callback(segments: list[dict[str, Any]]) -> None:
@@ -398,7 +547,9 @@ class IdleSonioxSocket(STTSocket):
 
     def _account_avoided(self) -> None:
         if self._idle_closed_at is not None:
-            self._metrics.avoided.inc(max(0.0, time.monotonic() - self._idle_closed_at))
+            avoided = max(0.0, time.monotonic() - self._idle_closed_at)
+            self._metrics.avoided.inc(avoided)
+            self._metrics.cohort_avoided.labels(arm=self._idle_budget.arm).inc(avoided)
             self._idle_closed_at = time.monotonic()
 
     def enable_writer_pacing(self, *args: Any) -> None:
@@ -430,6 +581,7 @@ class IdleSonioxSocket(STTSocket):
             self._transport.finish()
 
     async def drain_and_close(self) -> None:
+        begin_stream_close(self._transport)  # The drain or idle close below records it after closing.
         self.finish()
         if self._watchdog is not None:
             await asyncio.gather(self._watchdog, return_exceptions=True)

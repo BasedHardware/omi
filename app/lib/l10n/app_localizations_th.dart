@@ -708,7 +708,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get remembering => 'การจดจำ';
 
   @override
-  String get unlimitedPlan => 'แผนไม่จำกัด';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'จัดการแผน';
@@ -730,7 +730,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get upgrade => 'อัปเกรด';
 
   @override
-  String get upgradeToUnlimited => 'อัปเกรดเป็นไม่จำกัด';
+  String get upgradeToUnlimited => 'อัปเกรดเป็น Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -2265,10 +2265,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get firmwareUsbWarning => 'การเชื่อมต่อ USB ระหว่างการอัปเดตอาจทำให้อุปกรณ์ของคุณเสียหาย';
 
   @override
-  String get firmwareBatteryAbove15 => 'แบตเตอรี่เหนือ 15%';
+  String get firmwareBatteryRequirement => 'แบตเตอรี่เหนือ 30%';
 
   @override
-  String get firmwareEnsureBattery => 'ตรวจสอบให้แน่ใจว่าอุปกรณ์ของคุณมีแบตเตอรี่ 15%';
+  String get firmwareEnsureBattery => 'ตรวจสอบให้แน่ใจว่าอุปกรณ์ของคุณมีแบตเตอรี่ 30%';
 
   @override
   String get firmwareStableConnection => 'การเชื่อมต่อที่เสถียร';
@@ -3135,7 +3135,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'อัปเกรดเป็น Pro';
+  String get upgradeToPro => 'อัปเกรดเป็น Omi Pro';
 
   @override
   String get getOmiDevice => 'รับอุปกรณ์ Omi';
@@ -4252,7 +4252,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get trainingDataProgram => 'โปรแกรมข้อมูลการฝึก';
 
   @override
-  String get getOmiUnlimitedFree => 'รับ Omi Unlimited ฟรีโดยการมีส่วนร่วมข้อมูลของคุณเพื่อฝึกโมเดล AI';
+  String get getOmiUnlimitedFree => 'รับ Omi Pro ฟรีโดยการมีส่วนร่วมข้อมูลของคุณเพื่อฝึกโมเดล AI';
 
   @override
   String get trainingDataBullets => '• ข้อมูลของคุณช่วยปรับปรุงโมเดล AI\n• แชร์เฉพาะข้อมูลที่ไม่ละเอียดอ่อน';
@@ -4395,6 +4395,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get continueText => 'ดำเนินการต่อ';
+
+  @override
+  String get checkoutExistingSubscription =>
+      'คุณมีการสมัครสมาชิกอยู่แล้ว โปรดจัดการการสมัครสมาชิกปัจจุบันแทนการเริ่มใหม่';
 
   @override
   String get resubscribeFirstToChangePlans => 'สมัครใหม่ก่อนเพื่อเปลี่ยนแผน';
@@ -8549,6 +8553,9 @@ class AppLocalizationsTh extends AppLocalizations {
       'ไม่สามารถถอดเสียงได้ — การบันทึกยังดำเนินต่อไปและเสียงของคุณถูกบันทึกไว้';
 
   @override
+  String get captureNoAudioFromPendant => 'ไม่มีเสียงจากจี้';
+
+  @override
   String get capturing => 'กำลังบันทึก';
 
   @override
@@ -8668,6 +8675,28 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteReasonOther => 'อื่นๆ';
 
   @override
+  String get deletePauseInsteadTitle => 'พัก Omi แทนไหม?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'หยุดบันทึกและเก็บทุกอย่างไว้ กลับมาเมื่อไรก็ได้';
+
+  @override
+  String get deletePauseRecordingLine => 'การบันทึกจะหยุดลง ระหว่างที่คุณไม่อยู่จะไม่มีการบันทึกข้อมูลใหม่';
+
+  @override
+  String get deletePauseKeepLine => 'ความทรงจำ บทสนทนา และแอปของคุณจะคงเดิมทุกประการ';
+
+  @override
+  String get deletePauseReturnLine =>
+      'คุณยังคงลงชื่อเข้าใช้ไว้ กลับมาบันทึกต่อเมื่อไรก็ได้ การสมัครสมาชิกจะไม่เปลี่ยนแปลง';
+
+  @override
+  String get pauseOmiButton => 'พัก Omi';
+
+  @override
+  String get continueDeletingButton => 'ลบต่อไป';
+
+  @override
   String get deleteFlowFeedbackTitle => 'บอกเราเพิ่มเติม';
 
   @override
@@ -8687,6 +8716,28 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'มี $count รายการบันทึกที่ยังประมวลผลอยู่ หากลบตอนนี้ รายการเหล่านี้จะหายไป',
+      one: 'มี 1 รายการบันทึกที่ยังประมวลผลอยู่ หากลบตอนนี้ รายการนี้จะหายไป',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ลงชื่อเข้าใช้อีกครั้งภายใน $days วันเพื่อกู้คืนบัญชี',
+      one: 'ลงชื่อเข้าใช้อีกครั้งภายใน 1 วันเพื่อกู้คืนบัญชี',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'พิมพ์ DELETE เพื่อยืนยัน';
@@ -8792,12 +8843,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'แชท: \$$used / \$$limit ที่ใช้ในเดือนนี้';
+    return 'แชท: $used / $limit ที่ใช้ในเดือนนี้';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'แชท: \$$used ที่ใช้ในเดือนนี้';
+    return 'แชท: $used ที่ใช้ในเดือนนี้';
   }
 
   @override
@@ -9597,7 +9648,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get downgradeToFreemiumAction => 'เปลี่ยนไปใช้เวอร์ชันฟรี';
 
   @override
-  String get getFreeUnlimitedAccess => 'รับสิทธิ์ใช้งานไม่จำกัดฟรี';
+  String get getFreeUnlimitedAccess => 'รับ Omi Pro ฟรี';
 
   @override
   String get shareDataForTraining => 'แบ่งปันข้อมูลเพื่อการฝึกฝน';
@@ -10474,8 +10525,12 @@ class AppLocalizationsTh extends AppLocalizations {
       'ดาวน์โหลดอัปเดตไม่ได้ และอุปกรณ์ของคุณไม่มีการเปลี่ยนแปลง ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองอีกครั้ง';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'ยังไม่สามารถดูระดับแบตเตอรี่ได้ กรุณารอสักครู่ แล้วเชื่อมต่อใหม่หากยังเป็นเช่นเดิม';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'แบตเตอรี่อยู่ที่ $level% ชาร์จอุปกรณ์ให้ได้อย่างน้อย 15% ก่อนอัปเดต';
+    return 'แบตเตอรี่อยู่ที่ $level% ชาร์จอุปกรณ์ให้ได้อย่างน้อย 30% ก่อนอัปเดต';
   }
 
   @override
@@ -11024,6 +11079,12 @@ class AppLocalizationsTh extends AppLocalizations {
       'การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์';
 
   @override
+  String get captureConnecting => 'กำลังเชื่อมต่อ…';
+
+  @override
+  String get captureNoAudioDetail => 'พลอยห้อยเชื่อมต่ออยู่ แต่ไม่มีเสียงใดถึงโทรศัพท์ของคุณ';
+
+  @override
   String get captureIngressNeedsReconnect => 'เสียงไม่ถึงแอป — เชื่อมต่อ Omi ของคุณใหม่';
 
   @override
@@ -11052,13 +11113,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'พื้นที่ใกล้เต็ม';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi จะเชื่อมต่อใหม่เอง';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12186,12 +12240,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'ตรวจสอบการเชื่อมต่อ';
 
   @override
-  String get forYou => 'สำหรับคุณ';
-
-  @override
-  String get stopThese => 'หยุดรายการแบบนี้';
-
-  @override
   String get dismiss => 'ปิด';
 
   @override
@@ -12404,43 +12452,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewChangesSectionOther => 'การเปลี่ยนแปลงอื่นๆ';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count บทสนทนา',
-      one: '1 บทสนทนา',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ตำแหน่ง',
-      one: '1 ตำแหน่ง',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'แสดงทั้งหมด $count';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'เลิกทำทั้งหมด';
 
   @override
-  String get reviewChangeSeeEvidence => 'ดูหลักฐาน';
-
-  @override
   String get reviewChangeViewConversation => 'ดูบทสนทนา';
-
-  @override
-  String get reviewChangeViewTask => 'ดูงาน';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12515,10 +12530,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dreamReportTitle => 'รายงาน Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'โหมดตัวอย่าง: Dream แสดงสิ่งที่จะเปลี่ยน แต่ยังไม่มีอะไรในบัญชีของคุณเปลี่ยนแปลง';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream ใช้การเปลี่ยนแปลงเหล่านี้โดยอัตโนมัติ เลิกทำรายการใดก็ได้ใน การเปลี่ยนแปลงล่าสุด';
 
@@ -12564,11 +12575,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dreamReportNothingFound => 'ไม่มีอะไรต้องแก้ไข';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'อ่านแล้ว $records รายการ · $tokens โทเค็น';
-  }
-
-  @override
   String get dreamReportWouldFix => 'จะแก้ไข';
 
   @override
@@ -12584,27 +12590,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dreamReportLearnedWords => 'คำที่เรียนรู้';
 
   @override
-  String get dreamReportFeedback => 'รายงานให้ทีม Omi แล้ว';
-
-  @override
   String get dreamReportDeletedItem => 'รายการที่ลบแล้ว';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'วันนี้ทำงานแล้ว $count จาก $limit รอบ';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'มี $count การเปลี่ยนแปลงรออยู่',
-      one: 'มี 1 การเปลี่ยนแปลงรออยู่',
-      zero: 'ไม่มีการเปลี่ยนแปลงที่รออยู่',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12632,28 +12618,6 @@ class AppLocalizationsTh extends AppLocalizations {
       one: 'แนะนำ 1 รายการ',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ข้ามการเปลี่ยนแปลงเก่า $count รายการ',
-      one: 'ข้ามการเปลี่ยนแปลงเก่า 1 รายการ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'เก็บรายงาน $count รายการไว้เพื่อความเป็นส่วนตัว',
-      one: 'เก็บรายงาน 1 รายการไว้เพื่อความเป็นส่วนตัว',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -12790,7 +12754,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'ส่งข้อความเสียงแล้ว Omi จะตอบกลับ';
 
   @override
-  String get chatAppsPartOfPro => 'แอปแชตเป็นส่วนหนึ่งของ Pro';
+  String get chatAppsPartOfPro => 'แอปแชตเป็นส่วนหนึ่งของ Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'ข้อความ';
@@ -13235,6 +13199,30 @@ class AppLocalizationsTh extends AppLocalizations {
   String get paywallOutlineHeadline => 'ไม่พลาดแม้แต่คำเดียวอีกต่อไป';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/ปี',
+        'other': '/เดือน',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/ปี',
+        'other': '/เดือน',
+      },
+    );
+    return 'ฟรี $days วัน จากนั้น $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13329,10 +13317,18 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ใช้แผนฟรีต่อไป';
+  String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
 
   @override
-  String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
+  String get paywallMonthlyFallbackTitle => 'ยังไม่พร้อมสำหรับทั้งปีใช่ไหม';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'เริ่มแบบรายเดือนแทน ฟรี $days วันเท่าเดิม จากนั้น $price ต่อเดือน ยกเลิกได้ทุกเมื่อ';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'ทดลองรายเดือนฟรี';
 
   @override
   String paywallTrialStarted(int days) {
@@ -13382,15 +13378,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → โทรศัพท์';
-
-  @override
-  String get syncStepLabelUpload => 'อัปโหลด';
-
-  @override
-  String get syncStepLabelTranscribe => 'ถอดเสียง';
-
-  @override
   String get syncDetailsTitle => 'รายละเอียดการซิงค์';
 
   @override
@@ -13412,9 +13399,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsTranscribing => 'กำลังถอดเสียงบน Omi';
 
   @override
-  String get syncDetailsForSupport => 'สำหรับฝ่ายสนับสนุน';
-
-  @override
   String get syncDetailsAudioFiles => 'ไฟล์เสียง';
 
   @override
@@ -13424,7 +13408,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsCopy => 'คัดลอกรายละเอียดสำหรับฝ่ายสนับสนุน';
 
   @override
-  String get chatAppsChannelPlanRequired => 'ใช้ได้ในแพ็กเกจ Operator และ Architect';
+  String get chatAppsChannelPlanRequired => 'ใช้ได้ในแพ็กเกจ Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13559,32 +13543,6 @@ class AppLocalizationsTh extends AppLocalizations {
       locale: localeName,
       other: '$count การบันทึก',
       one: '1 การบันทึก',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String onTheWaySummary(String totals) {
-    return '$totals กำลังมา';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'กำลังอัปโหลด $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'ใกล้เสร็จแล้ว $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ต้องการความสนใจ $count',
-      one: 'ต้องการความสนใจ 1',
     );
     return '$_temp0';
   }
@@ -13934,7 +13892,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'ทำงานขณะที่โทรศัพท์กำลังชาร์จ';
 
   @override
-  String get onDeviceUpgradeBody => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
+  String get onDeviceUpgradeBody => 'อัปเกรดเป็น Omi Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceAtCapFooter => 'ไม่ว่าเลือกแบบไหนก็ไม่มีอะไรสูญหาย คุณเปลี่ยนได้ที่ การตั้งค่า › การถอดเสียง';
@@ -14115,7 +14073,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ทำใหม่ด้วย Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
+  String get onDeviceRedoHint => 'อัปเกรดเป็น Omi Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceKeepEverything => 'เก็บทุกอย่างไว้บนโทรศัพท์เครื่องนี้';
@@ -14312,4 +14270,1041 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi ยังคงบันทึกอยู่';
+
+  @override
+  String get episodeNow => 'ตอนนี้';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'สด · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ช่วง',
+      one: '1 ช่วง',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'ช่วงเวลา';
+
+  @override
+  String get episodeFollowUps => 'สิ่งที่ต้องทำต่อ';
+
+  @override
+  String get episodeOpenTranscript => 'เปิดถอดความ';
+
+  @override
+  String get episodeSoFar => 'จนถึงตอนนี้';
+
+  @override
+  String get episodeUpdatedJustNow => 'อัปเดตเมื่อครู่ · บันทึกฉบับเต็มเมื่อจบ';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'อัปเดตเมื่อ $minutes นาทีที่แล้ว · บันทึกฉบับเต็มเมื่อจบ';
+  }
+
+  @override
+  String get episodeNotesUnavailable => 'บันทึกสดไม่ได้อัปเดต โปรดดูข้อความถอดเสียงไปก่อน';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'กำลังบันทึก · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'ตอนก่อนหน้า';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'ช่วงเสียงที่รอดำเนินการ: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
+
+  @override
+  String get episodeWrapUpNow => 'สรุปตอนนี้';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi จะสรุปให้เมื่อคุณไปทำอย่างอื่น';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'พบงาน: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'พบการเตือน: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'บันทึกงานแล้ว: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'กำลังเพิ่ม $duration จาก Omi ของคุณ';
+  }
+
+  @override
+  String get episodeListeningNow => 'กำลังฟัง';
+
+  @override
+  String get deviceHeardToday => 'ได้ยินวันนี้';
+
+  @override
+  String get deviceToSync => 'รอซิงค์';
+
+  @override
+  String get deviceRightNow => 'ขณะนี้';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'ตอนสด · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'กำลังตามให้ทัน';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done จาก $total นาที';
+  }
+
+  @override
+  String get deviceRecently => 'ล่าสุด';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'ตัดการเชื่อมต่อ $duration';
+  }
+
+  @override
+  String get deviceControls => 'การควบคุม';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'นอกจากนี้: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'กดปุ่มบน Omi ของคุณ';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'กดสั้นๆ หนึ่งครั้ง แล้วถามอะไรก็ได้';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'ถามคำถามของคุณ';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'พูดออกมาเลย Omi กำลังฟังอยู่';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'เสร็จแล้ว? กดปุ่มอีกครั้งเพื่อส่ง';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'คุณได้รับฟรี $days วัน';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro ฟรี $days วัน เราจะเตือนก่อนเรียกเก็บเงิน ยกเลิกได้ทุกเมื่อ';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'รับทดลองใช้ $days วัน';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'เริ่มทดลองใช้ฟรี $days วัน';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'เปิด Omi ของคุณ';
+
+  @override
+  String get pairingPowerOnSubtitle => 'กดปุ่มหนึ่งครั้งและวางไว้ใกล้โทรศัพท์';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'เรียบร้อย Omi จะบันทึกบทสนทนาของคุณต่อไปในพื้นหลัง';
+
+  @override
+  String get noThanks => 'ไม่เป็นไร ขอบคุณ';
+
+  @override
+  String get recapInTheBackground => 'ในเบื้องหลัง';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'อยู่ต่อพร้อมส่วนลด $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'อยู่ต่อและจ่ายเดือนละ $price ใน $months เดือนถัดไป';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'เรียบร้อย ส่วนลด $percent% ใน $months เดือนถัดไป';
+  }
+
+  @override
+  String get othersSpeakerLabel => 'คนอื่น ๆ';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => 'เสร็จแล้ว';
+
+  @override
+  String get openLoopAnswerRemind => 'เตือนฉันทีหลัง';
+
+  @override
+  String get openLoopAnswerDrop => 'ทิ้งไป';
+
+  @override
+  String get syncRejectionInvalidDate => 'วันที่บันทึกเสียงไม่ถูกต้อง';
+
+  @override
+  String get syncDeleteKeptUploading => 'บางส่วนยังคงอัปโหลดอยู่และถูกเก็บไว้';
+
+  @override
+  String get syncRejectionServer => 'เซิร์ฟเวอร์ปฏิเสธ';
+
+  @override
+  String get syncRejectionTooLarge => 'ใหญ่เกินไป';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration บนโทรศัพท์';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'การอัปโหลดหยุดชั่วคราว — จะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'ต่อจาก “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· ตั้งแต่ $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'โน้ตจะเริ่มเมื่อถอดความฉบับสุดท้ายมาถึง';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'ถอดความฉบับสุดท้ายตามหลังอยู่ประมาณ $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'ถอดความฉบับสุดท้ายกำลังตามมา';
+
+  @override
+  String get livePreviewNoEngineBody => 'คำของคุณจะปรากฏที่นี่ในหนึ่งถึงสองนาทีหลังจากพูด';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'เมื่อสักครู่ บนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'เปิดข้อความสด';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'กำลังจะมาถึง';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'เมื่อกลับมาออนไลน์';
+
+  @override
+  String get onTheWayUploadsByItself => 'อัปโหลดเองอัตโนมัติ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'จะอัปโหลดเองอัตโนมัติเมื่อคุณกลับมาออนไลน์ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง';
+
+  @override
+  String get onTheWayDayUploading => 'กำลังอัปโหลด';
+
+  @override
+  String get onTheWayDayNext => 'ถัดไป';
+
+  @override
+  String get onTheWayDayQueued => 'อยู่ในคิว';
+
+  @override
+  String get onTheWayNoDate => 'ไม่มีวันที่';
+
+  @override
+  String get onTheWayFootnote =>
+      'การบันทึกที่ล้มเหลวจะลองใหม่ต่อในเบื้องหลัง ส่วนสิ่งที่เราถอดเสียงไม่ได้จะถูกรายงานถึงเราโดยอัตโนมัติ';
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'ยังไม่ได้อัปโหลด $count รายการบันทึก หากลบตอนนี้ รายการเหล่านี้จะหายไป — เปิดแอปค้างไว้เพื่ออัปโหลดให้เสร็จ',
+      one: 'ยังไม่ได้อัปโหลด 1 รายการบันทึก หากลบตอนนี้ รายการนี้จะหายไป — เปิดแอปค้างไว้เพื่ออัปโหลดให้เสร็จ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'ตรวจสอบว่าจะเกิดอะไรขึ้นกับข้อมูลของคุณก่อนออกจากระบบ';
+
+  @override
+  String get deletePauseConfirmation => 'พัก Omi แล้ว กลับมาบันทึกต่อเมื่อไรก็ได้';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การบันทึก $count รายการยังประมวลผลอยู่ โดยจะเก็บไว้ในบัญชีของคุณอีก ',
+      one: 'การบันทึก 1 รายการยังประมวลผลอยู่ โดยจะเก็บไว้ในบัญชีของคุณอีก ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days วัน.',
+      one: '1 วัน.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ความทรงจำและบทสนทนาของคุณจะถูกลบหลังจาก $days วัน',
+      one: 'ความทรงจำและบทสนทนาของคุณจะถูกลบหลังจาก 1 วัน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'แอปและการเชื่อมต่อของคุณจะถูกยกเลิกทันที';
+
+  @override
+  String get deleteSubscriptionImmediately => 'การสมัครสมาชิกของคุณจะถูกยกเลิกทันที';
+
+  @override
+  String get deleteRestoreTitle => 'บัญชีของคุณอยู่ระหว่างรอลบ';
+
+  @override
+  String get deleteRestoreSubtitle => 'เปลี่ยนใจแล้วหรือไม่? กู้คืนบัญชีก่อนที่ข้อมูลจะถูกลบ';
+
+  @override
+  String get deleteRestoreKeepData => 'กู้คืนความทรงจำและบทสนทนาของคุณ';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'การสมัครสมาชิกของคุณยังคงถูกยกเลิก หลังจากกู้คืนแล้ว ให้เชื่อมต่อแอปและการเชื่อมต่ออีกครั้ง';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'คุณเหลือเวลาอีก $days วันในการกู้คืนบัญชีของคุณ',
+      one: 'คุณเหลือเวลาอีก 1 วันในการกู้คืนบัญชีของคุณ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'กู้คืนบัญชีของฉัน';
+
+  @override
+  String get deleteFinishButton => 'ลบให้เสร็จ';
+
+  @override
+  String get deleteFinishNowButton => 'ลบบัญชีของฉันทันที';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'การดำเนินการนี้จะสิ้นสุดช่วงเวลากู้คืน บัญชีและรายการบันทึกทั้งหมดจะถูกลบอย่างถาวร';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'คุณเหลือเวลาไม่ถึง 1 วันในการกู้คืนบัญชีของคุณ';
+
+  @override
+  String get deleteFinishNowTitle => 'ลบบัญชีของคุณ?';
+
+  @override
+  String get syncHealthAlerts => 'การแจ้งเตือนสถานะการซิงค์';
+
+  @override
+  String get syncHealthAlertsDescription => 'แจ้งเตือนหาก Omi ไม่ได้ซิงค์การบันทึกเป็นเวลาเกินหนึ่งวัน';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน $hours ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน $hours ชั่วโมง';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'สรุปรายวันในหน้าหลัก';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
+
+  @override
+  String get yearlySwitchTitle => 'เปลี่ยนเป็นรายปี';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ประหยัด $amount ต่อปี';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ประหยัด $amount ต่อปีเมื่อจ่ายรายปี';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'แพ็กเกจเดิม จ่ายปีละครั้ง';
+
+  @override
+  String get yearlySwitchPlanLabel => 'แพ็กเกจ';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan $price ต่อปี';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'ชำระวันนี้';
+
+  @override
+  String get yearlySwitchRenews => 'ต่ออายุ';
+
+  @override
+  String get yearlySwitchCreditNote => 'รวมเครดิตสำหรับช่วงที่เหลือของเดือนนี้แล้ว';
+
+  @override
+  String get yearlySwitchDeclined => 'การชำระเงินถูกปฏิเสธ คุณยังจ่ายแบบรายเดือนอยู่';
+
+  @override
+  String get yearlySwitchFailed => 'เปลี่ยนไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'โหลดราคาไม่ได้';
+
+  @override
+  String get yearlySwitchUnavailable => 'ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้';
+
+  @override
+  String get yearlySwitchDoneTitle => 'ตอนนี้คุณจ่ายแบบรายปีแล้ว';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'เรียกเก็บ $amount วันนี้ ต่ออายุ $date';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'ส่งข้อความในแอป $app หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'ขอรหัสใหม่แล้วส่งจากแอป$app';
+  }
+
+  @override
+  String get episodeWritingNotes => 'กำลังเขียนบันทึก…';
+
+  @override
+  String get episodeWritingNotesDetail => 'กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'ครอบคลุมถึง $time · บันทึกฉบับเต็มเมื่อจบ';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'ถอดความถึง $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'บันทึกแล้ว $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
+
+  @override
+  String get searchNoiseFilter => 'คลิปสั้น';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count บทสนทนา',
+      one: '1 บทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ตำแหน่ง',
+      one: '1 ตำแหน่ง',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'แสดงทั้งหมด $count';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'ดูหลักฐาน';
+
+  @override
+  String get reviewChangeViewTask => 'ดูงาน';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'โหมดตัวอย่าง: Dream แสดงสิ่งที่จะเปลี่ยน แต่ยังไม่มีอะไรในบัญชีของคุณเปลี่ยนแปลง';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'อ่านแล้ว $records รายการ · $tokens โทเค็น';
+  }
+
+  @override
+  String get dreamReportFeedback => 'รายงานให้ทีม Omi แล้ว';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'วันนี้ทำงานแล้ว $count จาก $limit รอบ';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'มี $count การเปลี่ยนแปลงรออยู่',
+      one: 'มี 1 การเปลี่ยนแปลงรออยู่',
+      zero: 'ไม่มีการเปลี่ยนแปลงที่รออยู่',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ข้ามการเปลี่ยนแปลงเก่า $count รายการ',
+      one: 'ข้ามการเปลี่ยนแปลงเก่า 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'เก็บรายงาน $count รายการไว้เพื่อความเป็นส่วนตัว',
+      one: 'เก็บรายงาน 1 รายการไว้เพื่อความเป็นส่วนตัว',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → โทรศัพท์';
+
+  @override
+  String get syncStepLabelUpload => 'อัปโหลด';
+
+  @override
+  String get syncStepLabelTranscribe => 'ถอดเสียง';
+
+  @override
+  String get syncDetailsForSupport => 'สำหรับฝ่ายสนับสนุน';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'ถอดและร่างไว้บนมือถือของคุณขณะพูด โน้ตฉบับเต็มจะมาพร้อมกับถอดความฉบับสุดท้าย';
+
+  @override
+  String get episodeOnThisPhone => 'บนเครื่องนี้';
+
+  @override
+  String get livePreviewNoEngineTitle => 'กำลังบันทึกอย่างปลอดภัย';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'กำลังไล่ตามอีก $duration';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'รายละเอียดสำหรับฝ่ายสนับสนุน';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ซ่อนคลิปสั้นไว้ $count รายการ',
+      one: 'ซ่อนคลิปสั้นไว้ 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'แสดง';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ซ่อนคลิปสั้น $count รายการ',
+      one: 'ซ่อนคลิปสั้น 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'ใช้กับทั้งการบันทึก';
+
+  @override
+  String get speakerSelectionChanged => 'ผู้พูดเปลี่ยนไปแล้ว โปรดเลือกบรรทัดอีกครั้ง';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'การบันทึกใหญ่เกินไป เลือกบรรทัดให้น้อยลงในหนึ่งบทสนทนา',
+        'partial': 'บันทึกบางบรรทัดแล้ว เลือกบรรทัดที่เหลือแล้วลองอีกครั้ง',
+        'other': 'บันทึกบางบรรทัดแล้ว เลือกบรรทัดที่เหลือแล้วลองอีกครั้ง',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'เปลี่ยนชื่อ $count บรรทัดในบทสนทนาที่มีอยู่เท่านั้น',
+      one: 'เปลี่ยนชื่อ 1 บรรทัดในบทสนทนาที่มีอยู่เท่านั้น',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'บรรทัดอื่นของเสียงนี้ (ยังไม่ยืนยันขอบเขตการบันทึก)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'กำลังดำเนินการให้เสร็จ…';
+
+  @override
+  String get buildAndShareApp => 'สร้างและแชร์แอปที่คุณกำหนดเอง';
+
+  @override
+  String get membersAndCounting => '8000+ สมาชิกและนับเพิ่มขึ้นเรื่อยๆ';
+
+  @override
+  String get privacyIntro =>
+      'ที่ Omi เรามุ่งมั่นในการปกป้องความเป็นส่วนตัวของคุณ หน้านี้ช่วยให้คุณสามารถควบคุมวิธีการจัดเก็บและใช้ข้อมูลของคุณได้';
+
+  @override
+  String get dataProtectionDesc =>
+      'ข้อมูลของคุณได้รับการรักษาความปลอดภัยโดยค่าเริ่มต้นด้วยการเข้ารหัสที่แข็งแกร่ง ตรวจสอบการตั้งค่าและตัวเลือกความเป็นส่วนตัวในอนาคตด้านล่าง';
+
+  @override
+  String get transcriptionConfig => 'กำหนดค่าผู้ให้บริการ STT';
+
+  @override
+  String get importDataConfig => 'นำเข้าข้อมูลจากแหล่งอื่น';
+
+  @override
+  String get understandingSubtitle => 'คำที่เข้าใจจากบทสนทนาของคุณ';
+
+  @override
+  String get rememberingSubtitle => 'ข้อเท็จจริงและรายละเอียดที่จำไว้ให้คุณ';
+
+  @override
+  String get debugLogsDesc => 'ช่วยวินิจฉัยปัญหา';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'นี่จะลบข้อมูลกราฟความรู้ที่สร้างขึ้นทั้งหมด (โหนดและการเชื่อมต่อ) ความทรงจำเดิมของคุณจะยังคงปลอดภัย กราฟจะถูกสร้างขึ้นใหม่เมื่อเวลาผ่านไปหรือเมื่อมีคำขอครั้งถัดไป';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'ล้างโหนดและการเชื่อมต่อทั้งหมด';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'เมื่อโมเดลของเราดีขึ้น เราสามารถให้ผลการถอดเสียงที่ดีขึ้นสำหรับการบันทึกของคุณ';
+
+  @override
+  String get bestInClassTranscription => 'การถอดเสียงชั้นนำโดยไม่ต้องตั้งค่า';
+
+  @override
+  String get optimizedForConversation => 'เหมาะสำหรับบทสนทนา';
+
+  @override
+  String get highAccuracy => 'ความแม่นยำสูง';
+
+  @override
+  String get privacyFirst => 'ความเป็นส่วนตัวเป็นอันดับแรก';
+
+  @override
+  String get keepGoing => 'ทำต่อไป คุณทำได้ดีมาก';
+
+  @override
+  String get personalGrowthJourney => 'การเดินทางพัฒนาตนเองของคุณกับ AI ที่ฟังทุกคำพูดของคุณ';
+
+  @override
+  String get memoryAllowUse => 'อนุญาตให้ใช้';
+
+  @override
+  String get memoryDontUse => 'ไม่ต้องใช้';
+
+  @override
+  String get alwaysInContext => 'อยู่ในบริบทเสมอ';
+
+  @override
+  String get firmwareBatteryAbove15 => 'แบตเตอรี่เหนือ 15%';
+
+  @override
+  String get configureSttProvider => 'กำหนดค่าผู้ให้บริการ STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'ล้างโหนดและการเชื่อมต่อทั้งหมด';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'ยินดีต้อนรับสู่ Omi! คู่หูAIของคุณพร้อมที่จะช่วยเหลือคุณในการสนทนา งาน และอื่นๆ';
+
+  @override
+  String get conversationsProcessedAutomatically => 'การสนทนาได้รับการประมวลผลโดยอัตโนมัติ';
+
+  @override
+  String get getInsightsInstantly => 'รับข้อมูลเชิงลึกและสรุปได้ทันที';
+
+  @override
+  String get dailyScoreDescription => 'คะแนนที่ช่วยให้คุณ\nโฟกัสกับการปฏิบัติงานได้ดีขึ้น';
+
+  @override
+  String get startConversation => 'เริ่มการสนทนาและปล่อยให้มนต์ขลังเริ่มต้น';
+
+  @override
+  String get wearableAiCompanion => 'เพื่อน AI สวมใส่ได้';
+
+  @override
+  String get organizeAndControlMemories => 'จัดระเบียบและควบคุมความทรงจำของคุณ';
+
+  @override
+  String get setAllMemoriesToPrivate => 'ตั้งค่าความทรงจำทั้งหมดเป็นส่วนตัว';
+
+  @override
+  String get setAllMemoriesToPublic => 'ตั้งค่าความทรงจำทั้งหมดเป็นสาธารณะ';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'เลือกภาษาที่คุณต้องการสำหรับประสบการณ์ Omi ที่ดีที่สุด';
+
+  @override
+  String get enableFeaturesForBestExperience => 'เปิดใช้งานฟีเจอร์เพื่อประสบการณ์ Omi ที่ดีที่สุดบนอุปกรณ์ของคุณ';
+
+  @override
+  String get deliveryTimeDescription => 'เวลาที่จะรับสรุปรายวัน';
+
+  @override
+  String get configureSTTProvider => 'กำหนดค่าผู้ให้บริการ STT';
+
+  @override
+  String get setConversationEndDescription => 'กำหนดเวลาที่การสนทนาสิ้นสุดโดยอัตโนมัติ';
+
+  @override
+  String get clearNodesDescription => 'ล้างโหนดและการเชื่อมต่อทั้งหมด';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'การดำเนินการนี้จะลบข้อมูลกราฟความรู้ที่ได้รับทั้งหมด ความทรงจำต้นฉบับของคุณจะยังคงปลอดภัย';
+
+  @override
+  String get createAndShareYourApp => 'สร้างและแชร์แอปของคุณ';
+
+  @override
+  String get e2eeDescription =>
+      'การเข้ารหัสแบบ end-to-end เป็นมาตรฐานทองคำสำหรับความเป็นส่วนตัว เมื่อเปิดใช้งาน ข้อมูลของคุณจะถูกเข้ารหัสบนอุปกรณ์ของคุณก่อนที่จะส่งไปยังเซิร์ฟเวอร์ของเรา ซึ่งหมายความว่าไม่มีใคร แม้แต่ Omi สามารถเข้าถึงเนื้อหาของคุณได้';
+
+  @override
+  String get secureEncryptionDescription =>
+      'ข้อมูลของคุณถูกเข้ารหัสด้วยคีย์ที่ไม่ซ้ำกันสำหรับคุณบนเซิร์ฟเวอร์ของเรา ซึ่งโฮสต์บน Google Cloud ซึ่งหมายความว่าเนื้อหาดิบของคุณไม่สามารถเข้าถึงได้โดยใครก็ตาม รวมถึงพนักงาน Omi หรือ Google โดยตรงจากฐานข้อมูล';
+
+  @override
+  String get e2eeCardDescription =>
+      'เปิดใช้งานเพื่อความปลอดภัยสูงสุดที่มีเพียงคุณเท่านั้นที่สามารถเข้าถึงข้อมูลของคุณ แตะเพื่อเรียนรู้เพิ่มเติม';
+
+  @override
+  String get yourOmiUnleashed => 'Omi ของคุณ ปลดปล่อย ไปสู่ Unlimited เพื่อความเป็นไปได้ไม่สิ้นสุด';
+
+  @override
+  String get privacyIntroText =>
+      'ที่ Omi เราให้ความสำคัญกับความเป็นส่วนตัวของคุณอย่างจริงจัง เราต้องการมีความโปร่งใสเกี่ยวกับข้อมูลที่เรารวบรวมและวิธีการใช้งาน นี่คือสิ่งที่คุณต้องรู้:';
+
+  @override
+  String get commitmentText =>
+      'เรามุ่งมั่นที่จะใช้ข้อมูลที่เรารวบรวมเพียงเพื่อทำให้ Omi เป็นผลิตภัณฑ์ที่ดีขึ้นสำหรับคุณ ความเป็นส่วนตัวและความไว้วางใจของคุณเป็นสิ่งสำคัญที่สุดสำหรับเรา';
+
+  @override
+  String get thankYouText =>
+      'ขอบคุณที่เป็นผู้ใช้ที่มีคุณค่าของ Omi หากคุณมีคำถามหรือข้อกังวลใดๆ โปรดติดต่อเราที่ team@basedhardware.com';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'การดำเนินการนี้จะลบข้อมูลกราฟความรู้ที่ได้มาทั้งหมด (โหนดและการเชื่อมต่อ) ความทรงจำดั้งเดิมของคุณจะยังคงปลอดภัย กราฟจะถูกสร้างขึ้นใหม่เมื่อเวลาผ่านไปหรือเมื่อมีการร้องขอครั้งต่อไป';
+
+  @override
+  String get howPeopleWorks =>
+      'เมื่อสร้างบุคคลแล้ว คุณสามารถไปที่การถอดเสียงบทสนทนาและกำหนดส่วนที่เกี่ยวข้องให้พวกเขา ด้วยวิธีนี้ Omi จะสามารถจดจำเสียงพูดของพวกเขาได้เช่นกัน!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'สร้างและแชร์แอปที่กำหนดเอง';
+
+  @override
+  String get onboardingChooseYourPreference => 'เลือกการตั้งค่าของคุณ';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'ให้สิทธิ์การเข้าถึงที่จำเป็น';
+
+  @override
+  String get apiEnvironmentDescription => 'เลือกเซิร์ฟเวอร์ที่จะเชื่อมต่อ';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'สายของคุณยังคงเป็นส่วนตัวและปลอดภัย';
+
+  @override
+  String get omisStorageDesc =>
+      'เมื่อ Omi ของคุณไม่ได้เชื่อมต่อกับโทรศัพท์ มันจะเก็บเสียงไว้ในหน่วยความจำภายใน คุณจะไม่สูญเสียการบันทึกใดๆ';
+
+  @override
+  String get permissionsSetupDescription => 'เปิดใช้งานสิทธิ์บางอย่างเพื่อให้ Omi ทำงานได้อย่างเต็มที่';
+
+  @override
+  String get architectSubtitle => 'AI ขั้นสูง — แชทนับพัน + ระบบอัตโนมัติ';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current จาก $total';
+  }
+
+  @override
+  String get newestFirst => 'ใหม่สุดก่อน';
+
+  @override
+  String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'ไม่ได้บันทึก ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'ตรวจสอบเสียงจากสองวันที่ผ่านมาแบบรวดเร็ว';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'การถอดเสียงที่รออยู่ $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi ไม่ส่งเสียง — แตะเพื่อเชื่อมต่อใหม่';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi จะเชื่อมต่อใหม่เอง';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'เก็บ $name ไว้ และคาดว่าจะเจอในบทสนทนาของคุณ';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi จะถามก่อนจับคู่เสียงที่ใกล้เคียงกัน';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'ตอบใช่จะเพิ่มความมั่นใจของ $name';
+  }
+
+  @override
+  String get localCopiesSection => 'สำเนาในเครื่อง';
+
+  @override
+  String get forYou => 'สำหรับคุณ';
+
+  @override
+  String get stopThese => 'หยุดรายการแบบนี้';
+
+  @override
+  String get meetingActionItemsTitle => 'รายการที่ต้องทำ';
+
+  @override
+  String get addToTasks => 'เพิ่มไปยังงาน';
+
+  @override
+  String get showInTranscript => 'แสดงบทถอดเสียง';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'กำหนดส่งประมาณ $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'กำหนดส่งโดยประมาณ $date';
+  }
+
+  @override
+  String get openTask => 'เปิดงาน';
+
+  @override
+  String get completeTask => 'ทำงานให้เสร็จ';
+
+  @override
+  String get reopenTask => 'เปิดงานอีกครั้ง';
+
+  @override
+  String get addingToTasks => 'กำลังเพิ่มไปยังงาน';
+
+  @override
+  String get taskAddedToTasks => 'สร้างงานแล้ว';
+
+  @override
+  String get completedStatus => 'เสร็จสิ้น';
+
+  @override
+  String get notCompletedStatus => 'รอดำเนินการ';
+
+  @override
+  String get referralAffiliate => 'โปรแกรมพันธมิตร';
+
+  @override
+  String get referralCampaignTerms =>
+      'เพื่อนรับส่วนลดอุปกรณ์ Omi 10% การซื้อของเพื่อนต่างคน 2 คนแรกปลดล็อก Pro 2 เดือน การซื้อของเพื่อนต่างคนอีก 3 คนปลดล็อกเพิ่ม 3 เดือน สูงสุด 5 คน รวม 5 เดือน';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return 'Pro $months เดือน · ซื้อ $count/$target ครั้ง';
+  }
+
+  @override
+  String get referralClaim => 'รับรางวัล';
+
+  @override
+  String referralClaimed(int months) {
+    return 'รับ Pro แล้ว $months เดือน';
+  }
+
+  @override
+  String get referralRewardPending => 'รางวัลจะเก็บไว้จนกว่าการสมัครแบบชำระเงินจะสิ้นสุด';
+
+  @override
+  String get referralCampaignTitle => 'แนะนำ Omi รับ Pro ฟรี';
+
+  @override
+  String get referralCampaignSubtitle => 'เพื่อนได้ส่วนลด Omi 10% คุณได้ Pro สูงสุด 5 เดือน';
+
+  @override
+  String get referralShareInvite => 'แชร์คำเชิญ';
+
+  @override
+  String get referralYourRewards => 'รางวัลของคุณ';
+
+  @override
+  String get referralRewardFirstTitle => 'Pro 2 เดือน';
+
+  @override
+  String get referralRewardFirstDetail => 'เมื่อเพื่อน 2 คนซื้อ Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'อีก 3 เดือน';
+
+  @override
+  String get referralRewardSecondDetail => 'เมื่อเพื่อนอีก 3 คนซื้อ';
+
+  @override
+  String get referralClaimShort => 'รับ';
+
+  @override
+  String get paymentDeclinedTitle => 'บัตรของคุณถูกปฏิเสธ';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

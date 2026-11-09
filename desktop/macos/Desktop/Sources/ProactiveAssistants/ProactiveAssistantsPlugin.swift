@@ -1,3 +1,10 @@
+// The proactive-assistants plugin: scheduled screen-capture ticks, plugin
+// lifecycle, and the capture/resume gating policy.
+//
+// ProactiveCapturePolicy is a pure enum so the precondition -- a tick may run
+// only while monitoring and neither recovering nor background-polling -- stays
+// unit-testable; if stopMonitoring fails to clear its flags, every later tick
+// is gated off, and only a test can pin that contract.
 import Cocoa
 import CoreGraphics
 @preconcurrency import UserNotifications
@@ -461,7 +468,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// 60-second repeating write-only heartbeat for monitoring-duration
   /// recovery: refreshes `lastHeartbeatAt` on the persisted
   /// `MonitoringSessionRecord` so a crash has an upper bound on how long the
-  /// session actually ran. Modeled on `startSentryHeartbeat()`
+  /// session actually ran.
   /// (`OmiApp.swift`), but deliberately NOT invalidated by
   /// `pauseCaptureForSystemInterruption()` — the whole point is to keep
   /// ticking through sleep/screen-lock, which is exactly what that function

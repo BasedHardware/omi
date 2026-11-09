@@ -3,7 +3,7 @@
 Offline-synced conversations were created with raw coordinates and no address
 (the sync path never ran ``resolve_geolocation`` like REST create, developer
 API, integration ingest, and live finalization do), so recap timeline rows for
-synced conversations showed "Unknown". ``_run_full_pipeline_background_async``
+synced conversations showed "Unknown". ``run_full_pipeline_background_async``
 — the single coordinator both the inline and Cloud Tasks dispatch branches
 call — now enriches the job's geolocation once, before any segment is
 processed.
@@ -20,6 +20,7 @@ inside the stub window — importing a sibling test module's fixture set left
 real modules behind that later files could not re-import cleanly.
 """
 
+import importlib
 import os
 from pathlib import Path
 from types import ModuleType
@@ -51,6 +52,14 @@ def _build_pipeline_fakes() -> dict:
     ``database``/``models`` get package markers with dead paths so their real
     ``__init__``s never run (same trick as the transcription-prefs fakes).
     """
+    # Pure metric owners must outlive per-test stub windows. Otherwise import
+    # cleanup removes their modules while Prometheus retains their collectors,
+    # and the next isolated segment fails before reaching its provider.
+    importlib.import_module('utils.stt.batch_language')
+    importlib.import_module('utils.speakers.context')
+    importlib.import_module('utils.stt.transcript_admission')
+    importlib.import_module('utils.batch_pipeline.language_metrics')
+    importlib.import_module('utils.observability.sync_phases')
     fakes: dict = {}
 
     for parent in ('database', 'models'):
@@ -64,6 +73,8 @@ def _build_pipeline_fakes() -> dict:
         'database.sync_jobs',
         'database.sync_ledger',
         'database.sync_empty_recovery',
+        'database.sync_cap_recovery',
+        'database.redis_db',
         'database.owner_profile_updates',
         'database.firestore_read_metrics',
         'models.conversation',
@@ -77,6 +88,8 @@ def _build_pipeline_fakes() -> dict:
         'utils.conversations.lifecycle',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
+        'utils.conversations.smart_merge',
+        'utils.conversations.sync_hold_completion',
         'utils.dream_vocabulary',
         'utils.sync.bridge',
         'utils.executors',
@@ -148,6 +161,7 @@ def _prepare(pipeline, wav_paths):
     )
     pipeline._cleanup_files = MagicMock()
     pipeline.get_timestamp_from_path = MagicMock(return_value=123)
+    pipeline.get_wav_duration = MagicMock(return_value=1.0)  # the coordinator reads real durations
     pipeline.get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
     pipeline.get_sync_job = MagicMock(return_value={})
     pipeline.bind_or_converge_sync_ledger_completion = MagicMock(return_value=None)
@@ -184,7 +198,7 @@ async def test_coordinator_enriches_geolocation_once_before_segments(pipeline):
 
     pipeline.async_resolve_geolocation = _fake_resolver
 
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-geo-1', 'uid', ['/tmp/a.opus', '/tmp/b.opus'], 'omi', False, '/tmp/job-geo-1', geolocation=raw
     )
 
@@ -205,7 +219,7 @@ async def test_coordinator_keeps_raw_geolocation_when_geocode_fails(pipeline):
 
     pipeline.async_resolve_geolocation = _failing_resolver
 
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-geo-2', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job-geo-2', geolocation=raw
     )
 
@@ -236,7 +250,7 @@ async def test_coordinator_without_geolocation_never_attempts_a_geocode(pipeline
 
     pipeline.async_resolve_geolocation = _resolver
 
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-geo-3', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job-geo-3'
     )
 
@@ -258,6 +272,7 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
     fingerprint = 'persistence:document_size_limit'
     pipeline.checkpoint_sync_content_partial_result = MagicMock(return_value=True)
     pipeline.add_processed_sync_segment_id = MagicMock(return_value=True)
+    pipeline.checkpoint_and_mark_sync_segment = MagicMock(return_value='marked')
     pipeline._finalize_sync_job_for_run = MagicMock()
     pipeline.release_sync_content_claim = MagicMock(return_value=True)
     pipeline.release_sync_content_claim_after_job_retired = MagicMock(return_value=True)
@@ -291,7 +306,7 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
         return True
 
     pipeline.process_segment = process
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-partial-strike',
         'uid',
         ['/tmp/a.opus'],
@@ -306,9 +321,10 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
     # The healthy path adds no ledger read per segment.
     pipeline.get_processed_sync_segment_ids.assert_called_once()
     pipeline.get_sync_content_partial_result.assert_called_once()
-    # Only the successful sibling is checkpointed as processed.
-    assert [call.args[3] for call in pipeline.add_processed_sync_segment_id.call_args_list] == ['b']
-    pipeline.checkpoint_sync_content_partial_result.assert_called_once()
+    # Only the successful sibling is checkpointed and marked, in one ledger commit.
+    assert [call.args[4] for call in pipeline.checkpoint_and_mark_sync_segment.call_args_list] == ['b']
+    pipeline.add_processed_sync_segment_id.assert_not_called()
+    pipeline.checkpoint_sync_content_partial_result.assert_not_called()
     pipeline.mark_sync_content_completed.assert_not_called()
     result = pipeline._finalize_sync_job_for_run.call_args.args[2]
     assert result['failed_segments'] == 1 and result['total_segments'] == 2
@@ -343,7 +359,7 @@ async def test_finalize_internal_failure_does_not_blame_provider_in_job_result(p
         return False
 
     pipeline.process_segment = process
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-finalize', 'synthetic', ['/tmp/finalize.opus'], 'omi', False, '/tmp/job-finalize'
     )
     result = pipeline._finalize_sync_job_for_run.call_args.args[2]

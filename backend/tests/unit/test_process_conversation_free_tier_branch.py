@@ -70,6 +70,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
+    client_mod.run_transactional = MagicMock()
     add('database._client', client_mod)
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
@@ -138,7 +139,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
-        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
     ):
@@ -165,7 +165,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
@@ -223,7 +222,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.memory.rejected_memory_feedback', AutoMockModule('utils.memory.rejected_memory_feedback'))
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(_BACKEND / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)
@@ -239,6 +239,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     # The finalizer's smart-merge step is off by default; its own tests drive it.
     smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
     smart_merge.smart_merge_step = AsyncMock(return_value=False)
+    # The finalizer classifies a donor-resume failure with the real exception
+    # class and closed code set (isinstance must never see a mock).
+    from utils.conversations.smart_merge import _INCOMPLETE_CODES, SmartMergeIncomplete, _incomplete_cause
+
+    smart_merge.SmartMergeIncomplete = SmartMergeIncomplete
+    smart_merge._INCOMPLETE_CODES = _INCOMPLETE_CODES
+    smart_merge._incomplete_cause = _incomplete_cause
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
     services_pkg = ModuleType('services')
@@ -309,7 +316,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
     return spies
 
 
@@ -993,3 +999,114 @@ def test_successful_explicit_enrichment_clears_retired_terminal_marker_without_o
     _drive_reprocess(pc, _existing_desktop(conv_id), uid=uid)
     assert store.rows[path][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is None
     assert store.rows[path]['client_processing'] == projection
+
+
+@pytest.mark.parametrize('defer', [False, True])
+def test_silent_backfill_persists_summary_and_never_schedules_derived_work(monkeypatch, pc, defer):
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    spies['get_structured'].return_value = (Structured(title='Recovered', overview='Synthetic complete summary'), False)
+    _stub_completed_for_normal_path(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    bundle, disposition = [], []
+    lazy = __import__('utils.conversations.demand_processing', fromlist=['lazy_enrichment_enabled'])
+    monkeypatch.setattr(lazy, 'lazy_enrichment_enabled', lambda _: True)
+    submitted = MagicMock(side_effect=AssertionError('historical work must stay silent'))
+    monkeypatch.setattr(pc, 'submit_with_context', submitted)
+    pc.process_conversation(
+        'uid',
+        'en',
+        _existing_desktop(),
+        trigger=pc.ProcessingTrigger.SILENT_BACKFILL,
+        defer_derived_effects=defer,
+        derived_effects_observer=bundle.append,
+        derived_effects_disposition_observer=disposition.append,
+        recovery_transcript_decoded=True,
+    )
+    assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
+    assert not bundle
+    assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+    for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
+        spies[key].assert_not_called()
+    submitted.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('anyio_backend', ['asyncio'])
+@pytest.mark.parametrize('replay', [False, True])
+@pytest.mark.parametrize('fanout_status', ['claimed', 'completed', 'fenced'])
+async def test_silent_job_retry_and_completed_replay_never_fan_out(
+    monkeypatch, pc, anyio_backend, replay, fanout_status
+):
+    del anyio_backend
+    finalizer = _load_finalizer()
+    conversation = SimpleNamespace(
+        id='historic',
+        status=ConversationStatus.completed if replay else ConversationStatus.processing,
+        discarded=False,
+        geolocation=None,
+        language='en',
+    )
+
+    async def load(*_):
+        return None, {pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD: replay}, conversation
+
+    monkeypatch.setattr(finalizer, '_load_admitted_conversation', load)
+    monkeypatch.setattr(finalizer, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda _: None)
+    monkeypatch.setattr(finalizer, 'warm_rollout_cohorts', AsyncMock())
+    monkeypatch.setattr(finalizer, 'finalization_pending', lambda *_: False)
+    monkeypatch.setattr(finalizer, 'is_donor', lambda _: False)
+
+    def process(_uid, _language, conv, **kwargs):
+        assert kwargs['trigger'] is pc.ProcessingTrigger.SILENT_BACKFILL
+        conv.status = ConversationStatus.completed
+        kwargs['persistence_observer'](True)
+        return conv
+
+    monkeypatch.setattr(finalizer, 'process_conversation', process)
+    monkeypatch.setattr(
+        finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *_: {'status': fanout_status, 'fanout_key': 'key'},
+    )
+    complete = MagicMock(return_value=True)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
+    for name in [
+        '_maybe_start_shadow',
+        'link_duplicate_captures',
+        'extract_memories',
+        'record_finalized_meeting_receipt',
+        'schedule_person_voice_learning_retry',
+    ]:
+        monkeypatch.setattr(finalizer, name, MagicMock(side_effect=AssertionError('silent delivery escaped')))
+    for name in [
+        'smart_merge_step',
+        'await_meeting_evidence',
+        'trigger_external_integrations',
+        '_episode_after_finalization',
+        '_episode_after_absorb',
+        'resolve_frame_request_authority',
+    ]:
+        monkeypatch.setattr(finalizer, name, AsyncMock(side_effect=AssertionError('silent trigger escaped')))
+    result = await finalizer.finalize_persisted_conversation(
+        'uid',
+        'historic',
+        finalization_job_id='job',
+        dispatch_generation=1,
+        lease_epoch=2,
+        trigger=pc.ProcessingTrigger.SILENT_BACKFILL,
+    )
+    assert result.value == ('fenced' if fanout_status == 'fenced' else 'completed')
+    assert complete.call_count == (1 if fanout_status == 'claimed' else 0)
+
+
+def test_silent_backfill_budget_denial_cannot_persist_a_title_only_success(monkeypatch, pc):
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(pc.funded_processing, 'processing_allowed', lambda *_: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    with pytest.raises(pc.RecoveryStructureUnavailableError, match='processing budget unavailable'):
+        pc.process_conversation('uid', 'en', _existing_desktop(), trigger=pc.ProcessingTrigger.SILENT_BACKFILL)
+    assert payloads == []
+    spies['get_structured'].assert_not_called()

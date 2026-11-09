@@ -4,9 +4,16 @@ The gateway is the producer, but Firestore is the canonical backend-owned
 ledger. Events are immutable and idempotent by provider-attempt ID so retries
 or process restarts cannot double-count a billed attempt.
 
-Every newly persisted attempt also increments a fail-open hashed per-user-day
-rollup (``llm_gateway_user_days``) so the finops daily pull can read one
-document per user-day instead of paging every attempt document.
+Every newly persisted attempt with a user uid also increments a fail-open
+hashed per-user-day rollup (``llm_gateway_user_days``) so the finops daily pull
+can read one document per user-day instead of paging every attempt document.
+
+Attempts without a uid (internal Jev, embedding and translation calls) skip
+the rollup. They all landed on one ``{date}_anonymous`` document, ~97k
+increments a day on a single Firestore document. No budget reader can ask for
+it (each needs a uid), and the finops pull derives the anonymous bucket from
+the attempts themselves. ``LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP=off`` is the kill
+switch that restores the write.
 """
 
 from __future__ import annotations
@@ -14,11 +21,13 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import os
 from collections.abc import Mapping
 from typing import Any
 
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
+from prometheus_client import Counter
 
 from database._client import get_firestore_client
 from database.llm_usage import resolve_usage_plan_id
@@ -31,8 +40,21 @@ _UNATTRIBUTED = 'unattributed'
 _ANONYMOUS_UID_HASH = 'anonymous'
 _PROVIDER_COST_FIELDS = {'openai': 'cost_openai', 'gemini': 'cost_gemini'}
 _OTHER_PROVIDER_COST_FIELD = 'cost_other_provider'
+ANONYMOUS_ROLLUP_SKIP_ENV = 'LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP'
+_OFF_VALUES = frozenset({'off', 'false', '0', 'no', 'disabled'})
+
+USER_DAY_ROLLUPS_TOTAL = Counter(
+    'llm_gateway_user_day_rollups_total',
+    'Per-user-day rollup writes after a new attempt, by bounded outcome',
+    ['outcome'],
+)
 
 logger = logging.getLogger(__name__)
+
+
+def anonymous_rollup_skipped() -> bool:
+    """On unless the kill switch is set to an off word."""
+    return os.getenv(ANONYMOUS_ROLLUP_SKIP_ENV, '').strip().lower() not in _OFF_VALUES
 
 
 def record_llm_gateway_attempt(
@@ -139,6 +161,9 @@ def _record_user_day_rollup(client: Any, data: Mapping[str, Any], shadow: Mappin
             logger.warning('user-day rollup skipped: invalid date format %r', raw_date)
             return
         uid_hash = _hashed_uid(data.get('user_uid'))
+        if uid_hash == _ANONYMOUS_UID_HASH and anonymous_rollup_skipped():
+            USER_DAY_ROLLUPS_TOTAL.labels(outcome='skipped_anonymous').inc()
+            return
         cost = _micro_usd(data.get('estimated_cost_micro_usd'))
         update: dict[str, Any] = {
             'date': date,
@@ -157,7 +182,9 @@ def _record_user_day_rollup(client: Any, data: Mapping[str, Any], shadow: Mappin
             update['attempts_unpriced'] = firestore.Increment(1)
         update.update(shadow)
         client.collection(USER_DAYS_COLLECTION).document(f'{date}_{uid_hash}').set(update, merge=True)
+        USER_DAY_ROLLUPS_TOTAL.labels(outcome='written').inc()
     except Exception:
+        USER_DAY_ROLLUPS_TOTAL.labels(outcome='failed').inc()
         # The attempt ledger write already succeeded; losing one rollup
         # increment is recoverable from the attempts collection itself.
         logger.exception('user-day rollup failed (date=%s uid_hash=%s)', data.get('date'), uid_hash)

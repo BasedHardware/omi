@@ -12,9 +12,16 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 
 from deepgram import LiveTranscriptionEvents
-from config.stt_provider_policy import STTServingSurface
+from config.stt_provider_policy import DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
 from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
+
+
+@pytest.fixture(autouse=True)
+def restored_plain_parakeet_slot(monkeypatch):
+    # These legacy capability/preference cases exercise the pre-retirement
+    # chain. Default-off behavior is covered by test_streaming_parakeet_slot.
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
 
 
 @pytest.mark.asyncio
@@ -1062,13 +1069,19 @@ class TestGetSttServiceForLanguage:
 
         assert (service, lang, model) == (STTService.modulate, 'zh', 'velma-2')
 
-    def test_retired_configuration_uses_non_deepgram_defaults(self):
-        with patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    def test_disabled_configuration_uses_non_deepgram_defaults(self):
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']),
+            patch.dict('os.environ', {'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'false'}),
+            patch.dict(
+                'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+                {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+            ),
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
-        # After #10048 fix: Deepgram retirement is subtractive; Modulate is the safe primary
+        # Without operator rollback, a disabled deployment's model token cannot
+        # reactivate it or the plain Parakeet slot; keep the vendor default.
         assert (service, lang, model) == (STTService.modulate, 'en', 'velma-2')
 
     def test_unsupported_language_fails_closed(self):

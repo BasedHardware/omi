@@ -1,0 +1,7 @@
+{
+  "version": "0.12.532",
+  "date": "2026-10-24",
+  "changes": [
+    "Conversations summarized on-device no longer show the 🧠 placeholder when no emoji was chosen; they show the category emoji or 💬"
+  ]
+}

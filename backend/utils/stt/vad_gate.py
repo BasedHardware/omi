@@ -202,6 +202,12 @@ class VADStreamingGate:
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
         self._vad_inference_lock = threading.Lock()
         self._count_vad_windows = listen_loop_metrics_enabled()
+        # D2 edge shadow (utils/stt/edge_shadow.py): None unless this session
+        # is mirrored. Windows scored since this gate (re)started, and the
+        # probabilities of the last chunk when tapped.
+        self.edge_tap: Any = None
+        self._vad_windows_scored = 0
+        self._tap_probs: Optional[List[float]] = None
         start = VAD_GATE_SPEECH_THRESHOLD if speech_threshold is None else speech_threshold
         cont = start if continue_threshold is None else continue_threshold
         self._speech_threshold = start
@@ -273,6 +279,10 @@ class VADStreamingGate:
             self._vad_state, self._vad_context = make_fresh_state()
             self._vad_buffer = np.array([], dtype=np.float32)
             self._pcm_remainder = b''
+            self._vad_windows_scored = 0
+            if self.edge_tap is not None:
+                # Fresh VAD state: to the edge this is a new gate.
+                self.edge_tap = self.edge_tap.renew()
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0  # type: ignore[reportPrivateUsage]  # sync internal mapper cursor
             logger.info(
@@ -323,6 +333,18 @@ class VADStreamingGate:
 
         return data_int16.astype(np.float32) / 32768.0
 
+    def _report_to_edge(self, report: Callable[[], None]) -> None:
+        """Run an edge-shadow report; a failure detaches the tap, never the gate."""
+        try:
+            report()
+        except Exception:
+            logger.warning('edge shadow tap failed; detaching session=%s', self.session_id)
+            self.edge_tap = None
+
+    def decision_params(self) -> Tuple[float, float, float]:
+        """(start threshold, continue threshold, hangover ms) for the edge shadow."""
+        return self._speech_threshold, self._continue_threshold, self._hangover_ms
+
     def _decision_threshold(self) -> float:
         """Start threshold in SILENCE; continue threshold once speech is established."""
         if self._state in (GateState.SPEECH, GateState.HANGOVER):
@@ -360,6 +382,8 @@ class VADStreamingGate:
                         window, self._vad_state, self._vad_context
                     )
                     windows += 1
+                    if self._tap_probs is not None:
+                        self._tap_probs.append(prob)
                     if prob > threshold:
                         is_speech = True
                     else:
@@ -370,6 +394,7 @@ class VADStreamingGate:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
             self._last_vad_mixed = is_speech and saw_silence
+            self._vad_windows_scored += windows
             if self._count_vad_windows:
                 record_vad_windows(windows, time.perf_counter() - started)
             return is_speech
@@ -407,10 +432,23 @@ class VADStreamingGate:
         self._audio_cursor_ms += chunk_ms
 
         vad_pcm = pcm_data
+        scored_copy = False
         if score_pcm is not None and len(score_pcm) == len(pcm_data):
             vad_pcm = score_pcm
+            scored_copy = True
         self._last_vad_mixed = False
-        is_speech = self._run_vad(vad_pcm)
+        tap = self.edge_tap
+        if tap is None:
+            is_speech = self._run_vad(vad_pcm)
+        else:
+            first_ordinal = self._vad_windows_scored
+            self._tap_probs = []
+            try:
+                is_speech = self._run_vad(vad_pcm)
+                probs = self._tap_probs
+            finally:
+                self._tap_probs = None
+            self._report_to_edge(lambda: tap.chunk(self, start_sample, first_ordinal, probs, agc=scored_copy))
         if start_sample is not None and n_samples > 0:
             self._speech_frames.append(
                 (start_sample, start_sample + n_samples, None if self._last_vad_mixed else is_speech)
@@ -541,6 +579,10 @@ class VADStreamingGate:
             if is_speech:
                 # Transition: SILENCE → SPEECH
                 self._state = GateState.SPEECH
+                tap = self.edge_tap
+                preroll_start = self._pre_roll[0][1]
+                if tap is not None and start_sample is not None and preroll_start is not None:
+                    self._report_to_edge(lambda: tap.opened(start_sample, preroll_start))
                 # Emit pre-roll + current chunk
                 pre_roll_audio = b''.join(chunk for chunk, _ in self._pre_roll)
                 send_spans = self._spans_of(self._pre_roll)

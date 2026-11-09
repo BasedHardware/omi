@@ -155,6 +155,34 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         audience_fallback=True,  # _account_deletion_oidc_audience(): audience or handler URL
         deadline_seconds=1500,
     ),
+    # Legacy-sync retirement (contracts (a)/(d)): outbox wakes for the workers role. dispatch_when names the real
+    # runtime switch (M1 Grok L01-2); the ops file (lane 7) declares the queue wiring.
+    TaskEdge(
+        id='enrichment',
+        route='/v2/enrichment/run',
+        # config/enrichment.py: new sr- obligations bind to this queue only when ENRICHMENT_ROUTE=enrichment_queue.
+        dispatch_when={'ENRICHMENT_ROUTE': 'enrichment_queue'},
+        target_env='ENRICHMENT_TASKS_HANDLER_URL',
+        dispatch_audience_env='ENRICHMENT_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='ENRICHMENT_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='ENRICHMENT_TASKS_HANDLER_URL',
+        audience_fallback=True,  # dispatch_binding() and routers/enrichment.py: audience or handler URL
+        deadline_seconds=1500,
+    ),
+    TaskEdge(
+        id='provider-stt',
+        route='/v2/batch-pipeline/provider-stt/run',
+        # utils/provider_stt_tasks.py wakes whenever the handler URL and queue are set; no mode switch exists.
+        dispatch_when={},
+        target_env='PROVIDER_STT_TASKS_HANDLER_URL',
+        dispatch_audience_env='PROVIDER_STT_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='PROVIDER_STT_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='PROVIDER_STT_TASKS_HANDLER_URL',
+        audience_fallback=True,  # create_wake(): PROVIDER_STT_TASKS_OIDC_AUDIENCE or handler URL
+        empty_target_ok=True,  # unset handler = provider-STT dispatch not configured on that host
+        deadline_seconds=1500,
+        append_route=True,  # create_wake() joins ROUTE onto the handler origin, so the URL carries no path
+    ),
 )
 
 # Flags whose effective value must agree on every listed deployment that exists in the environment. Use for
@@ -614,7 +642,7 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
 
 
 def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
-    """Env key for os.getenv(K), os.environ.get(K), os.environ[K] and *env*(K) helpers; K literal or constant."""
+    """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared default_on(K) helpers."""
     if isinstance(node, ast.Call) and node.args:
         key = _literal_key(node.args[0], constants)
         if key is None:
@@ -628,7 +656,7 @@ def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
             and func.value.attr == 'environ'
         ):
             return key
-        if 'env' in name.lower():
+        if 'env' in name.lower() or name in {'_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'}:
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)
@@ -1282,6 +1310,29 @@ def _dedupe(violations: list[Violation]) -> list[Violation]:
     return list(seen.values())
 
 
+def _lane_check(module: str, function: str) -> Check:
+    """A check whose body lives in ``scripts/cross_service_checks/<module>.py`` (owned by another swarm lane).
+
+    Imported lazily so the module can import this one. Until the module lands, the check contributes nothing;
+    once it exists, a missing function is an error, never a silent skip.
+    """
+
+    def run(ctx: Context) -> list[Violation]:
+        import importlib
+
+        name = f'scripts.cross_service_checks.{module}'
+        try:
+            mod = importlib.import_module(name)
+        except ModuleNotFoundError as exc:
+            if exc.name != name:
+                raise
+            return []
+        return getattr(mod, function)(ctx)
+
+    run.__name__ = f'{module}.{function}'
+    return run
+
+
 INVARIANTS: tuple[tuple[str, Check], ...] = (
     ('renders', check_renders),
     ('config-map-source', check_config_map_sources),
@@ -1294,6 +1345,8 @@ INVARIANTS: tuple[tuple[str, Check], ...] = (
     ('kill-switch-reader', check_kill_switches),
     ('no-uid-literals', check_no_uid_literals),
     ('cross-env-url', check_cross_env_urls),
+    ('task-target-retry-semantics', _lane_check('task_targets', 'check_task_target_retry_semantics')),  # lane 4
+    ('staging-mirrors-prod', _lane_check('staging', 'check_staging_mirrors_prod')),  # lane 2
 )
 
 

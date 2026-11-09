@@ -707,7 +707,7 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(Ink.primary)
 
-            Text("Send app logs and report a problem")
+            Text("Save a redacted report on this Mac to share manually")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }

@@ -401,6 +401,16 @@ The CLI is built so an LLM can use it without a wrapper:
 See [`examples/agent_quickstart.md`](examples/agent_quickstart.md) for a worked
 example.
 
+### Common result types
+
+JSON output encodes dates and datetimes as ISO 8601 strings, filesystem paths
+and UUIDs as strings, and sets/frozensets as arrays. Set members keep their JSON
+value types, including numbers, booleans and tuple members encoded as arrays.
+Set arrays are sorted by each member's JSON representation for reproducible
+output; this is not numeric or insertion order. The same conversion applies
+inside nested mappings and Pydantic models. Pretty table cells show set members
+in deterministic display order and keep their text literal.
+
 ## Rate limits
 
 The dev API enforces per-policy hourly limits:

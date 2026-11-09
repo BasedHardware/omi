@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -26,6 +27,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -49,23 +51,28 @@ import 'package:omi/services/wals/wal.dart';
 
 /// A provider for every type a registered page reads, so any page pumps without a
 /// ProviderNotFoundException. A scenario seeds state by passing its own provider of the same type.
-List<SingleChildWidget> defaultAuditProviders() => [
+///
+/// [usage] replaces the real [UsageProvider] (the one that calls payment APIs). The demo walk
+/// passes a local catalog. The default stays the real provider, so a capture still shows the
+/// unloaded and failed plan states.
+List<SingleChildWidget> defaultAuditProviders({UsageProvider Function()? usage}) => [
       ChangeNotifierProvider(create: (_) => MessageProvider()),
       ChangeNotifierProvider(
-          create: (_) => ActionItemsProvider(
-                getActionItems: (
-                        {limit = 100,
-                        offset = 0,
-                        completed,
-                        conversationId,
-                        startDate,
-                        endDate,
-                        dueStartDate,
-                        dueEndDate}) async =>
-                    const ActionItemsResponse(actionItems: []),
-                deleteActionItemRequest: (_) async => true,
-                updateActionItemRequest: (id, {description, completed, dueAt}) async => null,
-              )),
+        create: (_) => ActionItemsProvider(
+          getActionItems: (
+                  {limit = 100,
+                  offset = 0,
+                  completed,
+                  conversationId,
+                  startDate,
+                  endDate,
+                  dueStartDate,
+                  dueEndDate}) async =>
+              const ActionItemsResponse(actionItems: []),
+          deleteActionItemRequest: (_) async => true,
+          updateActionItemRequest: (id, {description, completed, dueAt}) async => null,
+        ),
+      ),
       ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
       ChangeNotifierProvider(create: (_) => AppProvider()),
       ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => true)),
@@ -73,13 +80,14 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider(create: (_) => IntegrationProvider()),
       ChangeNotifierProvider(create: (_) => MessagingChannelsProvider(readConfig: () async => ChatAppsConfig.off)),
       ChangeNotifierProvider(create: (_) => FolderProvider()),
-      ChangeNotifierProvider(create: (_) => UsageProvider()),
+      ChangeNotifierProvider(create: (_) => (usage ?? UsageProvider.new)()),
       ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
       ChangeNotifierProvider(
-          create: (_) => MemoriesProvider(
-                fetchMemoriesRequest: ({limit = 100, offset = 0, thisDeviceOnly = false}) async =>
-                    const GetMemoriesResult([], true),
-              )),
+        create: (_) => MemoriesProvider(
+          fetchMemoriesRequest: ({limit = 100, offset = 0, thisDeviceOnly = false}) async =>
+              const GetMemoriesResult([], true),
+        ),
+      ),
       ChangeNotifierProvider(create: (_) => GoalsProvider()),
       ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => LoadedTaskIntegrationProvider()),
       ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
@@ -91,7 +99,8 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
       ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
       ChangeNotifierProvider(
-          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
+        create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
+      ),
       ChangeNotifierProvider(create: (_) => OnboardingProvider()),
       ChangeNotifierProvider(create: (_) => McpProvider()),
       ChangeNotifierProvider<PaymentMethodProvider>(create: (_) => InertPaymentMethodProvider()),
@@ -101,13 +110,20 @@ List<SingleChildWidget> defaultAuditProviders() => [
 
 /// A device provider with no BLE behind it.
 class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  AuditDeviceProvider(
-      {this.connected = false, this.battery = 0, this.charging = false, this.newFirmware = false, this.device});
+  AuditDeviceProvider({
+    this.connected = false,
+    this.battery = 0,
+    this.charging = false,
+    this.newFirmware = false,
+    this.device,
+    this.syncStalled = false,
+  });
   final bool connected;
   final int battery;
   final bool charging;
   final bool newFirmware;
   final BtDevice? device;
+  final bool syncStalled;
 
   @override
   bool get isConnected => connected;
@@ -124,11 +140,15 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   bool get havingNewFirmware => newFirmware;
   @override
+  bool get isSyncStalled => syncStalled;
+  @override
+  SyncHealthEvaluation? get syncHealth => null;
+  @override
   String get latestStableFirmwareVersion => '';
   @override
   String get currentFirmwareVersion => 'Unknown';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override
@@ -147,7 +167,7 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class InertSyncProvider extends ChangeNotifier implements SyncProvider {
+class InertSyncProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   SyncState get syncState => const SyncState();
   @override
@@ -250,8 +270,12 @@ ServerConversation auditConversation(
   return ServerConversation(
     id: id,
     createdAt: DateTime(2026, 9, 20, 10),
-    structured: Structured(title, 'We agreed to simplify the recording flow and ship the revised notes Friday.',
-        emoji: '\u{1F4AC}', category: 'work'),
+    structured: Structured(
+      title,
+      'We agreed to simplify the recording flow and ship the revised notes Friday.',
+      emoji: '\u{1F4AC}',
+      category: 'work',
+    ),
     status: ConversationStatus.completed,
     discarded: discarded,
     transcriptSegments: segments,
@@ -269,7 +293,9 @@ Future<void> primeNetworkImages(WidgetTester tester, Iterable<String> urls) asyn
     return recorder.endRecording().toImage(8, 8);
   });
   for (final url in urls) {
-    PaintingBinding.instance.imageCache.putIfAbsent(CachedNetworkImageProvider(url),
-        () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: tile!.clone()))));
+    PaintingBinding.instance.imageCache.putIfAbsent(
+      CachedNetworkImageProvider(url),
+      () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: tile!.clone()))),
+    );
   }
 }

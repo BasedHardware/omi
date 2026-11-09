@@ -134,7 +134,6 @@ def _segment_fixture(monkeypatch, stt_result):
     monkeypatch.setattr(minimal_redrive, 'provider_is_enabled', lambda *_: True)
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='url'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', Mock(return_value=('modulate', 'en', 'velma-2')))
     stt = Mock(return_value=stt_result)
@@ -173,7 +172,9 @@ def test_normal_double_empty_keeps_selection_and_paid_recovery(monkeypatch):
     ok, _, _ = _run_segment()
     assert ok is False
     pipeline.get_prerecorded_service.assert_called_once()
-    assert all('selected_service' not in call.kwargs for call in stt.call_args_list)
+    # Ordinary unknown-language dispatch pins the provider selected after LID;
+    # minimal mode's independent Parakeet pin remains separate above.
+    assert all(call.kwargs['selected_service'] == ('modulate', 'multi', 'velma-2') for call in stt.call_args_list)
     recover.assert_called_once()
     silence.assert_called_once()
 
@@ -443,7 +444,7 @@ async def _run_coordinator(module, **kwargs):
         parakeet_service=MagicMock(return_value=PARAKEET),
         finalize=MagicMock(),
     )
-    await module._run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
+    await module.run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
     return seen, module._finalize_sync_job_for_run.call_args.args[2]
 
 
@@ -514,7 +515,7 @@ async def test_coordinator_retries_provider_unavailable_instead_of_finalizing(co
     coordinator.process_segment = segment
     coordinator.minimal_redrive = minimal_redrive
     with pytest.raises(TranscriptionFailure) as raised:
-        await coordinator._run_full_pipeline_background_async(
+        await coordinator.run_full_pipeline_background_async(
             'job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', task_mode=True
         )
     assert raised.value.error_code == 'sync_minimal_provider_unavailable'

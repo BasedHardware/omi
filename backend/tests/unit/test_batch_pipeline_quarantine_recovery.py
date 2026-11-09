@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+import logging
 from unittest.mock import Mock
 
 from types import SimpleNamespace
@@ -11,18 +12,21 @@ from config.batch_pipeline import recovery_owners
 from config.policy import resolve_batch_policy, resolve_stage_policy
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
-from database.batch_pipeline_projection_protocol import ProjectionReplay
+from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery, log_failure
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 
 @pytest.fixture
 def setup(monkeypatch):
+    # Existing recovery contract under the explicit safety-net rollback. The
+    # ship-on positive-VAD boundary is exercised in test_batch_pipeline_empty_safety.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', 'synthetic-owner')
@@ -229,6 +233,13 @@ def test_deletion_or_protection_change_cancels_mid_recovery(setup, change, phase
     assert ('batch_pipeline_prod_results', 'bad') not in client.rows
 
 
+def test_log_failure_preserves_terminal_event(caplog):
+    with caplog.at_level(logging.WARNING):
+        log_failure({'stage': 'provider', 'reason': 'provider_failed'})
+    assert caplog.messages == ['event=batch_recovery_failure stage=provider reason=provider_failed']
+    assert all(record.exc_info is None for record in caplog.records)
+
+
 def test_failed_stt_is_permanently_held_without_loop_or_sensitive_logs(setup, caplog):
     client, _, binding, _, stt, recovery = setup
     stt.side_effect = RuntimeError('PRIVATE_SYNTHETIC_SENTINEL')
@@ -248,6 +259,248 @@ def test_ambiguous_started_intent_is_held_after_bounded_dwell(setup):
     assert recovery.recover('bad', binding.owner_id) == 'held'
     assert row(client)['recovery_state'] == 'failed_held'
     stt.assert_not_called()
+
+
+def running_words(setup):
+    from database.batch_pipeline_recognizer_receipts import record_recognizer
+
+    client, store, binding, _, _, recovery = setup
+    prepared = recovery.protocol.prepare('bad', binding.owner_id, 0)
+    token = prepared['recovery']['token']
+    assert recovery.protocol.start('bad', token, 0)
+    assert record_recognizer(store, 'bad', token, 'recovery', 'modulate', 'words', 3, 1.0)
+    return token
+
+
+def test_missing_words_result_requeues_once_then_recovers_via_normal_task(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    old_token = running_words(setup)
+    original = deepcopy(row(client)['recovery'])
+    recovery.clock = lambda: 900
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery'] == original
+    recovery.clock = lambda: 901
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    marker = row(client)['recovery']
+    assert row(client)['recovery_state'] == 'prepared'
+    assert marker['token'] != old_token and marker['missing_result_retries'] == 1
+    assert marker['missing_result_history'] == [{key: original[key] for key in ('token', 'started_at', 'recognizers')}]
+    assert row(client)['audio_uri'] == 'gs://synthetic/audio'
+    assert not recovery.protocol.settle('bad', old_token, 902, 'gs://synthetic/late')
+    # A concurrent stale scanner cannot mint another replacement.
+    assert recovery.protocol.retry_missing_result('bad', old_token, 902) == 'held'
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert marker['token'] in enqueue.call_args.args[2]
+    stt.assert_not_called()
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['recovery_state'] == 'recovered'
+    stt.assert_called_once()
+
+
+def test_repeated_persist_failure_spends_only_one_replacement_call(setup):
+    from database.batch_pipeline_recognizer_receipts import record_recognizer
+
+    client, store, binding, artifacts, stt, recovery = setup
+
+    def words(*args):
+        token = row(client)['recovery']['token']
+        assert record_recognizer(store, 'bad', token, 'recovery', 'modulate', 'words', 3, 1.0)
+        return {'synthetic': True}
+
+    stt.side_effect = words
+    artifacts.persist_recovery_result.side_effect = OSError('synthetic storage outage')
+    assert recovery.recover('bad', binding.owner_id) == 'result_held'
+    recovery.clock = lambda: 1001
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    assert recovery.recover('bad', binding.owner_id) == 'result_held'
+    recovery.clock = lambda: 1902
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == artifacts.persist_recovery_result.call_count == 2
+
+
+@pytest.mark.parametrize('arrival', ['before_delivery', 'during_download'])
+def test_replacement_adopts_late_old_upload_without_recognizing_again(setup, arrival):
+    client, _, binding, artifacts, stt, recovery = setup
+    old = running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    replacement = row(client)['recovery']['token']
+    available = [arrival == 'before_delivery']
+    artifacts.find_recovery_result.side_effect = lambda item, token: (
+        'gs://synthetic/late-old-result' if token == old and available[0] else None
+    )
+    if arrival == 'during_download':
+
+        def download(item):
+            available[0] = True
+            return b'synthetic'
+
+        artifacts.fetch_audio.side_effect = download
+    assert recovery.recover('bad', binding.owner_id) == 'reconciled'
+    assert row(client)['recovery_state'] == 'recovered'
+    assert row(client)['recovery']['token'] == replacement
+    assert row(client)['result']['result_uri'] == 'gs://synthetic/late-old-result'
+    stt.assert_not_called()
+    artifacts.persist_recovery_result.assert_not_called()
+    if arrival == 'before_delivery':
+        artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['wrong_history', 'already_started'])
+def test_previous_result_adoption_is_fenced_against_replacement_start(setup, change):
+    client, _, binding, _, _, recovery = setup
+    old = running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    token = row(client)['recovery']['token']
+    if change == 'already_started':
+        assert recovery.protocol.start('bad', token, 902)
+    else:
+        old = 'foreign-history-token'
+    assert not recovery.protocol.settle('bad', token, 903, 'gs://synthetic/late', previous_token=old)
+    assert 'result' not in row(client)
+
+
+def test_requeued_words_rechecks_funding_before_replacement_call(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    monkeypatch.setattr(module, 'sync_allowed', Mock(return_value=False))
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'receipt',
+    [
+        None,
+        {},
+        {'outcome': 'empty', 'word_count': 0},
+        {'outcome': 'words', 'word_count': 0},
+        {'outcome': 'words', 'word_count': True},
+    ],
+)
+def test_unusable_words_evidence_keeps_original_dwell_bound(setup, receipt):
+    client, _, binding, _, stt, recovery = setup
+    token = running_words(setup)
+    row(client)['recovery']['recognizers'] = (
+        {'modulate': {'provider': 'modulate', **receipt}} if receipt is not None else {}
+    )
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert row(client)['recovery']['token'] == token
+    assert row(client)['recovery']['failure'] == {'stage': 'provider', 'reason': 'abandoned_running'}
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('result', ['object', 'row'])
+def test_words_with_existing_result_never_requeues(setup, result):
+    client, _, binding, artifacts, stt, recovery = setup
+    token = running_words(setup)
+    recovery.clock = lambda: 901
+    if result == 'object':
+        artifacts.find_recovery_result.return_value = 'gs://synthetic/recovered'
+        assert recovery.recover('bad', binding.owner_id) == 'reconciled'
+    else:
+        row(client)['result'] = {'result_uri': 'gs://synthetic/existing'}
+        assert recovery.protocol.retry_missing_result('bad', token, 901) == 'held'
+    assert row(client)['recovery']['token'] == token
+    assert 'missing_result_retries' not in row(client)['recovery']
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('bound', ['spent', 'operator', 'malformed'])
+def test_words_retry_bound_retains_custody_and_does_not_claim_abandonment(setup, bound, caplog):
+    client, _, binding, artifacts, stt, recovery = setup
+    token = running_words(setup)
+    row(client)['recovery'].update(
+        {'missing_result_retries': 1}
+        if bound == 'spent'
+        else {'paid_state': 'attempted'} if bound == 'operator' else {'missing_result_retries': True}
+    )
+    recovery.clock = lambda: 901
+    with caplog.at_level(logging.WARNING):
+        assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert row(client)['recovery']['failure'] == {'stage': 'payload_validation', 'reason': 'operation_failed'}
+    assert row(client)['recovery']['token'] == token
+    assert row(client)['recovery']['recognizers']['modulate']['outcome'] == 'words'
+    assert row(client)['audio_uri'] == 'gs://synthetic/audio'
+    assert 'outcome=exhausted' in caplog.text
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['token', 'lease', 'result', 'privacy', 'owner'])
+def test_words_retry_rechecks_fences(setup, change):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    client, _, binding, _, stt, recovery = setup
+    token = running_words(setup)
+    if change == 'token':
+        row(client)['recovery']['token'] = 'replacement'
+    elif change == 'lease':
+        row(client)['lease_until'] = 1000
+    elif change == 'result':
+        client.rows[('batch_pipeline_prod_results', 'bad')] = {'result': 'synthetic'}
+    elif change == 'privacy':
+        client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    else:
+        client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]['job_id'] = 'foreign'
+    if change in {'privacy', 'owner'}:
+        with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+            recovery.protocol.retry_missing_result('bad', token, 901)
+    else:
+        assert recovery.protocol.retry_missing_result('bad', token, 901) == 'held'
+    assert row(client)['recovery_state'] == 'running'
+    stt.assert_not_called()
+
+
+def test_late_words_receipt_blocks_stale_abandonment(setup):
+    client, _, _, _, _, recovery = setup
+    token = running_words(setup)
+    assert not recovery.protocol.settle('bad', token, 901, failure={'stage': 'provider', 'reason': 'abandoned_running'})
+    assert row(client)['recovery_state'] == 'running'
+
+
+@pytest.mark.parametrize('fault', ['persist', 'settle', 'refused'])
+def test_result_held_logs_stage_and_type_without_private_exception(setup, monkeypatch, caplog, fault):
+    _, _, binding, artifacts, _, recovery = setup
+    private = 'PRIVATE_TRANSCRIPT_AUDIO_SENTINEL'
+    if fault == 'persist':
+        artifacts.persist_recovery_result.side_effect = OSError(private)
+    elif fault == 'settle':
+        monkeypatch.setattr(recovery.protocol, 'settle', Mock(side_effect=TimeoutError(private)))
+    else:
+        monkeypatch.setattr(recovery.protocol, 'settle', Mock(return_value=False))
+    with caplog.at_level(logging.WARNING):
+        assert recovery.recover('bad', binding.owner_id) == 'result_held'
+    assert f'route=quarantine stage={"persist" if fault == "persist" else "settle"}' in caplog.text
+    assert (
+        f'exception_type={"OSError" if fault == "persist" else "TimeoutError" if fault == "settle" else "none"}'
+        in caplog.text
+    )
+    if fault == 'refused':
+        assert 'reason=refused' in caplog.text
+    assert private not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
@@ -321,7 +574,7 @@ def test_legacy_adapter_preserves_original_clocks_and_uses_one_sync_client_attem
     import wave
 
     pre_recorded, vad, split_result, build_incoming, *_ = legacy_dependencies
-    from utils.batch_pipeline.quarantine_recovery import transcribe
+    from utils.batch_pipeline.recovery_recognizers import transcribe
 
     data = io.BytesIO()
     with wave.open(data, 'wb') as wav:
@@ -671,7 +924,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
     assert stt.call_count == 1
-    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad')
+    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad', owner_only=True)
 
 
 @pytest.mark.parametrize('delivery_wins', [False, True])
@@ -720,7 +973,9 @@ def test_asgi_disabled_recovery_is_retryable_without_spending_intent(setup, monk
     response = TestClient(app).post(
         '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
     )
-    assert response.status_code == 503
+    # Contract (d): retryable means 409 retry (Cloud Tasks retries any non-2xx); 503 throttles the queue.
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'kill_switch_off'}
     assert row(client)['recovery_state'] == 'prepared'
     stt.assert_not_called()
     artifacts.fetch_audio.assert_not_called()
@@ -1155,3 +1410,677 @@ def test_extend_never_overrides_a_concurrent_held_rearm(setup, monkeypatch):
     assert row(client)['recovery_wake']['wake_until'] == 821.0
     assert recovery.protocol.extend_wake('bad', token, 1, 701.0, 600) is False
     assert row(client)['recovery_wake']['wake_until'] == 821.0
+
+
+def _freeze_disabled_snapshot(monkeypatch, recovery, binding):
+    """Admit the unit's recovery part while recovery is off for its owner."""
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+
+
+def test_disabled_snapshot_with_no_paid_intent_refreshes_once_enabled(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED', 'false')
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is False
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    # Kill switch off: the frozen verdict stands even though recovery is now on.
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+    stt.assert_not_called()
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert stt.call_count == 1
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True
+    assert row(client)['policy_part_sources']['recovery'] == 'refreshed'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+
+
+def test_refresh_never_adopts_a_still_disabled_setting(setup, monkeypatch):
+    client, _, binding, artifacts, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    recorded = dict(row(client)['policy_parts']['recovery'])
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+    assert row(client)['policy_parts']['recovery'] == recorded
+    assert 'policy_part_sources' not in row(client) or row(client)['policy_part_sources'].get('recovery') != 'refreshed'
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['intent', 'failed_held', 'foreign'])
+def test_refresh_never_touches_spent_or_foreign_units(setup, monkeypatch, change):
+    from database.batch_pipeline_policy import refresh_disabled_recovery
+
+    client, store, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    if change == 'intent':
+        row(client)['recovery'] = {'token': 'spent', 'epoch': 1, 'privacy_generation': 0}
+    elif change == 'failed_held':
+        row(client)['recovery_state'] = 'failed_held'
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    owner = 'other-owner' if change == 'foreign' else binding.owner_id
+    before = dict(row(client))
+    assert refresh_disabled_recovery(store, 'bad', owner) is None
+    assert row(client) == before
+    stt.assert_not_called()
+
+
+def test_dispatch_refreshes_disabled_snapshot_before_enqueue(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', binding.owner_id)
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '')
+    outcome = recovery.dispatch('bad', binding.owner_id)
+    assert outcome != 'disabled'
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True
+
+
+PARTIAL_ACCOUNTING = {
+    'seconds': 3,
+    'source': 'sync_fresh',
+    'updates': {},
+    'hour': 'synthetic-hour',
+    'completed': False,
+    'charged': 0.0,
+}
+
+
+def ledger_row(client, binding):
+    return client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
+
+
+def test_terminally_held_upload_completes_partial_once_without_touching_held_unit(setup):
+    client, store, binding, artifacts, stt, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    jobs_before = deepcopy({key: value for key, value in client.rows.items() if key[0].endswith('_jobs')})
+    good_before = deepcopy(row(client, 'results', 'good'))
+    projection = ProjectionStore(store)
+    result, step = projection.complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert result == {
+        'new_memories': [],
+        'updated_memories': [],
+        'failed_segments': 1,
+        'held_segments': 1,
+        'total_segments': 2,
+        'errors': [],
+        'outcome': 'partial',
+    }
+    ledger = ledger_row(client, binding)
+    assert ledger['status'] == 'partial' and ledger['result'] == result
+    assert ledger['usage_committed_seconds'] == 3 and ledger['job_id'] == binding.job_id
+    assert step == ([0.0, 3], [101]) and ledger['usage_steps'] == [0.0, 3] and ledger['usage_step_times'] == [101]
+    # Paid-once and ordered-head: no provider call, no job/intent/merge write,
+    # the parked sibling keeps its receipt, and the held audio is not touched.
+    assert {key: value for key, value in client.rows.items() if key[0].endswith('_jobs')} == jobs_before
+    assert row(client, 'results', 'good') == good_before
+    assert ('batch_pipeline_prod_results', 'bad') not in client.rows
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+    # Idempotent: a replay reads the same partial and writes nothing.
+    writes = sum(len(tx.updates) for tx in client.transactions)
+    assert projection.complete_partial(binding, 102, PARTIAL_ACCOUNTING) == (result, step)
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+    assert ledger_row(client, binding)['updated_at'] == ledger['updated_at']
+
+
+@pytest.mark.parametrize('change', ['prepared', 'running', 'enabled_held', 'operator_intent', 'not_ready', 'none'])
+def test_partial_waits_while_anything_can_still_change(setup, change):
+    client, store, binding, _, stt, _ = setup
+    job = row(client)
+    job['recovery_state'] = 'failed_held'
+    if change in {'prepared', 'running'}:
+        job['recovery_state'] = change
+    elif change == 'enabled_held':
+        job['recovery_state'] = 'held'
+        job['policy_parts'] = {'recovery': resolve_stage_policy(binding.owner_id, 'recovery').to_dict()}
+        assert job['policy_parts']['recovery']['recovery_enabled'] is True
+    elif change == 'operator_intent':
+        job['speech_redrive'] = {'state': 'prepared', 'token': 'reviewed'}
+    elif change == 'not_ready':
+        row(client, 'results', 'good')['projection']['state'] = 'persisted'
+    else:
+        job.update(state='committed', recovery_state='recovered')
+    before = deepcopy(client.rows)
+    assert ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING) is None
+    assert client.rows == before
+    stt.assert_not_called()
+
+
+def test_partial_refuses_a_completed_or_foreign_ledger(setup):
+    client, store, binding, _, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    ledger_row(client, binding)['job_id'] = 'bp_replacement'
+    with pytest.raises(ProjectionBlocked, match='ledger owner'):
+        ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    ledger_row(client, binding).update(job_id=binding.job_id, status='completed')
+    before = deepcopy(client.rows)
+    assert ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING) is None
+    assert client.rows == before
+
+
+def test_partial_status_preserves_custody_with_held_span(setup):
+    import json
+    from pathlib import Path
+    from utils.batch_pipeline.intake import durable_status
+
+    client, store, binding, _, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    client.rows[('batch_pipeline_prod_intakes', binding.job_id)] = {
+        'owner_id': binding.owner_id,
+        'content_id': binding.content_id,
+        'segment_ids': list(binding.segment_ids),
+        'lane': 'backfill',
+        'total_files': 1,
+    }
+    result, _ = ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    status = durable_status(store, binding.owner_id, binding.job_id)
+    assert status['status'] == 'processing' and status['reason_code'] == 'batch_unit_held'
+    assert status['failed_segments'] == 1 and status['successful_segments'] == 1
+    assert status['result'] == result and status['poll_after_ms'] == 300000 and status['errors'] == []
+    golden = json.loads((Path(__file__).parents[1] / 'fixtures/held_partial_status.json').read_text())
+    assert status == golden
+
+
+def test_deleting_a_projected_sibling_cannot_ack_unresolved_partial_custody(setup):
+    from utils.batch_pipeline.intake import _deleted_conversation_status
+
+    client, store, binding, *_ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert (
+        _deleted_conversation_status(
+            ledger_row(client, binding), {'lane': 'backfill', 'total_files': 1}, binding.job_id
+        )
+        is None
+    )
+
+
+def test_recovery_disabled_unit_completes_partial_then_upgrades_after_recovery(setup, monkeypatch):
+    client, store, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    projection = ProjectionStore(store)
+    partial, _ = projection.complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert partial['held_segments'] == 1 and ledger_row(client, binding)['status'] == 'partial'
+    # Recovery turns on later: the partial ledger still belongs to the batch job,
+    # so the one paid recovery runs and the ordinary completion upgrades it.
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert stt.call_count == 1
+    result = row(client)['result']
+    row(client)['state'] = 'committed'
+    client.rows[('batch_pipeline_prod_results', 'bad')] = {
+        'protocol_version': 1,
+        'segment_id': 'bad',
+        'owner_key': owner_key(binding.owner_id),
+        'capture_at': 1,
+        'previous_segment_id': 'good',
+        'late_capture': True,
+        'result': result,
+        'projection_state': 'pending',
+    }
+    binding = projection.read('bad')[2]
+    session = projection.session('bad', binding, 102)
+
+    def assign(transaction):
+        session.prepare(transaction)
+        session.speech_seconds = 2
+        session.persist(transaction)
+
+    projection.run(assign)
+    projection.ready('bad', binding, 103)
+    stale = {**PARTIAL_ACCOUNTING, 'seconds': 5.0}
+    with pytest.raises(ProjectionBlocked, match='usage accounting changed'):
+        projection.complete('bad', binding, 104, stale)
+    upgraded = projection.complete('bad', binding, 104, {**stale, 'charged': 3})
+    ledger = ledger_row(client, binding)
+    assert ledger['status'] == 'completed' and ledger['result'] == upgraded
+    assert upgraded['failed_segments'] == 0 and upgraded['total_segments'] == 2
+    assert ledger['usage_committed_seconds'] == 5.0 and ledger['usage_steps'] == [0.0, 3, 5.0]
+    assert ledger['usage_step_times'] == [101, 104]
+    # A held span already settled as partial is never re-partialed after completion.
+    assert projection.complete_partial(binding, 105, PARTIAL_ACCOUNTING) is None
+    assert stt.call_count == 1
+
+
+def test_partial_accounting_charges_only_the_remainder(setup, monkeypatch):
+    from database import hourly_usage_updates, llm_usage
+
+    client, store, binding, _, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    charged = []
+    monkeypatch.setattr(llm_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'synthetic-plan')
+    monkeypatch.setattr(
+        hourly_usage_updates,
+        'prepare_hourly_usage_updates',
+        lambda stamp, counts, *args, **kwargs: charged.append(counts) or {'synthetic': counts},
+    )
+    projection = ProjectionStore(store)
+    assert projection.prepare_accounting(binding, 100) is None
+    accounting = projection.prepare_accounting(binding, 100, held=True)
+    assert accounting['seconds'] == 3 and accounting['charged'] == 0.0
+    assert charged == [{'transcription_seconds': 3, 'speech_seconds': 3}]
+    ledger_row(client, binding).update(status='partial', usage_committed_seconds=3)
+    row(client, 'results', 'good')['projection']['speech_seconds'] = 8
+    again = projection.prepare_accounting(binding, 100, held=True)
+    assert again['charged'] == 3 and charged[-1] == {'transcription_seconds': 5, 'speech_seconds': 5}
+
+
+def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, stt, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    # The first fair-use write fails after the partial committed (Redis outage).
+    monkeypatch.setattr(fair_use, 'record_speech_ms', Mock(side_effect=[RuntimeError('synthetic redis'), None]))
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    real_accounting = projector.store.prepare_accounting
+
+    def accounting(target, now, *, held=False):
+        assert held
+        if target.content_id != binding.content_id:
+            return real_accounting(target, now, held=held)
+        return dict(PARTIAL_ACCOUNTING)
+
+    projector.store.prepare_accounting = accounting
+    foreign = {'projection_binding': {**row(client)['projection_binding'], 'content_id': 'foreign'}}
+    page = [('bad', row(client)), ('bad-sibling', deepcopy(row(client))), ('foreign', foreign), ('broken', {})]
+    fetch = Mock(side_effect=[page[:4], page, page])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', fetch)
+    # Same upload once; a foreign ledger is never charged; a malformed row is contained.
+    # Page reads: 4 examined rows + two S=2 attempts (5 reads/sibling + 7).
+    assert projector.sweep_held(limit=4) == {
+        'partial': 0,
+        'waiting': 1,
+        'error': 2,
+        'units': 4,
+        'reads': 38,
+        'more': 1,
+        'pages': 1,
+    }
+    assert ledger_row(client, binding)['status'] == 'partial'
+    assert projector.held_after == 'broken'
+    writes = sum(len(tx.updates) for tx in client.transactions)
+    # A short page wraps the cursor but is still the same pass: the attempted
+    # uploads stay deduped, so this segment reads rows without re-attempting.
+    assert projector.sweep_held(limit=5) == {
+        'partial': 0,
+        'waiting': 0,
+        'error': 1,
+        'units': 4,
+        'reads': 4,
+        'more': 0,
+        'pages': 1,
+    }
+    assert projector.held_after is None
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+    # The next call is a fresh pass: the replay re-attempted the upload, wrote
+    # nothing new and re-issued the same durable fair-use step, so the lost
+    # charge lands exactly once.
+    assert projector.sweep_held(limit=5) == {
+        'partial': 1,
+        'waiting': 1,
+        'error': 1,
+        'units': 4,
+        'reads': 38,
+        'more': 0,
+        'pages': 1,
+    }
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+    keys = [(call.args[1], call.kwargs['idempotency_key']) for call in fair_use.record_speech_ms.call_args_list]
+    assert keys == [(3000, 'content'), (3000, 'content')]
+    stt.assert_not_called()
+
+
+def held_unit_rows(client, count, *, duplicate_at=()):
+    """Synthetic held page rows in document order; ``duplicate_at`` repeats a
+    content id so a pass's upload dedupe is provable across pages."""
+    rows = []
+    for index in range(count):
+        job = deepcopy(row(client))
+        duplicate = next((d for d in duplicate_at if d[0] == index), None)
+        job['projection_binding'] = {
+            **job['projection_binding'],
+            'content_id': f'upload-{duplicate[1] if duplicate else index}',
+        }
+        rows.append((f'unit-{index:04d}', job))
+    return rows
+
+
+def test_full_pages_chain_into_one_pass_and_attempt_each_upload_once(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    attempts = []
+    monkeypatch.setattr(projector, 'complete_held', lambda b: attempts.append(b.content_id) or None)
+    rows = held_unit_rows(client, 8, duplicate_at=((4, 1),))
+    pages = Mock(side_effect=[rows[0:3], rows[3:6], rows[6:8]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(3, deadline=1e12)
+    # Two full pages schedule the third immediately: one call, three fetches.
+    assert pages.call_count == 3
+    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'reads': 127, 'more': 0, 'pages': 3}
+    # The unit repeated across pages is one upload: one attempt for the pass.
+    assert attempts == [f'upload-{index}' for index in (0, 1, 2, 3, 5, 6, 7)]
+    assert projector.held_after is None
+
+
+def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypatch):
+    from utils.batch_pipeline import projection as projection_module
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4], rows[0:2], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    monotonic = Mock(side_effect=[105.0, 115.0, 125.0, 135.0])
+    monkeypatch.setattr(projection_module, 'time', SimpleNamespace(monotonic=monotonic, time=lambda: 101))
+    counts = projector.sweep_held(2, deadline=110.0)
+    # The first page ran before the deadline, the second after it: two fetches
+    # only, with the cursor left on the second page's last unit.
+    assert pages.call_count == 2
+    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'reads': 72, 'more': 1, 'pages': 2}
+    assert projector.held_after == 'unit-0003'
+    resumed = projector.sweep_held(2, deadline=1e12)
+    # The resumed segment is the same pass: both uploads stay deduped, so its
+    # page reads rows without re-attempting, then the short page wraps.
+    assert pages.call_count == 4
+    assert resumed == {'partial': 0, 'waiting': 0, 'error': 0, 'units': 2, 'reads': 2, 'more': 0, 'pages': 2}
+
+
+def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 10)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4], rows[4:6], rows[6:8], rows[8:10]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(2, deadline=1e12, max_pages=3)
+    assert pages.call_count == 3
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1, 'pages': 3}
+
+
+def test_max_pages_alone_chains_full_pages(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 8)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4], rows[4:6], rows[6:8], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    # No deadline: the page budget alone must still chain the pass.
+    counts = projector.sweep_held(2, max_pages=3)
+    assert pages.call_count == 3
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1, 'pages': 3}
+
+
+def test_failed_fetch_ends_the_segment_with_its_pages_charged(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[0:2], RuntimeError('synthetic fetch failure'), rows[2:4], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(2, deadline=1e12)
+    # The failed fetch raises nothing and charges the page already served, so
+    # the caller's read budget sees it; the cursor stays resumable.
+    assert pages.call_count == 2
+    assert counts == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 1, 'pages': 1}
+    assert projector.held_after == 'unit-0001'
+    resumed = projector.sweep_held(2, deadline=1e12)
+    assert pages.call_count == 4
+    assert resumed == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 0, 'pages': 2}
+
+
+def test_a_full_pass_over_a_large_backlog_finishes_within_the_tick_bound(setup, monkeypatch):
+    from utils.batch_pipeline import projection as projection_module
+    from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 200)
+    pages = Mock(side_effect=[rows[offset : offset + HELD_PARTIAL_PAGE] for offset in range(0, 200, HELD_PARTIAL_PAGE)])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    tick = iter(float(second) for second in range(0, 60))  # one simulated second per page
+    monkeypatch.setattr(projection_module, 'time', SimpleNamespace(monotonic=lambda: next(tick), time=lambda: 101))
+    counts = projector.sweep_held(deadline=20.0)
+    # 200 units at the production page size: 7 fetches (6 full, 1 short) in 6
+    # simulated seconds, inside a 20 s tick budget.
+    assert pages.call_count == 7
+    assert counts['units'] == 200 and counts['more'] == 0 and counts['error'] == 0
+    assert counts['waiting'] == 200 and counts['reads'] == 200 + 200 * 17
+    assert projector.held_after is None
+
+
+def test_unit_failures_never_stop_a_multi_page_pass(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+
+    def flaky(binding):
+        if int(binding.content_id.rsplit('-', 1)[1]) % 2 == 0:
+            raise TimeoutError('synthetic page-mate failure')
+        return None
+
+    monkeypatch.setattr(projector, 'complete_held', flaky)
+    rows = held_unit_rows(client, 6)
+    pages = Mock(side_effect=[rows[0:3], rows[3:6], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(3, deadline=1e12)
+    # Every even unit failed — still charged for its reads — and the pass
+    # served both pages to the end.
+    assert pages.call_count == 3
+    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 108, 'more': 0, 'pages': 3}
+
+
+def test_attempt_charge_floors_at_the_measured_single_upload_worst(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    solo = deepcopy(row(client))
+    solo['projection_binding'] = {**solo['projection_binding'], 'segment_ids': ['solo-unit']}
+    pages = Mock(side_effect=[[('solo-unit', solo)], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(2, deadline=1e12)
+    # One examined row plus a 16-read attempt charge: the formula's 5 x 1 + 7
+    # must never undercut the measured per-attempt worst case. The short page
+    # wraps the scan in the same call.
+    assert pages.call_count == 1
+    assert counts == {'partial': 0, 'waiting': 1, 'error': 0, 'units': 1, 'reads': 17, 'more': 0, 'pages': 1}
+
+
+@pytest.mark.parametrize('change', ['speech_redrive', 'recovery_enabled'])
+def test_unfinished_held_unit_is_never_accounted_or_charged(setup, monkeypatch, change):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    job = row(client)
+    if change == 'speech_redrive':
+        job.update(recovery_state='failed_held', speech_redrive={'state': 'running', 'token': 'reviewed'})
+    else:
+        job['policy_parts'] = {'recovery': resolve_stage_policy(binding.owner_id, 'recovery').to_dict()}
+    monkeypatch.setattr(fair_use, 'record_speech_ms', Mock())
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    before = deepcopy(client.rows)
+    assert projector.store.prepare_accounting(binding, 101, held=True) is None
+    assert projector.complete_held(binding) is None
+    fair_use.record_speech_ms.assert_not_called()
+    assert client.rows == before
+
+
+def test_fair_use_charge_after_partial_uses_a_distinct_once_key(monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import record_speech
+
+    calls = []
+    monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append((args, kwargs)))
+    binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
+    record_speech(binding, {'seconds': 3, 'source': 'sync_fresh', 'completed': False}, 100)
+    calls.clear()
+    # After a partial at 3 s (stored steps [0, 3]) the upgrade re-issues the base
+    # step under its own key, then the remainder: a base lost to a Redis failure
+    # after the partial commit still lands, and one that landed is a SET NX no-op.
+    record_speech(
+        binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'steps': [0.0, 3], 'step_times': [90]}, 100
+    )
+    assert [(args[1], kwargs['idempotency_key']) for args, kwargs in calls] == [
+        (3000, 'content'),
+        (2000, 'content:3000'),
+    ]
+    calls.clear()
+    record_speech(
+        binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': True, 'steps': [0.0, 3], 'step_times': [90]}, 100
+    )
+    assert calls == []
+
+
+def test_expired_or_unknown_age_step_is_never_readmitted(monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import record_speech_steps, reissue_window_seconds
+
+    calls = []
+    monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append(kwargs['idempotency_key']))
+    binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
+    now = 10 * 86400.0
+    window = reissue_window_seconds()
+    assert 0 < window < fair_use.FAIR_USE_REDIS_RETENTION_SECONDS
+    # A unit held past the once-key TTL: its old step stays out, the fresh one lands.
+    record_speech_steps(binding, 'sync_fresh', [0.0, 3, 5], [now - window - 1, now], now)
+    assert calls == ['content:3000']
+    calls.clear()
+    # A legacy partial without commit times: never re-issued.
+    record_speech_steps(binding, 'sync_fresh', [0.0, 3], [None], now)
+    assert calls == []
+
+
+def test_lost_base_charge_lands_after_a_newer_partial_step(setup, monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    landed = {}
+
+    def once(uid, ms, source, idempotency_key, raise_on_error):
+        if fail[0]:
+            fail[0] = False
+            raise RuntimeError('synthetic redis')
+        landed.setdefault(idempotency_key, ms)
+
+    fail = [True]
+    monkeypatch.setattr(fair_use, 'record_speech_ms', once)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    projector.store.prepare_accounting = lambda target, now, held=False: {
+        **PARTIAL_ACCOUNTING,
+        'charged': 0.0,
+        'steps': [0.0],
+    }
+    with pytest.raises(RuntimeError):
+        projector.complete_held(binding)
+    # The partial committed (0 -> 3) but its fair-use write was lost. A newer
+    # step (3 -> 5) commits next: both keys land, base included.
+    assert ledger_row(client, binding)['usage_steps'] == [0.0, 3]
+    # Stand in for an earlier partial over a wider held span, so this pass rewrites it.
+    ledger_row(client, binding)['result'] = {**ledger_row(client, binding)['result'], 'superseded_segments': 1}
+    row(client, 'results', 'good')['projection']['speech_seconds'] = 5
+    projector.store.prepare_accounting = lambda target, now, held=False: {
+        **PARTIAL_ACCOUNTING,
+        'seconds': 5,
+        'charged': 3,
+        'steps': [0.0, 3],
+    }
+    assert projector.complete_held(binding) is not None
+    assert ledger_row(client, binding)['usage_steps'] == [0.0, 3, 5]
+    assert landed == {'content': 3000, 'content:3000': 2000}
+
+
+@pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
+def test_default_on_quarantine_allowance_preserves_custody_and_funding(setup, monkeypatch, access):
+    from utils import stt_cap_dispatch as cap
+
+    client, store, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if access == 'kill_off' else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    if access == 'byok':
+        row(client)['policy'] = {'provider_reason': 'byok'}
+    resolver = Mock(
+        return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+    result = recovery.recover('bad', binding.owner_id)
+    assert stt.call_count == (0 if access == 'capped' else 1)
+    if access == 'capped':
+        assert result == 'held' and row(client)['recovery_state'] == 'prepared'
+    if access in {'byok', 'kill_off'}:
+        resolver.assert_not_called()
+
+
+class _CandidateQuery:
+    """Evaluates the ==/in filters, __name__ order, cursor and limit recovery_candidates uses."""
+
+    def __init__(self, docs, filters=(), after=None, count=None):
+        self.docs, self.filters, self.after, self.count = docs, filters, after, count
+
+    def where(self, field, op, value):
+        assert op in {'==', 'in'}
+        return _CandidateQuery(self.docs, (*self.filters, (field, op, value)), self.after, self.count)
+
+    def order_by(self, field):
+        assert field == '__name__'
+        return self
+
+    def document(self, doc_id):
+        return doc_id
+
+    def start_after(self, cursor):
+        return _CandidateQuery(self.docs, self.filters, cursor['__name__'], self.count)
+
+    def limit(self, count):
+        return _CandidateQuery(self.docs, self.filters, self.after, count)
+
+    def stream(self):
+        rows = [
+            SimpleNamespace(id=doc_id, to_dict=lambda data=data: dict(data))
+            for doc_id, data in sorted(self.docs.items())
+            if (self.after is None or doc_id > self.after)
+            and all(data.get(f) == v if op == '==' else data.get(f) in v for f, op, v in self.filters)
+        ]
+        return iter(rows[: self.count])
+
+
+def test_recovery_candidates_skip_committed_units_held_by_projection():
+    """A quarantine-held projection marks its committed job recovery_state=held for the
+    held-partial scan. prepare() refuses any job that is not quarantined, so such jobs
+    must not fill the recovery dispatch page ahead of real quarantined units."""
+    from database.batch_pipeline_quarantine_recovery import recovery_candidates
+
+    docs = {f'c-{index:03d}': {'owner_id': 'o', 'state': 'committed', 'recovery_state': 'held'} for index in range(80)}
+    docs['q-held'] = {'owner_id': 'o', 'state': 'quarantined', 'recovery_state': 'held'}
+    docs['q-prepared'] = {'owner_id': 'o', 'state': 'quarantined', 'recovery_state': 'prepared'}
+    docs['q-failed'] = {'owner_id': 'o', 'state': 'quarantined', 'recovery_state': 'failed_held'}
+    client = SimpleNamespace(collection=lambda name: _CandidateQuery(docs))
+    assert recovery_candidates(client, 'test', None, limit=64) == [('q-held', 'o'), ('q-prepared', 'o')]
+    assert recovery_candidates(client, 'test', 'o', limit=64) == [('q-held', 'o'), ('q-prepared', 'o')]
+    assert recovery_candidates(client, 'test', None, limit=64, after_id='q-held') == [('q-prepared', 'o')]

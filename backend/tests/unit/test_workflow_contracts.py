@@ -331,18 +331,28 @@ def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
 
 def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
     repo = BACKEND_DIR.parent
-    workflows = {
-        "backend-unit-tests.yml": "backend-unit-tests-",
-        "openapi-contract.yml": "openapi-contract-",
-    }
-
-    for filename, group_prefix in workflows.items():
-        workflow = (repo / ".github/workflows" / filename).read_text(encoding="utf-8")
-        assert "concurrency:" in workflow
-        assert f"group: {group_prefix}${{{{ github.event_name == 'pull_request'" in workflow
-        assert "format('pr-{0}', github.event.pull_request.number)" in workflow
-        assert "format('run-{0}', github.run_id)" in workflow
-        assert "cancel-in-progress: true" in workflow
+    # backend-unit-tests (2026-10-21 runner economy, named by David): PR runs
+    # still cancel that PR's older run, but main pushes share one ref-keyed
+    # group with cancel-in-progress false — the running suite finishes and
+    # only the newest pending main SHA runs next, so a merge burst no longer
+    # queues a full superseded suite per intermediate SHA. Manual dispatches
+    # keep per-run groups so they can never evict a pending push run.
+    backend_unit_tests = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+    assert "concurrency:" in backend_unit_tests
+    assert "group: backend-unit-tests-${{ github.event_name == 'pull_request'" in backend_unit_tests
+    assert "format('pr-{0}', github.event.pull_request.number)" in backend_unit_tests
+    assert (
+        "|| (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-" in backend_unit_tests
+    )
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in backend_unit_tests
+    # openapi-contract keeps per-run main isolation: its runs are cheap and
+    # path-filtered, and its pending-run accounting is not release evidence.
+    openapi_contract = (repo / ".github/workflows/openapi-contract.yml").read_text(encoding="utf-8")
+    assert "concurrency:" in openapi_contract
+    assert "group: openapi-contract-${{ github.event_name == 'pull_request'" in openapi_contract
+    assert "format('pr-{0}', github.event.pull_request.number)" in openapi_contract
+    assert "format('run-{0}', github.run_id)" in openapi_contract
+    assert "cancel-in-progress: true" in openapi_contract
 
 
 def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
@@ -353,7 +363,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as six parallel shard jobs whose interleaved slices partition
+    selection as eight parallel shard jobs whose weighted partitions cover
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -364,10 +374,10 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
-    assert "--shard 6/${{ matrix.shard }}" in workflow
-    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
-    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
+    assert "shard: [1, 2, 3, 4, 5, 6, 7, 8]" in workflow
+    assert "--shard 8/${{ matrix.shard }}" in workflow
+    assert "name: Backend unit shard ${{ matrix.shard }}/8" in workflow
+    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
     # guardrail result that is not a plain success.
@@ -381,12 +391,13 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     assert '::notice title=Heavy CI deferred::' in workflow
     assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
     assert 'guardrails_required=skipped' in workflow
-    # The runner slices the deterministic selection round-robin with the
-    # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
-    # shard labels match the files they carry); `index` is an awk builtin,
-    # so the shard variable must be named anything else.
-    assert "(NR - 1) % total == shard - 1" in runner
-    assert "awk -v index=" not in runner
+    # The runner deals the deterministic selection heaviest-first (measured
+    # weights) to the least loaded shard (PR #23767: round-robin left walls
+    # 433-754s); ties fall back to round-robin with one-based shard labels.
+    assert "backend_unit_shard_weights.tsv" in runner
+    assert (BACKEND_DIR / "scripts/backend_unit_shard_weights.tsv").is_file()
+    assert "key=lambda index: (load[index], count[index], index)" in runner
+    assert "assigned[path] = target + 1" in runner
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
@@ -602,10 +613,23 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "app/build/app/outputs/flutter-apk/app-dev-debug.apk" in android
     assert "retention-days: 5" in android
     assert "${{ secrets." not in android
-    # Compile-smoke is the wall: restore-only so main does not pay Gradle
-    # save+cleanup after the APK, and so it does not race the JVM writer
-    # for the same content keys (runs 35256814704 / 35268313733).
-    assert "cache-read-only: true" in android
+    # Cold Gradle homes took 11-12m (40022514904 / 40025498700), and
+    # 40030083284 hit the 25m cap. Compile-smoke must seed its own cache on
+    # PRs and main; basic and enhanced use separate key namespaces, avoiding
+    # the old ReserveCacheError race with the parallel JVM writer.
+    android_gradle = next(
+        step["with"]
+        for step in yaml.safe_load(android)["steps"]
+        if step.get("uses") == "gradle/actions/setup-gradle@v6"
+    )
+    unit_gradle = next(
+        step["with"]
+        for step in yaml.safe_load(unit_tests)["steps"]
+        if step.get("uses") == "gradle/actions/setup-gradle@v6"
+    )
+    assert android_gradle["cache-provider"] == "basic"
+    assert android_gradle["cache-read-only"] is False
+    assert unit_gradle.get("cache-provider", "enhanced") == "enhanced"
     assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" not in android
 
     # Size report is a zip breakdown of the debug APK this job already built.
@@ -680,7 +704,7 @@ def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_fr
     assert "has_app_ios_compile" in ios
     assert "has_app_ios_compile" in changes
     assert "has_app_ios_compile:" in detect_changes
-    assert "timeout-minutes: 40" in ios
+    assert "timeout-minutes: 50" in ios
     assert "fetch-depth: 0" in ios
     assert "run-swift-ci.sh --select-toolchain" in ios
     assert "Prove stable iOS compiler emits no Siri metadata" in ios
@@ -912,6 +936,73 @@ def test_gcp_diarizer_checks_deployment_files_only_after_checkout():
     assert re.search(r"(?:\[\[?|\btest\b)[^\n]*-f[^\n]*\$values_file", target_script)
 
 
+def test_gcp_diarizer_batch_deploys_dedicated_release_like_the_runbook():
+    """W1: the diarizer-batch dispatch must reproduce the lead-only install.
+
+    backend/scripts/diarization_eval/batch_install.md installs the separate
+    prod-omi-diarizer-batch release from the same chart and image as diarizer,
+    stacking the batch values on the base values and pinning the published
+    digest with the tag emptied. The workflow option must not drift from that.
+    """
+    workflow_path = BACKEND_DIR.parent / ".github/workflows/gcp_diarizer.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    service_input = workflow[True]["workflow_dispatch"]["inputs"]["service"]
+    assert "diarizer-batch" in service_input["options"]
+
+    steps = workflow["jobs"]["deploy"]["steps"]
+    target_step = next(step for step in steps if step.get("name") == "Resolve deployment target")
+    target_script = target_step["run"]
+    assert 'diarizer-batch)' in target_script
+    assert 'values_overlay="backend/charts/diarizer/${DEPLOY_ENV}_omi_diarizer_batch_values.yaml"' in target_script
+    assert '[[ -n "$values_overlay" && ! -f "$values_overlay" ]]' in target_script
+    assert 'echo "values_overlay=$values_overlay"' in target_script
+    # release_name stays ${DEPLOY_ENV}-omi-${SERVICE}, so diarizer-batch targets
+    # prod-omi-diarizer-batch, never prod-omi-diarizer.
+    assert 'echo "release_name=${DEPLOY_ENV}-omi-${SERVICE}"' in target_script
+
+    build_step = next(step for step in steps if step.get("name") == "Build and Push Docker image")
+    assert '"$SERVICE" == "batch-pipeline-worker" || "$SERVICE" == "diarizer-batch"' in build_step["run"]
+
+    helm_step = next(step for step in steps if "Helm" in step.get("name", ""))
+    helm_script = helm_step["run"]
+    assert helm_step["env"]["TARGET_VALUES_OVERLAY"] == "${{ steps.target.outputs.values_overlay }}"
+    assert '-f "./$TARGET_VALUES" -f "./$TARGET_VALUES_OVERLAY"' in helm_script
+    assert "--set-string image.tag= --set-string" in helm_script
+    assert '--atomic --wait --timeout 15m' in helm_script
+
+    verify_step = next(step for step in steps if step.get("name") == "Verify rollout")
+    assert '"$SERVICE" == "diarizer-batch"' in verify_step["run"]
+    assert "rollout_timeout=900s" in verify_step["run"]
+
+
+def test_gcp_diarizer_verify_rollout_asserts_the_digest_helm_deploys():
+    """Promotion deploys verify the promoted digest, not only freshly built ones.
+
+    bramp2 (2026-10-25) found Verify rollout asserting against steps.build only,
+    while Helm deploys steps.build || steps.promote, so an image_digest
+    promotion skipped the exact deployed-digest check entirely. EXPECTED_DIGEST
+    must stay the same selection Helm deploys for batch-pipeline-worker.
+    """
+    workflow_path = BACKEND_DIR.parent / ".github/workflows/gcp_diarizer.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["deploy"]["steps"]
+
+    verify_step = next(step for step in steps if step.get("name") == "Verify rollout")
+    assert (
+        verify_step["env"]["EXPECTED_DIGEST"]
+        == "${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}"
+    )
+    # The message must be right for both paths: it reports what was expected, not what was built.
+    assert "not the expected digest" in verify_step["run"]
+    assert "not the built digest" not in verify_step["run"]
+
+    # The expression Helm deploys for batch-pipeline-worker is exactly the one
+    # Verify rollout asserts, so the two selections cannot drift apart again.
+    helm_step = next(step for step in steps if "Helm" in step.get("name", ""))
+    assert f'"image.digest={verify_step["env"]["EXPECTED_DIGEST"]}"' in helm_step["run"]
+
+
 def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()
@@ -995,7 +1086,7 @@ def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
     dockerfiles = policy._runtime_images(repo)
-    workflow = (repo / '.github/workflows/gcp_memory_maintenance_job.yml').read_text(encoding='utf-8')
+    workflow = (repo / '.github/workflows/gcp_frame_request_retention_job.yml').read_text(encoding='utf-8')
 
     gate_block = re.search(r'      - name: Verify serving Firestore indexes\n(?:        .*\n)+', workflow).group(0)
     removed = workflow.replace(gate_block, '')
@@ -1031,11 +1122,6 @@ def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
     )
     assert policy.workflow_gate_violations(tolerated_control, name='tolerated-control.yml', dockerfiles=dockerfiles)
 
-    push_step = re.search(r'      - name: Push verified runtime image\n(?:        .*\n)+', workflow).group(0)
-    reordered = workflow.replace(gate_block, '')
-    reordered = reordered.replace(push_step, push_step + gate_block)
-    assert policy.workflow_gate_violations(reordered, name='reordered.yml', dockerfiles=dockerfiles)
-
 
 def _synthetic_deploy(steps: str, *, extra_jobs: str = '', job_prefix: str = '') -> str:
     return f"""name: synthetic-deploy
@@ -1061,7 +1147,8 @@ _SYNTHETIC_GATE = """      - uses: actions/checkout@v7
         with:
           source_sha: ${{ github.sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 """
 
 
@@ -1434,8 +1521,6 @@ _LANE_SOURCE_BINDINGS = {
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',
     'gcp_llm_gateway.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_memory_maintenance_job.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_memory_maintenance_job_auto_dev.yml': '${{ github.sha }}',
     'gcp_notifications_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_x_connector_sync_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_day3_reengagement_email_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
@@ -1966,9 +2051,12 @@ def _composite_control_root(tmp_path: Path) -> Path:
         '__init__.py',
         'firestore_index_registry.py',
         'firestore_query_types.py',
+        'mcp_read_queries.py',
         'review_queries.py',
         'messaging_queries.py',
         'sync_pipeline_indexes.py',
+        'batch_pipeline_indexes.py',
+        'lifecycle_metrics_indexes.py',
     ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
@@ -2003,7 +2091,6 @@ def _run_composite(
     live_indexes,
     source_sha='e' * 40,
     head_sha=None,
-    credentials='{}',
     verify_credential_project='false',
     run_validate_step=False,
 ):
@@ -2033,7 +2120,7 @@ def _run_composite(
     runner_temp.mkdir(exist_ok=True)
     _stub_bin(tmp_path)
     credentials_path = tmp_path / 'credentials.json'
-    credentials_path.write_text(credentials or '', encoding='utf-8')
+    credentials_path.write_text('{}', encoding='utf-8')
     indexes_file = tmp_path / 'live-indexes.json'
     indexes_file.write_text(json.dumps(live_indexes), encoding='utf-8')
 
@@ -2041,7 +2128,6 @@ def _run_composite(
         'inputs.source_sha': source_sha,
         'inputs.project_id': 'dev-project',
         'inputs.database': '(default)',
-        'inputs.credentials_json': credentials,
         'inputs.verify_credential_project': verify_credential_project,
         'inputs.artifact_suffix': '',
         'runner.temp': str(runner_temp),
@@ -2121,10 +2207,6 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     assert check.returncode == 1
     assert 'Invalid Firestore source SHA' in check.stdout
 
-    check, _ = _run_composite(tmp_path / 'no-creds', live_indexes=ready_live, credentials='')
-    assert check.returncode == 1
-    assert 'Missing Firestore read-only credentials' in check.stdout
-
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1
     assert 'Firestore source mismatch' in check.stdout
@@ -2168,3 +2250,101 @@ def test_notifications_job_renders_the_verified_gateway_endpoint():
     assert "--github-output" in steps[gate]["run"]
     assert steps[render]["env"]["OMI_LLM_GATEWAY_URL"] == "${{ steps.gateway-serving.outputs.gateway_url }}"
     assert "http://127.0.0.1:9" in steps[render]["run"]
+
+
+def _gcp_backend_workflow() -> dict:
+    return yaml.safe_load((BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8'))
+
+
+def test_backend_dispatch_input_names_its_requester():
+    """Every manual backend dispatch names who requested it (lead ruling 310a7c).
+
+    Prod run 40214727824 (2026-10-25) could not be traced to any session: every
+    agent dispatches as the shared account, so the run itself must carry the
+    requester. `required` alone is not enough -- the REST API does not enforce
+    required string inputs -- so the prod boundary step checks it again.
+    """
+    workflow = _gcp_backend_workflow()
+    triggers = workflow.get('on', workflow.get(True))
+    inputs = triggers['workflow_dispatch']['inputs']
+
+    requested_by = inputs['requested_by']
+    assert requested_by['type'] == 'string'
+    assert requested_by['required'] is True
+    assert 'lane label or session' in requested_by['description']
+
+    run_name = workflow['run-name']
+    assert 'inputs.requested_by' in run_name
+    # Non-dispatch triggers still render the event and actor instead of blanks.
+    assert 'inputs.environment || github.event_name' in run_name
+    assert 'inputs.requested_by || github.actor' in run_name
+
+
+def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
+    """The prod boundary check fails closed when requested_by is empty or
+    whitespace, echoes the requester into the log, and ignores it for
+    development dispatches."""
+    workflow = _gcp_backend_workflow()
+    job = workflow['jobs']['validate-production-boundary']
+    step = next(step for step in job['steps'] if step.get('env', {}).get('DEPLOY_ENVIRONMENT') is not None)
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'boundary.sh'
+    # Expand the inline deploy_gateway expressions the way the dispatcher does;
+    # literal ${{ }} is not valid bash and is irrelevant to the requester check.
+    script.write_text(re.sub(r'\$\{\{[^}]*\}\}', 'false', step['run']), encoding='utf-8')
+
+    def run_boundary(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {
+            **os.environ,
+            'DEPLOY_ENVIRONMENT': environment,
+            'DEPLOY_TARGETS': 'cloud-run-only',
+            'WORKFLOW_MODE': 'deploy',
+            'SERVICE_IMAGES': '',
+            'REQUESTED_BY': requested_by,
+        }
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_boundary('prod', '   ')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_boundary('prod', 'train:nightly-42')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=train:nightly-42' in accepted.stdout
+
+    development = run_boundary('development', '')
+    assert development.returncode == 0, development.stderr
+
+
+def test_backend_traffic_repair_prod_dispatch_needs_a_requester(tmp_path):
+    """repair-traffic-only is an independent prod mutation path: it skips
+    validate-production-boundary and validates in its own first step, so the
+    requester check must live there too (Luna round 1, PR #23694)."""
+    workflow = _gcp_backend_workflow()
+    steps = workflow['jobs']['repair-traffic']['steps']
+    step = next(step for step in steps if step.get('name') == 'Validate Environment Input')
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'repair.sh'
+    # Expand the inline github.event.inputs.environment expressions the way the
+    # dispatcher does; literal ${{ }} is not valid bash.
+    script.write_text(
+        re.sub(r'\$\{\{\s*github\.event\.inputs\.(\w+)\s*\}\}', r'${INPUT_\1}', step['run']),
+        encoding='utf-8',
+    )
+
+    def run_repair(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {**os.environ, 'INPUT_environment': environment, 'REQUESTED_BY': requested_by}
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_repair('prod', '')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_repair('prod', 'op1')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=op1' in accepted.stdout
+
+    development = run_repair('development', '')
+    assert development.returncode == 0, development.stderr

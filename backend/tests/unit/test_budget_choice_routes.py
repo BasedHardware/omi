@@ -1,5 +1,6 @@
 """HTTP contract with no real identity, database, subscription, or provider access."""
 
+import os
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -42,6 +43,13 @@ def api(monkeypatch, route_module):
     monkeypatch.setattr(real_auth, 'run_blocking', inline)
     monkeypatch.setattr(real_auth, '_enforce_rate_limit', lambda *args, **kwargs: None)
     monkeypatch.setattr(route, 'budget_period', lambda: '2026-10')
+
+    def cohort_tokens():
+        if os.getenv('HELD_CONTENT_ENABLED', 'false').lower() != 'true':
+            return ''
+        return os.getenv('HELD_CONTENT_COHORT', 'all')
+
+    monkeypatch.setattr(route.held_content_cohort.runtime_cohort, 'tokens', cohort_tokens)
     monkeypatch.setattr(route.choices_db, 'get_choice', lambda uid, period: None)
     monkeypatch.setattr(
         route.choices_db,
@@ -160,6 +168,23 @@ def test_platform_trial_paywall_is_unavailable_and_cannot_store_choice(api, monk
             'detail'
         ]
         == 'budget_not_exhausted'
+    )
+
+
+def test_excluded_cohort_does_not_read_usage_or_choice(api, monkeypatch):
+    client, route = api
+    monkeypatch.setenv('HELD_CONTENT_ENABLED', 'true')
+    monkeypatch.setenv('HELD_CONTENT_COHORT', 'uid:other-synthetic-user')
+    monkeypatch.setattr(route, 'resolve_transcription_allowance', lambda *args: pytest.fail('must not read'))
+    monkeypatch.setattr(route.choices_db, 'get_choice', lambda *args: pytest.fail('must not read'))
+    monkeypatch.setattr(route.choices_db, 'set_choice', lambda *args: pytest.fail('must not write'))
+    headers = {'X-Omi-Held-Content': '1'}
+    assert client.get('/v1/users/budget-choice', headers=headers).status_code == 404
+    assert (
+        client.put(
+            '/v1/users/budget-choice', headers=headers, json={'period': '2026-10', 'choice': 'on_device'}
+        ).status_code
+        == 404
     )
 
 

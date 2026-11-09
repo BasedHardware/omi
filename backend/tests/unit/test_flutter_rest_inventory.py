@@ -44,7 +44,11 @@ BASE_URL_ROOTS = {'/v1/dev', '/v1/mcp'}
 
 # Known gaps already tracked with a follow-up owner. Add here ONLY with a note
 # naming the tracking PR/issue, exactly like the desktop inventories.
-KNOWN_MISSING_ROUTES: Set[str] = set()
+KNOWN_MISSING_ROUTES: Set[str] = {
+    # fdcdc5f6bd3 (pocket onboarding arm) calls this from app/lib/backend/http/api/conversations.dart,
+    # but no backend route exists yet. Owner: the pocket onboarding author; add the route or drop the call.
+    '/v1/onboarding/seed-conversation',
+}
 
 # Dart route literals: capture from `${Env.apiBaseUrl}` to the closing quote,
 # then cut at the first `?` (query strings and optional-query ternaries).

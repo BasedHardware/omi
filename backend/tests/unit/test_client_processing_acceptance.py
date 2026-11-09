@@ -198,7 +198,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
-        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
@@ -223,7 +222,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
@@ -280,7 +278,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.memory.rejected_memory_feedback', AutoMockModule('utils.memory.rejected_memory_feedback'))
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(_BACKEND / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)
@@ -413,7 +412,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
     return spies
 
 
@@ -478,6 +476,17 @@ def _projection_dict(digest: str | None = None, *, title: str = PROJECTION_TITLE
 
 def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, default=str)
+
+
+def test_canonical_ingest_binding_also_refuses_mixed_unnamed_scopes(monkeypatch, stack):
+    pc, dev = stack
+    _enable_flag(monkeypatch, pc)
+    segments = [
+        TranscriptSegment(text='approved', speaker_id=0, speaker_id_scope='first', is_user=False, start=0, end=1),
+        TranscriptSegment(text='declined', speaker_id=0, speaker_id_scope='second', is_user=False, start=1, end=2),
+    ]
+    projection = _projection(transcript_sha256(segments))
+    assert dev._bind_projection_to_segments(projection, segments, projection, stored=False) is None
 
 
 def _stored_minimum(conversation_id: str) -> dict[str, Any]:

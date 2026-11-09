@@ -15,7 +15,13 @@ from unittest.mock import AsyncMock, Mock
 from utils.stt import live_gate, live_health, live_session, streaming as st
 from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED
 from config.live_stt_registry import DEFAULT_TARGETS, routing_on
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt.live_router import connecting_target
+
+
+@pytest.fixture(autouse=True)
+def configured_live_targets(monkeypatch):
+    enabled_live_targets(monkeypatch)
 
 
 def _dropped_total(kind):
@@ -721,7 +727,7 @@ def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
     monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     quarantines = []
     monkeypatch.setattr(live_session.health, 'quarantine', lambda *args: quarantines.append(args))
-    breaker = SimpleNamespace(record_serve_failure=lambda: None, serve_error_bench_seconds=180.0)
+    breaker = SimpleNamespace(record_serve_failure=lambda **_kwargs: None, serve_error_bench_seconds=180.0)
     monkeypatch.setattr(st, '_circuit_for_primary', lambda _service: breaker)
     success = []
     closed = []

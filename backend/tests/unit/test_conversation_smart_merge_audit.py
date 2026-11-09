@@ -570,3 +570,23 @@ def test_plain_conversation_delete_is_not_counted(recorded, monkeypatch):
     monkeypatch.setattr(merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: None)
     merge_conversations.delete_conversation_with_sync_sources(UID, 'c')
     assert recorded.deleted == []
+
+
+@pytest.fixture(autouse=True)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
+
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
+
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

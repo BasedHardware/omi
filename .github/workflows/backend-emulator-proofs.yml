@@ -1,6 +1,6 @@
 name: Backend Emulator Proofs
 
-# The canonical-memory and JIT emulator proofs, which nothing ran automatically
+# The canonical-memory, JIT and record-admission emulator proofs. Memory proofs had no automatic coverage
 # before 2026-08-30. They cover crash recovery, deletion races, generation
 # contention, day rollover, overlapping runners and writer cutover against a
 # real Firestore emulator -- the classes that fakes cannot reach and that a
@@ -15,6 +15,14 @@ name: Backend Emulator Proofs
 # it to a required check once it has a stable green history.
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -27,6 +35,27 @@ on:
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
       - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
+      - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
+      - 'backend/testing/replay_harness/**'
+      - 'backend/testing/hermetic_network.py'
+      - 'backend/testing/store_fixtures.py'
+      - 'backend/tests/integration/test_replay_harness_firestore.py'
+      - 'backend/tests/unit/test_replay_harness*.py'
+      - 'backend/utils/conversations/**'
+      - 'backend/services/conversation_finalization.py'
+      - 'backend/routers/conversation_finalization.py'
+      - 'backend/tests/integration/test_replay_harness_titling_firestore.py'
+      - 'backend/utils/batch_pipeline/**'
+      - 'backend/config/record_*.py'
+      - 'backend/config/batch_pipeline*.py'
+      - 'backend/config/audio_archive.py'
+      - 'backend/config/policy/**'
+      - 'backend/utils/executors.py'
+      - 'backend/testing/pipeline_sim/clock.py'
+      - 'backend/utils/other/storage.py'
+      - 'backend/utils/other/local_storage.py'
+      - 'backend/utils/other/raw_audio*.py'
       - 'backend/pylock.toml'
       - 'firebase.json'
       - 'firestore.rules'
@@ -41,14 +70,41 @@ on:
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
       - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
+      - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
+      - 'backend/testing/replay_harness/**'
+      - 'backend/testing/hermetic_network.py'
+      - 'backend/testing/store_fixtures.py'
+      - 'backend/tests/integration/test_replay_harness_firestore.py'
+      - 'backend/tests/unit/test_replay_harness*.py'
+      - 'backend/utils/conversations/**'
+      - 'backend/services/conversation_finalization.py'
+      - 'backend/routers/conversation_finalization.py'
+      - 'backend/tests/integration/test_replay_harness_titling_firestore.py'
+      - 'backend/utils/batch_pipeline/**'
+      - 'backend/config/record_*.py'
+      - 'backend/config/batch_pipeline*.py'
+      - 'backend/config/audio_archive.py'
+      - 'backend/config/policy/**'
+      - 'backend/utils/executors.py'
+      - 'backend/testing/pipeline_sim/clock.py'
+      - 'backend/utils/other/storage.py'
+      - 'backend/utils/other/local_storage.py'
+      - 'backend/utils/other/raw_audio*.py'
       - 'backend/pylock.toml'
       - 'firebase.json'
       - 'firestore.rules'
       - '.github/workflows/backend-emulator-proofs.yml'
 
 concurrency:
-  group: backend-emulator-proofs-${{ github.ref }}
+  group: backend-emulator-proofs-${{ github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   emulator-proofs:
@@ -59,6 +115,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6

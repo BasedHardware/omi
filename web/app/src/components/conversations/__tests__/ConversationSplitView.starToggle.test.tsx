@@ -214,4 +214,22 @@ describe('ConversationSplitView star toggle', () => {
       screen.getByRole('button', { name: 'Unstar conversation' }),
     ).toBeInTheDocument();
   });
+
+  it('updates the tile star when a refetch changes conversation.starred', async () => {
+    const { rerender } = render(<ConversationSplitView />);
+    expect(
+      screen.getByRole('button', { name: 'Star conversation' }),
+    ).toBeInTheDocument();
+
+    harness.conversations = [
+      { ...conversation('team-sync', '2026-08-11T12:00:00Z'), starred: true },
+    ];
+    rerender(<ConversationSplitView />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Unstar conversation' }),
+      ).toBeInTheDocument(),
+    );
+  });
 });

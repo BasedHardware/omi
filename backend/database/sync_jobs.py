@@ -1338,6 +1338,20 @@ def get_processed_segments(job_id: str) -> Set[str]:
         return set()
 
 
+def was_marked_once(job_id: str, tag: str) -> bool:
+    """Read side of try_mark_once; strict bool, fails closed on Redis error.
+
+    A read drives decisions (the sync empty-success guard), not idempotent
+    side effects, so an unreadable marker reports absent instead of assuming
+    the side effect already ran.
+    """
+    try:
+        return bool(r.get(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}')))
+    except Exception as e:
+        logger.warning('was_marked_once failed for %s:%s: %s', job_id, tag, e)
+        return False
+
+
 def try_mark_once(job_id: str, tag: str) -> bool:
     """SETNX guard so per-job side effects (fair-use metering, usage recording)
     run at most once across Cloud Tasks retries.

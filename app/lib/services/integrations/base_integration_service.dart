@@ -23,7 +23,8 @@ abstract class BaseIntegrationService {
     await checkConnection();
   }
 
-  Future<bool> authenticate() => launchIntegrationOAuth(() => getIntegrationOAuthUrl(oauthAppKey));
+  Future<bool> authenticate({bool Function()? isCurrent}) =>
+      launchIntegrationOAuth(() => getIntegrationOAuthUrl(oauthAppKey), isCurrent: isCurrent);
 
   Future<bool> checkConnection() async {
     try {

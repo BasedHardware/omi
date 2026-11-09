@@ -1,10 +1,10 @@
+from utils.mcp_dates import local_date_window, rest_datetime_window, localize_timestamps
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from utils.external_list_reads import ExternalListCacheRoute, cached_external_list, lever_enabled
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
-from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel, Field, ValidationError
@@ -56,7 +56,8 @@ from utils.mcp_server.handlers import action_items as mcp_action_item_handlers
 from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
-from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card
+from utils.conversations import transcribing_hold
+from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
 import logging
 
@@ -115,7 +116,7 @@ MCP_REST_SCOPE_EXEMPTIONS = {
 
 # REST detail/list reads project one extra card field beyond the hosted tool
 # reads: the released desktop client consumes apps_results off the card.
-_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results"]
+_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results", *transcribing_hold.READ_FIELDS]
 
 # Detail additionally fetches the manual speaker-assignment receipt so the
 # shared prepare-for-read seam can decode it exactly like the legacy full-doc
@@ -361,6 +362,8 @@ def get_user_profile(uid: str = Depends(get_uid_with_mcp_memories_read)):
 
 
 class CleanerMemory(BaseModel):
+    source_at: Optional[datetime] = None
+    extracted_at: Optional[datetime] = None
     id: str
     content: str
     category: MemoryCategory
@@ -474,9 +477,9 @@ def get_memories(
             updated_after=parsed_updated_after,
             sort=sort,
             categories=[category.value for category in category_list],
-            # The released REST list scanned up to 5000 raw rows through
-            # collect_filtered_memories; keep that window instead of the
-            # smaller MCP tool cap.
+            # Preserve the released REST candidate window. The shared
+            # reader proves completeness within this cap or returns an
+            # explicit bound error instead of a partial sorted prefix.
             max_scan=5000,
             cursor_kind="rest_get_memories",
             **({'budget': budget} if budget is not None else {}),
@@ -502,6 +505,8 @@ class SimpleTranscriptSegment(BaseModel):
     text: str
     original_text: Optional[str] = None
     speaker_id: Optional[int] = None
+    speaker_key: Optional[str] = None
+    speaker_label: Optional[str] = None
     speaker_name: Optional[str] = None
     start: float
     end: float
@@ -517,6 +522,8 @@ class TranscriptMatchSnippet(BaseModel):
     start_ms: Optional[int] = None
     end_ms: Optional[int] = None
     speaker_id: Optional[int] = None
+    speaker_key: Optional[str] = None
+    speaker_label: Optional[str] = None
 
 
 class SimpleConversation(BaseModel):
@@ -530,6 +537,10 @@ class SimpleConversation(BaseModel):
     participants_included: bool = False
     participants: List[dict] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
+    source: Optional[str] = None
+    is_call: Optional[bool] = None
+    call_platform: Optional[str] = None
+    calendar_event_id: Optional[str] = None
 
 
 class FullConversation(SimpleConversation):
@@ -548,6 +559,7 @@ def get_conversations(
     offset: int = 0,
     cursor: Optional[str] = None,
     updated_since: Optional[str] = None,
+    timezone: Optional[str] = None,
     uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
@@ -573,6 +585,7 @@ def get_conversations(
         raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
     try:
+        start_date, end_date, zone = rest_datetime_window(uid, start_date, end_date, timezone)
         page, next_cursor = mcp_conversation_handlers.conversation_cards_page_core(
             uid,
             limit=limit,
@@ -592,13 +605,15 @@ def get_conversations(
     # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
     valid_conversations = []
     for conv in page:
-        card = conversation_card(conv)
+        card = conversation_card(transcribing_hold.project(conv))
         card["apps_results"] = conv.get("apps_results") or []
         try:
             valid_conversations.append(SimpleConversation.model_validate(card))
         except Exception as e:  # noqa: BLE001 - one bad record must not 500 the page
             logger.warning(f"Skipping malformed conversation {conv.get('id', 'unknown')} in MCP list: {e}")
-    return valid_conversations
+    return [
+        SimpleConversation.model_validate(localize_timestamps(conv.model_dump(), zone)) for conv in valid_conversations
+    ]
 
 
 @router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])
@@ -607,24 +622,15 @@ def search_conversations(
     limit: int = 10,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    timezone: Optional[str] = None,
     uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"search_conversations {uid} query={sanitize_pii(query)} limit={limit}")
 
-    start_dt = None
-    end_dt = None
-    if start_date:
-        try:
-            start_dt = parse_date_only_utc(start_date)
-        except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
-            )
-    if end_date:
-        try:
-            end_dt = end_of_day_utc(parse_date_only_utc(end_date))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
+    try:
+        start_dt, end_dt, zone = local_date_window(uid, start_date, end_date, timezone)
+    except ToolExecutionError as exc:
+        raise _http_error_from_tool_error(exc)
 
     # Summary vectors miss transcript-only phrases; the shared resolver merges
     # transcript-chunk hits and returns lean docs (no photos) for shaping.
@@ -644,19 +650,19 @@ def search_conversations(
 
     # conversation_card() applies redact_conversation_for_list in place, so a
     # locked row reaches the snippet attacher already stripped of transcript.
-    cards = [conversation_card(conv) for conv in conversations]
+    cards = [conversation_card(transcribing_hold.project(conv)) for conv in conversations]
     # Snippets after redaction so locked list rows never leak transcript evidence (#6621).
     conversations = attach_match_snippets_to_conversations(conversations, query)
     for conv, card in zip(conversations, cards):
         card["apps_results"] = conv.get("apps_results") or []
-        card["match_snippets"] = conv.get("match_snippets") or []
+        card["match_snippets"] = [public_transcript_timing(snippet) for snippet in conv.get("match_snippets") or []]
     valid = []
     for card in cards:
         try:
             valid.append(SimpleConversation.model_validate(card))
         except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
             logger.warning(f"Skipping malformed conversation {card.get('id', 'unknown')} in MCP search: {e}")
-    return valid
+    return [SimpleConversation.model_validate(localize_timestamps(conv.model_dump(), zone)) for conv in valid]
 
 
 @router.get(
@@ -677,7 +683,7 @@ def get_conversation_by_id(
         extra_field_paths=_REST_CONVERSATION_DETAIL_EXTRA_FIELD_PATHS,
     )
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise HTTPException(status_code=404, detail="Conversation not found. Use the full id from get_conversations.")
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -692,7 +698,7 @@ def get_conversation_by_id(
         max_chars=MCP_REST_CONVERSATION_MAX_CHARS,
         extra_keys=("speaker_name",),
     )
-    payload = conversation_card(conversation)
+    payload = conversation_card(transcribing_hold.project(conversation))
     payload["apps_results"] = conversation.get("apps_results") or []
     payload["transcript_segments"] = transcript_segments
     payload["truncated"] = truncated
@@ -720,6 +726,7 @@ class SimpleActionItem(BaseModel):
     due_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None
+    source: Optional[str] = None
     # Additive for the updated_since sync feed: the persisted revision
     # watermark, and a soft tombstone flag present only on rows that actually
     # carry deleted:true (hard deletes leave no row and are not reported).
@@ -1067,11 +1074,14 @@ def get_screen_activity(
     summary: bool = False,
     limit: int = 200,
     cursor: Optional[str] = None,
+    timezone: Optional[str] = None,
+    timestamp_format: Optional[str] = None,
     uid: str = Depends(get_uid_with_mcp_screen_activity_read),
 ):
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     limit = max(1, min(limit, 200))
     try:
+        start_date, end_date, zone = rest_datetime_window(uid, start_date, end_date, timezone)
         result = mcp_other_handlers.screen_activity_core(
             uid,
             start=start_date,
@@ -1082,6 +1092,9 @@ def get_screen_activity(
             limit=limit,
             cursor_token=cursor,
             cursor_kind="rest_get_screen_activity",
+            timezone_name=str(zone),
+            timestamp_format=timestamp_format,
+            use_iso_offset=timezone is not None,
         )
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)
@@ -1104,6 +1117,7 @@ def get_daily_summaries(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     cursor: Optional[str] = None,
+    timezone: Optional[str] = None,
     uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_daily_summaries {uid} limit={limit} offset={offset}")
@@ -1118,6 +1132,7 @@ def get_daily_summaries(
             "start_date": start_date,
             "end_date": end_date,
             "cursor": cursor,
+            "timezone": timezone,
         },
     )
     _next_cursor_header(response, result.get("next_cursor"))

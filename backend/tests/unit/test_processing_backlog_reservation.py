@@ -25,6 +25,9 @@ def source_path(kind, identity='excluded', uid=UID):
 
 @pytest.fixture
 def reservation(monkeypatch):
+    monkeypatch.setattr(
+        worker.backlog_release, 'decide', lambda uid, job, units, **kw: worker.backlog_release.Decision(True, 'granted')
+    )
     monkeypatch.setattr(store.time, 'time', lambda: NOW)
     monkeypatch.setattr(store, '_request_memo', lambda: SimpleNamespace(forget_request_reads=lambda uid: None))
 
@@ -258,6 +261,7 @@ def worker_reservation(reservation, monkeypatch):
         monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:' + UID)
         monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
         monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: PERIOD)
+        monkeypatch.setattr(worker.funded_processing, 'paid_owner', lambda uid: True)
         monkeypatch.setattr(worker.funded_processing, 'allowance', lambda uid: SimpleNamespace(managed=True))
         monkeypatch.setattr(worker.funded_processing, 'capacity', lambda _: (100, 100))
         monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
@@ -271,6 +275,8 @@ def worker_reservation(reservation, monkeypatch):
             lambda uid, row: {'origin': 'live' if row['metadata'] == 'encrypted-live' else 'sync'},
         )
         monkeypatch.setattr(worker, 'recording_units_per_hour', lambda _: 3600)
+        # Integration lane 6: no open cap-hold batch reservations in these scenarios.
+        monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
 
         async def blocking(executor, function, *args, **kwargs):
             return function(*args, **kwargs)

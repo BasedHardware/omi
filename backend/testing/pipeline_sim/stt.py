@@ -20,6 +20,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+from diarizer.batch_pipeline import padded_retry_fits, padded_retry_seconds
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty
 
 SAMPLE_RATE = 16000
@@ -185,7 +186,11 @@ class FakeSTT:
         mean = profile.base_latency_seconds + profile.seconds_per_audio_second * audio_seconds
         return mean * math.exp(self.rng.gauss(0, profile.latency_sigma) - profile.latency_sigma**2 / 2)
 
-    async def request(self, kind: str, audio_seconds: float, *, purpose: str = 'batch') -> str:
+    async def request(
+        self, kind: str, audio_seconds: float, *, purpose: str = 'batch', forced_outcome: str | None = None
+    ) -> str:
+        if forced_outcome not in {None, EMPTY}:
+            raise ValueError('only an explicit empty-ASR fixture is supported')
         stats = self.stats
         stats.requests += 1
         stats.by_purpose[purpose] += 1
@@ -206,7 +211,7 @@ class FakeSTT:
         finally:
             self.slots.release()
         window = self._window()
-        if window is not None and window.mode == EMPTY:
+        if forced_outcome == EMPTY or (window is not None and window.mode == EMPTY):
             stats.empty += 1
             return EMPTY
         draw = self.rng.random()
@@ -280,12 +285,18 @@ class PlannedWords:
             for s, outcome in zip(samples_list, outcomes)
         ]
 
-    def recover_words(self, samples, max_padded_seconds):
+    def recover_words(self, samples, max_padded_seconds, *, before_dispatch=None, after_dispatch=None):
         outcome = self.plan[samples.segment_id].get('retry')
-        if outcome is None:
+        if outcome is None or not padded_retry_fits(samples, max_padded_seconds):
             return None  # Oversize for the padded retry: the worker records skipped_oversize.
+        # Match ParakeetWords.recover_empty: refusal retains custody, and only
+        # an accepted provider result reports the padded audio quantum.
+        if before_dispatch is not None and not before_dispatch():
+            return None
         if outcome in {ERROR, TIMEOUT}:
             raise ProviderUnavailable('synthetic padded retry failure')
+        if after_dispatch is not None:
+            after_dispatch(padded_retry_seconds(samples))
         return synthetic_words(len(samples) / SAMPLE_RATE) if outcome == WORDS else []
 
 
@@ -341,6 +352,8 @@ class FakeModulate:
             self.outcomes['provider_failed'] += 1
             raise ProviderUnavailable('synthetic paid provider failure')
         rate = self.profile.near_silence_recover_rate if kind == NEAR_SILENCE else self.profile.speech_recover_rate
+        if self.truth[item.segment_id].get('unrecoverable'):
+            rate = 0.0
         if kind == SILENCE or self.rng.random() >= rate:
             self.outcomes['empty'] += 1
             raise MultilingualEmpty(duration, spans)

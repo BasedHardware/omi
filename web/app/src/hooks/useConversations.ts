@@ -219,6 +219,7 @@ export function useConversations(
         }
       } else {
         // No cache, do normal fetch
+        setConversations([]);
         setOffset(0);
         setHasMore(true);
         fetchConversations(0, false);

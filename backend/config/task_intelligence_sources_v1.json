@@ -12,13 +12,16 @@
         "app/lib/pages/action_items/services/action_item_export_service.dart",
         "app/lib/pages/action_items/widgets/action_item_form_sheet.dart",
         "app/lib/pages/conversation_detail/widgets.dart",
+        "app/lib/pages/conversation_detail/widgets/conversation_action_items_section.dart",
         "app/lib/pages/conversations/widgets/goals_widget.dart",
-        "backend/routers/action_items.py"
+        "backend/routers/action_items.py",
+        "backend/utils/open_loops/service.py",
+        "backend/utils/retrieval/tool_services/action_items.py"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {
-          "path": "backend/routers/action_items.py",
+          "path": "backend/utils/retrieval/tool_services/action_items.py",
           "symbol": "action_items_db.create_action_item",
           "discover": true
         },
@@ -51,6 +54,16 @@
           "path": "backend/routers/action_items.py",
           "symbol": "action_items_db.update_action_item",
           "discover": true
+        },
+        {
+          "path": "backend/utils/open_loops/service.py",
+          "symbol": "action_items_db.mark_action_item_completed",
+          "discover": true
+        },
+        {
+          "path": "backend/utils/retrieval/tool_services/action_items.py",
+          "symbol": "action_items_db.create_action_items_batch",
+          "discover": true
         }
       ]
     },
@@ -60,6 +73,7 @@
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
         "desktop/macos/Desktop/Sources/Stores/UnsyncedTaskCreateProjection.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
         "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
@@ -128,11 +142,6 @@
         {
           "path": "backend/utils/retrieval/tool_services/action_items.py",
           "symbol": "action_items_db.update_action_item",
-          "discover": true
-        },
-        {
-          "path": "backend/utils/retrieval/tools/action_item_tools.py",
-          "symbol": "action_items_db.create_action_item",
           "discover": true
         },
         {
@@ -230,6 +239,8 @@
       "owner_paths": [
         "backend/utils/conversations/process_conversation.py",
         "backend/utils/conversations/merge_conversations.py",
+        "backend/utils/task_intelligence/conversation_capture.py",
+        "backend/utils/task_intelligence/reminder_policy.py",
         "backend/routers/conversations.py"
       ],
       "test_adapter": "transcript_capture_v2",

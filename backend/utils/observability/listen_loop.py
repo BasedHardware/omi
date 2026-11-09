@@ -1,6 +1,6 @@
 """Listen event-loop health: loop lag, per-frame processing time and VAD inference rate.
 
-These are the signals the listen HPA retune (CPU 70%, more sockets per pod) is gated on.
+These are the signals the listen HPA retune (D0b: CPU 55%, more sockets per pod) is watched on.
 Labels are closed vocabularies only; never uid, session or conversation identifiers.
 
 Kill switch: ``LISTEN_LOOP_METRICS_ENABLED`` (default on; ``false``/``0``/``off``/``no``

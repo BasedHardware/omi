@@ -28,7 +28,6 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import Future
 from contextlib import contextmanager
-from dataclasses import asdict
 from datetime import datetime, timezone
 import logging
 import os
@@ -189,7 +188,8 @@ class ChainLog:
         self.tails[key] = segment
         self.bindings[segment] = ProjectionBinding(owner, f'job-{content}', content, tuple(siblings))
         item = WorkItem(segment, owner, capture_at, f'gs://sim/{segment}.wav', CAPTURE_SECONDS, Priority.DEEP)
-        self.jobs[segment] = {**asdict(item), 'requires_compute_admission': True, 'policy_parts': self.policy_parts}
+        serialized_item = item.to_dict()
+        self.jobs[segment] = {**serialized_item, 'requires_compute_admission': True, 'policy_parts': self.policy_parts}
 
     # --- FirestoreStore facade ------------------------------------------------
     def projection_page(self, limit=100, *, after=None, states=('pending', 'persisted', 'ready')):
@@ -399,7 +399,7 @@ def run(
         lanes.spend('fetch_audio')
         return b''
 
-    def resolve(item, binding, manifest, client, *, projection_item=None):
+    def resolve(item, binding, manifest, client, *, projection_item=None, require_lineage_fence=False):
         lanes.spend('context')
         return context.ResolvedContext(binding.target_conversation_id)
 
@@ -471,6 +471,7 @@ def run(
         patch.object(projection_drain, 'time', lanes.module()),
         patch.object(projection_drain, 'run_blocking', inline_blocking),
         patch.object(projection, 'projection_claim', claim),
+        patch.object(projection_drain, 'projection_claim_held', lambda *args: False),
         patch.object(projection, 'build_incoming', build_incoming),
         patch.object(projection_parts, 'split_result', lambda item, payload: [(item, payload)]),
         patch.object(context, 'resolve_context', resolve),

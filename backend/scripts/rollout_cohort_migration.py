@@ -8,7 +8,13 @@ from dataclasses import dataclass
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
+from config.rollout_cohorts import COLLECTION, COHORT_ENVS, parse_cohort, valid_uid
+from database.rollout_cohorts import (
+    HELD_CONTENT_DOCUMENT,
+    RAMP_DOC_ID,
+    STT_CAP_DOCUMENT,
+    normalize_ramp_document,
+)
 
 KEYS = {
     'batch-pipeline': 'BATCH_PIPELINE_UID_ALLOWLIST',
@@ -18,7 +24,6 @@ KEYS = {
     'dream-agent': 'DREAM_AGENT_UID_ALLOWLIST',
     'speaker-grouping-shadow': 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST',
     'stt-live-demand': 'STT_LIVE_DEMAND_UID_ALLOWLIST',
-    'sync-legacy-fresh': 'SYNC_LEGACY_FRESH_UID_ALLOWLIST',
     'sync-lineage-resolve': 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
     'transcription-final-pass': 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST',
     'transcription-shadow': 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
@@ -32,7 +37,6 @@ HOSTS = {
     'stt-live-demand': {'helm/backend-listen'},
     'mobile-standard-batch': {'helm/backend-listen'},
     'sync-lineage-resolve': ALL_HOSTS - {'helm/pusher'},
-    'sync-legacy-fresh': {'cloud-run/backend-sync', 'cloud-run/backend-sync-backfill'},
 }
 LIMIT = 450  # A single bounded atomic seed; refuse to truncate a larger live cohort.
 
@@ -106,6 +110,9 @@ def read_live(environment, kube_context, *, command=_json_command):
 
 def cohort_sources(sources, name):
     """Inspect declared bindings, never combine divergent host lists into a wider cohort."""
+    if name == 'batch-pipeline-shadow':
+        # No env allowlist ever existed: legacy membership is everyone, narrowed only by stored denials.
+        return [Membership(all_users=True)]
     rows = []
     for host, env in sources.items():
         if name.startswith('messaging-'):
@@ -145,14 +152,37 @@ def inventory(sources):
     return desired, conflicts
 
 
-def validate_stored_documents(client):
+def _validate_stored_cohort_control_document(data, environment):
+    tokens = data.get('tokens') if isinstance(data, dict) else None
+    if (
+        not isinstance(data, dict)
+        or data.get('environment') != environment
+        or not isinstance(tokens, str)
+        or (bool(tokens.strip()) and parse_cohort(tokens) is None)
+    ):
+        raise ValueError('malformed stored cohort control document')
+
+
+def validate_stored_documents(client, environment):
+    if environment not in {'prod', 'dev'}:
+        raise ValueError('unsupported migration environment')
     # Verify the same whole-document shape the serving adapter requires. A
     # malformed unrelated field can deny every cohort, including legacy all.
-    rows = list(client.collection(COLLECTION).limit(LIMIT + 1).stream(timeout=10.0, retry=None))
-    if len(rows) > LIMIT:
-        raise ValueError('stored cohort inventory exceeds migration bound')
+    # Control documents share the collection but are never member records.
+    # Reserve their slots plus one overflow row so validation preserves LIMIT.
+    rows = list(client.collection(COLLECTION).limit(LIMIT + 4).stream(timeout=10.0, retry=None))
+    member_count = 0
     for row in rows:
         data = row.to_dict()
+        if row.id == RAMP_DOC_ID:
+            normalize_ramp_document(data)
+            continue
+        if row.id in {STT_CAP_DOCUMENT, HELD_CONTENT_DOCUMENT}:
+            _validate_stored_cohort_control_document(data, environment)
+            continue
+        member_count += 1
+        if member_count > LIMIT:
+            raise ValueError('stored cohort inventory exceeds migration bound')
         cohorts = data.get('cohorts') if isinstance(data, dict) else None
         if not isinstance(cohorts, dict) or any(
             not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())
@@ -191,7 +221,7 @@ def migrate(args, *, client_factory, live_reader=read_live):
             print(f'{name}: live_members={len(row.members)} legacy_all={int(row.all_users)} writes=0')
         return 0
     client = client_factory(project=args.project)
-    validate_stored_documents(client)
+    validate_stored_documents(client, args.environment)
     stored = {
         name: (read_stored(client, args.environment, name, True), read_stored(client, args.environment, name, False))
         for name in desired

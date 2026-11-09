@@ -47,6 +47,44 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
 # Summary acceptance must agree on every finalization host.
 FINALIZATION_GATE_FLAGS = ('CLIENT_SUMMARIES_AT_CAP_ENABLED',)
 
+BATCH_FINAL_PASS_FLAG = 'BATCH_FINAL_PASS_ENABLED'
+BATCH_FINAL_PASS_HOSTS = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+)
+
+
+def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
+    """Independent serving roster: deleting a binding cannot hide a runtime."""
+    if env != 'prod':
+        return []
+    errors, values = [], set()
+    gke = config.get('gke', {})
+    config_map = gke.get('config_map', {})
+    flag = BATCH_FINAL_PASS_FLAG
+    for platform, name in BATCH_FINAL_PASS_HOSTS:
+        services = gke if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+        entry = services.get(name, {}).get('env', {}).get(flag, {})
+        value = entry.get('value')
+        if platform == 'gke':
+            expected = {'name': config_map.get('name'), 'key': flag}
+            if entry.get('config_map') != expected or not expected['name']:
+                errors.append(ValidationError(f'{platform}/{name}', f'{flag} must use the shared ConfigMap'))
+            source = config_map.get('entries', {}).get(flag, {})
+            value = source.get('value') if source.get('source') == 'literal' else None
+        if value not in {'true', 'false'}:
+            errors.append(ValidationError(f'{platform}/{name}', f'{flag} needs an explicit true/false binding'))
+        else:
+            values.add(value)
+    if len(values) > 1:
+        errors.append(ValidationError('batch_final_pass', f'{flag} must agree across all production hosts'))
+    return errors
+
+
 # The runtime resolves these flags with strip().casefold() against the truthy
 # set {'1','true','yes','on'}; anything else — including '' — is silently False.
 # Admission therefore only accepts that truthy set and its falsy counterparts,
@@ -244,19 +282,31 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+# Cloud Run cannot resolve cluster DNS. Prod routes through the internal-ALB
+# shared gateway (gateway IP + /diarizer); the dev gateway VIP was deleted
+# 2026-11-02, so dev uses the documented rollback Ingress host. Admission
+# rejects any other literal, including a value that merely agrees across
+# Cloud Run hosts.
+_CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
+    'dev': 'http://diarizer.omiapi.com:80',
+    'prod': 'http://172.16.160.20/diarizer',
+}
 
 
 def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require the reachable diarizer ILB on every speaker-ID host.
+    """Require a reachable diarizer route on every speaker-ID host.
 
     Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
     ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
     voice matching there while the others keep working. Cloud Run cannot use
-    in-cluster DNS; the value must match GKE listen's ILB hostname.
+    in-cluster DNS, so each Cloud Run host must use that environment's
+    approved internal-ALB route. GKE hosts share one route (ClusterIP service
+    DNS in prod, the legacy diarizer Ingress host in dev after the shared
+    internal gateway was removed).
     """
     errors: list[ValidationError] = []
-    seen_values: dict[str, str] = {}
-    listen_value: str | None = None
+    gke_values: dict[str, str] = {}
+    cloud_run_values: dict[str, str] = {}
     for platform, service_name in SPEAKER_EMBEDDING_HOSTS:
         service_config = _service_config(env_config, platform, service_name)
         if service_config is None:
@@ -285,30 +335,38 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
                     f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
                 )
             )
-        seen_values[scope] = value
-        if platform == 'gke' and service_name == 'backend-listen':
-            listen_value = value
-
-    if listen_value:
-        for scope, value in seen_values.items():
-            if '/gke/backend-listen' in scope:
-                continue
-            if value != listen_value:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{SPEAKER_EMBEDDING_ENV} must match gke/backend-listen ({listen_value!r})',
-                    )
+        approved = _CLOUD_RUN_SPEAKER_EMBEDDING_URL.get(env) if platform == 'cloud_run' else None
+        if approved and value != approved:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the approved internal-ALB route {approved!r}',
                 )
+            )
+        (gke_values if platform == 'gke' else cloud_run_values)[scope] = value
+
+    for topology_values in (gke_values, cloud_run_values):
+        distinct = set(topology_values.values())
+        if len(distinct) > 1:
+            rendered = ', '.join(f'{scope}={value!r}' for scope, value in sorted(topology_values.items()))
+            errors.append(
+                ValidationError(
+                    f'{env}/speaker-embedding',
+                    f'{SPEAKER_EMBEDDING_ENV} disagrees across hosts: {rendered}',
+                )
+            )
     return errors
 
 
 __all__ = [
+    'BATCH_FINAL_PASS_FLAG',
+    'BATCH_FINAL_PASS_HOSTS',
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
     'FINALIZATION_GATE_FLAGS',
     'SPEAKER_EMBEDDING_ENV',
     'SPEAKER_EMBEDDING_HOSTS',
     'validate_conversation_finalization_capabilities',
+    'validate_batch_final_pass_hosts',
     'validate_speaker_embedding_hosts',
 ]

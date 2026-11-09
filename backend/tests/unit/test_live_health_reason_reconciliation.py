@@ -264,10 +264,13 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
 
 def test_vocabulary_is_closed_and_classifier_cannot_accept_free_text():
     assert LIVE_STT_REASONS <= ALLOWED_REASONS
-    assert len(LIVE_STT_REASONS) == 33
+    # 33 + the three local delivery deaths split out of capacity_full (P34).
+    assert len(LIVE_STT_REASONS) == 36
     assert provider_observation('failover', 'no_text_rescue_complete') is None
     assert provider_observation('failover', 'cancelled') is None
     assert provider_observation('failover', 'replay_ring_overflow') is None  # session-local, never provider failure
+    for local_bound in ('send_queue_full', 'replay_send_stalled', 'delivery_expired'):
+        assert provider_observation('failover', local_bound) is None  # our send path, never provider failure
     assert normalize_live_stt_reason('cancelled') == 'cancelled'
     assert normalize_live_stt_reason(None, 'unknown free text') == 'connection_lost'
     assert normalize_live_stt_reason('send ConnectionError: private') == 'connection_lost'
@@ -300,7 +303,9 @@ async def test_never_refreshed_snapshot_is_distinct_from_stale_and_idle_refreshe
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'])
+@pytest.mark.parametrize(
+    'cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow', 'replay_send_stalled']
+)
 async def test_real_window_publishes_cause_before_latch_and_next_send_is_censored(cause):
     class ObservedWindow(WindowedParakeetSocket):
         def __setattr__(self, name, value):

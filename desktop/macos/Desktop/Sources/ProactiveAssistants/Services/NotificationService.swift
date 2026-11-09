@@ -1,3 +1,9 @@
+// Proactive notification delivery: scheduling and posting through
+// UNUserNotificationCenter, with snooze/frequency state.
+//
+// Every send must pass the shared gate primitive (master toggle, frequency
+// throttle, snooze, presence) -- two proactive lanes once reached the poster
+// directly and skipped those gates, shipping silent.
 import AppKit
 import Foundation
 @preconcurrency import UserNotifications
@@ -302,10 +308,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
 
         metadata.onInteraction?(.opened)
-        if case .openProactivityItem(let target) = metadata.action {
-          ProactivityNotificationAdapter.open(target)
-          break
-        }
         switch Self.openAction(
           assistantId: assistantId,
           title: title,

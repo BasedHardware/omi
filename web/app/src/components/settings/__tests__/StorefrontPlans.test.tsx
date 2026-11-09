@@ -59,7 +59,7 @@ describe('StorefrontPlans', () => {
     const onSelect = renderPlans(golden('free_settings'));
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 2 months free' }));
     const plus = screen.getByTestId('storefront-tier-plus');
-    expect(within(plus).getByText('$16.66/month')).toBeTruthy();
+    expect(within(plus).getByText('US$16.66/month')).toBeTruthy();
     fireEvent.click(within(plus).getByRole('button', { name: 'Get Plus' }));
     expect(onSelect.mock.calls[0][1].id).toBe('price_plus_year');
   });
@@ -115,7 +115,7 @@ describe('StorefrontPanel purchase routing', () => {
     api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
     api.upgradeSubscription.mockResolvedValue({ status: 'success' });
     render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
-    const label = 'Switch to yearly · save $39.98';
+    const label = 'Switch to yearly · save US$39.98';
     fireEvent.click(await screen.findByRole('button', { name: label }));
     expect(
       await screen.findByText('Your monthly plan continues until Nov 1'),
@@ -229,5 +229,32 @@ describe('BudgetUpsellBanner', () => {
     expect(
       await screen.findByRole('button', { name: 'Upgrade to Architect' }),
     ).toBeTruthy();
+  });
+  it('a new buyer renders the single-plan Omi Pro sheet and checks it out, never a dead panel', async () => {
+    // 2026-10-24 ruling: /v2/payments/plans answers a single unlimited_v2 tier
+    // for a new buyer. The panel must render that card with a working CTA
+    // (offLadder used to refuse unlimited_v2) and start checkout on it.
+    api.getStorefront.mockResolvedValue(golden('single_plan_omi_pro'));
+    api.createCheckoutSession.mockResolvedValue({
+      url: 'https://checkout.stripe.test/pro',
+    });
+    render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
+    expect(await screen.findByText("You're on Free")).toBeTruthy();
+    expect(screen.queryByText(/Couldn.t load plans/)).toBeNull();
+    const card = screen.getByTestId('storefront-tier-unlimited_v2');
+    fireEvent.click(within(card).getByRole('button', { name: 'Get Unlimited' }));
+    await waitFor(() =>
+      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_month'),
+    );
+    expect(window.open).toHaveBeenCalledWith(
+      'https://checkout.stripe.test/pro',
+      '_blank',
+    );
+    // The yearly chip offers the annual Omi Pro price too.
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 3 months free' }));
+    fireEvent.click(within(card).getByRole('button', { name: 'Get Unlimited' }));
+    await waitFor(() =>
+      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_year'),
+    );
   });
 });

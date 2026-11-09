@@ -10,6 +10,8 @@ from datetime import date
 from unittest import mock
 from pathlib import Path
 
+from git_test_env import clean_git_env
+
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
@@ -36,7 +38,7 @@ def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]
         "fail": "closed",
         "owner": "tester",
         "created": "2026-08-01",
-        "review_by": "2026-10-15",
+        "review_by": "2026-11-15",
         "decision": "pending",
         "terminal": terminal,
     }
@@ -57,16 +59,47 @@ def ramp_plan(**overrides: object) -> dict[str, object]:
 
 class RegistryFixture(unittest.TestCase):
     def setUp(self) -> None:
+        git_env = mock.patch.dict(os.environ, clean_git_env(), clear=True)
+        git_env.start()
+        self.addCleanup(git_env.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="omi-flag-registry-")
         self.root = Path(self.temp.name)
         subprocess.run(
             ["git", "init", "-q"],
             cwd=self.root,
             check=True,
-            env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+            env=clean_git_env(),
         )
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))
+
+    def test_shared_boolean_parser_fail_field_is_enforced(self) -> None:
+        with mock.patch("check_feature_flag_registry.parser_defaults", return_value={"EXAMPLE_ENABLED": "open"}):
+            errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
+        self.assertTrue(any("EXAMPLE_ENABLED: fail must be open" in error for error in errors))
+
+    def test_renderer_checks_and_generates_parser_fail_field(self) -> None:
+        self.write(
+            "backend/config/refactor_modes.py",
+            "def default_on(name, *, environ=None): return True\n"
+            "def default_off(name, *, environ=None): return False\n",
+        )
+        self.write(
+            "backend/config/example.py",
+            "from config.refactor_switches import default_on\ndef enabled(): return default_on('EXAMPLE_ENABLED', False)\n",
+        )
+        renderer = Path(__file__).with_name("render_feature_flag_registry.py")
+        import sys
+
+        command = [sys.executable, str(renderer), "--root", str(self.root), "--as-of", "2026-10-01"]
+        checked = subprocess.run(command + ["--check-parsers"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 1, checked.stdout + checked.stderr)
+        self.assertIn("EXAMPLE_ENABLED", checked.stderr)
+        rendered = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(rendered.returncode, 0, rendered.stdout + rendered.stderr)
+        checked = subprocess.run(command + ["--check-parsers"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+        self.assertEqual(load_registry(self.root / "config/feature-flags.yaml")["flags"][0]["fail"], "open")
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -95,7 +128,21 @@ class RegistryFixture(unittest.TestCase):
         )
 
     def errors(self) -> list[str]:
-        return check(self.root, check_render=False)[0]
+        return check(self.root, check_render=False, as_of=date(2026, 10, 1))[0]
+
+    def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
+        self.write("backend/docs/experiment.md", "Pre-registered readout")
+        row = flag(
+            lifecycle="experiment",
+            decision="kill_after_readout",
+            terminal="undecided",
+            review_by="2026-10-30",
+            prereg="backend/docs/experiment.md",
+        )
+        self.assertEqual(validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root), [])
+        for changes in ({"terminal": "off"}, {"lifecycle": "rollout"}):
+            errors = validate_registry({"flags": [{**row, **changes}], "ignore": [], "retired": []}, root=self.root)
+            self.assertTrue(any("kill_after_readout requires" in error for error in errors))
 
     def test_finds_literal_and_module_constant_env_reads_with_locations(self) -> None:
         self.write(
@@ -143,6 +190,25 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
 
+    def test_dart_kill_switch_constant_is_cataloged(self) -> None:
+        self.write(
+            "app/lib/services/experiments/watch_copy_dedupe.dart",
+            "class Policy { static const killSwitchFlag = 'watch_copy_dedupe_off'; }\n",
+        )
+        self.assertIn("unregistered feature flag: watch_copy_dedupe_off", "\n".join(self.errors()))
+        kill = flag(
+            "watch_copy_dedupe_off",
+            kind="posthog",
+            surfaces=["mobile"],
+            lifecycle="ops_kill",
+            decision="keep",
+            terminal="keep",
+            posthog={"row": "expected", "role": "kill"},
+        )
+        kill.pop("review_by")
+        self.write("config/feature-flags.yaml", self.yaml([flag(), kill]))
+        self.assertEqual([], self.errors())
+
     def test_swift_sdk_constant_read_is_a_real_surface_not_an_unconditional_declaration(self) -> None:
         key = "fixture-remote-stop"
         self.write(
@@ -185,6 +251,34 @@ class RegistryFixture(unittest.TestCase):
         self.write("config/feature-flags.yaml", self.yaml([flag(aliases=["FORMER_ENABLED"])]))
         self.assertIn("stale registry entry: delete it or restore the read: FORMER_ENABLED", self.errors())
 
+    def test_reads_tracked_at_head_are_scanned_in_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone sources:
+        # the read scanner must fall back to the HEAD blob or every app/web
+        # flag is misreported as stale in a backend-scoped lane.
+        self.write(
+            "app/lib/services/experiments/gate.dart",
+            "final a = ExperimentDefinition<String>(key: 'SPARSE_MOBILE_GATE');\n",
+        )
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml([flag(), flag(key="SPARSE_MOBILE_GATE", surfaces=["mobile"])]),
+        )
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        identity = ["-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests"]
+        subprocess.run(["git", "-C", str(self.root), *identity, "add", "-A"], check=True, env=env)
+        subprocess.run(["git", "-C", str(self.root), *identity, "commit", "-qm", "fixture"], check=True, env=env)
+        (self.root / "app/lib/services/experiments/gate.dart").unlink()
+        self.assertEqual(self.errors(), [])
+        # An alias with no read on disk or at HEAD is still stale: the HEAD
+        # fallback widens sparse visibility, it does not weaken the check.
+        (self.root / "config/feature-flags.yaml").write_text(
+            self.yaml([flag(), flag(key="SPARSE_MOBILE_GATE", surfaces=["mobile"], aliases=["SPARSE_GONE"])]),
+            encoding="utf-8",
+        )
+        errors = self.errors()
+        self.assertIn("stale registry entry: delete it or restore the read: SPARSE_GONE", errors)
+        self.assertNotIn("stale registry entry: delete it or restore the read: SPARSE_MOBILE_GATE", errors)
+
     def test_deploy_key_missing_from_registry(self) -> None:
         self.write("backend/deploy/runtime_env/_base.yaml", "services:\n  MISSING_KILL_SWITCH:\n    value: false\n")
         self.assertTrue(
@@ -223,6 +317,17 @@ class RegistryFixture(unittest.TestCase):
         registry = load_registry(self.root / "config/feature-flags.yaml")
         output = render(self.root, registry, date(2026, 10, 8))
         self.assertTrue(any("ship" in line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
+
+    def test_with_legacy_keeps_a_dated_rollout_until_deletion(self) -> None:
+        entry = flag(decision="with_legacy", terminal="off", review_by="2026-12-15")
+        self.assertEqual(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root), [])
+        entry["terminal"] = "on"
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("decision with_legacy requires terminal off", errors)
+        entry["terminal"] = "off"
+        del entry["review_by"]
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("review_by", errors)
 
     def test_unknown_decision_is_rejected(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(decision="unknown")]))
@@ -365,7 +470,7 @@ class RegistryFixture(unittest.TestCase):
             ".github/actions/deploy/action.yml",
             'run: gcloud run services update backend-listen --update-env-vars "EXAMPLE_PERCENT=10,EXAMPLE_UID_ALLOWLIST=uid"\n',
         )
-        errors, _ = check(self.root, check_render=False)
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
         self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_PERCENT", "\n".join(errors))
         self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_UID_ALLOWLIST", "\n".join(errors))
 
@@ -379,7 +484,7 @@ class RegistryFixture(unittest.TestCase):
 
     def test_rendered_doc_mismatch_requires_regeneration(self) -> None:
         self.write("backend/docs/feature-flag-registry.md", "<!-- feature-flag-registry as-of: 2026-09-24 -->\nstale\n")
-        self.assertIn("rendered doc drift", "\n".join(check(self.root)[0]))
+        self.assertIn("rendered doc drift", "\n".join(check(self.root, as_of=date(2026, 10, 1))[0]))
 
     def test_renderer_resolves_shared_cohort_mapping(self) -> None:
         tree = _parse_mapping(
@@ -470,6 +575,31 @@ class RegistryFixture(unittest.TestCase):
         )
         self.assertEqual(self.errors(), [])
 
+    def test_prereg_tracked_at_head_counts_in_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths: a
+        # prereg doc committed at HEAD but absent from the working tree is
+        # still valid evidence and must not fail the registry check.
+        self.write("docs/prereg/example.md", "# prereg\n")
+        self.write(
+            "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")])
+        )
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        commit_env_identity = [
+            "-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests",
+        ]
+        subprocess.run(["git", "-C", str(self.root), *commit_env_identity, "add", "-A"], check=True, env=env)
+        subprocess.run(
+            ["git", "-C", str(self.root), *commit_env_identity, "commit", "-qm", "fixture"], check=True, env=env
+        )
+        (self.root / "docs/prereg/example.md").unlink()
+        self.assertEqual(self.errors(), [])
+        # A path in neither the working tree nor HEAD still fails closed.
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/never-committed.md")]),
+        )
+        self.assertIn("prereg file does not exist", "\n".join(self.errors()))
+
     def test_running_experiments_table_links_prereg_and_marks_overdue(self) -> None:
         running = flag(lifecycle="experiment", prereg="docs/prereg/example.md", review_by="2026-10-15")
         killed = flag(
@@ -495,7 +625,7 @@ class RegistryFixture(unittest.TestCase):
         )
         registry = load_registry(self.root / "config/feature-flags.yaml")
         self.write("backend/docs/feature-flag-registry.md", render(self.root, registry, date(2026, 9, 24)))
-        self.assertEqual(check(self.root)[0], [])
+        self.assertEqual(check(self.root, as_of=date(2026, 10, 1))[0], [])
 
     def test_retired_name_must_not_be_read_and_is_exempt_from_stale(self) -> None:
         old = {

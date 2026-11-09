@@ -27,6 +27,8 @@ from config.rollout_cohorts import (
 )
 from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
+from utils.observability.fallback import record_fallback
+from utils.rollout.runtime_percent import configure_runtime_percent, ramp_snapshot, warm_ramp
 from utils.stt_cap_cohort import runtime_cohort
 
 TTL_SECONDS = 60
@@ -50,9 +52,10 @@ class _Entry:
 class _TTLReads:
     """Bounded positive/negative/error cache with one in-flight read per key."""
 
-    def __init__(self, reader: Callable[[str], Any], capacity: int = MAX_USERS):
+    def __init__(self, reader: Callable[[str], Any], capacity: int = MAX_USERS, *, discovery: bool = False):
         self.reader = reader
         self.capacity = capacity
+        self.discovery = discovery
         self.entries: OrderedDict[str, _Entry] = OrderedDict()
         self.lock = RLock()
 
@@ -63,8 +66,10 @@ class _TTLReads:
             # SDK exceptions carry document paths and therefore UIDs. Never log them.
             logger.warning('event=rollout_cohort_read outcome=denied')
             value = None
+        if self.discovery and key.endswith(':dream-agent') and not value:
+            _dream_cohort_degraded('unavailable' if value is None else 'empty')
         with self.lock:
-            entry.expires = time.monotonic() + TTL_SECONDS
+            entry.expires = min(time.monotonic() + TTL_SECONDS, getattr(value, 'deadline', float('inf')))
             entry.future.set_result(value)
 
     def request(self, key: str, *, background: bool) -> Future:
@@ -113,6 +118,18 @@ class _TTLReads:
 _cache = _TTLReads(read_memberships)
 
 
+def _dream_cohort_degraded(outcome: str) -> None:
+    logger.error('event=dream_cohort_health outcome=%s', outcome)
+    record_fallback(
+        component='agent_tools',
+        from_mode='dream_cohort',
+        to_mode='declared_eligibility',
+        reason='unavailable' if outcome == 'unavailable' else 'policy',
+        outcome='degraded',
+        log=logger,
+    )
+
+
 def _in_rollout_cohort(
     uid: str, name: str, *, legacy_members: tuple[str, ...] | None = None, legacy_all: bool = False
 ) -> bool:
@@ -121,6 +138,9 @@ def _in_rollout_cohort(
         return False
     members = _cache.get(uid)
     if members is None:
+        if name == 'dream-agent':
+            _dream_cohort_degraded('unavailable')
+            raise policy.RolloutCohortUnavailable('dream cohort membership unavailable')
         return False
     try:
         members = members.get(rollout_environment(), {})
@@ -134,6 +154,7 @@ def _in_rollout_cohort(
 def _load_rollout_cohorts(uid: str) -> None:
     """Preload in a synchronous request dependency (already on a worker thread)."""
     if valid_uid(uid):
+        ramp_snapshot()
         runtime_cohort.tokens()
         _cache.get(uid)
 
@@ -143,16 +164,16 @@ async def _warm_rollout_cohorts(uid: str) -> None:
     if not valid_uid(uid):
         return
     runtime_cohort.tokens()
+    # Admission snapshots both membership and percentage. Warm them together so a
+    # fresh deploy cannot use env fallback merely because the remote read is pending.
     future = _cache.request(uid, background=True)
-    if future.done():
-        return
     try:
-        await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=1.25)
+        await asyncio.wait_for(asyncio.gather(warm_ramp(), asyncio.shield(asyncio.wrap_future(future))), timeout=1.25)
     except asyncio.TimeoutError:
-        pass  # The pending cache entry denies admission until its read completes.
+        pass  # Runtime percent stays at zero until the first read confirms config or fallback.
 
 
-_member_cache = _TTLReads(read_cohort_members, capacity=4 * len(COHORT_ENVS))
+_member_cache = _TTLReads(read_cohort_members, capacity=4 * len(COHORT_ENVS), discovery=True)
 
 
 def _rollout_cohort_members(name: str) -> tuple[str, ...]:
@@ -164,6 +185,8 @@ def _rollout_cohort_members(name: str) -> tuple[str, ...]:
     except ValueError:
         return ()
     if members is None:
+        if name == 'dream-agent':
+            raise policy.RolloutCohortUnavailable('dream cohort discovery unavailable')
         return ()
     legacy = {item.strip() for item in COHORT_ENVS[name]().split(',') if valid_uid(item.strip())}
     return tuple(sorted(set(members) | {uid for uid in legacy if in_rollout_cohort(uid, name)}))
@@ -178,3 +201,5 @@ def configure_rollout_runtime() -> None:
         _warm_rollout_cohorts,
         env_readers={'batch-pipeline': batch_members, 'batch-pipeline-recovery': recovery_members},
     )
+    # Runtime percents and legacy_sync (`rollout_cohorts/_ramp`, contract (f)) bind with the cohorts.
+    configure_runtime_percent()

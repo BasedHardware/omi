@@ -1,5 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { ConversationSplitView } from '@/components/conversations/ConversationSplitView';
 import type { GetConversationsParams } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
@@ -232,6 +241,19 @@ beforeEach(() => {
   harness.clearSearch.mockReset();
   harness.setContext.mockReset();
   harness.getFolders.mockReset().mockResolvedValue([]);
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches: false,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
 });
 
 describe('ConversationSplitView review regressions', () => {
@@ -393,6 +415,26 @@ describe('ConversationSplitView review regressions', () => {
       ),
     );
     expect(harness.clearSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the detail pane on entering selection mode instead of re-selecting the newest tile', async () => {
+    harness.conversations = [
+      conversation('older-conversation', '2026-08-10T12:00:00Z'),
+      conversation('newest-conversation', '2026-08-11T12:00:00Z'),
+    ];
+
+    render(<ConversationSplitView />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('conversation-detail')).toHaveTextContent(
+        'newest-conversation',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.queryByTestId('conversation-detail')).not.toBeInTheDocument();
+    expect(screen.getByTestId('conversation-gallery')).toBeInTheDocument();
   });
 });
 

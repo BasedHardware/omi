@@ -15,7 +15,7 @@ import MemoryWithTabs from './summary/memory-with-tabs';
 import { Fragment } from 'react';
 import {
   noteTranscriptIDs,
-  presentableNoteText,
+  presentableNoteTitle,
 } from '@omi/note-shared/note-sources.mjs';
 
 interface MemoryProps {
@@ -26,7 +26,7 @@ interface MemoryProps {
 
 export default function Memory({ memory, screenshots = null }: MemoryProps) {
   const title =
-    presentableNoteText(
+    presentableNoteTitle(
       memory.structured?.title,
       noteTranscriptIDs(memory.transcript_segments),
     ) || DEFAULT_TITLE_MEMORY;

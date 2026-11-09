@@ -185,8 +185,64 @@ def _validated_preregistry_manifest(manifest_path: Path) -> dict[str, Any]:
     candidate = dict(loaded)
     candidate.setdefault('fieldOverrides', [])
     field_indexes.expected_field_requirements(candidate)
-    print(f'{manifest_path} predates the index registry; validated the declared manifest as-is')
+    print(f'{manifest_path}: structurally validated the declared manifest as data')
     return loaded
+
+
+def additive_index_manifest(base_path: Path, candidate_path: Path) -> dict[str, Any]:
+    """Return only additions; reject removals, replacements, and new exemptions.
+
+    PR manifests are data, never imported Python. Reuse the structural validator
+    and canonical signatures used by readiness/provisioning. Compare complete
+    declarations too, so an unsupported option cannot masquerade as an addition.
+    """
+    base = _validated_preregistry_manifest(base_path)
+    candidate = _validated_preregistry_manifest(candidate_path)
+    for manifest in (base, candidate):
+        if set(manifest) - {'indexes', 'fieldOverrides'}:
+            raise ValueError('unsupported manifest keys in add-only mode')
+        for index in manifest['indexes']:
+            if set(index) - {'collectionGroup', 'queryScope', 'fields'}:
+                raise ValueError('unsupported composite options in add-only mode')
+            if any(set(field) - {'fieldPath', 'order', 'arrayConfig'} for field in index['fields']):
+                raise ValueError('unsupported composite field options in add-only mode')
+            if len(index['fields']) < 2:
+                raise ValueError('composite index must have at least two fields')
+        signatures = expected_index_signatures(manifest)
+        if len(signatures) != len(manifest['indexes']):
+            raise ValueError('duplicate composite declaration in add-only mode')
+    before = expected_index_signatures(base)
+    after = expected_index_signatures(candidate)
+    if not before <= after:
+        raise ValueError('index removals or replacements stay main-only')
+    base_fields = {(entry['collectionGroup'], entry['fieldPath']): entry for entry in base.get('fieldOverrides', [])}
+    candidate_fields = {
+        (entry['collectionGroup'], entry['fieldPath']): entry for entry in candidate.get('fieldOverrides', [])
+    }
+
+    # Existing field declarations must be unchanged, including exemptions.
+    # Adding modes to an existing declaration is a change and stays main-only.
+    def canonical(item: Mapping[str, Any]) -> str:
+        return json.dumps(item, sort_keys=True)
+
+    for key, entry in base_fields.items():
+        other = candidate_fields.get(key)
+        if (
+            other is None
+            or {canonical(i) for i in entry['indexes']} != {canonical(i) for i in other['indexes']}
+            or entry.get('ttl', False) != other.get('ttl', False)
+        ):
+            raise ValueError('field override removals or changes stay main-only')
+    for entry in candidate['indexes']:
+        if _index_signature(entry) not in before and entry['fields'][-1]['fieldPath'] != '__name__':
+            raise ValueError('new composite declarations must end in __name__; regenerate the manifest')
+    added_fields = [entry for key, entry in candidate_fields.items() if key not in base_fields]
+    if any(not entry['indexes'] for entry in added_fields):
+        raise ValueError('new field exemptions stay main-only')
+    return {
+        'indexes': [entry for entry in candidate['indexes'] if _index_signature(entry) not in before],
+        'fieldOverrides': added_fields,
+    }
 
 
 def verify_manifest_source(manifest_path: Path, source_root: Path | None = None) -> dict[str, Any]:
@@ -210,6 +266,7 @@ def verify_manifest_source(manifest_path: Path, source_root: Path | None = None)
         if not manifest_path.is_file():
             print(f'{manifest_path} predates the index registry and declares no manifest; nothing to verify')
             return {'indexes': [], 'fieldOverrides': []}
+        print(f'{manifest_path} predates the index registry')
         return _validated_preregistry_manifest(manifest_path)
     try:
         loaded = json.loads(manifest_path.read_text(encoding='utf-8'))
@@ -1060,12 +1117,16 @@ def reconcile(
     source_commit: str | None = None,
     proposal_ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
     source_root: Path | None = None,
+    add_only_base: Path | None = None,
+    start_only: bool = False,
     runner: CommandRunner = subprocess.run,
     field_request=field_indexes.field_api_request,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> None:
+    if start_only and (add_only_base is None or not provision_missing):
+        raise ValueError('--start-only requires --add-only-base and --provision-missing')
     if sum((check_only, dry_run, provision_missing)) > 1:
         raise ValueError('--check-only, --dry-run, and --provision-missing cannot be combined')
     if source_root is not None and not check_only:
@@ -1077,7 +1138,12 @@ def reconcile(
         _validate_proposal_ttl(proposal_ttl_seconds)
     elif proposal_output is not None or source_commit is not None:
         raise ValueError('--proposal-output and --source-commit require --check-only')
-    manifest = verify_manifest_source(manifest_path, source_root=source_root)
+    if add_only_base is not None:
+        if check_only or source_root is not None or not (provision_missing or dry_run):
+            raise ValueError('--add-only-base requires --provision-missing or --dry-run without --source-root')
+        manifest = additive_index_manifest(add_only_base, manifest_path)
+    else:
+        manifest = verify_manifest_source(manifest_path, source_root=source_root)
     expected = expected_index_signatures(manifest)
     field_requirements = expected_field_requirements(manifest)
     if dry_run:
@@ -1127,12 +1193,16 @@ def reconcile(
             requirements=field_requirements,
             project=project,
             database=database,
+            wait_for_ready=not start_only,
             request=field_request,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
             sleep=sleep,
             monotonic=monotonic,
         )
+    if start_only:
+        print('Additive Firestore builds submitted; deploy readiness still requires READY')
+        return
     wait_for_indexes(
         expected=expected,
         field_requirements=field_requirements,
@@ -1149,7 +1219,7 @@ def reconcile(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--project', required=True)
+    parser.add_argument('--project')
     parser.add_argument('--database', default=DEFAULT_DATABASE)
     parser.add_argument('--manifest', type=Path, default=ROOT / 'firestore.indexes.json')
     parser.add_argument('--timeout-seconds', type=float, default=DEFAULT_TIMEOUT_SECONDS)
@@ -1165,6 +1235,9 @@ def main() -> int:
         action='store_true',
         help='perform no writes and fail unless every manifest index is READY',
     )
+    parser.add_argument('--start-only', action='store_true', help='submit additive PR builds without waiting for READY')
+    parser.add_argument('--add-only-base', type=Path, help='reconcile only additions relative to this manifest')
+    parser.add_argument('--plan-additions', action='store_true', help='print eligible=true/false without cloud access')
     parser.add_argument('--proposal-output', type=Path)
     parser.add_argument('--validate-proposal', type=Path)
     parser.add_argument('--source-commit')
@@ -1179,7 +1252,23 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        if args.plan_additions:
+            if args.add_only_base is None:
+                raise ValueError('--plan-additions requires --add-only-base')
+            try:
+                additions = additive_index_manifest(args.add_only_base, args.manifest)
+            except ValueError as exc:
+                print(f'Prebuild skipped: {exc}')
+                print('eligible=false')
+            else:
+                eligible = bool(additions['indexes'] or additions['fieldOverrides'])
+                print(f'eligible={str(eligible).lower()}')
+            return 0
+        if not args.project:
+            raise ValueError('--project is required for reconciliation')
         if args.validate_proposal is not None:
+            if args.add_only_base is not None:
+                raise ValueError('--add-only-base cannot validate proposals')
             if args.check_only or args.provision_missing or args.dry_run or args.proposal_output is not None:
                 raise ValueError('--validate-proposal cannot be combined with reconciliation modes')
             if not args.source_commit:
@@ -1201,6 +1290,8 @@ def main() -> int:
             project=args.project,
             database=args.database,
             manifest_path=args.manifest.resolve(),
+            add_only_base=args.add_only_base.resolve() if args.add_only_base else None,
+            start_only=args.start_only,
             timeout_seconds=args.timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
             check_only=args.check_only,

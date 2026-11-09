@@ -627,4 +627,73 @@ void main() {
     expect(card.realTimeMode, isTrue);
     await sync.stop();
   });
+
+  test('Limitless: Transfer to Phone moves a recording opened before the pendant was listed again', () async {
+    const ts1 = 1700000000000;
+    Wal pendantWal() => Wal(
+          timerStart: ts1 ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 5,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          device: 'limitless-1',
+          fileNum: 0,
+          storageOffset: 0,
+          storageTotalBytes: 0,
+        );
+    final card = _FakeLimitless(
+      pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3],
+          ],
+          'timestamp_ms': ts1,
+          'max_index': 0,
+        },
+      ],
+    );
+    // The recording page keeps the Wal it was opened with. Every discovery wake
+    // and sync pass relists the pendant as a new Wal with the same id.
+    final opened = pendantWal();
+    final listed = pendantWal();
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [listed];
+    sync.setLocalSync(_FakeLocalSync());
+
+    await sync.syncWal(wal: opened);
+
+    expect(listed.status, WalStatus.synced, reason: 'the sync pages read the listed entry');
+    expect(listed.isSyncing, isFalse);
+    expect(card.acks.last, 0, reason: 'the pendant frees the transferred pages');
+    await sync.stop();
+  });
+
+  test('Limitless: Transfer to Phone fails for a recording that is no longer listed', () async {
+    final card = _FakeLimitless(pages: const []);
+    Wal pendantWal(int timerStart) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 5,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          device: 'limitless-1',
+          fileNum: 0,
+          storageOffset: 0,
+          storageTotalBytes: 2,
+        );
+    final listed = pendantWal(1700000100);
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [listed];
+    sync.setLocalSync(_FakeLocalSync());
+
+    await expectLater(sync.syncWal(wal: pendantWal(1700000000)), throwsException);
+
+    expect(card.batchMode, isFalse, reason: 'the pendant is never asked for audio');
+    expect(listed.isSyncing, isFalse);
+    await sync.stop();
+  });
 }

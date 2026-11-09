@@ -9,7 +9,6 @@ import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/memory_graph_identity.dart';
 
 Future<Map<String, dynamic>> _emptyGraph() async => {'nodes': [], 'edges': []};
 
@@ -40,12 +39,6 @@ void main() {
       expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('es'))), 'Tú');
       expect(memoryGraphUserLabel('  ', lookupAppLocalizations(const Locale('de'))), 'Sie');
       expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('en'))), 'You');
-    });
-
-    test('only backend labels and the given name identify the user node', () {
-      expect(memoryGraphKnownUserLabels(''), {'me', 'the user'});
-      expect(memoryGraphKnownUserLabels(' Ana '), {'me', 'the user', 'ana'});
-      expect(memoryGraphKnownUserLabels('').contains('tú'), isFalse);
     });
 
     test('uses the given name when one is set', () {
@@ -197,6 +190,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Saved memory'), findsOneWidget);
     expect(calls, 2);
+    await tester.pump(const Duration(seconds: 9));
+  });
+
+  testWidgets('a failed refresh on app resume keeps the map without a toast', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async {
+          if (++calls > 1) throw Exception('offline');
+          return {
+            'nodes': [],
+            'edges': [],
+            'catalog_nodes': [
+              {'id': 'memory:1', 'label': 'Saved memory'}
+            ]
+          };
+        })));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(tester.element(find.byType(MemoryGraphPage)));
+
+    // The page stays alive on Home's other tabs, so a resume refresh must not speak over them.
+    tester
+        .state<MemoryGraphPageState>(find.byType(MemoryGraphPage))
+        .didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('Saved memory'), findsOneWidget);
+    expect(find.text(l10n.couldNotLoadKnowledgeGraph), findsNothing);
+
+    // A refresh the person asked for still says it failed.
+    await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
+    await tester.pumpAndSettle();
+    expect(calls, 3);
+    expect(find.text(l10n.couldNotLoadKnowledgeGraph), findsOneWidget);
     await tester.pump(const Duration(seconds: 9));
   });
 

@@ -36,6 +36,7 @@ import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Toggle } from './SettingsToggle';
 import { Card } from '@/components/settings/SettingsCard';
+import { RedeemCodeCard } from './RedeemCodeCard';
 import {
   SECTION_INFO,
   SIGNED_OUT_DESTINATION,
@@ -67,7 +68,7 @@ import { SUPPORTED_LANGUAGES } from '@/types/user';
 import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
 import {
   RESUBSCRIBE_FIRST,
-  isPendingCancelConflict,
+  purchaseErrorMessage,
   renewalDateSeconds,
   yourPlanEndsOn,
   yourPlanWillRenewOn,
@@ -965,6 +966,7 @@ export function UsageSectionContent({
     setIsLoading(true);
     setError(null);
 
+    let purchaseRoute: 'upgrade' | 'checkout' = 'checkout';
     try {
       const isCurrentPlan =
         selectedOption?.is_active ||
@@ -979,6 +981,7 @@ export function UsageSectionContent({
       const interval = selectedOption?.interval ?? selectedOption?.title ?? 'unknown';
       trackUpgradePlanSelected(tier, interval, 'usage_page');
       if (isPaid && !isCancelingSubscription && !isCurrentPlan) {
+        purchaseRoute = 'upgrade';
         const result = await upgradeSubscription(selectedPriceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
@@ -987,6 +990,7 @@ export function UsageSectionContent({
           setError(result?.message || 'Failed to upgrade plan');
         }
       } else {
+        purchaseRoute = 'checkout';
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
           window.open(result.url, '_blank');
@@ -1013,11 +1017,7 @@ export function UsageSectionContent({
         }
       }
     } catch (err) {
-      setError(
-        isPendingCancelConflict(err)
-          ? RESUBSCRIBE_FIRST
-          : 'An error occurred. Please try again.',
-      );
+      setError(purchaseErrorMessage(err, purchaseRoute));
     } finally {
       setIsLoading(false);
     }
@@ -1488,6 +1488,9 @@ export function UsageSectionContent({
                 )}
               </div>
             </>
+          )}
+          {subscription?.stripe_subscription_id && !isCancelingSubscription && (
+            <RedeemCodeCard onRedeemed={onSubscriptionUpdate} />
           )}
         </div>
       ) : (

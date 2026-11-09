@@ -78,7 +78,9 @@ In normal operation, the browser signs in with Firebase Google or email
 authentication. The client and every protected route require the user UID to
 exist at `adminData/{uid}` in Firestore. Server route handlers verify the
 Firebase ID token with the Firebase Admin SDK; they do not trust the
-client-side check alone.
+client-side check alone. Each route then requires a scope from the member's
+role (`requireScope`); roles, the legacy full-access default and the agent
+proposal API are in [`docs/team-access.md`](docs/team-access.md).
 
 For local work, permissions break down as follows:
 

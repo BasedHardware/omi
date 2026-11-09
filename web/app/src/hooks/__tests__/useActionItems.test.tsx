@@ -97,6 +97,42 @@ describe('useActionItems', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('only restores the tasks whose delete failed in a partly failed bulk delete', async () => {
+    // The initial load resolves; the reload a successful delete's cache
+    // invalidation triggers never resolves, so this isolates what bulkDelete
+    // itself puts back from whatever a subsequent reload would later correct.
+    let initialLoadServed = false;
+    vi.mocked(getActionItems).mockImplementation(() => {
+      if (!initialLoadServed) {
+        initialLoadServed = true;
+        return Promise.resolve({
+          items: [item('a'), item('b'), item('c')],
+          hasMore: false,
+        } as never);
+      }
+      return new Promise(() => undefined);
+    });
+    // Like lib/api.ts: a DELETE that succeeds invalidates the action-items cache.
+    vi.mocked(deleteActionItem).mockImplementation(async (id: string) => {
+      if (id === 'b') {
+        throw new Error('API error: 500 Internal Server Error');
+      }
+      invalidateCache(invalidationPatterns.actionItems);
+    });
+
+    const { result } = renderHook(() => useActionItems());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.bulkDelete(['a', 'b', 'c']);
+    });
+
+    // 'a' and 'c' were actually deleted server-side and must stay gone;
+    // only 'b' (the failed delete) comes back.
+    expect(result.current.items.map((task) => task.id)).toEqual(['b']);
+    expect(result.current.error).not.toBeNull();
+  });
+
   it('does not bring back a task deleted while an earlier reload was in flight', async () => {
     let answerFirstReload: () => void = () => undefined;
     let answerQueuedReload: () => void = () => undefined;

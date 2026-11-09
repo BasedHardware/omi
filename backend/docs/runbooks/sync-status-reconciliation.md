@@ -21,6 +21,15 @@ return retryable 503 rather than a missing-job response. Existing completed Redi
 responses bypass the extra reads. A recovered lookup emits shared fallback
 telemetry from `redis_status` to `durable_completion` without customer labels.
 
+One privacy denial is answered terminally. When the conversation walk finds a
+conversation the user deleted (tombstone, or a user soft-delete without a
+server redirect), the content was already processed and the deletion is final:
+the route answers `completed` with an empty result and
+`reason_code: conversation_deleted`. Before this, it answered 404, and the phone
+re-uploaded the deleted audio as a new WAL. No conversation ID is echoed.
+Account, protection and generation denials, redirect anomalies and recording
+privacy changes keep the pre-reconciliation response.
+
 This does not infer success from age, an empty queue, a discard or a missing
 conversation. Invalid, held and failed receipts keep the legacy behavior. If an
 old handle has lost **all** associations after redrive, it remains unknown: the

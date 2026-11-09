@@ -15,7 +15,7 @@ import pytest
 from config.batch_pipeline import worker_io_concurrency
 from diarizer import batch_pipeline
 from diarizer.batch_pipeline import PipelineWorker
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult, FailedWork
 from utils.batch_pipeline.errors import FatalGpuError
 
 
@@ -105,6 +105,7 @@ class Model:
 
     def worker(self, io_concurrency, **overrides):
         settings = dict(
+            language_of=lambda item: 'en',  # Synthetic English fixture.
             decode=self.decode,
             vad=self.vad,
             words_providers={'parakeet': self},
@@ -126,11 +127,16 @@ def timed_flight(io_concurrency, *, scale=1.0, items=None):
 
 
 def test_overlap_cuts_flight_wall_time_and_keeps_results_identical():
-    serial, serial_results, serial_model = timed_flight(1, scale=0.25)
-    overlapped, results, model = timed_flight(3, scale=0.25)
+    from dataclasses import replace
+
+    cohort = [replace(item, language_receipt_enabled=True) for item in flight()]
+    serial, serial_results, serial_model = timed_flight(1, scale=0.25, items=cohort)
+    overlapped, results, model = timed_flight(3, scale=0.25, items=cohort)
     assert results == serial_results
     assert [r.segment_id for r in results] == [f's{i}' for i in range(7)]
     assert all(isinstance(r, WorkResult) and r.outcome == 'success' for r in results)
+    assert all(r.language_receipt['route'] == 'parakeet' for r in results)
+    assert all(r.language_receipt['letters'] == 5 for r in results)
     assert model.saved == serial_model.saved
     # Serial model floor: sum(fetch)+sum(persist)+GPU. Overlap hides most IO.
     io_hidden = serial - overlapped
@@ -187,7 +193,8 @@ def test_prefetch_never_crosses_the_two_hour_decode_group():
     assert all(not pending for _, pending in seen)
 
 
-def test_fetch_and_persist_failures_stay_per_item_and_in_order():
+def test_fetch_and_persist_failures_stay_per_item_and_in_order(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
     model = Model(scale=0.02)
     failures = []
 
@@ -203,7 +210,12 @@ def test_fetch_and_persist_failures_stay_per_item_and_in_order():
 
     worker = model.worker(3, decode=decode, persist=persist, on_failure=lambda i, e: failures.append(i.segment_id))
     results = worker.process_batch(flight())
-    assert [r.segment_id for r in results] == ['s0', 's2', 's3', 's5', 's6']
+    assert [r.segment_id for r in results if isinstance(r, WorkResult)] == ['s0', 's2', 's3', 's5', 's6']
+    failed = {r.segment_id: r for r in results if isinstance(r, FailedWork)}
+    assert set(failed) == {'s1', 's4'}
+    assert failed['s1'].measured_held_vad_speech_seconds is None  # fetch never reached VAD
+    assert failed['s4'].measured_held_vad_speech_seconds == flight()[4].duration_seconds
+    assert failed['s4'].worker_vad_receipt['captured_samples'] == round(flight()[4].duration_seconds * 16000)
     assert sorted(failures) == ['s1', 's4']
     assert worker.counts['failed'] == 2
 
@@ -245,7 +257,7 @@ def test_fatal_diarization_error_waits_for_inflight_writes():
 
 @pytest.mark.parametrize(
     'raw,expected',
-    [(None, 3), ('1', 1), ('4', 4), ('8', 8), ('0', 3), ('9', 3), ('x', 3), ('-2', 3)],
+    [(None, 5), ('1', 1), ('4', 4), ('8', 8), ('0', 5), ('9', 5), ('x', 5), ('-2', 5)],
 )
 def test_io_concurrency_knob(monkeypatch, raw, expected):
     if raw is None:

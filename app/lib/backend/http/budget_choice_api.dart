@@ -4,6 +4,10 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/budget_choice_wire.g.dart';
 import 'package:omi/env/env.dart';
 
+/// A month rollover returns 409 budget_period_changed. The dialog reloads and asks again.
+bool budgetPeriodChanged(ApiResult<dynamic> result) =>
+    result is ApiFailure && result.problem.statusCode == 409 && result.problem.detail == 'budget_period_changed';
+
 /// A choice records intent; it never grants cloud processing or consumes held audio.
 class BudgetChoiceApi {
   BudgetChoiceApi({String? baseUrl, this.send}) : baseUrl = baseUrl ?? Env.apiBaseUrl ?? '';

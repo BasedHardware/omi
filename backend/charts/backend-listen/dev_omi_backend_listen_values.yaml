@@ -106,6 +106,12 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
+  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
+    value: "true"
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
@@ -124,6 +130,16 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: BATCH_CONTROL_CANDIDATE_FANOUT
+    value: "16"
+  - name: BATCH_ADMISSION_PARALLEL_CALLS
+    value: "true"
+  - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
+    value: "10"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: ""
+  - name: BATCH_HELD_DEAD_LETTER_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
@@ -134,8 +150,8 @@ env:
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
-  - name: BATCH_PIPELINE_PERCENT
-    value: "0"
+  - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
@@ -153,9 +169,9 @@ env:
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
-  - name: REPEAT_WORK_REVISION_ENABLED
-    value: "false"
+    value: "true"
+  - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
+    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
@@ -193,9 +209,9 @@ env:
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
     value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
@@ -207,6 +223,10 @@ env:
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -222,7 +242,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}'
+    value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -233,10 +253,12 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
-    value: "60"
+    value: "55"
   - name: FSR_SERVING_CONFIG_TTL_SECONDS
     value: "60"
   - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
@@ -247,11 +269,7 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
-    value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
-    value: "true"
-  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
@@ -371,8 +389,8 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
-  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
-    value: "false"
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
   - name: GOOGLE_MAPS_API_KEY
@@ -398,13 +416,15 @@ env:
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL
-    value: "http://172.16.48.49/vad/v1/vad"
+    value: "http://vad.omiapi.com:80/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.48.49/diarizer"
+    value: "http://diarizer.omiapi.com:80"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://172.16.48.49/nllb"
+    value: "http://nllb.omiapi.com"
+  # Mirrors prod (Luna only). The dev NLLB service stays reachable at
+  # HOSTED_TRANSLATION_API_URL for experiments: set this to "nllb,luna".
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,gemini"
+    value: "luna"
   - name: TRANSLATION_CACHE_TTL
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
@@ -446,14 +466,14 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
     value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
@@ -627,15 +647,23 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # D2 edge shadow (plan D): mirror a static uid-hash cohort's raw frames to
+  # listen-edge for decode+VAD agreement. The URL alone mirrors nothing: the
+  # mirror needs EDGE_SHADOW_PERCENT > 0, which stays 0 until the lead ramps
+  # it per the EDGE_SHADOW_PERCENT registry row (declared in the prod values
+  # only; the registry checker allows one ramp declaration)
+  # (backend/docs/runbooks/edge-shadow-rollout.md).
+  - name: EDGE_SHADOW_URL
+    value: "ws://dev-omi-listen-edge.dev-omi-backend.svc.cluster.local:8080/v1/shadow"
+  # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
+  # is a secret: never committed here, set only through privateEnv
+  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # listen sends no token.
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: AUDIO_TIMELINE_SPANS
-    value: "false"
-  - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "false"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
@@ -652,10 +680,6 @@ env:
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"
-  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
-  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
-  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
-    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

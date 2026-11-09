@@ -26,6 +26,7 @@ from routers.listen import receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_session_transcript_outcome import _runtime
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import connect_backoff as connect_backoff_module
 from utils.stt import (
     legacy_replay,
@@ -60,6 +61,7 @@ ENV = 'STT_FAILOVER_RECOVERY_ENABLED'
 
 @pytest.fixture(autouse=True)
 def _isolated_stt_state(monkeypatch):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     fleet = FleetHealth()
     for module in (live_health, live_chain, live_session, streaming):
@@ -328,7 +330,7 @@ async def test_off_429_records_failure_on_releases(monkeypatch):
     circuit = streaming._circuit_for_primary(STTService.modulate)
     recorded: list[bool] = []
     released: list[bool] = []
-    monkeypatch.setattr(circuit, 'record_failure', lambda: recorded.append(True))
+    monkeypatch.setattr(circuit, 'record_failure', lambda **kw: recorded.append(True))
     monkeypatch.setattr(circuit, 'release_probe', lambda: released.append(True))
     monkeypatch.setattr(circuit, 'allow_request', lambda **kw: True)
 
@@ -361,7 +363,7 @@ async def test_on_429_releases_probe(monkeypatch):
     circuit = streaming._circuit_for_primary(STTService.modulate)
     recorded: list[bool] = []
     released: list[bool] = []
-    monkeypatch.setattr(circuit, 'record_failure', lambda: recorded.append(True))
+    monkeypatch.setattr(circuit, 'record_failure', lambda **kw: recorded.append(True))
     monkeypatch.setattr(circuit, 'release_probe', lambda: released.append(True))
     monkeypatch.setattr(circuit, 'allow_request', lambda **kw: True)
 

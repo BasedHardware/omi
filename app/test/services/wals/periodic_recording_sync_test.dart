@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/wals/periodic_recording_sync.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
@@ -15,7 +16,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   for (final trigger in [WakeTrigger.periodic, WakeTrigger.deviceConnected]) {
-    test('background $trigger wake discovers and drains backlog without opening live capture', () async {
+    // Only the OS periodic window fences live capture; a start it swallows is
+    // replayed when the fence drops. A reconnect pass never fences (2026-10-20).
+    final fenced = trigger == WakeTrigger.periodic;
+    test('background $trigger wake drains backlog and leaves a connected pendant capturing', () async {
       final directory = await Directory.systemTemp.createTemp('periodic_sync_');
       final world = await CaptureReplayWorld.boot(tempDir: directory);
       final pendant = BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40);
@@ -29,14 +33,15 @@ void main() {
         refreshPending: () async {},
         discover: () async {
           discoveries++;
-          expect(SyncWakeScope.syncOnly, true);
+          expect(SyncWakeScope.syncOnly, fenced);
           // A BLE connect observer and Home both attempt their normal starts.
           await world.controller.streamDeviceRecording(device: pendant);
           await world.controller.streamDeviceRecording();
+          if (fenced) expect(world.sockets, isEmpty, reason: 'the fenced window opens no live capture');
         },
         drain: () async {
           drains++;
-          expect(SyncWakeScope.syncOnly, true);
+          expect(SyncWakeScope.syncOnly, fenced);
           return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
         },
         drainLiveCapture: () async => throw StateError('must drain the backlog'),
@@ -50,13 +55,16 @@ void main() {
       )..setForeground(false);
       await coordinator.wake(trigger);
       await coordinator.waitUntilIdle();
+      await world.settle();
       await world.controller.pendingSourceSwitch;
+      await world.settle();
       expect(discoveries, 1);
       expect(drains, 1);
       expect(holds, 1);
       expect(releases, 1);
-      expect(world.sockets, isEmpty);
-      expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      expect(world.sockets, isNotEmpty);
+      expect(world.socket!.status, PureSocketStatus.connected);
+      expect(world.deviceConnection!.openAudioSubscriptions, 1);
       expect(coordinator.nextCooldownAt, isNull);
       expect(SyncWakeScope.syncOnly, false);
       coordinator.dispose();
@@ -65,7 +73,7 @@ void main() {
     });
   }
 
-  test('background reconnect storms stop after two fenced passes, including failures', () async {
+  test('background wake storms stop after two fenced passes; failures schedule a bounded retry', () async {
     var discoveries = 0;
     var drains = 0;
     var holds = 0;
@@ -80,7 +88,7 @@ void main() {
         expect(SyncWakeScope.syncOnly, true);
         // Coalesce a burst, even during the final allowed pass.
         for (var i = 0; i < 5; i++) {
-          unawaited(coordinator.wake(WakeTrigger.deviceConnected));
+          unawaited(coordinator.wake(WakeTrigger.periodic));
         }
       },
       drain: () async {
@@ -99,14 +107,14 @@ void main() {
       },
     )..setForeground(false);
     addTearDown(coordinator.dispose);
-    await coordinator.wake(WakeTrigger.deviceConnected);
+    await coordinator.wake(WakeTrigger.periodic);
     await coordinator.waitUntilIdle();
     expect(discoveries, 2);
     expect(drains, 2);
     expect(holds, 1);
     expect(releases, 1);
-    expect(cooldowns, 0);
-    expect(coordinator.nextCooldownAt, isNull);
+    expect(cooldowns, 2, reason: 'background retries are bounded, no longer dropped');
+    expect(coordinator.nextCooldownAt, isNotNull);
     expect(SyncWakeScope.syncOnly, false);
   });
 

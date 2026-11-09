@@ -195,8 +195,8 @@ actor RewindIndexer {
       let backoffSeconds = min(pow(2.0, Double(initFailureCount)), Self.maxBackoffSeconds)
       nextRetryTime = Date().addingTimeInterval(backoffSeconds)
 
-      // First 3 failures: send to Sentry for diagnostics (logError).
-      // After that: log locally only (log) to avoid flooding Sentry with a known-dead DB.
+      // First 3 failures: log as errors (logError) for diagnostics.
+      // After that: log locally only (log) to avoid flooding the log with a known-dead DB.
       if initFailureCount <= 3 {
         logError(
           "RewindIndexer: Failed to initialize (attempt \(initFailureCount), next retry in \(Int(backoffSeconds))s): \(error)"

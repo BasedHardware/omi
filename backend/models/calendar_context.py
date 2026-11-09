@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Callable, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, field_serializer
 
 
 class MeetingParticipant(BaseModel):
@@ -16,6 +16,17 @@ class MeetingParticipantSources(BaseModel):
 
     expected_calendar: Optional[List[MeetingParticipant]] = None
     observed_screen_listing: Optional[List[MeetingParticipant]] = None
+    # Filtered call tiles, distinct from legacy screen OCR listings.
+    observed_call_tiles: Optional[List[MeetingParticipant]] = None
+
+    @field_validator('observed_call_tiles')
+    @classmethod
+    def names_only(cls, value):
+        return [MeetingParticipant(name=p.name) for p in value] if value is not None else None
+
+    @field_serializer('observed_call_tiles')
+    def serialize_tiles(self, value):
+        return [{'name': p.name} for p in value] if value is not None else None
 
 
 class CalendarMeetingContext(BaseModel):
@@ -36,6 +47,66 @@ class CalendarMeetingContext(BaseModel):
     participant_sources: Optional[MeetingParticipantSources] = Field(
         default=None, description="Participant provenance retained before calendar/screen context merging"
     )
+
+    @classmethod
+    def strip_client_provenance(cls, value):
+        if isinstance(value, cls):
+            return value.model_copy(update={'participant_sources': None})
+        if isinstance(value, dict):
+            return {key: item for key, item in value.items() if key != 'participant_sources'}
+        return value
+
+    def to_storage_dict(self) -> dict[str, Any]:
+        """The stored shape under ``external_data['calendar_meeting_context']``.
+
+        Hand-built rather than a model dump: the conversation trust-boundary
+        guard keys on dump call sites, and a storage write for meeting metadata
+        must not silently sweep up fields added to the model later.
+        """
+        return {
+            'calendar_event_id': self.calendar_event_id,
+            'title': self.title,
+            'participants': [
+                {'name': participant.name, 'email': participant.email} for participant in self.participants
+            ],
+            'platform': self.platform,
+            'meeting_link': self.meeting_link,
+            'start_time': self.start_time.isoformat(),
+            'duration_minutes': self.duration_minutes,
+            'notes': self.notes,
+            'calendar_source': self.calendar_source,
+            'participant_sources': self._participant_sources_storage_dict(),
+        }
+
+    def _participant_sources_storage_dict(self) -> Optional[dict[str, Any]]:
+        sources = self.participant_sources
+        if sources is None:
+            return None
+        result = {
+            'expected_calendar': (
+                [{'name': participant.name, 'email': participant.email} for participant in sources.expected_calendar]
+                if sources.expected_calendar is not None
+                else None
+            ),
+            'observed_screen_listing': (
+                [
+                    {'name': participant.name, 'email': participant.email}
+                    for participant in sources.observed_screen_listing
+                ]
+                if sources.observed_screen_listing is not None
+                else None
+            ),
+        }
+
+        if sources.observed_call_tiles is not None:
+            result['observed_call_tiles'] = [{'name': participant.name} for participant in sources.observed_call_tiles]
+        return result
+
+    def without_tile_provenance(self) -> 'CalendarMeetingContext':
+        if self.participant_sources is None:
+            return self
+        sources = self.participant_sources.model_copy(update={'observed_call_tiles': None})
+        return self.model_copy(update={'participant_sources': sources})
 
     def participants_by_source(self) -> MeetingParticipantSources:
         if self.participant_sources is not None:

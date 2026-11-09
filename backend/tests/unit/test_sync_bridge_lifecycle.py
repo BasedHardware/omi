@@ -76,7 +76,7 @@ def test_bridge_cleanup_failure_is_retryable_after_atomic_persistence(system):
     assert survivors == []
     assert len(row['transcript_segments']) == 3
     retract.assert_called_with('u', 'chunk-004', retain_capture=True)
-    copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+    copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
 
 
 def test_stale_snapshots_of_survivor_and_donor_cannot_commit(system, monkeypatch):
@@ -171,7 +171,7 @@ def test_late_audio_copies_without_retracting_completed_ancestor(system):
     copy.reset_mock()
     assert bridge.finish_sync_bridges('u', 'chunk-004', audio_source_id='chunk-004') == 'chunk-000'
     retract.assert_not_called()
-    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
 
 
 def test_bridge_redirect_cycle_is_bounded_as_assignment_conflict_subtype(monkeypatch):
@@ -189,7 +189,7 @@ def test_bridge_redirect_cycle_is_bounded_as_assignment_conflict_subtype(monkeyp
     assert exc_info.value.subtype == 'redirect_cycle'
 
 
-def test_bridge_source_shape_conflict_uses_other_subtype(monkeypatch):
+def test_bridge_source_shape_conflict_has_its_own_subtype(monkeypatch):
     from utils.sync import bridge
 
     rows = {
@@ -201,7 +201,7 @@ def test_bridge_source_shape_conflict_uses_other_subtype(monkeypatch):
     with pytest.raises(bridge.SyncAssignmentConflict, match='source missing or not a tombstone') as exc_info:
         bridge.finish_sync_bridges('u', 'survivor')
 
-    assert exc_info.value.subtype == 'other'
+    assert exc_info.value.subtype == 'bridge_source_not_tombstone'
 
 
 def test_receipt_does_not_mark_a_newer_tombstone_revision(system):
@@ -250,7 +250,7 @@ def test_failed_late_audio_copy_is_pending_without_transient_source_hint(system)
     copy.reset_mock()
     ingest(3)
     retract.assert_not_called()
-    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
 
 
 def test_intake_accepts_chunk_when_destructive_gate_is_held_and_retraction_converges_later(system, caplog):
@@ -272,7 +272,7 @@ def test_intake_accepts_chunk_when_destructive_gate_is_held_and_retraction_conve
         donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
         assert donor['deleted'] and donor['sync_merged_into'] == 'chunk-000'
         assert 'sync_bridge_cleaned_revision' not in donor
-        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
         assert any('event=sync_bridge outcome=deferred' in record.message for record in caplog.records)
         retract.side_effect = None
         retract.reset_mock()
@@ -411,7 +411,7 @@ def test_refresh_target_changes_after_bridge_read_without_failing_persisted_inta
     donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
     assert row['transcript_segments']  # assignment committed before finalize
     if redirect:
-        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'survivor', strict=True)
+        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'survivor', strict=True, skip_existing=True)
         assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
     else:
         retract.assert_not_called()
@@ -524,3 +524,28 @@ def test_redirect_during_refresh_retains_transitive_sync_donors(system, monkeypa
         donor = store.rows[('users', 'u', 'conversations', source)]
         assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
     assert ('u', [{'id': 'chunk-008'}], 'chunk-000') in [c.args for c in copy.call_args_list]
+
+
+def test_silent_bridge_keeps_notification_capable_cleanup_debt(system, monkeypatch):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    # Persist a bridge without running its ordinary post-persist callback.
+    from utils.conversations import lifecycle
+
+    incoming = capture(2)
+    incoming.update(status='completed', data_protection_level='enhanced', private_cloud_sync_enabled=True)
+    lifecycle.ingest_sync_conversation('u', incoming)
+    transfer = MagicMock()
+    monkeypatch.setattr(bridge, 'transfer_donor', transfer)
+    assert bridge.finish_sync_bridges('u', 'chunk-000', silent=True) == 'chunk-000'
+    transfer.assert_not_called()
+    retract.assert_not_called()
+    assert 'sync_bridge_cleaned_revision' not in store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    copy.assert_called_once()
+    # Normal later work still owns the retained cleanup; silence is not global.
+    bridge.finish_sync_bridges('u', 'chunk-000')
+    transfer.assert_called_once()
+    retract.assert_called_once()

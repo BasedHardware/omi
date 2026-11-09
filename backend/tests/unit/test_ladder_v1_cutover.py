@@ -332,6 +332,8 @@ def test_legacy_prices_resolve_api_read_limit_to_none():
 
 @pytest.fixture
 def choice_http(monkeypatch):
+    import os
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import budget_choice
@@ -341,6 +343,13 @@ def choice_http(monkeypatch):
 
     store = StrictFirestore()
     monkeypatch.setenv('HELD_CONTENT_ENABLED', 'true')
+
+    def cohort_tokens():
+        if os.getenv('HELD_CONTENT_ENABLED', 'false').lower() != 'true':
+            return ''
+        return os.getenv('HELD_CONTENT_COHORT', 'all')
+
+    monkeypatch.setattr(budget_choice.held_content_cohort.runtime_cohort, 'tokens', cohort_tokens)
     monkeypatch.setattr(
         budget_choice,
         'resolve_transcription_allowance',
@@ -387,7 +396,6 @@ def test_ladder_quotas_do_not_use_legacy_chat_cap_or_overage(monkeypatch):
     from utils import subscription as sub, overage
     from models.users import Subscription, PlanType
 
-    monkeypatch.setattr(sub, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(
         sub.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.operator)
     )
@@ -503,9 +511,9 @@ def test_flag_off_cold_import_never_resolves_database(monkeypatch):
 @pytest.mark.parametrize(
     'plan,key,upgrade',
     [
-        ('basic', None, 'plus'),
-        ('plus', 'ladder_v1_plus_month', 'operator'),
-        ('operator', 'ladder_v1_pro_month', 'architect'),
+        ('basic', None, 'unlimited_v2'),
+        ('plus', 'ladder_v1_plus_month', 'unlimited_v2'),
+        ('operator', 'ladder_v1_pro_month', 'unlimited_v2'),
         ('architect', 'ladder_v1_architect_month', None),
     ],
 )
@@ -565,7 +573,8 @@ def test_chat_dark_path_and_legacy_do_not_read_ledger(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'plan,upgrade', [('basic', 'plus'), ('plus', 'operator'), ('operator', 'architect'), ('architect', None)]
+    'plan,upgrade',
+    [('basic', 'unlimited_v2'), ('plus', 'unlimited_v2'), ('operator', 'unlimited_v2'), ('architect', None)],
 )
 def test_chat_pause_payload_is_only_flagged_exhausted_ladder(monkeypatch, cap_presentation, plan, upgrade):
     sheet_for, ladder_catalog = cap_presentation
@@ -668,7 +677,6 @@ def test_historical_mixed_coverage_admits_on_snapshot(monkeypatch, key, dispatch
     snapshot = {'budget_percent': 0, 'used_units': 0, 'budget_units': 100, 'completeness': {key: 1}}
     monkeypatch.setattr(ladder, 'usage_snapshot', lambda *a, **k: snapshot)
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(
         subscription.users_db, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan='plus')
     )

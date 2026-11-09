@@ -1,3 +1,5 @@
+from google.api_core.exceptions import NotFound
+
 """Focus sessions — focus/distraction tracking and statistics.
 
 Collection: users/{uid}/focus_sessions
@@ -16,9 +18,10 @@ from ._client import db
 logger = logging.getLogger(__name__)
 
 
-def _user_col(uid: str, collection: str) -> Any:
+def _user_col(uid: str, collection: str, *, client: Any = None) -> Any:
     """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+    firestore_client = client if client is not None else db
+    return firestore_client.collection('users').document(uid).collection(collection)
 
 
 def _typed_doc(doc: Any) -> Optional[Dict[str, Any]]:
@@ -103,6 +106,11 @@ def _normalize_focus_session_doc(doc_id: str, data: Dict[str, Any]) -> Dict[str,
     }
 
 
+#: Upper bound on stored rows one read may walk while refilling a page around
+#: poison documents. Matches the history cap ``get_focus_stats`` already reads.
+_MAX_FOCUS_SESSION_SCAN_ROWS = 5000
+
+
 def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -113,28 +121,52 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
         query = query.where(filter=FieldFilter('created_at', '>=', day_start))
         query = query.where(filter=FieldFilter('created_at', '<', day_end))
 
-    query = query.offset(offset).limit(limit)
+    # Skipped poison rows used to shrink the page without saying so: a caller
+    # asking for `limit` rows got fewer, and the rows that fell off the end were
+    # never returned by a later `offset` page. Scan forward until the page is
+    # full or the collection is exhausted, so `offset` keeps counting stored
+    # rows while callers still receive `limit` readable ones.
     items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        raw = _typed_doc(doc)
-        if raw is None:
-            continue
+    window = max(limit, 1)
+    cursor = max(offset, 0)
+    scanned = 0
 
-        doc_id = getattr(doc, 'id', 'unknown')
-        try:
-            items.append(_normalize_focus_session_doc(str(doc_id), raw))
-        except Exception as exc:
-            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
-            continue
+    while len(items) < limit and scanned < _MAX_FOCUS_SESSION_SCAN_ROWS:
+        page = list(query.offset(cursor).limit(window).stream())
+        if not page:
+            break
+        scanned += len(page)
+        cursor += len(page)
+
+        for doc in page:
+            raw = _typed_doc(doc)
+            if raw is None:
+                continue
+
+            doc_id = getattr(doc, 'id', 'unknown')
+            try:
+                items.append(_normalize_focus_session_doc(str(doc_id), raw))
+            except Exception as exc:
+                logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+                continue
+            if len(items) >= limit:
+                break
+
+        if len(page) < window:
+            break
+
     return items
 
 
-def delete_focus_session(uid: str, session_id: str) -> bool:
-    ref = _user_col(uid, 'focus_sessions').document(session_id)
-    if not getattr(ref.get(), "exists", False):
+def delete_focus_session(uid: str, session_id: str, *, client: Any = None) -> bool:
+    ref = _user_col(uid, 'focus_sessions', client=client).document(session_id)
+    try:
+        if not getattr(ref.get(), "exists", False):
+            return False
+        ref.delete()
+        return True
+    except NotFound:
         return False
-    ref.delete()
-    return True
 
 
 def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:

@@ -8,6 +8,7 @@ import os
 import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+from config.parakeet_ja import ja_window_allocated, ja_window_configured
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, STTServingSurface, parakeet_supports_language
 from config.live_stt_replay import ReplayLimits, parse_replay_limits
 
@@ -27,10 +28,17 @@ class Target:
     replay: ReplayLimits | None = None
 
     def capable(self, language: str | None, features: frozenset[str] = frozenset({'streaming'})) -> bool:
+        from config.stt_provider_policy import provider_is_enabled
+
+        if not provider_is_enabled(self.family, STTServingSurface.STREAMING):
+            return False
         lang = (language or 'multi').lower().split('-', 1)[0]
         if not features.issubset(self.features) or (self.languages and lang not in self.languages):
             return False
         if self.family == 'parakeet':
+            if lang == 'ja':
+                # Owner ramp is applied by `window_ja_admits` where the uid is known.
+                return ja_window_configured()
             return parakeet_supports_language(STTServingSurface.PRERECORDED, lang)
         if self.family == 'modulate':
             return lang in MODULATE_SUPPORTED_LANGUAGES
@@ -44,13 +52,24 @@ class Target:
         return self.ramp_percent
 
     def at_capacity(self) -> bool:
-        return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')
+        from config.refactor_switches import default_off
+
+        return bool(
+            self.capacity_env
+            and default_off(self.capacity_env, os.getenv(self.capacity_env, 'false').lower() == 'true')
+        )
 
 
 def assigned(uid: str | None, salt: str, share: float) -> bool:
     from config.policy.batch import cohort_bucket
 
     return bool(uid) and cohort_bucket(uid, salt, bits=64) < share
+
+
+def window_ja_admits(target: Target, uid: str | None, language: str | None) -> bool:
+    """A Parakeet target serves Japanese only to owners inside the ja window ramp."""
+    lang = (language or 'multi').lower().split('-', 1)[0]
+    return target.family != 'parakeet' or lang != 'ja' or ja_window_allocated(uid)
 
 
 def routing_on(uid: str | None) -> bool:
@@ -61,7 +80,7 @@ def routing_on(uid: str | None) -> bool:
 
 DEFAULT_TARGETS = (
     Target('parakeet-window', 'parakeet', 0.02),
-    Target('modulate-velma-2', 'modulate', 0.055),
+    Target('modulate-velma-2', 'modulate', 0.055, ramp_percent=0),
     Target('soniox', 'soniox', 0.0754),
 )
 DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}

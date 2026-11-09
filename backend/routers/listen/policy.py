@@ -12,6 +12,7 @@ import logging
 
 from config.policy.listen import ListenSessionPolicy, resolve_listen_policy
 from utils.observability.fallback import record_fallback
+from utils.conversations.recorded_time import recorded_end
 
 logger = logging.getLogger(__name__)
 POLICY_TTL_SECONDS = 24 * 60 * 60  # Six times the clients' four-hour recording rotation.
@@ -138,7 +139,7 @@ async def initialize_session_policy(host):
     ):
         from utils.conversations.process_conversation import retrieve_in_progress_conversation
         from database.listen_continuations import calendar_continuity_row
-        from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, gap_splits
+        from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, gap_splits
         from utils.transcribe_decisions import effective_conversation_timeout
         from utils.transcribe_decisions import should_attach_to_existing_in_progress
 
@@ -148,14 +149,15 @@ async def initialize_session_policy(host):
         host._policy_resume_candidate = existing
         if existing:
             source = getattr(existing.get('source'), 'value', existing.get('source'))
-            finished = existing.get('finished_at')
+            finished = recorded_end(existing)
+            arrival_at = datetime.now(timezone.utc)
             if (
                 not any(existing.get(key) for key in ('deleted', 'discarded', 'is_locked'))
                 and existing.get('client_device_id') == host.client_device_context.client_device_id
                 and should_attach_to_existing_in_progress(existing_source=source, request_source=host.request.source)
                 and finished is not None
                 and not gap_splits(
-                    (datetime.now(timezone.utc) - finished).total_seconds(),
+                    (arrival_at - finished).total_seconds(),
                     continuation_timeout(
                         existing, effective_conversation_timeout(host.request.conversation_timeout, False)
                     ),

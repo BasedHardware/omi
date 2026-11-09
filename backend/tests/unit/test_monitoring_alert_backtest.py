@@ -140,6 +140,46 @@ def test_committed_offline_admission_gate():
     assert not b.lint(b.rules(), json.loads(b.INVENTORY.read_text()))['failures']
 
 
+def test_observed_metric_from_another_datasource_cannot_admit_a_local_prometheus_rule():
+    r = rule()
+    inventory = {
+        'metrics': [],
+        'datasource_metrics': {'gmp-cloud-run': {'captured_at': 123, 'metrics': ['fixture_total']}},
+    }
+    assert b.lint({'fixture': r}, inventory)['failures']
+    r['data'][0]['datasourceUid'] = 'gmp-cloud-run'
+    r['data'][0]['model']['datasource'] = {'type': 'prometheus', 'uid': 'gmp-cloud-run'}
+    assert not b.lint({'fixture': r}, inventory)['failures']
+    r['data'][0]['datasourceUid'] = 'prometheus'
+    r['data'][0]['model']['datasource']['uid'] = 'prometheus'
+    assert b.lint({'fixture': r}, inventory)['failures']
+    assert inventory['metrics'] == []
+
+
+@pytest.mark.parametrize(
+    'full_age,full_freshness,queue_age,queue_freshness,expected',
+    [
+        (7201, 0, 8000, 0, 1),
+        (0, 0, 7201, 0, 1),
+        (7201, 900, 7201, 120, 0),
+        (7201, 900, 7201, 0, 1),
+        (7201, 0, 7201, 120, 1),
+        (7200, 0, 7200, 0, 0),
+    ],
+)
+def test_lateness_page_has_one_owner_and_requires_each_sources_fresh_measurement(
+    full_age, full_freshness, queue_age, queue_freshness, expected
+):
+    rules = b.rules()
+    assert 'omi-batch-queue-uncommitted-2h' not in rules
+    actual = rules['omi-batch-unit-unpublished-2h']
+    result = b.evaluate(
+        actual,
+        {'A': {(): [full_age]}, 'B': {(): [full_freshness]}, 'C': {(): [queue_age]}, 'F': {(): [queue_freshness]}},
+    )
+    assert result == {(): expected}
+
+
 def test_replay_range_frames_honor_offsets_and_resolution():
     r = rule(duration='0s')
     r['data'][0]['model'].update(instant=False, intervalMs=30000, maxDataPoints=100)
@@ -217,3 +257,16 @@ def test_debt_fingerprint_ignores_routing_and_annotations():
     retuned = json.loads(json.dumps(rule))
     retuned['for'] = '99m'
     assert b.fingerprint(retuned) != b.fingerprint(rule)
+
+
+def test_declared_gmp_log_metrics_are_not_admitted_as_observed_or_local():
+    r = rule()
+    inventory = {
+        'metrics': [],
+        'datasource_metrics': {'gmp-cloud-run': {'declared_metrics': ['fixture_total']}},
+    }
+    assert b.lint({'fixture': r}, inventory)['failures']
+    r['data'][0]['datasourceUid'] = 'gmp-cloud-run'
+    r['data'][0]['model']['datasource'] = {'type': 'prometheus', 'uid': 'gmp-cloud-run'}
+    assert not b.lint({'fixture': r}, inventory)['failures']
+    assert 'metrics' not in inventory['datasource_metrics']['gmp-cloud-run']

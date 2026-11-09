@@ -96,6 +96,9 @@ class AppContext:
 
     def make_client(self) -> OmiClient:
         profile = self.get_profile()
+        # --api-base, $OMI_API_BASE and configs saved before `config set` checked URLs reach here
+        # unchecked; httpx would report a bad one as a network failure (or "outcome unknown").
+        profile.api_base = config_cmd.validated_url("api_base", profile.api_base)
         # Apply the per-command key only to cloud API requests. Saved-profile
         # management uses its own credentials.
         env_key = os.environ.get(cfg.ENV_API_KEY)
@@ -312,6 +315,15 @@ def main() -> None:
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
+    except cfg.ConfigWriteRefused as exc:
+        # A deliberate refusal to clobber a config that would not parse. It
+        # reaches here from every write path (`config set`, `config profile
+        # use/delete`, `local configure`, and the auth store), so catching it
+        # once here beats eight call-site handlers that can drift apart.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        sys.exit(_exit_with_cli_error(CliError(message=str(exc)), renderer))
     except click.Abort:
         # Ctrl-C during an interactive prompt (Click raises click.Abort, which
         # subclasses RuntimeError — not KeyboardInterrupt — so it must be caught

@@ -204,7 +204,10 @@ def test_completed_receipt_old_wake_acks_without_null_owner_privacy_error(custod
     assert enrichment.run_enrichment(key, token, now=121, process=Mock(side_effect=AssertionError())) == 'stale'
 
 
-def test_watchdog_cursor_reaches_exhausted_wake_beyond_valid_prefix(custody, monkeypatch):
+@pytest.mark.parametrize('c3', [False, True])
+def test_watchdog_cursor_reaches_exhausted_wake_beyond_valid_prefix(custody, monkeypatch, c3):
+    from database.outbox_firestore import ENRICHMENT_OUTBOX
+
     client, uid, _, _ = custody
     cursor = client.collection('sync_reprocess_scan').document('cursor')
     cursor.delete()
@@ -224,15 +227,24 @@ def test_watchdog_cursor_reaches_exhausted_wake_beyond_valid_prefix(custody, mon
                 'task_due_at': 100000,
                 'first_pending_at': 0,
                 'summary_deadline_at': 120,
-                'dispatch': reprocess._dispatch_binding(),
+                'dispatch': reprocess.dispatch_binding(),
             }
         )
         refs.append(ref)
     monkeypatch.setattr(reprocess, '_wake_exists', lambda row: row['document_id'] != refs[-1].id)
+    if c3:
+        monkeypatch.setattr(ENRICHMENT_OUTBOX, '_blocked', lambda _: False)
+
+    def sweep():
+        if c3:
+            result = ENRICHMENT_OUTBOX.sweep(now=100001, limit=2)
+            return {'repaired': result.rewoken, 'error': result.errors}
+        return reprocess.sweep(now=100001, limit=2)
+
     try:
-        assert reprocess.sweep(now=100001, limit=2) == {'repaired': 0, 'error': 0}
-        assert reprocess.sweep(now=100001, limit=2) == {'repaired': 0, 'error': 0}
-        assert reprocess.sweep(now=100001, limit=2) == {'repaired': 1, 'error': 0}
+        assert sweep() == {'repaired': 0, 'error': 0}
+        assert sweep() == {'repaired': 0, 'error': 0}
+        assert sweep() == {'repaired': 1, 'error': 0}
         row = refs[-1].get().to_dict()
         assert row['task_token'] != 'a' * 32 and row['summary_deadline_at'] == 120
         assert all(ref.get().to_dict()['task_token'] == 'a' * 32 for ref in refs[:-1])

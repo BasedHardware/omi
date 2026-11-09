@@ -394,6 +394,18 @@ def test_private_env_rejects_names_that_would_shadow_chart_or_dispatch(name: str
         HELPER.check_private_env_against_chart({name: SENTINEL}, values, overrides)
 
 
+@pytest.mark.parametrize("stage", ("dev", "prod"))
+@pytest.mark.parametrize("name", ("SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS"))
+def test_keyless_prod_rejects_private_key_credentials_before_helm(stage: str, name: str):
+    values = _load_values(PROD_VALUES.with_name(f"{stage}_omi_backend_listen_values.yaml"))
+    if stage == "prod":
+        with pytest.raises(ValueError, match="workloadIdentityOnly") as error:
+            HELPER.check_private_env_against_chart({name: SENTINEL}, values, {})
+        assert SENTINEL not in str(error.value)
+    else:
+        HELPER.check_private_env_against_chart({name: SENTINEL}, values, {})
+
+
 def test_private_env_allows_blank_dispatch_override_of_same_name():
     values = _load_values(PROD_VALUES)
     HELPER.check_private_env_against_chart(
@@ -656,3 +668,53 @@ def test_materialize_step_installs_dependencies_before_the_secret_touches_disk()
         "TRANSLATION_SERVICE_MODELS",
     ):
         assert _step(MATERIALIZE)["env"][name] == _step("Resolve optional listen env overrides")["env"][name]
+
+
+DEV_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "dev_omi_backend_listen_values.yaml"
+
+
+@pytest.mark.parametrize("models", ["nllb", "luna,nllb", " NLLB ,luna"])
+def test_prod_rejects_translation_override_that_names_retired_nllb(models: str):
+    values = _load_values(PROD_VALUES)
+    with pytest.raises(ValueError, match="override names nllb, but this environment has no NLLB endpoint"):
+        HELPER.check_translation_endpoint(values, {"TRANSLATION_SERVICE_MODELS": models}, {})
+
+
+@pytest.mark.parametrize(
+    ("private_env", "message"),
+    [
+        ({"HOSTED_TRANSLATION_API_URL": "http://nllb"}, "HOSTED_TRANSLATION_API_URL is not allowed"),
+        ({"TRANSLATION_SERVICE_MODELS": "nllb,luna"}, "TRANSLATION_SERVICE_MODELS names nllb"),
+    ],
+)
+def test_prod_private_env_cannot_reselect_retired_nllb(private_env: dict, message: str):
+    values = _load_values(PROD_VALUES)
+    with pytest.raises(ValueError, match=message) as raised:
+        HELPER.check_translation_endpoint(values, {}, private_env)
+    assert "http://nllb" not in str(raised.value)
+
+
+def test_translation_override_allows_luna_in_prod_and_nllb_where_bound():
+    HELPER.check_translation_endpoint(_load_values(PROD_VALUES), {"TRANSLATION_SERVICE_MODELS": "luna"}, {})
+    HELPER.check_translation_endpoint(_load_values(PROD_VALUES), {"TRANSLATION_SERVICE_MODELS": ""}, {})
+    # Dev still binds its NLLB endpoint for experiments.
+    HELPER.check_translation_endpoint(_load_values(DEV_VALUES), {"TRANSLATION_SERVICE_MODELS": "nllb,luna"}, {})
+
+
+def test_cli_prod_translation_override_naming_nllb_fails_closed(tmp_path: Path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--values-file",
+            str(PROD_VALUES),
+            "--output-argv-file",
+            str(tmp_path / "overrides.argv"),
+            "--set",
+            "TRANSLATION_SERVICE_MODELS=nllb,luna",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "no NLLB endpoint" in result.stderr

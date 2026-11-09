@@ -7,6 +7,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from feature_flag_parser_defaults import parser_defaults
 from feature_flag_registry import (
     REVIEW_GRACE_DAYS,
     RAMP_REQUIRED_FROM,
@@ -31,10 +32,12 @@ AS_OF = re.compile(r"<!-- feature-flag-registry as-of: (\d{4}-\d{2}-\d{2}) -->")
 DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES = date(2026, 11, 20)
 DUPLICATE_DECLARATION_ALLOWLIST = {
     "AUDIO_ARCHIVE_PERCENT",
+    "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT",
+    "AUDIO_ARCHIVE_STOP_PCM_PERCENT",
     "AUDIO_ARCHIVE_UID_ALLOWLIST",
     "BATCH_LIVE_STT_RETIRE_PERCENT",
-    "BATCH_PIPELINE_PERCENT",
     "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST",
+    "BATCH_PIPELINE_SHADOW_PERCENT",
     "BATCH_PIPELINE_UID_ALLOWLIST",
     "CONVERSATION_RELEVANCE_JEV_PERCENT",
     "DEMAND_PROCESSING_PERCENT",
@@ -50,7 +53,6 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
     "STT_LIVE_DEMAND_UID_ALLOWLIST",
     "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
     "STT_ROUTING_ON_PERCENT",
-    "SYNC_LEGACY_FRESH_PERCENT",
     "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
     "TRANSCRIPTION_FINAL_PASS_PERCENT",
     "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST",
@@ -72,6 +74,9 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
         return errors, []
     warnings: list[str] = []
     flags = {entry["key"]: entry for entry in registry["flags"]}
+    for key, expected in parser_defaults(root).items():
+        if key in flags and flags[key]["fail"] != expected:
+            errors.append(f"{key}: fail must be {expected} for the shared boolean parser; regenerate the registry")
     grandfathered = sum(
         1
         for entry in registry["flags"]

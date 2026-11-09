@@ -22,6 +22,7 @@ from tests.unit.fixtures.strict_firestore_transaction import (
 from utils import encryption
 from utils.conversations import finalizer, lifecycle
 from utils.conversations.recovery import raw_transcript_bytes
+from utils.conversations.terminal_relevance import valid_decision
 
 pc = importlib.import_module('utils.conversations.process_conversation')
 UID, CID, JOB = 'recovery-user', 'recovery-conversation', 'recovery-job'
@@ -37,6 +38,10 @@ async def _inline(_executor, function, *args, **kwargs):
 @pytest.fixture
 def pipeline(monkeypatch):
     store = StrictFirestore()
+    occasion = SimpleNamespace(reason=None)
+    # Explicitly isolated unless a test supplies an episode. StrictFirestore is
+    # not a query engine; never let this fixture reach real credentials.
+    monkeypatch.setattr(pc, 'occasion_retention', lambda *a: occasion.reason)
     # Keep the fixture's reference ownership and read-before-write enforcement.
     # This boundary also needs Firestore's merge=True document-set semantics.
     original_set = StrictFirestoreTransaction.set
@@ -68,9 +73,10 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(finalizer, '_maybe_start_shadow', lambda *args: None)
     monkeypatch.setattr(pc, 'is_release_probe_uid', lambda uid: False)
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args: None)
-    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
     monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, 'has_structural_wake_word_marker', lambda text: False)
     monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *args: False)
@@ -94,7 +100,7 @@ def pipeline(monkeypatch):
     for name in ('extract_memories', 'trigger_external_integrations', 'smart_merge_step'):
         monkeypatch.setattr(finalizer, name, MagicMock(side_effect=AssertionError('derived effect escaped')))
 
-    return SimpleNamespace(store=store, writes=writes, paid_notes=paid_notes, decisions=decisions)
+    return SimpleNamespace(store=store, writes=writes, paid_notes=paid_notes, decisions=decisions, occasion=occasion)
 
 
 def _seed(pipeline, *, level='enhanced', transcript=None, **overrides):
@@ -102,6 +108,7 @@ def _seed(pipeline, *, level='enhanced', transcript=None, **overrides):
         'id': CID,
         'status': 'processing',
         'source': 'omi',
+        'language': 'en',
         'created_at': NOW - timedelta(days=30),
         'started_at': NOW - timedelta(days=30),
         'finished_at': NOW - timedelta(days=30),
@@ -150,9 +157,30 @@ async def _run_and_verify(pipeline):
 
 
 @pytest.mark.asyncio
+async def test_speaker_obligation_settles_after_canonical_persistence(pipeline, monkeypatch):
+    observed = []
+
+    def resolve(uid, conversation, *, on_persist):
+        assert pipeline.store.rows[CONVERSATION_PATH]['status'] == 'processing'
+
+        def settled(current):
+            observed.append((current, pipeline.store.rows[CONVERSATION_PATH]['status']))
+
+        on_persist(settled)
+        return True
+
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', resolve)
+    _seed(pipeline, transcript=[{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}])
+    await _run_and_verify(pipeline)
+    assert observed == [(True, 'completed')]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
 @pytest.mark.parametrize('text', ['', 'hmm'])
-async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blob(pipeline, level, text):
+async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blob(pipeline, monkeypatch, level, text):
+    # Rollback must retain the existing explicit-discard and encrypted-blob contract.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     transcript = [{'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}] if text else []
     blob = _seed(pipeline, level=level, transcript=transcript)
     response, counters = await _run_and_verify(pipeline)
@@ -295,7 +323,8 @@ async def test_decode_failure_preserves_blob_and_uses_existing_terminal_path(pip
     assert response == {'status': 'dead_letter'}
     assert row['transcript_segments'] == blob
     assert row['status'] == 'completed' and row['discarded'] is False
-    assert 'relevance_decision' not in row
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert pipeline.store.rows[JOB_PATH]['last_failure_code'] == 'recovery_structure_unavailable'
     assert counters['verified'] == 0 and counters['refused'] == 1
     output = capsys.readouterr().out
@@ -331,7 +360,8 @@ async def test_post_read_protection_refuses_discard_transactionally(pipeline, mo
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['transcript_segments'] == blob
-    assert 'relevance_decision' not in row
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     for key, value in protection.items():
         if key == 'structured':
             # Protected content survives; an untitled row also gains the
@@ -355,7 +385,9 @@ async def test_restore_before_finalizer_read_never_decides_discard(pipeline, cap
     row = pipeline.store.rows[CONVERSATION_PATH]
     assert response == {'status': 'dead_letter'}  # kept minimum, existing terminal policy
     assert row['discarded'] is False and row['sync_relevance_user_kept'] is True
-    assert row['transcript_segments'] == blob and 'relevance_decision' not in row
+    assert row['transcript_segments'] == blob
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert pipeline.decisions and all(not decision.discard for decision in pipeline.decisions)
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
@@ -368,7 +400,9 @@ async def test_title_added_while_job_is_queued_remains_visible(pipeline, capsys)
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['user_title'] == 'Title added after admission'
-    assert row['transcript_segments'] == blob and 'relevance_decision' not in row
+    assert row['transcript_segments'] == blob
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
 
@@ -387,7 +421,9 @@ async def test_blob_corrupted_after_read_cannot_commit_discard(pipeline, monkeyp
     row = pipeline.store.rows[CONVERSATION_PATH]
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
-    assert row['transcript_segments'] == corrupted and 'relevance_decision' not in row
+    assert row['transcript_segments'] == corrupted
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
 
@@ -406,10 +442,12 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
     transcript must also keep the speaker metadata describing it."""
     from models.conversation import ConversationSpeakers
 
+    # Exercise the discard arm under rollback; default-on minimums are kept instead.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     stored = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
     transcript = [{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_07', 'speaker_id': 7, 'is_user': False}]
 
-    def resolve(uid, conversation):
+    def resolve(uid, conversation, **kwargs):
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', participant_speaker_ids=[7, 100, 101, 102]
         )
@@ -510,3 +548,19 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
     assert result.status.value == 'completed'
     effects[0]()
     assert factory.call_count == expected_calls
+
+
+@pytest.mark.asyncio
+async def test_episode_member_recovery_retains_filler_without_paid_discard(pipeline):
+    pipeline.occasion.reason = 'occasion_member'
+    blob = _seed(
+        pipeline, transcript=[{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}]
+    )
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'done'}
+    assert not row['discarded']
+    assert row['transcript_segments'] == blob
+    assert counters['verified'] == 1
+    assert all(not decision.discard for decision in pipeline.decisions)
+    pipeline.paid_notes.assert_not_called()

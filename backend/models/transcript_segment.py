@@ -12,6 +12,7 @@ from models.capture_window_proof import CaptureWindowProof
 from models.other import Person
 from models.speaker_label_provenance import project_source
 from utils.model_text import format_elapsed
+from utils.speakers.display import display_participants
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -121,7 +122,8 @@ class TranscriptSegment(BaseModel):
     # document them) stay intact.
     # Cleared atomically on the first manual review; never authorizes teaching.
     speaker_match_source: SkipJsonSchema[Optional[str]] = None
-    speaker_id_scope: SkipJsonSchema[Optional[str]] = None
+    # Opaque voice scope travels to clients for exact recording rename proofs.
+    speaker_id_scope: Optional[str] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # Only present for v2 text whose provider position could not be proven.
     # Absence keeps every v1 serialized segment byte-identical.
@@ -132,8 +134,10 @@ class TranscriptSegment(BaseModel):
     audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
-    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
-    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    # Revocable profile pointer; readers require current profile and retention consent.
+    recurring_voice_id: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # Pinned-speaker priors and recurring-match near-misses: [{person_id, level, suggest?}].
+    # Suggestion-card evidence only; never a person label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # Transported only in Python-mode internal dumps; the DB folds this into
     # the bounded conversation blob and removes it from stored segments.
@@ -177,7 +181,7 @@ class TranscriptSegment(BaseModel):
         if self.original_text is None:
             data.pop('original_text', None)
         data['speaker_label_source'] = project_source(data)
-        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates', 'recurring_voice_id'):
             value = getattr(self, key)
             if value is not None:
                 data[key] = value
@@ -357,23 +361,17 @@ class TranscriptSegment(BaseModel):
         elapsed_timestamps: bool = False,
     ) -> str:
         if not user_name:
-            user_name = 'User'
+            user_name = 'You'
         transcript = ''
         people_map = {person.id: person.name for person in people} if people else {}
+        display = display_participants(segments, names=people_map, owner_name=user_name)
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
             timestamp_str = (
                 f'[{segment.get_timestamp_string(elapsed=elapsed_timestamps)}] ' if include_timestamps else ''
             )
-            speaker_name = user_name
-            if not segment.is_user:
-                if segment.person_id and segment.person_id in people_map:
-                    speaker_name = people_map[segment.person_id]
-                else:
-                    speaker_name = (
-                        f'Speaker {segment.speaker_id}' if segment.speaker_id is not None else 'Unknown speaker'
-                    )
+            speaker_name = display.label(segment)
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 
         return transcript.strip()
@@ -538,6 +536,11 @@ class TranscriptSegment(BaseModel):
             a: Optional['TranscriptSegment'], b: Optional['TranscriptSegment']
         ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
             if not a or not b:
+                return a, b
+            if a.audio_alignment == 'unplaced' or b.audio_alignment == 'unplaced':
+                # -1 timestamps cannot prove chronological adjacency. Keep each
+                # retained identity immutable so episode consumption survives a
+                # reconnect/crash and finalization can recover unseen segments.
                 return a, b
             if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
                 return a, b

@@ -31,7 +31,12 @@ def _add(world, cid, created_s, started_s, finished_s, *, origin=ORIGIN, stamps=
     if stamps:
         extra.setdefault('external_data', _stamps(origin))
     extra['created_at'] = T0 + timedelta(seconds=created_s)
-    return world.add(cid, started_s / 60.0, (finished_s - started_s) / 60.0, **extra)
+    row = world.add(cid, started_s / 60.0, (finished_s - started_s) / 60.0, **extra)
+    # Model an explicit calibrated capture clock independent of segment origin.
+    world.raw(cid).update(
+        recorded_start=T0 + timedelta(seconds=created_s), recorded_end=T0 + timedelta(seconds=finished_s)
+    )
+    return row
 
 
 def _drifted_pair(world, *, origin=ORIGIN, new_origin=None):
@@ -70,7 +75,7 @@ def test_default_wallclock_path_merges_a_drifted_same_recording_pair(world, capl
     assert len(merged) == 1 and 'gap_path=wallclock' in merged[0]
     fragments = survivor['smart_merge']['fragments']
     assert [f['id'] for f in fragments] == ['p', 'n']
-    assert fragments[1]['started_at'] == T0 + timedelta(seconds=400)
+    assert fragments[1]['started_at'] == T0 + timedelta(seconds=720)
 
 
 @pytest.mark.parametrize('created_s', [599, 1600])
@@ -78,7 +83,8 @@ def test_legacy_accepted_pair_keeps_its_legacy_path(world, caplog, created_s):
     """A pair the legacy gate accepts keeps its exact legacy verdict under the unconditional policy,
     even when its wall times are negative (599) or invalid (1600 > finished)."""
     _add(world, 'p', 0, 0, 600)
-    _add(world, 'n', created_s, 900, 1500)
+    _add(world, 'n', 900, 900, 1500)
+    world.raw('n')['created_at'] = T0 + timedelta(seconds=created_s)
     world.jev_answers = [0.35]
     seen = []
     world.monkeypatch.setattr(
@@ -107,8 +113,8 @@ def test_legacy_accepted_pair_keeps_its_legacy_path(world, caplog, created_s):
 @pytest.mark.parametrize('gap_s', [0, 60, 3600])
 def test_wallclock_gap_edges_are_asked(world, gap_s):
     _drifted_pair(world)
-    world.raw('n')['created_at'] = T0 + timedelta(seconds=600 + gap_s)
-    world.raw('n')['finished_at'] = world.raw('n')['created_at'] + timedelta(seconds=300)
+    world.raw('n')['recorded_start'] = T0 + timedelta(seconds=600 + gap_s)
+    world.raw('n')['recorded_end'] = world.raw('n')['recorded_start'] + timedelta(seconds=300)
     world.jev_answers = [0.9]
     world.finish('n')
     assert len(world.jev_calls) == 1
@@ -117,8 +123,8 @@ def test_wallclock_gap_edges_are_asked(world, gap_s):
 @pytest.mark.parametrize('gap_s, reason', [(3601, 'gap_out_of_window'), (-1, 'wallclock_gap_negative')])
 def test_wallclock_gap_bounds_skip_without_jev(world, caplog, gap_s, reason):
     _drifted_pair(world)
-    world.raw('n')['created_at'] = T0 + timedelta(seconds=600 + gap_s)
-    world.raw('n')['finished_at'] = world.raw('n')['created_at'] + timedelta(seconds=300)
+    world.raw('n')['recorded_start'] = T0 + timedelta(seconds=600 + gap_s)
+    world.raw('n')['recorded_end'] = world.raw('n')['recorded_start'] + timedelta(seconds=300)
     world.jev_answers = [0.9]
     caplog.set_level('INFO', logger=smart_merge.logger.name)
     assert world.finish('n') is False
@@ -171,13 +177,13 @@ def test_last_fragment_donor_row_proves_lineage_for_a_third_generation(world):
     _add(world, 'f3', 1300, 900, 1700)
     assert world.finish('f3') is True
     survivor = world.get(UID, 'f1')
-    assert [f['id'] for f in survivor['smart_merge']['fragments']] == ['f2', 'f1', 'f3']
+    assert [f['id'] for f in survivor['smart_merge']['fragments']] == ['f1', 'f2', 'f3']
     assert world.raw('f3')['smart_merge_decision']['gap_seconds'] == 100.0
 
 
 def test_different_latest_origin_uses_legacy_even_if_survivor_matches(world):
     _add(world, 'f1', 0, 0, 600)
-    _add(world, 'f2', 700, 720, 1200, origin='other-recording')
+    _add(world, 'f2', 720, 720, 1200, origin='other-recording')
     assert world.finish('f2') is True
 
     _add(world, 'f3', 1300, 900, 1700)
@@ -266,7 +272,7 @@ def test_last_fragment_finish_mutation_rejects_a_stale_wall_gap(world):
         UID, 'f3', mode=config.SmartMergeMode.MERGE, trigger=ProcessingTrigger.CAPTURE_END, owner='job'
     )
     assert plan is not None
-    world.raw('f2')['finished_at'] = T0 + timedelta(seconds=1400)
+    world.raw('f2')['recorded_end'] = T0 + timedelta(seconds=1400)
     assert smart_merge._absorb(UID, 'f3', plan, mode=config.SmartMergeMode.MERGE, owner='job') is False
     assert not world.raw('f3').get('deleted')
 
@@ -276,7 +282,7 @@ def test_union_recheck_lets_a_legacy_plan_survive_a_bad_wall_clock(world, post_p
     """A legacy-admitted plan rechecks the union rule: a negative (599) or
     invalid (1600 > finished) wall clock cannot reject what legacy admits."""
     _add(world, 'p', 0, 0, 600)
-    _add(world, 'n', 599, 900, 1500)
+    _add(world, 'n', 900, 900, 1500)
     world.jev_answers = [0.35]
     plan = smart_merge._decide(
         UID, 'n', mode=config.SmartMergeMode.MERGE, trigger=ProcessingTrigger.CAPTURE_END, owner='job'
@@ -302,6 +308,7 @@ def test_union_recheck_lets_a_wall_plan_survive_a_fresh_legacy_pass(world, caplo
     assert plan.wallclock_gap is True and plan.same_recording is True
     assert plan.admission_path == 'wallclock'
     world.raw('n')['started_at'] = T0 + timedelta(seconds=900)
+    world.raw('n')['recorded_start'] = T0 + timedelta(seconds=900)
     world.raw('n')['created_at'] = T0 + timedelta(seconds=599)
     caplog.set_level('INFO', logger=smart_merge.logger.name)
     caplog.clear()
@@ -315,7 +322,7 @@ def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world, caplog):
     """A legacy-admitted plan whose fresh rows now skip legacy is rescued
     by the wall-clock proof re-evaluated inside the transaction."""
     _add(world, 'p', 0, 0, 600)
-    _add(world, 'n', 720, 900, 1500)
+    _add(world, 'n', 900, 900, 1500)
     world.jev_answers = [0.9]
     plan = smart_merge._decide(
         UID, 'n', mode=config.SmartMergeMode.MERGE, trigger=ProcessingTrigger.CAPTURE_END, owner='job'
@@ -323,6 +330,7 @@ def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world, caplog):
     assert plan is not None
     assert plan.wallclock_gap is True and plan.same_recording is False
     world.raw('n')['started_at'] = T0 + timedelta(seconds=400)
+    world.raw('n')['recorded_start'] = T0 + timedelta(seconds=720)
     caplog.set_level('INFO', logger=smart_merge.logger.name)
     caplog.clear()
     assert smart_merge._absorb(UID, 'n', plan, mode=config.SmartMergeMode.MERGE, owner='job') is True
@@ -334,12 +342,13 @@ def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world, caplog):
 def test_wallclock_path_does_not_reuse_a_legacy_cached_decision(world):
     """A legacy record (nonnull speech gap, different gap) must be re-asked under the wall-clock policy."""
     _add(world, 'p', 0, 0, 600)
-    _add(world, 'n', 700, 900, 1500)
+    _add(world, 'n', 900, 900, 1500)
     world.jev_answers = [0.2]
     assert world.finish('n') is False
     assert world.raw('n')['smart_merge_decision']['speech_gap_seconds'] is not None
 
     world.raw('n')['started_at'] = T0 + timedelta(seconds=400)
+    world.raw('n')['recorded_start'] = T0 + timedelta(seconds=720)
     world.jev_answers = [0.9]
     assert world.finish('n') is True
     assert len(world.jev_calls) == 2
@@ -348,7 +357,7 @@ def test_wallclock_path_does_not_reuse_a_legacy_cached_decision(world):
 def test_reuses_a_legacy_cached_decision_when_legacy_still_admits(world):
     """A sticky legacy keep is honored on the same candidate and path without re-asking."""
     _add(world, 'p', 0, 0, 600)
-    _add(world, 'n', 700, 900, 1500)
+    _add(world, 'n', 900, 900, 1500)
     world.jev_answers = [0.2]
     assert world.finish('n') is False
 
@@ -372,7 +381,7 @@ def test_donor_row_finish_at_decision_time_drives_gap_and_state(world):
     _add(world, 'f2', 700, -120, 1200)
     world.jev_answers = [0.9]
     assert world.finish('f2') is True
-    world.raw('f2')['finished_at'] = T0 + timedelta(seconds=1250)
+    world.raw('f2')['recorded_end'] = T0 + timedelta(seconds=1250)
     _add(world, 'f3', 1370, 900, 1700)
     world.jev_answers = [0.9]
     assert world.finish('f3') is True

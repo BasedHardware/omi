@@ -49,9 +49,13 @@ def source_role(env, owner: str) -> str:
     return env.get('K_SERVICE') or env.get('OMI_SYNC_STACK_ROLE') or owner
 
 
-def boolean(env, key, default='false', *, strip=True):
+def boolean(env, key, default='false', *, strip=True, uid=None):
     value = env.get(key, default)
-    return (value.strip() if strip else value).lower() == 'true'
+    from config.refactor_switches import default_off, default_on
+
+    legacy = (value.strip() if strip else value).lower() == 'true'
+    parser = default_on if default == 'true' else default_off
+    return parser(key, legacy, uid=uid, environ=env)
 
 
 def member(uid, env, name, key, *, explicit=False):

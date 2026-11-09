@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -138,7 +139,7 @@ abstract class GlobalSearchSource {
 
   Future<ApiResult<SearchOverview>> overview();
   Future<ConversationSearchResult> conversations(String query,
-      {String? speakerId, DateTime? startDate, DateTime? endDate});
+      {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false});
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false});
   Future<ApiResult<List<DailySummary>>> recaps(String query);
   Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) => recaps(query);
@@ -157,9 +158,14 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
 
   @override
   Future<ConversationSearchResult> conversations(String query,
-          {String? speakerId, DateTime? startDate, DateTime? endDate}) =>
+          {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) =>
       searchConversationsServerResult(query,
-          limit: 20, includeDiscarded: false, speakerId: speakerId, startDate: startDate, endDate: endDate);
+          // Short clips are filtered from the discarded matches here, so that search reads a deeper page.
+          limit: includeNoise ? 50 : 20,
+          includeDiscarded: includeNoise,
+          speakerId: speakerId,
+          startDate: startDate,
+          endDate: endDate);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) =>
@@ -382,8 +388,21 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     var settled = false;
     try {
       await Future.wait<void>([
-        Future.sync(() => source.conversations(query, startDate: start, endDate: end)).then((r) {
-          if (!settled) conversations = r;
+        Future.sync(() => source.conversations(query, startDate: start, endDate: end, includeNoise: _noiseOnly))
+            .then((r) {
+          if (settled) return;
+          // Discarded rows include more than noise; this filter asks for noise alone.
+          conversations = _noiseOnly
+              ? ConversationSearchResult(
+                  items: [
+                    for (final c in r.items)
+                      if (c.isFoldedNoise) c,
+                  ],
+                  currentPage: r.currentPage,
+                  totalPages: r.totalPages,
+                  outcome: r.outcome,
+                )
+              : r;
         }).catchError((_) {
           if (!settled) partial = true;
         }),
@@ -458,6 +477,13 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       },
       onClear: _clearDateFilter,
     );
+  }
+
+  bool _noiseOnly = false;
+
+  void _toggleNoiseOnly() {
+    setState(() => _noiseOnly = !_noiseOnly);
+    _onChanged(_query.text);
   }
 
   void _clearDateFilter() {
@@ -605,16 +631,29 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                 ],
               ),
             ),
-            if (_activeStart != null)
+            if (_activeStart != null || _query.text.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: OmiDateFilterChip(
-                    key: const ValueKey('global_search_date_filter'),
-                    start: _activeStart!,
-                    end: _activeEnd,
-                    onClear: _clearDateFilter,
+                  child: Wrap(
+                    spacing: OmiSpacing.xs,
+                    runSpacing: OmiSpacing.xs,
+                    children: [
+                      OmiFilterChip(
+                        key: const ValueKey('global_search_noise_filter'),
+                        label: l10n.searchNoiseFilter,
+                        selected: _noiseOnly,
+                        onSelected: _toggleNoiseOnly,
+                      ),
+                      if (_activeStart != null)
+                        OmiDateFilterChip(
+                          key: const ValueKey('global_search_date_filter'),
+                          start: _activeStart!,
+                          end: _activeEnd,
+                          onClear: _clearDateFilter,
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -770,7 +809,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             _Row(
               key: ValueKey('search_conversation_${conversation.id}'),
               leading: _Emoji(conversation.structured.emoji),
-              title: conversation.structured.title,
+              title: presentableConversationTitleOrFallback(conversation, l10n),
               subtitle: [
                 dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                 if (conversation.matchSnippets.isNotEmpty) conversation.matchSnippets.first.text,
@@ -836,7 +875,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                 for (final conversation in _scopeConversations)
                   _Row(
                     leading: _Emoji(conversation.structured.emoji),
-                    title: conversation.structured.title,
+                    title: presentableConversationTitleOrFallback(conversation, context.l10n),
                     subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                     onTap: () => _openConversation(conversation),
                   ),

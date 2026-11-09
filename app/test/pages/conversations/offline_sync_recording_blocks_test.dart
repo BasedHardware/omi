@@ -26,6 +26,10 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
   int retried = 0;
+  final manuallyRetried = <Wal>[];
+
+  @override
+  Future<void> syncWal(Wal wal) async => manuallyRetried.add(wal);
 
   @override
   bool canPlayOrShareWal(Wal wal) => wal.filePath != null;
@@ -33,7 +37,7 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   Future<void> shareRecordingAsWav(List<Wal> wals) async => shared.add(wals);
 
   @override
-  List<Wal> get retryableAttentionWals => wals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+  List<Wal> get retryableAttentionWals => wals.where((w) => isRetryableSyncState(w.syncDisplayState)).toList();
   @override
   Future<void> retryNeedsAttentionWals() async => retried++;
 
@@ -226,5 +230,22 @@ void main() {
     await tester.pump();
 
     expect(sync.retried, 1);
+  });
+
+  testWidgets('a persisted HTTP refusal hides Retry and keeps Share Recording reachable', (tester) async {
+    final wals = _tooOldAfternoon().take(2).toList();
+    wals.first
+      ..status = WalStatus.uploadRejected
+      ..filePath = 'audio_refused.bin';
+    final sync = await _pump(tester, wals);
+
+    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
+    expect(sync.manuallyRetried, isEmpty);
+
+    await tester.tap(find.textContaining('6m').last);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Share Recording'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing, reason: 'automatic recovery owns deterministic refusals');
   });
 }

@@ -1,15 +1,16 @@
 import json
-import logging
 import os
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from utils.logging_config import configure_split_stream_logging
+from omi_logging import configure_logging
 
-# Route INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
-# classify routine request logs as ERROR severity (issues #9136, #9138, #9135).
-configure_split_stream_logging(level=logging.INFO)
+# Text routes INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
+# classify routine request logs as ERROR severity (issues #9136, #9138, #9135), and keeps
+# textPayload for log metrics until pusher's consumers are admitted for JSON
+# (docs/runbooks/structured-logging-rollout.md). Pusher keeps its Uvicorn access lines.
+configure_logging('pusher', access_policy='keep', default_format='text')
 
 import firebase_admin
 from fastapi import FastAPI, Request
@@ -55,6 +56,11 @@ def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
 
 
 async def startup_event() -> None:
+    from database.pinecone_partition_state import start_mutations, drain_mutations
+    from database.pinecone_mutation_lifecycle import install_shutdown_drain
+
+    start_mutations()
+    app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
     _validate_static_capabilities()
     start_background_task(refresh_stt_cap_cohort_forever(), name='pusher:stt_cap_cohort_refresh')
     start_background_task(log_executor_health(), name='pusher:executor_health')
@@ -65,6 +71,13 @@ async def shutdown_event() -> None:
     # even if the chart preStop hook did not run. Existing in-flight sessions are
     # then drained by drain_background_tasks within the bounded grace period.
     ReadinessGate.begin_drain()
+    from database.pinecone_partition_state import drain_mutations
+    from database.pinecone_mutation_lifecycle import drain_on_shutdown
+
+    # A blocked provider may occupy every shared DB worker during shutdown.
+    await drain_on_shutdown(drain_mutations)
+    if restore_signal := getattr(app.state, 'pinecone_restore_signal', None):
+        restore_signal()
     await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()

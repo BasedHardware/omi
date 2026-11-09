@@ -43,6 +43,15 @@ ENV_LOCAL_TOKEN = "OMI_LOCAL_TOKEN"
 ENV_PROFILE = "OMI_PROFILE"
 
 
+class ConfigWriteRefused(PermissionError):
+    """:func:`save` refused to overwrite a config that failed to parse on load.
+
+    A deliberate refusal, not an unexpected fault, so the CLI's error ladder
+    can report it as such. Still a ``PermissionError`` so existing callers
+    that catch that keep working.
+    """
+
+
 def default_config_path() -> Path:
     """Return the resolved config path, honoring ``$OMI_CONFIG``."""
     override = os.environ.get(ENV_CONFIG_PATH)
@@ -319,13 +328,15 @@ def save(config: Config) -> None:
     written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
     DACL supplied directly to ``CreateFileW``.
 
-    Raises PermissionError when the on-disk file failed to parse on load:
-    overwriting it would silently destroy profiles/credentials the user could
-    still repair by hand. The caller (a write command) surfaces that error
-    instead of clobbering the corrupt file.
+    Raises :class:`ConfigWriteRefused` (a ``PermissionError``) when the on-disk
+    file failed to parse on load: overwriting it would silently destroy
+    profiles/credentials the user could still repair by hand. ``main()``
+    surfaces that refusal as a normal CLI error rather than letting it reach
+    the last-chance handler, which would report a deliberate safety stop as an
+    unexpected one.
     """
     if config.load_error is not None:
-        raise PermissionError(
+        raise ConfigWriteRefused(
             f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
     parent = config.path.parent

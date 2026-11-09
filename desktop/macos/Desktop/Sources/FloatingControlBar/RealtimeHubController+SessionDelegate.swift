@@ -1385,7 +1385,7 @@ extension RealtimeHubController {
     // Most "session error" closes are expected lifecycle events, not bugs: a socket
     // that lived past the idle window is a normal provider idle-close (Gemini ~2.5min,
     // 1008), and a client "operation was aborted"/cancellation is a teardown. Reporting
-    // these to Sentry as errors created the high-volume OMI-DESKTOP-27C cluster. Keep
+    // these as error-level events created the high-volume OMI-DESKTOP-27C cluster. Keep
     // them as local logs; only capture genuine fast-fail provider errors, without raw
     // provider close text for known fast policy/auth/config rejects.
     let closeCategory = RealtimeHubCloseClassifier.category(
@@ -1418,7 +1418,7 @@ extension RealtimeHubController {
       provider: providerTag,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn)
-    let shouldCaptureProviderCloseToSentry = RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory)
+    let isActionableProviderClose = RealtimeHubCloseClassifier.isActionableClose(closeCategory)
     let closeAttemptID = DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: providerTag,
       category: closeCategory?.rawValue,
@@ -1438,16 +1438,16 @@ extension RealtimeHubController {
         turnOutcome: turnOutcome,
         recoveryAction: recoveryAction,
         recoveryResult: recoveryResult)
-      // `logError` synchronously builds the Sentry attachment. Capture only after
-      // this paired decision exists so the incident carries its bounded recovery
-      // outcome as well as the raw provider-close classification.
-      if shouldCaptureProviderCloseToSentry {
-        logError(reportingPlan.sentryMessage)
+      // Actionable closes get an error-level log (local log + beta trail) only
+      // after this paired decision exists, so the record carries its bounded
+      // recovery outcome as well as the raw provider-close classification.
+      if isActionableProviderClose {
+        logError(reportingPlan.boundedErrorMessage)
       }
     }
-    // Keep the provider/system payload in the private local log. The Sentry
+    // Keep the provider/system payload in the private local log. The error
     // message is constructed only from bounded enums and scalars, after the
-    // recovery decision is available for its synchronous attachment.
+    // recovery decision is available.
     log(reportingPlan.localMessage)
     log(
       "RealtimeHub: provider close terminal state tool=\(terminalToolName) "

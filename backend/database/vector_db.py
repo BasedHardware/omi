@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar, cast
 from pinecone import Pinecone
 
 from database import projection_repair
+from database.pinecone_partition_index import owner_index
 from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 
@@ -177,7 +178,7 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
         data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
         typed_metadata: Dict[str, Any] = data['metadata']
         typed_metadata.update(metadata)
-        res = index.upsert(vectors=[data], namespace="ns1")
+        res = owner_index(index, uid, index_name=_pinecone_index_name).upsert(vectors=[data], namespace="ns1")
     except Exception:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
         raise
@@ -191,7 +192,9 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, A
         return {}
     metadata['uid'] = uid
     metadata['memory_id'] = conversation_id
-    result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
+    result: Dict[str, Any] = owner_index(index, uid, index_name=_pinecone_index_name).update(
+        f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1"
+    )
     return result
 
 
@@ -229,7 +232,9 @@ def query_vectors(
         filter_data['created_at'] = created_at
 
     xq = query_vector if query_vector is not None else embeddings.embed_query(query)
-    xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
+    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='query_vectors', vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1"
+    )
     matches: List[Any] = xc['matches']
     return [item['id'].replace(f'{uid}-', '') for item in matches]
 
@@ -265,8 +270,14 @@ def query_vectors_by_metadata(
             {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
 
-    xc = index.query(
-        vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
+    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='query_vectors_by_metadata',
+        vector=vector,
+        filter=filter_data,
+        namespace="ns1",
+        include_values=False,
+        include_metadata=True,
+        top_k=1000,
     )
     if not xc['matches']:
         # Relax-retry when the structured people/topics/entities $or clause produced no hits, dropping
@@ -277,7 +288,8 @@ def query_vectors_by_metadata(
         if len(and_clauses) > 1 and '$or' in and_clauses[1]:
             and_clauses.pop(1)
             logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
-            xc = index.query(
+            xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+                caller='query_vectors_by_metadata',
                 vector=vector,
                 filter=filter_data,
                 namespace="ns1",
@@ -318,7 +330,7 @@ def delete_vector(uid: str, conversation_id: str) -> None:
         logger.warning('Pinecone index not initialized, skipping conversation vector delete')
         return
     vector_id = f'{uid}-{conversation_id}'
-    result = index.delete(ids=[vector_id], namespace="ns1")
+    result = owner_index(index, uid, index_name=_pinecone_index_name).delete(ids=[vector_id], namespace="ns1")
     logger.info(f'delete_vector {vector_id} {result}')
 
 
@@ -358,7 +370,9 @@ def upsert_workstream_association_vector(
             'schema_version': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION,
         },
     }
-    index.upsert(vectors=[data], namespace=WORKSTREAM_ASSOCIATION_NAMESPACE)
+    owner_index(index, uid, index_name=_pinecone_index_name).upsert(
+        vectors=[data], namespace=WORKSTREAM_ASSOCIATION_NAMESPACE
+    )
     return True
 
 
@@ -368,7 +382,8 @@ def query_workstream_association_candidates(
     """Return derived candidate IDs only; callers must hydrate authority."""
     if index is None or not summary.strip():
         return []
-    response = index.query(
+    response = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='query_workstream_association_candidates',
         vector=embeddings.embed_query(summary),
         top_k=max(1, min(limit, 20)),
         include_metadata=True,
@@ -393,7 +408,7 @@ def query_workstream_association_candidates(
 def delete_workstream_association_vector(uid: str, workstream_id: str, *, account_generation: int = 0) -> bool:
     if index is None:
         return False
-    index.delete(
+    owner_index(index, uid, index_name=_pinecone_index_name).delete(
         ids=[f'{uid}:workstream:{account_generation}:{workstream_id}'],
         namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
     )
@@ -403,7 +418,7 @@ def delete_workstream_association_vector(uid: str, workstream_id: str, *, accoun
 def reset_workstream_association_vectors(uid: str, *, account_generation: int = 0) -> bool:
     if index is None:
         return False
-    index.delete(
+    owner_index(index, uid, index_name=_pinecone_index_name).delete(
         filter={
             '$and': [
                 {'uid': {'$eq': uid}},
@@ -478,7 +493,7 @@ def upsert_memory_vector(
         "values": vector,
         "metadata": metadata,
     }
-    res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
+    res = owner_index(index, uid, index_name=_pinecone_index_name).upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vector {memory_id} {res}')
     return vector
 
@@ -534,7 +549,7 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
                 "metadata": metadata,
             },
         )
-    res = index.upsert(vectors=payload, namespace=MEMORIES_NAMESPACE)
+    res = owner_index(index, uid, index_name=_pinecone_index_name).upsert(vectors=payload, namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vectors_batch count={len(payload)} {res}')
     return len(payload)
 
@@ -578,8 +593,13 @@ def find_similar_memories(
     vector = embeddings.embed_query(content)
     filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
+    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='find_similar_memories',
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        filter=filter_data,
+        namespace=MEMORIES_NAMESPACE,
     )
 
     results: List[Dict[str, Any]] = []
@@ -683,11 +703,13 @@ def upsert_canonical_memory_vector(
     # Migration cleanup is metadata-fenced: remove both the former bare
     # ``memory_id`` row and any prior ``memproj:`` row for this user only.
     # A failed cleanup must abort the upsert so the durable outbox retries.
-    index.delete(
+    owner_index(index, item.uid, index_name=_pinecone_index_name).delete(
         filter=build_canonical_memory_vector_delete_filter(item.uid, item.memory_id),
         namespace=MEMORIES_NAMESPACE,
     )
-    res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
+    res = owner_index(index, item.uid, index_name=_pinecone_index_name).upsert(
+        vectors=[data], namespace=MEMORIES_NAMESPACE
+    )
     logger.info('upsert_canonical_memory_vector %s %s', item.memory_id, res)
     return vector
 
@@ -703,7 +725,7 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
         logger.warning('Pinecone index not initialized, nothing to purge for canonical memory vector delete')
         return True
     delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
-    index.delete(filter=delete_filter, namespace=MEMORIES_NAMESPACE)
+    owner_index(index, uid, index_name=_pinecone_index_name).delete(filter=delete_filter, namespace=MEMORIES_NAMESPACE)
     logger.info(
         'delete_canonical_memory_vectors uid=%s memory_id=%s',
         uid,
@@ -781,7 +803,7 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
     provider_deleted = False
     try:
         with destructive_operation_gate(uid, kind='stale_vector_index_cleanup') as gate_token:
-            index.delete(
+            owner_index(index, uid, index_name=_pinecone_index_name).delete(
                 filter={'$and': [{'uid': {'$eq': uid}}, {'$or': clauses}]},
                 namespace=MEMORIES_NAMESPACE,
             )
@@ -832,7 +854,8 @@ def query_memory_vector_candidates(
             if mode == SearchMode.archive_explicit
             else build_default_memory_vector_filter(uid)
         )
-    response = index.query(
+    response = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='query_memory_vector_candidates',
         vector=vector,
         top_k=bounded_limit,
         include_metadata=True,
@@ -862,7 +885,9 @@ def delete_memory_vector(uid: str, memory_id: str) -> None:
         return
 
     vector_id = f'{uid}-{memory_id}'
-    result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
+    result = owner_index(index, uid, index_name=_pinecone_index_name).delete(
+        ids=[vector_id], namespace=MEMORIES_NAMESPACE
+    )
     logger.info(f'delete_memory_vector {vector_id} {result}')
 
 
@@ -900,7 +925,7 @@ def upsert_x_post_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
         }
         for i, it in enumerate(filtered)
     ]
-    res = index.upsert(vectors=payload, namespace=X_POSTS_NAMESPACE)
+    res = owner_index(index, uid, index_name=_pinecone_index_name).upsert(vectors=payload, namespace=X_POSTS_NAMESPACE)
     logger.info(f'upsert_x_post_vectors_batch count={len(payload)} {res}')
     return len(payload)
 
@@ -911,8 +936,13 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
         logger.warning('Pinecone index not initialized, skipping x_post similarity search')
         return []
     vector = embeddings.embed_query(content)
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter={'uid': uid}, namespace=X_POSTS_NAMESPACE
+    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='find_similar_x_posts',
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        filter={'uid': uid},
+        namespace=X_POSTS_NAMESPACE,
     )
     matches: List[Any] = xc.get('matches', [])
     return [
@@ -974,7 +1004,9 @@ def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
     upserted = 0
     for i in range(0, len(vectors), 100):
         chunk = vectors[i : i + 100]
-        index.upsert(vectors=chunk, namespace=SCREEN_ACTIVITY_NAMESPACE)
+        owner_index(index, uid, index_name=_pinecone_index_name).upsert(
+            vectors=chunk, namespace=SCREEN_ACTIVITY_NAMESPACE
+        )
         upserted += len(chunk)
 
     logger.info(f'upsert_screen_activity_vectors uid={uid} count={upserted}')
@@ -1004,7 +1036,8 @@ def search_screen_activity_vectors(
     if app_filter:
         filter_data['appName'] = app_filter
 
-    xc = index.query(
+    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='search_screen_activity_vectors',
         vector=query_vector,
         top_k=k,
         include_metadata=True,
@@ -1031,7 +1064,9 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
     # Chunk to stay within Pinecone's per-delete id limit (1,000).
     for i in range(0, len(vector_ids), 1000):
-        index.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
+        owner_index(index, uid, index_name=_pinecone_index_name).delete(
+            ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE
+        )
 
 
 # ==========================================
@@ -1066,7 +1101,9 @@ def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -
                 "created_at": int(datetime.now(timezone.utc).timestamp()),
             },
         }
-        res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
+        res = owner_index(index, uid, index_name=_pinecone_index_name).upsert(
+            vectors=[data], namespace=ACTION_ITEMS_NAMESPACE
+        )
         logger.info(f'upsert_action_item_vector {action_item_id} {res}')
         return vector
     except Exception as e:
@@ -1106,7 +1143,9 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
             }
             for i, item in enumerate(items)
         ]
-        res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
+        res = owner_index(index, uid, index_name=_pinecone_index_name).upsert(
+            vectors=payload, namespace=ACTION_ITEMS_NAMESPACE
+        )
         logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
         return len(payload)
     except Exception as e:
@@ -1141,8 +1180,13 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
         vector = embeddings.embed_query(prepared_query)
         filter_data: Dict[str, Any] = {'uid': uid}
 
-        xc = index.query(
-            vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
+        xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+            caller='search_action_items_by_vector',
+            vector=vector,
+            top_k=limit,
+            include_metadata=True,
+            filter=filter_data,
+            namespace=ACTION_ITEMS_NAMESPACE,
         )
 
         matches: List[Any] = xc.get('matches', [])
@@ -1186,7 +1230,8 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
 
     try:
         vector = embeddings.embed_query(prepared_query)
-        xc = index.query(
+        xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+            caller='find_similar_action_items',
             vector=vector,
             top_k=limit,
             include_metadata=True,
@@ -1222,7 +1267,9 @@ def delete_action_item_vector(uid: str, action_item_id: str) -> None:
         return
 
     vector_id = f'{uid}-ai-{action_item_id}'
-    result = index.delete(ids=[vector_id], namespace=ACTION_ITEMS_NAMESPACE)
+    result = owner_index(index, uid, index_name=_pinecone_index_name).delete(
+        ids=[vector_id], namespace=ACTION_ITEMS_NAMESPACE
+    )
     logger.info(f'delete_action_item_vector {vector_id} {result}')
 
 
@@ -1234,7 +1281,9 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
     # Chunk to stay within Pinecone's per-delete id limit (1,000).
     for i in range(0, len(vector_ids), 1000):
-        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
+        owner_index(index, uid, index_name=_pinecone_index_name).delete(
+            ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE
+        )
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
@@ -1251,31 +1300,8 @@ def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]) -> 
         return
     vector_ids = [f'{uid}-{cid}' for cid in conversation_ids]
     for i in range(0, len(vector_ids), 1000):
-        index.delete(ids=vector_ids[i : i + 1000], namespace="ns1")
+        owner_index(index, uid, index_name=_pinecone_index_name).delete(ids=vector_ids[i : i + 1000], namespace="ns1")
     logger.info(f'delete_conversation_vectors_batch count={len(vector_ids)}')
-
-
-def delete_pinecone_memory_vectors_by_id(vector_ids: List[str]) -> int:
-    """Delete ns2 memory vectors by exact Pinecone id.
-
-    Canonical cleanup uses ``delete_canonical_memory_vectors`` so legacy
-    provider identities are removed by UID metadata instead of guessed IDs.
-    """
-    if index is None:
-        logger.warning("Pinecone index not initialized, skipping memory vector delete by id")
-        return 0
-    if not vector_ids:
-        return 0
-    total_deleted = 0
-    for i in range(0, len(vector_ids), 1000):
-        chunk = vector_ids[i : i + 1000]
-        try:
-            index.delete(ids=chunk, namespace=MEMORIES_NAMESPACE)
-            total_deleted += len(chunk)
-        except Exception:
-            logger.warning("delete_pinecone_memory_vectors_by_id chunk failed chunk=%d", i // 1000)
-    logger.info("delete_pinecone_memory_vectors_by_id total_deleted=%d", total_deleted)
-    return total_deleted
 
 
 def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
@@ -1295,7 +1321,7 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
     for i in range(0, len(vector_ids), 1000):
         chunk = vector_ids[i : i + 1000]
         try:
-            index.delete(ids=chunk, namespace=MEMORIES_NAMESPACE)
+            owner_index(index, uid, index_name=_pinecone_index_name).delete(ids=chunk, namespace=MEMORIES_NAMESPACE)
             total_deleted += len(chunk)
         except Exception:
             logger.warning(f'delete_memory_vectors_batch chunk failed uid={uid} chunk={i // 1000}')
@@ -1345,7 +1371,9 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
 
     upserted = 0
     for i in range(0, len(payload), 100):
-        index.upsert(vectors=payload[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+        owner_index(index, uid, index_name=_pinecone_index_name).upsert(
+            vectors=payload[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE
+        )
         upserted += len(payload[i : i + 100])
     logger.info(f'upsert_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={upserted}')
     return upserted
@@ -1377,7 +1405,8 @@ def search_transcript_chunks(
     query_kwargs: Dict[str, Any] = {}
     if timeout_seconds is not None:
         query_kwargs['_request_timeout'] = timeout_seconds
-    xc = index.query(
+    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='search_transcript_chunks',
         vector=vector,
         top_k=limit,
         include_metadata=True,
@@ -1409,10 +1438,14 @@ def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
     prefix = f'{uid}-{conversation_id}-c'
     try:
         ids: List[str] = []
-        for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+        for page in owner_index(index, uid, index_name=_pinecone_index_name).list(
+            prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE
+        ):
             ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
         for i in range(0, len(ids), 1000):
-            index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+            owner_index(index, uid, index_name=_pinecone_index_name).delete(
+                ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE
+            )
         if ids:
             logger.info(f'delete_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={len(ids)}')
     except Exception:
@@ -1435,10 +1468,14 @@ def delete_transcript_chunk_vectors_batch(
         prefix = f'{uid}-{conversation_id}-c'
         try:
             ids: List[str] = []
-            for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+            for page in owner_index(index, uid, index_name=_pinecone_index_name).list(
+                prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE
+            ):
                 ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
             for i in range(0, len(ids), 1000):
-                index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+                owner_index(index, uid, index_name=_pinecone_index_name).delete(
+                    ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE
+                )
             deleted += len(ids)
         except Exception:
             failures += 1
@@ -1447,3 +1484,21 @@ def delete_transcript_chunk_vectors_batch(
         raise RuntimeError(f'transcript chunk vector delete failed for {failures} conversation(s)')
     logger.info(f'delete_transcript_chunk_vectors_batch uid={uid} total_deleted={deleted}')
     return deleted
+
+
+def delete_all_user_vector_copies(uid: str) -> None:
+    """Purge every feature and retained migration copy for an account wipe."""
+    if index is None:
+        raise RuntimeError('Pinecone index is required to verify account vector deletion')
+    scoped = owner_index(index, uid, index_name=_pinecone_index_name)
+    for namespace in (
+        "ns1",
+        MEMORIES_NAMESPACE,
+        SCREEN_ACTIVITY_NAMESPACE,
+        ACTION_ITEMS_NAMESPACE,
+        X_POSTS_NAMESPACE,
+        TRANSCRIPT_CHUNKS_NAMESPACE,
+        WORKSTREAM_ASSOCIATION_NAMESPACE,
+    ):
+        scoped.delete_all_copies(namespace=namespace, filter={'uid': uid})
+        scoped.verify_empty_all_copies(namespace=namespace, filter={'uid': uid})

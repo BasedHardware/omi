@@ -24,6 +24,7 @@ NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def clear_in_flight(monkeypatch):
+    monkeypatch.setattr(jobs, 'enroll', MagicMock(return_value=None))
     monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', MagicMock())
     jobs._in_flight_retries.clear()
     yield
@@ -67,6 +68,38 @@ def test_run_executes_claimed_person_jobs(world):
     assert [call.args[1] for call in world.extract.await_args_list] == ['p1', 'p2']
     assert [f[3] for f in world.finished] == ['tok', 'tok']
     assert [f[4] for f in world.finished] == ['stored', 'stored']
+
+
+def test_vector_enrollment_completes_job_without_audio(world, monkeypatch):
+    enroll = MagicMock(return_value='stored')
+    monkeypatch.setattr(jobs, 'enroll', enroll)
+    world.claimed.append(_claimed_job())
+    asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
+    assert enroll.call_args.args == (UID, 'p1', CONV, ['s0'])
+    world.extract.assert_not_awaited()
+    assert world.finished[0][4] == 'stored'
+
+
+def test_vector_failure_preserves_audio_fallback(world, monkeypatch):
+    telemetry = MagicMock()
+    monkeypatch.setattr(jobs, 'record_fallback', telemetry)
+    monkeypatch.setattr(jobs, 'enroll', MagicMock(side_effect=ValueError('invalid evidence')))
+    world.claimed.append(_claimed_job())
+    asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
+    world.extract.assert_awaited_once()
+    assert world.extract.await_args.kwargs['require_owner_exclusion'] is True
+    telemetry.assert_called_once_with(
+        component='speaker_learning', from_mode='vector', to_mode='verified_audio', reason='other', outcome='degraded'
+    )
+
+
+@pytest.mark.parametrize('outcome', ['disabled', 'rejected_embedding', 'rejected_quality', 'stale_assignment'])
+def test_vector_rejection_cannot_bypass_gates_through_audio(world, monkeypatch, outcome):
+    monkeypatch.setattr(jobs, 'enroll', MagicMock(return_value=outcome))
+    world.claimed.append(_claimed_job())
+    asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
+    world.extract.assert_not_awaited()
+    assert world.finished[0][4] == outcome
 
 
 def test_run_respects_per_pass_bound(world):
@@ -339,7 +372,7 @@ async def test_finalizer_fenced_or_failed_fanout_never_schedules(monkeypatch, fa
 def test_deadline_finishes_in_flight_job_as_timeout(world, monkeypatch):
     world.claimed.append(_claimed_job())
 
-    async def slow(*args):
+    async def slow(*args, **kwargs):
         await asyncio.sleep(60)
 
     world.extract.side_effect = slow
@@ -354,7 +387,7 @@ def test_deadline_finishes_in_flight_job_as_timeout(world, monkeypatch):
 def test_cancellation_is_never_swallowed(world, monkeypatch):
     world.claimed.append(_claimed_job())
 
-    async def cancelled(*args):
+    async def cancelled(*args, **kwargs):
         raise asyncio.CancelledError()
 
     world.extract.side_effect = cancelled

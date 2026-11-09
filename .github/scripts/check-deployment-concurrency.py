@@ -47,6 +47,7 @@ class LockContract:
 # shared target must keep resolving to the same value. Keep this explicit so a
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
+    "gcp_incluster_guards.yml": LockContract("deploy-incluster-guards-${{ github.event.inputs.environment }}"),
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
     "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
@@ -56,7 +57,9 @@ LOCK_CONTRACTS = {
     "gcp_app.yml": LockContract(
         "deploy-cloud-run-omi-web-app-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_backend.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
+    "gcp_backend.yml": LockContract(
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
+    ),
     # Create-only schema reconciliation owns its own domain. See
     # validate_firestore_schema_lock_isolation for why it must not be in the
     # backend-stack group.
@@ -68,14 +71,14 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-metrics-egress-${{ github.event.inputs.environment || 'development' }}"
     ),
     "gcp_backend_listen_helm.yml": LockContract(
-        "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment || 'development') }}"
     ),
     "gcp_backend_pusher.yml": LockContract(
-        "${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_backend_pusher_auto_deploy.yml": LockContract("deploy-gke-pusher-development"),
     "gcp_diarizer.yml": LockContract(
-        "deploy-gke-${{ github.event.inputs.service || 'diarizer' }}-${{ github.event.inputs.environment }}"
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-gke-{0}-{1}', github.event.inputs.service || 'diarizer', github.event.inputs.environment) }}"
     ),
     "gcp_frontend.yml": LockContract(
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
@@ -83,11 +86,9 @@ LOCK_CONTRACTS = {
     "gcp_frame_request_retention_job.yml": LockContract(
         "deploy-frame-request-retention-${{ github.event.inputs.environment }}"
     ),
-    "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
-    "gcp_memory_maintenance_job.yml": LockContract(
-        "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
+    "gcp_llm_gateway.yml": LockContract(
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
     ),
-    "gcp_memory_maintenance_job_auto_dev.yml": LockContract("deploy-cloud-run-memory-maintenance-job-development"),
     "gcp_day3_reengagement_email_job.yml": LockContract(
         "deploy-cloud-run-day3-reengagement-email-job-${{ github.event.inputs.environment }}"
     ),
@@ -105,11 +106,19 @@ LOCK_CONTRACTS = {
     "gcp_x_connector_sync_job.yml": LockContract(
         "deploy-cloud-run-x-connector-sync-job-${{ github.event.inputs.environment }}"
     ),
-    "gcp_parakeet.yml": LockContract("deploy-gke-parakeet-${{ github.event.inputs.environment }}"),
+    "gcp_parakeet.yml": LockContract(
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-gke-parakeet-{0}', github.event.inputs.environment) }}"
+    ),
+    "config_train.yml": LockContract(
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
+    ),
     "gcp_personas.yml": LockContract(
         "deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_plugins.yml": LockContract("deploy-cloud-run-plugins-${{ github.event.inputs.environment }}"),
+    "sync_ledger_fence_cutover.yml": LockContract(
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
+    ),
 }
 
 
@@ -139,6 +148,9 @@ WRITER_MARKERS = (
     "gcloud run deploy ",
     "gcloud run jobs deploy ",
     "gcloud run jobs update ",
+    "backend/scripts/ops_train.py apply",
+    # Pauses queues and prepares/promotes Cloud Run revisions (sync ledger fence cutover).
+    "backend/scripts/sync_ledger_fence_cutover.py activate-",
 )
 PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 
@@ -582,11 +594,180 @@ DISPATCH_OR_DEFAULT_ENVIRONMENT = re.compile(
 )
 
 
-def resolve_environment(group: str, environment: str) -> str:
+def resolve_environment(group: str, environment: str, *, break_glass: bool = False, service: str = "") -> str:
     rendered = DISPATCH_OR_DEFAULT_ENVIRONMENT.sub(environment, group)
-    return rendered.replace("${{ github.event.inputs.environment || 'development' }}", environment).replace(
+    rendered = rendered.replace("${{ github.event.inputs.environment || 'development' }}", environment).replace(
         "${{ github.event.inputs.environment }}", environment
     )
+    if "${{" not in rendered:
+        return rendered
+    context = {
+        "github.event.inputs.environment": environment,
+        "github.event.inputs.break_glass_lock": "true" if break_glass else "false",
+        "github.event.inputs.service": service,
+        "github.event_name": "workflow_dispatch",
+        "github.run_id": "RUN_ID",
+    }
+    return render_expressions(rendered, context)
+
+
+class UnresolvedExpression(Exception):
+    pass
+
+
+EXPRESSION_TOKEN = re.compile(
+    r"\s*(?:(?P<string>'(?:[^']|'')*')|(?P<op>==|!=|&&|\|\||!|\(|\)|,)|(?P<ident>[A-Za-z_][A-Za-z0-9_.-]*))"
+)
+
+
+def evaluate_expression(expression: str, context: dict[str, str]) -> str:
+    """Evaluate the GitHub expression subset deploy lock groups use.
+
+    Supports string literals, context lookups, ==, !=, !, &&, || (GitHub's
+    value-returning semantics), parentheses and format(). An identifier that is
+    not in the context raises UnresolvedExpression, so a group keyed on an
+    unknown input stays visibly unresolved instead of collapsing to ''.
+    """
+
+    tokens: list[tuple[str, str]] = []
+    position = 0
+    while position < len(expression):
+        if expression[position:].strip() == "":
+            break
+        match = EXPRESSION_TOKEN.match(expression, position)
+        if not match:
+            raise UnresolvedExpression(expression)
+        kind = match.lastgroup or ""
+        tokens.append((kind, match.group(kind)))
+        position = match.end()
+    index = 0
+
+    def peek() -> tuple[str, str] | None:
+        return tokens[index] if index < len(tokens) else None
+
+    def take(value: str | None = None) -> tuple[str, str]:
+        nonlocal index
+        token = peek()
+        if token is None or (value is not None and token[1] != value):
+            raise UnresolvedExpression(expression)
+        index += 1
+        return token
+
+    def truthy(value: str | bool | None) -> bool:
+        return value not in (None, "", False, "false", "0")
+
+    def primary() -> str | bool | None:
+        token = take()
+        if token[0] == "string":
+            return token[1][1:-1].replace("''", "'")
+        if token[1] == "(":
+            value = disjunction()
+            take(")")
+            return value
+        if token[1] == "!":
+            return not truthy(primary())
+        if token[0] == "ident":
+            if token[1] == "format" and peek() == ("op", "("):
+                take("(")
+                arguments = [disjunction()]
+                while peek() == ("op", ","):
+                    take(",")
+                    arguments.append(disjunction())
+                take(")")
+                template = str(arguments[0])
+                for number, argument in enumerate(arguments[1:]):
+                    template = template.replace("{" + str(number) + "}", "" if argument is None else str(argument))
+                return template
+            if token[1] in ("true", "false"):
+                return token[1] == "true"
+            if token[1] not in context:
+                raise UnresolvedExpression(token[1])
+            return context[token[1]]
+        raise UnresolvedExpression(expression)
+
+    def comparison() -> str | bool | None:
+        left = primary()
+        token = peek()
+        if token in (("op", "=="), ("op", "!=")):
+            take()
+            right = primary()
+            equal = str(left).lower() == str(right).lower()
+            return equal if token[1] == "==" else not equal
+        return left
+
+    def conjunction() -> str | bool | None:
+        value = comparison()
+        while peek() == ("op", "&&"):
+            take("&&")
+            right = comparison()
+            value = right if truthy(value) else value
+        return value
+
+    def disjunction() -> str | bool | None:
+        value = conjunction()
+        while peek() == ("op", "||"):
+            take("||")
+            right = conjunction()
+            value = value if truthy(value) else right
+        return value
+
+    result = disjunction()
+    if index != len(tokens):
+        raise UnresolvedExpression(expression)
+    return "" if result is None or result is False else str(result).lower() if isinstance(result, bool) else result
+
+
+def render_expressions(text: str, context: dict[str, str]) -> str:
+    def substitute(match: re.Match[str]) -> str:
+        try:
+            return evaluate_expression(match.group(1), context)
+        except UnresolvedExpression:
+            return match.group(0)
+
+    return re.sub(r"\$\{\{(.*?)\}\}", substitute, text)
+
+
+# B5: every prod deploy writer for the backend train, listen, LLM gateway, pusher and
+# the GPU services shares one lock. lane 6's ramp controller and the lead's tools read it
+# through backend/scripts/prod_train_lock.py. Break-glass must fall back to the
+# workflow's pre-B5 per-target lock, never to an unserialized group.
+PROD_TRAIN_GROUP = "prod-train"
+PROD_TRAIN_WRITERS = {
+    # Break-glass config-train shares the backend stack lock: both mutate the same Cloud Run services and queues.
+    "config_train.yml": "deploy-backend-stack-prod",
+    "gcp_backend.yml": "deploy-backend-stack-prod",
+    "gcp_backend_listen_helm.yml": "deploy-backend-stack-prod",
+    "gcp_backend_pusher.yml": "deploy-gke-pusher-prod",
+    "gcp_diarizer.yml": "deploy-gke-diarizer-prod",
+    "gcp_llm_gateway.yml": "deploy-backend-stack-prod",
+    "gcp_parakeet.yml": "deploy-gke-parakeet-prod",
+    "sync_ledger_fence_cutover.yml": "deploy-backend-stack-prod",
+}
+
+
+def validate_prod_train_lock(groups: dict[str, str], workflow_text: dict[str, str]) -> list[str]:
+    errors: list[str] = []
+    for name, group in sorted(groups.items()):
+        resolved = resolve_environment(group, "prod")
+        if name not in PROD_TRAIN_WRITERS:
+            if resolved == PROD_TRAIN_GROUP:
+                errors.append(f"{name}: only audited prod-train writers may take the prod-train lock")
+            continue
+        if resolved != PROD_TRAIN_GROUP:
+            errors.append(f"{name}: prod must resolve to the {PROD_TRAIN_GROUP!r} lock, got {resolved!r}")
+        broken = resolve_environment(group, "prod", break_glass=True)
+        if broken != PROD_TRAIN_WRITERS[name]:
+            errors.append(
+                f"{name}: break-glass must fall back to its per-target lock "
+                f"{PROD_TRAIN_WRITERS[name]!r}, got {broken!r}"
+            )
+        if resolve_environment(group, "development") == PROD_TRAIN_GROUP:
+            errors.append(f"{name}: development must never take the prod-train lock")
+        if "      break_glass_lock:\n" not in workflow_text.get(name, ""):
+            errors.append(f"{name}: prod-train writers must declare the break_glass_lock dispatch input")
+    for name in sorted(set(PROD_TRAIN_WRITERS) - set(groups)):
+        errors.append(f"{name}: audited prod-train writer has no concurrency group")
+    return errors
 
 
 def development_group(name: str, group: str) -> str:
@@ -678,7 +859,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
-        ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
         ("gcp_day3_reengagement_email_job.yml", "gcp_day3_reengagement_email_job_auto_dev.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
@@ -696,7 +876,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_diarizer.yml",
         "gcp_frame_request_retention_job.yml",
         "gcp_llm_gateway.yml",
-        "gcp_memory_maintenance_job.yml",
         "gcp_day3_reengagement_email_job.yml",
         "gcp_models.yml",
         "gcp_nllb_translation.yml",
@@ -741,6 +920,7 @@ def check_repository() -> list[str]:
             groups[name] = concurrency["group"]
 
     errors.extend(validate_firestore_schema_lock_isolation(groups))
+    errors.extend(validate_prod_train_lock(groups, workflow_text))
     if set(groups) == set(LOCK_CONTRACTS):
         errors.extend(validate_shared_families(groups))
 
@@ -1215,9 +1395,44 @@ jobs:
         raise PolicyError("a commented composite reference expanded the deploy contract")
 
 
+def _self_test_prod_train_lock() -> None:
+    gate = "github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train'"
+    group = "${{ " + gate + " || format('deploy-gke-parakeet-{0}', github.event.inputs.environment) }}"
+    text = "on:\n  workflow_dispatch:\n    inputs:\n      break_glass_lock:\n        type: boolean\n"
+    cases = {
+        ("prod", False): "prod-train",
+        ("prod", True): "deploy-gke-parakeet-prod",
+        ("development", False): "deploy-gke-parakeet-development",
+    }
+    for (environment, broken), expected in cases.items():
+        if resolve_environment(group, environment, break_glass=broken) != expected:
+            raise PolicyError(f"prod-train group did not resolve to {expected!r}")
+    if validate_prod_train_lock({"gcp_parakeet.yml": group}, {"gcp_parakeet.yml": text}) != [
+        f"{name}: audited prod-train writer has no concurrency group"
+        for name in sorted(set(PROD_TRAIN_WRITERS) - {"gcp_parakeet.yml"})
+    ]:
+        raise PolicyError("a correct prod-train writer was rejected")
+    unserialized = "${{ " + gate + " || format('break-glass-{0}', github.run_id) }}"
+    if not validate_prod_train_lock({"gcp_parakeet.yml": unserialized}, {"gcp_parakeet.yml": text}):
+        raise PolicyError("a break-glass group without a per-target lock satisfied the prod-train contract")
+    if not validate_prod_train_lock({"gcp_parakeet.yml": group}, {"gcp_parakeet.yml": "on: {}\n"}):
+        raise PolicyError("a prod-train writer without a break_glass_lock input satisfied the contract")
+    intruder = {"gcp_models.yml": "${{ github.event.inputs.environment == 'prod' && 'prod-train' || 'x' }}"}
+    if not any("only audited" in error for error in validate_prod_train_lock(intruder, {})):
+        raise PolicyError("an unaudited workflow took the prod-train lock")
+    pusher = (
+        "${{ " + gate + " || (github.event.inputs.service || 'pusher') == 'llm-gateway' && "
+        "format('deploy-backend-stack-{0}', github.event.inputs.environment) || "
+        "format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
+    )
+    if resolve_environment(pusher, "prod", break_glass=True, service="llm-gateway") != "deploy-backend-stack-prod":
+        raise PolicyError("pusher llm-gateway break-glass did not keep the backend-stack lock")
+
+
 def run_self_test() -> None:
     """Exercise independent policy fixtures without creating a monolithic test body."""
 
+    _self_test_prod_train_lock()
     _self_test_firestore_schema_ownership()
     _self_test_firestore_schema_lock_isolation()
     _self_test_automatic_backend_stack_lifecycle()

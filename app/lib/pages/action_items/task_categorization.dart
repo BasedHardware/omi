@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:omi/backend/schema/schema.dart';
 
 /// Task list buckets for the action items page.
@@ -9,6 +11,92 @@ import 'package:omi/backend/schema/schema.dart';
 /// by the shared fixtures in `contracts/parity/task_due_buckets.json`; changing
 /// the rule here means editing that fixture in the same PR.
 enum TaskCategory { today, tomorrow, later, noDeadline, overdue }
+
+/// Provider-owned task membership. Rows are immutable generated DTOs, so every
+/// change relevant to categorization passes through a list mutation. Tracking
+/// those writes avoids scanning a 500-task snapshot just to validate a cache.
+class TaskCategorizationList extends ListBase<ActionItemWithMetadata> {
+  TaskCategorizationList([Iterable<ActionItemWithMetadata> items = const []]) : _items = List.of(items);
+
+  final List<ActionItemWithMetadata> _items;
+  int _version = 0;
+  int _cachedVersion = -1;
+  bool? _cachedCompleted;
+  DateTime? _cachedAt;
+  DateTime? _validUntil;
+  Map<TaskCategory, List<ActionItemWithMetadata>>? _categories;
+
+  @override
+  int get length => _items.length;
+  @override
+  set length(int value) {
+    if (value == _items.length) return;
+    _items.length = value;
+    _version++;
+  }
+
+  @override
+  ActionItemWithMetadata operator [](int index) => _items[index];
+  @override
+  void operator []=(int index, ActionItemWithMetadata value) {
+    if (identical(_items[index], value)) return;
+    _items[index] = value;
+    _version++;
+  }
+
+  @override
+  void add(ActionItemWithMetadata element) {
+    _items.add(element);
+    _version++;
+  }
+
+  @override
+  void addAll(Iterable<ActionItemWithMetadata> iterable) {
+    if (identical(iterable, this)) {
+      addAll(List<ActionItemWithMetadata>.of(this));
+      return;
+    }
+    // Route each write through add so even a throwing iterable invalidates
+    // the cache for any prefix already appended.
+    for (final value in iterable) {
+      add(value);
+    }
+  }
+
+  @override
+  void insert(int index, ActionItemWithMetadata element) {
+    _items.insert(index, element);
+    _version++;
+  }
+
+  @override
+  void insertAll(int index, Iterable<ActionItemWithMetadata> iterable) {
+    // Snapshot aliases/throwing iterables before changing membership.
+    final inserted = iterable.toList();
+    _items.insertAll(index, inserted);
+    if (inserted.isNotEmpty) _version++;
+  }
+
+  Map<TaskCategory, List<ActionItemWithMetadata>>? _cached(bool completed, DateTime now) {
+    if (_cachedVersion != _version ||
+        _cachedCompleted != completed ||
+        _cachedAt == null ||
+        now.isBefore(_cachedAt!) ||
+        !now.isBefore(_validUntil!)) {
+      return null;
+    }
+    return _categories;
+  }
+
+  void _remember(
+      bool completed, DateTime now, DateTime validUntil, Map<TaskCategory, List<ActionItemWithMetadata>> categories) {
+    _cachedVersion = _version;
+    _cachedCompleted = completed;
+    _cachedAt = now;
+    _validUntil = validUntil;
+    _categories = categories;
+  }
+}
 
 /// Buckets [items] by due date relative to [now] (defaults to the wall clock;
 /// injectable so the parity conformance test can run the fixture vectors).
@@ -23,6 +111,11 @@ Map<TaskCategory, List<ActionItemWithMetadata>> categorizeTasks(
   DateTime? now,
 }) {
   final current = now ?? DateTime.now();
+  if (items is TaskCategorizationList) {
+    final cached = items._cached(showCompleted, current);
+    if (cached != null) return cached;
+  }
+  var validUntil = DateTime(current.year, current.month, current.day + 1);
 
   final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
     TaskCategory.today: [],
@@ -38,8 +131,20 @@ Map<TaskCategory, List<ActionItemWithMetadata>> categorizeTasks(
     if (!item.completed && showCompleted) continue;
 
     categorized[categoryForItem(item, showCompleted, now: current)]!.add(item);
+    if (!showCompleted && item.dueAt == null && item.createdAt != null) {
+      // Aging is a strict comparison, so equality is still No deadline.
+      final expiresAt = item.createdAt!.add(const Duration(days: 7, microseconds: 1));
+      if (expiresAt.isAfter(current) && expiresAt.isBefore(validUntil)) validUntil = expiresAt;
+    }
   }
 
+  if (items is TaskCategorizationList) {
+    final frozen = Map<TaskCategory, List<ActionItemWithMetadata>>.unmodifiable({
+      for (final entry in categorized.entries) entry.key: UnmodifiableListView<ActionItemWithMetadata>(entry.value),
+    });
+    items._remember(showCompleted, current, validUntil, frozen);
+    return frozen;
+  }
   return categorized;
 }
 

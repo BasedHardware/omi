@@ -147,7 +147,11 @@ async def test_reconnect_skips_the_provider_that_died_serving() -> None:
     assert streaming._modulate_circuit.state == 'open'
 
     healthy_fallback = SimpleNamespace(is_connection_dead=False, death_reason=None)
-    with patch('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05):
+    with patch('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05), patch(
+        # Deepgram retired 2026-08-27; this walker regression pins a listed slot.
+        'utils.stt.streaming.stt_service_models',
+        ['modulate-velma-2', 'soniox', 'dg-nova-3'],
+    ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
             primary_service=STTService.modulate,
             connect_primary=_connect_raising(

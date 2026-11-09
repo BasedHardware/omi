@@ -24,6 +24,14 @@ def is_text_line(panel):
 
 
 class WallV2Contract(unittest.TestCase):
+    def test_funnel_row_sits_below_the_tv_wall(self):
+        from build_wall_dashboard import WALL_H
+        row = [p for p in load("omi-tv-v2")["panels"] if p["gridPos"]["y"] >= WALL_H]
+        self.assertEqual({p["gridPos"]["y"] for p in row}, {WALL_H})
+        self.assertEqual(sum(p["gridPos"]["w"] for p in row), 24)
+        self.assertEqual({p["targets"][0]["root_selector"] for p in row},
+                         {"frames.funnel", "frames.funnelWeekly", "frames.funnelPlatforms"})
+
     def test_checked_in_wall_matches_builder(self):
         from build_wall_dashboard import build_wall_board
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
@@ -51,7 +59,8 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         for name in COLUMNS:
             x, w = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             self.assertEqual(column[0]["type"], "stat")
             self.assertTrue(column[0]["title"].startswith(name), column[0]["title"])
             self.assertEqual(column[0]["gridPos"]["y"], 0)
@@ -78,7 +87,8 @@ class WallV2Contract(unittest.TestCase):
                 self.assertTrue(defaults.get("unit"), panel["title"])
                 self.assertIn("axisLabel", defaults["custom"], panel["title"])
         stats = {p["title"]: p for p in board["panels"] if p["type"] == "stat" and not is_text_line(p)}
-        self.assertEqual(len(stats), 5)
+        # Five column stats + the Variable margin tile (David, 2026-10-24).
+        self.assertEqual(len(stats), 6)
         names = [o["properties"][0]["value"] for p in stats.values() for o in p["fieldConfig"]["overrides"]]
         self.assertIn("Stickiness (DAU/WAU)", {p["title"] for p in board["panels"]})
         self.assertTrue(all("people" not in n.lower() for n in names), names)
@@ -89,7 +99,7 @@ class WallV2Contract(unittest.TestCase):
 
     def test_each_stat_has_an_api_delta_strip_in_field_order(self):
         import re
-        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H
+        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H, WALL_H
         board = load("omi-tv-v2")
         source = (HERE.parent / "lib/wall-series.ts").read_text()
         block = re.search(r"DELTA_STRIPS[^=]*= \{(.*?)\};", source, re.S).group(1)
@@ -98,7 +108,8 @@ class WallV2Contract(unittest.TestCase):
         self.assertIn('BAD_MARK = "\\u2060"', source)
         for name in COLUMNS:
             x, _ = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             head, strip = column[0], column[1]
             self.assertTrue(is_strip(strip))
             self.assertFalse(head["options"]["showPercentChange"])  # native change is relative only
@@ -115,7 +126,8 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "Cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
-        for line in ["gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttEstimateUsd",
+        for line in ["gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttCashUsd",
+                     "sttModulateModelledUsd", "sttEstimateUsd",
                      "saasMeasuredUsd", "saasEstimateUsd", "revenuePerDay"]:
             self.assertIn(line, fields)
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
@@ -123,14 +135,17 @@ class WallV2Contract(unittest.TestCase):
         for name in ESTIMATE:
             self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
             self.assertNotIn("custom.stacking", styled[name])  # still in the stack
-        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est."})
-        self.assertEqual(set(MEASURED), {"STT measured", "SaaS measured (Mercury)"})
+        # The measured stack carries ONLY measured dollars per provider; modelled
+        # Modulate and the dated constants stay sand-colored estimate series.
+        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est.", "Modulate modelled"})
+        self.assertEqual(set(MEASURED), {"STT measured", "STT cash (Mercury)", "SaaS measured (Mercury)"})
         for name in MEASURED:
             self.assertIn(name, styled)
             self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
         self.assertIn("Soniox console", cost["description"])
         self.assertIn("measured SaaS (Mercury)", cost["description"])
+        self.assertIn("Modulate modelled", cost["description"])
         self.assertNotIn("FinOps modelled", cost["description"])
 
     def test_status_colors_curve_placeholder_and_data_through(self):
@@ -209,14 +224,15 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
         self.assertIn("one point per day", panel["description"])
 
-    def test_margin_by_plan_sits_beside_unit_economics(self):
+    def test_margin_by_plan_keeps_its_frame_and_status_line(self):
         from build_wall_dashboard import FREE, PLAN_NAMES
         board = load("omi-tv-v2")
         panel = next(p for p in board["panels"] if p["title"] == "Margin by plan")
-        unit = next(p for p in board["panels"] if p["title"] == "Unit economics")
-        self.assertEqual(panel["gridPos"]["y"], unit["gridPos"]["y"])
-        self.assertEqual(panel["gridPos"]["h"], unit["gridPos"]["h"])
-        self.assertEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], unit["gridPos"]["x"])
+        # Still the Revenue column's tall closing chart, directly above its
+        # status line (the Variable margin tile now fills the space beside
+        # Unit economics instead — same frame family, 2026-10-24).
+        self.assertEqual(panel["gridPos"]["x"], 15)
+        self.assertGreaterEqual(panel["gridPos"]["h"], 6)
         target = panel["targets"][0]
         self.assertTrue(target["url"].endswith("/health"))
         self.assertEqual(target["root_selector"], "frames.marginByPlan")
@@ -252,6 +268,68 @@ class WallV2Contract(unittest.TestCase):
         status = next(p for p in board["panels"] if p["targets"][0]["root_selector"] == "frames.marginStatus")
         self.assertEqual(status["gridPos"], {**panel["gridPos"], "y": panel["gridPos"]["y"] + panel["gridPos"]["h"],
                                              "h": 1})
+
+    def test_all_in_tiles_name_their_scope_and_status_carries_settled_variance(self):
+        board = load("omi-tv-v2")
+        # Relabelled so the names say what they include (David 2026-11-02): the
+        # stat names stay short (no wrap at 1440), the description carries scope.
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        blob = json.dumps(health, ensure_ascii=False)
+        self.assertIn("All-in/day", blob)
+        self.assertIn("All-in/user", blob)
+        self.assertNotIn('"Cost / day"', blob)
+        self.assertNotIn('"Cost / user"', blob)
+        status = next(p for p in board["panels"]
+                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
+        # The live headline's settled D−2 figure and variance fold into this
+        # line, so the board keeps its layout.
+        self.assertIn("settled D−2", status["description"])
+        self.assertIn("variance", status["description"])
+
+    def test_variable_margin_tile_big_number_sparkline_and_target(self):
+        from build_wall_dashboard import STATUS_GOOD
+        board = load("omi-tv-v2")
+        tile = next(p for p in board["panels"] if p["title"] == "Variable margin (live est.)")
+        # The big number is the latest margin % (today's live estimate), with
+        # the 60-day daily series as the stat's own sparkline; the goal is the
+        # threshold (green at/above).
+        self.assertEqual(tile["type"], "stat")
+        self.assertEqual(tile["targets"][0]["url"].rsplit("/", 1)[1], "health")
+        self.assertEqual(tile["targets"][0]["root_selector"], "frames.variableMargin")
+        self.assertEqual(tile["options"]["graphMode"], "area")
+        # The reducer is `last`, never `lastNotNull`: a day without an MRR book
+        # snapshot nulls that day's margin, and the headline must show the
+        # explicit no-value marker, not an older non-null margin (Luna r3 P2).
+        self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
+        self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
+        # No live estimate (or no MRR book) shows no value, never a settled number as live.
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no live est.")
+        self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
+        steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
+        self.assertEqual([s["value"] for s in steps], [None, 50])
+        self.assertEqual(steps[1]["color"], STATUS_GOOD)
+        # The definition is on the wall, not in a separate doc.
+        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone",
+                       "Goal 50%", "60 days", "non-USD paying subscriptions", "no MRR book"):
+            self.assertIn(phrase, tile["description"])
+        # The secondary chart: cost run rate vs MRR with the 50% target marked.
+        chart_panel = next(p for p in board["panels"] if p["title"] == "Cost run rate vs MRR")
+        fields = [c["selector"] for c in chart_panel["targets"][0]["columns"]]
+        for field in ("costPerMonth", "mrr", "goalCost", "vertexReservedPerMonth"):
+            self.assertIn(field, fields)
+        styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
+                  for o in chart_panel["fieldConfig"]["overrides"]}
+        target_line = styled["50% target cost"]
+        self.assertEqual(target_line["color"]["fixedColor"], STATUS_GOOD)
+        self.assertEqual(target_line["custom.lineStyle"]["dash"], [6, 4])  # a goal, not a series
+        # Missing/stale vendor lines are named on the tile's own status line,
+        # which also carries the MRR source and its non-USD exclusion count.
+        status = next(p for p in board["panels"]
+                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
+        self.assertEqual(status["gridPos"]["h"], 1)
+        self.assertIn("named", status["description"])
+        self.assertIn("non-USD", status["description"])
+        self.assertIn("7-day window", status["description"])
 
     def test_cost_estimates_are_dated_like_the_api(self):
         import re

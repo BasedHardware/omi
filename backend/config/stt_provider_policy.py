@@ -12,11 +12,14 @@ from __future__ import annotations
 from enum import Enum
 from typing import Final, Mapping
 
+from config.live_stt_gpu_fleet import gpu_fleet_off, streaming_parakeet_slot_enabled
+
 
 class STTServingSurface(str, Enum):
     STREAMING = 'streaming'
     PRERECORDED = 'prerecorded'
     PTT = 'ptt'
+    HELD_RECOVERY = 'held_recovery'
 
 
 DEEPGRAM_CLOUD_PROVIDER: Final = 'deepgram_cloud'
@@ -98,16 +101,14 @@ MODULATE_SUPPORTED_LANGUAGES: Final[frozenset[str]] = frozenset(
     }
 )
 
-# This is the single source of truth for provider enablement. Cloud Deepgram
-# serves the live surfaces; batch stays on Parakeet/Velma. Self-hosted Deepgram
-# is a distinct product, available only to a runtime with its explicit endpoint
-# configured. Future availability changes start here.
+# This is the single source of truth for provider enablement. Batch stays on
+# Parakeet/Velma. Future availability changes start here.
 PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
-    # PTT is streaming-only in transcribe_voice_message_stream, which dispatches
-    # Parakeet and Modulate and raises on anything else. Admitting Deepgram here
-    # would select a provider that surface cannot connect.
-    DEEPGRAM_CLOUD_PROVIDER: frozenset({STTServingSurface.STREAMING}),
-    DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset({STTServingSurface.STREAMING}),
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys.
+    # Deliberately absent from this map: provider_is_enabled answers False for
+    # both DEEPGRAM_PROVIDERS on every surface, so selection can never admit a
+    # `dg-*` model, and a deployment that still lists one is warned at startup
+    # (utils/stt/streaming.py validate_streaming_stt_env) and skipped here.
     MODULATE_PROVIDER: frozenset(
         {
             STTServingSurface.STREAMING,
@@ -122,29 +123,32 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
             STTServingSurface.PTT,
         }
     ),
-    # Streaming only: transcribe_voice_message_stream dispatches Parakeet and
-    # Modulate alone, and the batch path has no Soniox client.
-    SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING}),
+    # Async is admitted for fenced held recovery and, on the prerecorded surface,
+    # only as batch provider-STT failover capacity: no prerecorded model token maps
+    # to Soniox (config.prerecorded_stt.provider_for_model_token) and it is absent
+    # from DEFAULT_MODELS_BY_SURFACE, so general prerecorded/PTT selection keeps
+    # its existing providers; the batch route table marks it failover_only.
+    SONIOX_PROVIDER: frozenset(
+        {STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY, STTServingSurface.PRERECORDED}
+    ),
 }
+
+# One independent call after a validated Modulate-empty held recovery, inside
+# the same paid intent. BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED is its kill switch.
+HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = SONIOX_PROVIDER
 
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.
 #
-# Parakeet is the bounded-capacity last resort: the Parakeet service owns the
-# hard stream gate (see parakeet/admission.py), so every listener converges on
-# one cap per serving pod instead of listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
     # Velma-2 leads on cost, and its failures are recoverable: a mid-session
     # error frame hands the stream to Soniox rather than ending it (#12459), which
     # is what the second slot is for. Soniox only ever serves as that failover
     # hop, so judge it by the failover metrics, not by session-start acceptance
-    # (#13662). Deepgram stays listed so a BYOK user still resolves a `dg-*`
-    # model; it is not the intended overflow for Velma failures. Parakeet stays
-    # last rather than being dropped: a client can ask for it by name
-    # (`?stt_service=parakeet`), and that preference is only honorable while
-    # the model is listed here.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'),
+    # (#13662). The plain Parakeet last-resort slot is retired independently of
+    # the reviewed parakeet-window lane and can be restored by its kill switch.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.
@@ -208,6 +212,16 @@ def normalized_stt_language(language: str | None) -> str:
     if not language:
         return ''
     return language.split('-')[0].split('_')[0].lower()
+
+
+# Profile equivalence is not provider capability or a change to the recorded
+# language. Only near-identical spoken pairs belong in this small map.
+LANGUAGE_EQUIVALENCE: Final[Mapping[str, str]] = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
+
+
+def canonical_language(language: str | None) -> str:
+    code = normalized_stt_language(language)
+    return LANGUAGE_EQUIVALENCE.get(code, code)
 
 
 # Soniox rejects any ``language_hints`` entry outside this vocabulary with
@@ -331,6 +345,9 @@ def deepgram_provider_for_runtime(self_hosted: bool) -> str:
 
 def provider_is_enabled(provider: str, surface: STTServingSurface) -> bool:
     """Return whether a provider may serve the specified product surface."""
+    # Modulate is a vendor, not a fleet GPU: it keeps live streaming after the shared fleet retires.
+    if gpu_fleet_off() and provider == PARAKEET_PROVIDER:
+        return False
     return surface in PROVIDER_SERVING_SURFACES.get(provider, frozenset())
 
 
@@ -340,6 +357,12 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
     A Deepgram token is admissible when either deployment is allowed. Selection
     re-checks the runtime's own provider, so this cannot reach a withheld one.
     """
+    if (
+        model.strip().lower() == 'parakeet'
+        and surface == STTServingSurface.STREAMING
+        and not streaming_parakeet_slot_enabled()
+    ):
+        return False
     if model.strip().lower() == 'parakeet-window' and surface != STTServingSurface.STREAMING:
         return False
     provider = provider_for_model_token(model)
@@ -352,7 +375,10 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
 
 def default_models_for_surface(surface: STTServingSurface) -> tuple[str, ...]:
     """Return the canonical model ordering for one serving surface."""
-    return tuple(model for model in DEFAULT_MODELS_BY_SURFACE[surface] if model_is_enabled(model, surface))
+    models = DEFAULT_MODELS_BY_SURFACE[surface]
+    if surface == STTServingSurface.STREAMING and streaming_parakeet_slot_enabled():
+        models += ('parakeet',)
+    return tuple(model for model in models if model_is_enabled(model, surface))
 
 
 def canonical_model_config(surface: STTServingSurface) -> str:

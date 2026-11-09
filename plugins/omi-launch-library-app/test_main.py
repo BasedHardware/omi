@@ -507,6 +507,17 @@ class EndpointTests(unittest.TestCase):
         self.assertIsNone(payload["error"])
         self.assertIn("Falcon 9", payload["result"])
 
+    def test_search_launches_non_string_end_date(self):
+        from pydantic import ValidationError
+        from models import SearchLaunchesRequest
+        with self.assertRaises(ValidationError):
+            SearchLaunchesRequest.model_validate({"query": "Starlink", "end_date": 20261031})
+
+    def test_search_launches_compact_iso_date_end_of_day(self):
+        from models import SearchLaunchesRequest
+        req = SearchLaunchesRequest.model_validate({"query": "Starlink", "end_date": "20261031"})
+        self.assertEqual(req.end_date, "2026-10-31T23:59:59Z")
+
 
 if __name__ == "__main__":
     unittest.main()

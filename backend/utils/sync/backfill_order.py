@@ -1,8 +1,10 @@
 """Read-only rollout policy shared by durable and direct backfill dispatch."""
 
-import hashlib
 import math
 import os
+
+from config.policy.batch import cohort_bucket
+from config.refactor_modes import serving_for
 
 
 def newest_first(uid: str) -> bool:
@@ -12,12 +14,14 @@ def newest_first(uid: str) -> bool:
     if uid and uid in allowlist:
         return True
     try:
-        percent = float(os.getenv('SYNC_BACKFILL_ORDER_PERCENT', '100'))
+        percent = float(
+            os.getenv('SYNC_BACKFILL_ORDER_PERCENT', '0' if serving_for('CAPTURE_COVERAGE_MODE', uid) else '100')
+        )
     except ValueError:
         return False
     if not math.isfinite(percent):
         return False
-    bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
+    bucket = cohort_bucket(uid, '')
     return bool(uid) and bucket < max(0, min(100, percent))
 
 

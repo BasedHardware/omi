@@ -12,6 +12,7 @@
 /// | A text action | `OmiButton` (`.secondary`, `.destructive`, `.tertiary`; `size: OmiButtonSize.compact`) |
 /// | An icon-only action | `OmiIconButton(icon:, label:, onPressed:)` / `OmiIconButton.filled` |
 /// | A spinner | `OmiSpinner` |
+/// | Live / background-work state on a glyph | `OmiLiveDot` (green only while live), `OmiActivityRing` (sync ring, no text) |
 /// | Empty / failed / first-load page body | `OmiEmptyState`, `OmiErrorState`, `OmiLoadingState` |
 /// | Settings | `OmiSettingsGroup` of `OmiSettingsRow` / `OmiSettingsRow.toggle`, `OmiSectionHeader`, `OmiSwitch` |
 /// | Search | `OmiSearchField(placeholder:)` |
@@ -34,6 +35,7 @@ export 'components/omi_date_filter_chip.dart';
 export 'components/omi_edit_sheet.dart';
 export 'components/omi_filter_chip.dart';
 export 'components/omi_level_meter.dart';
+export 'components/omi_live_indicators.dart';
 export 'components/omi_locked_preview.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';

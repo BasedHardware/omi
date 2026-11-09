@@ -128,7 +128,7 @@ def current_run() -> NotesRun | None:
 def observe_notes(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
-        run = NotesRun('episode' if kwargs.get('episode_evidence') is not None else 'baseline')
+        run = NotesRun('baseline')
         token = _current.set(run)
         try:
             result = fn(*args, **kwargs)

@@ -6,6 +6,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+from scripts.git_test_env import clean_git_env
+
 import pytest
 
 HARNESS_ROOT = Path(__file__).resolve().parents[1]
@@ -23,12 +25,7 @@ def _clean_env() -> dict[str, str]:
     whenever the pre-push gate invokes it. Left in place, `git init <fixture>`
     re-opens the *caller's* repository instead of creating the fixture.
     """
-    env = os.environ.copy()
-    local_vars = subprocess.run(
-        ["git", "rev-parse", "--local-env-vars"], text=True, stdout=subprocess.PIPE, check=True
-    ).stdout.split()
-    for var in local_vars:
-        env.pop(var, None)
+    env = clean_git_env()
     env.pop("PYTHON", None)
     return env
 

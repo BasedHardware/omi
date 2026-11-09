@@ -1,5 +1,7 @@
 import logging
 
+from utils.conversations import transcribing_hold
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from pydantic import ValidationError
@@ -97,9 +99,14 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
             update_data.pop(field)
 
     if update_data:
-        folders_db.update_folder(uid, folder_id, update_data)
+        success = folders_db.update_folder(uid, folder_id, update_data)
+        if success is False:
+            raise HTTPException(status_code=404, detail="Folder not found")
 
-    return folders_db.get_folder(uid, folder_id)
+    fresh_folder = folders_db.get_folder(uid, folder_id)
+    if not fresh_folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return fresh_folder
 
 
 @router.delete('/v1/folders/{folder_id}', status_code=204, tags=['folders'])
@@ -153,6 +160,7 @@ def get_folder_conversations(
     conversations = folders_db.get_conversations_in_folder(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
     # with a 500.
@@ -185,8 +193,13 @@ def move_conversation_to_folder(
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
 
-    folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
-    return {"status": "ok", "conversation": conversations_db.get_conversation(uid, conversation_id)}
+    moved = folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
+    if moved is False:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    fresh_conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not fresh_conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "ok", "conversation": fresh_conversation}
 
 
 @router.post(

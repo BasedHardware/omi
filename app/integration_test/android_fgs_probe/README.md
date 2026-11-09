@@ -38,3 +38,15 @@ boot ID and every case result. A failed/incomplete run cannot leave a stale
 passing receipt. Android still enforces its foreground-service deadline; a
 bounded 60-second case wait accommodates host contention and Activity.onStop
 without skipping the actual promotion, lifecycle or cleanup assertions.
+
+In the burst and restart cases the activity logs `ACTIVE` only after every
+queued command has been delivered on its main thread, then holds its own stop
+until the runner has checked `dumpsys` for the foreground service and the
+`omi:sync-transfer` wake lock and broadcast `com.omi.fgsprobe.VERIFIED`. A
+wall-clock stop used to follow `ACTIVE` by 2.5 s, which a slow emulator could
+consume delivering the 201 queued burst commands (CI run 39680972837 measured
+~26 ms per command), so the runner read the intended teardown as a lost
+transfer. The live-state snapshots are saved as `<round>-<mode>-active-*.log`
+before the verdict; `VERIFY_TIMEOUT` in the log means the acknowledgement never
+arrived and fails the case. `app/scripts/android_fgs_probe_test.py` pins this
+runner contract offline.

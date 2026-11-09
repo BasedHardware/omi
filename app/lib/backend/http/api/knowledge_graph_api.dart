@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth_service.dart';
@@ -35,7 +34,6 @@ class KnowledgeGraphApi {
     String? cursor,
     @visibleForTesting Future<http.Response?> Function(String url)? apiCaller,
     @visibleForTesting bool Function()? isCurrent,
-    @visibleForTesting String ownerGivenName = '',
   }) async {
     // Capture explicit endpoint URLs before awaiting: the request stays pinned
     // and the app-client schema inventory can see each public contract.
@@ -43,8 +41,6 @@ class KnowledgeGraphApi {
     final baseUrl = '${Env.apiBaseUrl}v1/knowledge-graph';
     final canonicalUrl = '${Env.apiBaseUrl}v1/knowledge-graph/canonical';
     final session = apiCaller == null ? AuthService.instance.captureSessionSnapshot() : null;
-    final ownerLabels =
-        memoryGraphKnownUserLabels(apiCaller == null ? SharedPreferencesUtil().givenName : ownerGivenName);
     bool current() =>
         Env.apiBaseUrl == origin &&
         (isCurrent?.call() ??
@@ -79,7 +75,7 @@ class KnowledgeGraphApi {
       }
       legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility.body) as Map<String, dynamic>)
           .toJson();
-      if ((legacy['nodes'] as List).any((node) => !memoryGraphIsUserNode(node as Map, ownerLabels))) {
+      if ((legacy['nodes'] as List).any((node) => !memoryGraphIsUserNode(node as Map))) {
         return {
           ...legacy,
           '_backend_origin': baseUrl,
@@ -128,6 +124,30 @@ class KnowledgeGraphApi {
       };
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
+  }
+
+  /// Optional onboarding warm-up. Only a successfully read empty legacy graph
+  /// may schedule a rebuild; canonical graphs are derived on read.
+  /// Read failures (including a replaced session) propagate to onboarding's
+  /// best-effort boundary. They are not evidence that legacy recovery is safe.
+  static Future<void> prebuildForOnboarding() async {
+    final current = await getKnowledgeGraph();
+    if (current['canonical'] == true) return;
+    final nodes = current['nodes'] as List<dynamic>? ?? const [];
+    final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
+    if (hasGraph) return;
+
+    final rebuildResult = await rebuildKnowledgeGraph();
+    final status = rebuildResult['status'];
+    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
+    if (status == 'canonical_up_to_date') {
+      return;
+    }
+    await waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(seconds: 2),
+      stabilityChecks: 1,
+    );
   }
 
   /// Triggers a rebuild of the knowledge graph.

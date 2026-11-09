@@ -436,8 +436,11 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
         _clearGraph();
         await _loadGraph();
       } else if (_hasContent) {
-        OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
-            actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
+        // A resume refresh runs while another tab may be showing; it keeps the map and says nothing.
+        if (!silent) {
+          OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
+              actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
+        }
       } else {
         setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
       }
@@ -472,24 +475,20 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
 
     // The canvas runs a quadratic force simulation. Keep the legacy endpoint's
     // 200-entity overview bound when canonical pages contain more records.
-    final nodes = (data['nodes'] as List<dynamic>? ?? []).take(200).toList();
+    final allNodes = data['nodes'] as List<dynamic>? ?? [];
+    final nodes = allNodes.take(200).toList();
     final edges = data['edges'] as List<dynamic>? ?? [];
 
     final givenName = SharedPreferencesUtil().givenName;
     final userLabel = memoryGraphUserLabel(givenName, context.l10n);
-    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
-    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) => memoryGraphIsUserNode(nodeData, knownUserLabels);
-
-    String? primaryUserId;
-    for (final nodeData in nodes) {
-      if (nodeData is Map && isUserLikeNode(nodeData)) {
-        primaryUserId = (nodeData['id'] ?? '').toString();
-        if (primaryUserId.isNotEmpty) break;
-      }
-    }
-    primaryUserId ??= 'user-node';
-
-    final remappedIds = <String, String>{};
+    final primaryUserId = memoryGraphPrimaryOwnerId(allNodes);
+    // Resolve owner aliases before bounding the canvas so their incident edges
+    // keep the canonical anchor even when an alias is outside the visible page.
+    final remappedIds = <String, String>{
+      for (final node in allNodes.whereType<Map>())
+        if (memoryGraphIsUserNode(node) && (node['id'] ?? '').toString().isNotEmpty && node['id'] != primaryUserId)
+          (node['id'] ?? '').toString(): primaryUserId,
+    };
     final addedNodeIds = <String>{};
 
     for (final rawNodeData in nodes) {
@@ -498,13 +497,8 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
       final originalId = (nodeData['id'] ?? '').toString();
       if (originalId.isEmpty) continue;
 
-      final isUserLike = isUserLikeNode(nodeData);
-      if (isUserLike && originalId != primaryUserId) {
-        remappedIds[originalId] = primaryUserId;
-        continue;
-      }
-
-      final nodeId = remappedIds[originalId] ?? originalId;
+      if (remappedIds.containsKey(originalId)) continue;
+      final nodeId = originalId;
       if (addedNodeIds.contains(nodeId)) continue;
 
       final isUser = nodeId == primaryUserId;

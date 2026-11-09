@@ -221,21 +221,46 @@ void main() {
 
   for (final owners in [
     [
+      {'id': 'user', 'label': 'user', 'node_type': 'person'}
+    ],
+    [
       {'id': 'user-node', 'label': 'Me', 'node_type': 'user'}
     ],
     [
-      {'id': 'owner-a', 'label': 'John', 'node_type': 'person'},
-      {'id': 'owner-b', 'label': 'The User', 'node_type': 'person'}
+      {'id': 'owner-a', 'label': 'John', 'node_type': 'user'},
+      {'id': 'user-node', 'label': 'The User', 'node_type': 'person'}
     ],
   ]) {
-    test('owner-only view with ${owners.length} nodes recovers the canonical catalog', () async {
+    test('owner-only view ${owners.map((node) => node['id']).join(',')} recovers the canonical catalog', () async {
       final result = await KnowledgeGraphApi.getKnowledgeGraph(
-          ownerGivenName: 'John',
           apiCaller: (url) async => _ok(url.contains('/canonical')
               ? _page(catalog: [_node('memory:1', 'Saved fact')])
               : {'nodes': owners, 'edges': []}));
       expect(result['nodes'], isEmpty);
       expect((result['catalog_nodes'] as List).single['label'], 'Saved fact');
     });
+  }
+
+  for (final ownerId in ['user', 'user-node']) {
+    for (final label in ['John', 'Sam Altman', 'Me', 'The User', 'I', 'user']) {
+      test('a name-only entity "$label" beside $ownerId cannot trigger owner-only recovery', () async {
+        var reads = 0;
+        final nodes = [
+          {'id': ownerId, 'label': 'user', 'node_type': 'person'},
+          {'id': 'distinct-entity', 'label': label, 'node_type': label == 'I' ? 'concept' : 'person'},
+        ];
+        final edges = [
+          {'id': 'e1', 'source_id': ownerId, 'target_id': 'distinct-entity', 'label': 'knows'},
+        ];
+        final result = await KnowledgeGraphApi.getKnowledgeGraph(apiCaller: (url) async {
+          reads++;
+          expect(url, isNot(contains('/canonical')));
+          return _ok({'nodes': nodes, 'edges': edges});
+        });
+        expect(reads, 1);
+        expect(result['nodes'], nodes);
+        expect(result['edges'], edges);
+      });
+    }
   }
 }

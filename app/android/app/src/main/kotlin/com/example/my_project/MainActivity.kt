@@ -36,6 +36,7 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        OmiPostHogSetup.register(this, flutterEngine.dartExecutor.binaryMessenger)
         com.friend.ios.ondevice.OnDeviceBackgroundWorker.attach(this, flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
             if (call.method != "setPolicy") { result.notImplemented() } else {
@@ -47,6 +48,8 @@ class MainActivity: FlutterActivity() {
 
 
         com.friend.ios.ondevice.PhoneBatteryChannel.register(this, flutterEngine)
+        // On-device live preview for local-preview listen sessions (display only).
+        com.friend.ios.livepreview.LivePreviewPlugin.register(this, flutterEngine)
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
@@ -70,6 +73,7 @@ class MainActivity: FlutterActivity() {
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
         SyncTransferPlugin.register(flutterEngine, this)
         TtsMp3DecoderPlugin.register(flutterEngine)
+        ChatVideoSamplerPlugin.register(flutterEngine, this)
         TtsPcmPlayerPlugin.register(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->

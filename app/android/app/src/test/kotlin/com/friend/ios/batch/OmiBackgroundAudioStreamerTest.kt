@@ -139,6 +139,15 @@ class OmiBackgroundAudioStreamerTest {
         assertEquals("Bearer legacy-token", h.sockets.single().request().header("Authorization"))
     }
 
+    @Test fun `native streaming never declares local preview`() {
+        // This path has no batch journal: a declared, admitted session would
+        // receive its pendant audio anyway and silently open the deferred
+        // cloud stream. Without the flag it stays an ordinary cloud session.
+        val h = Harness()
+        h.frame()
+        assertNull(h.sockets.single().request().url.queryParameter("local_preview"))
+    }
+
     @Test fun `foreground gate and settings changes apply before next send`() {
         val h = Harness()
         h.frame()

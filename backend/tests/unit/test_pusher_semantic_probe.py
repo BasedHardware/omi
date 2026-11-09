@@ -368,6 +368,7 @@ def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, pr
     assert 'failure_stage=transcript_word_count' in line
     assert 'word_counts_live=17 word_counts_expected=136' in line
     assert 'consumer_readback=PASS candidate_pod_count=0' in line
+    assert 'listen_close_code=none' in line
     assert 'secret' not in line
     assert 'transcript token endpoint uid' not in line
 
@@ -594,6 +595,7 @@ async def test_pre_audio_connection_close_is_listen_bootstrap_error(monkeypatch,
     assert not passed
     assert receipt['failure_stage'] == 'listen_bootstrap_error'
     assert socket.sent == 0
+    assert receipt['listen_close_code'] == 1006
     assert reason not in json.dumps(receipt)
 
 
@@ -615,6 +617,8 @@ async def test_post_ready_connection_close_stays_listen_closed_early(monkeypatch
     assert not passed
     assert receipt['failure_stage'] == 'listen_closed_early'
     assert socket.sent == 1
+    # The close code is what tells a pod drain (1001/1006) from a server-side close.
+    assert receipt['listen_close_code'] == 1006
     assert reason not in json.dumps(receipt)
 
 

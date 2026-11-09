@@ -15,8 +15,11 @@ service:
   type: ClusterIP
   port: 8080
 
+# Callerless since the shared-gateway /nllb route took over: every caller
+# reaches this service by ClusterIP DNS or 172.16.160.20. Keep the block for
+# rollback; the ALB re-forms on the reserved prod-nllb-translation-ilb-ip-address.
 ingress:
-  enabled: true
+  enabled: false
   className: ""
   annotations:
     kubernetes.io/ingress.class: "gce-internal"

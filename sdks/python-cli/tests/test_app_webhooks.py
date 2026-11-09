@@ -155,6 +155,25 @@ def test_send_reports_the_notification_a_reply_would_trigger(cli_runner: CliRunn
     assert "would notify the user: Noted, I will remind you" in result.stderr
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Close the loop [/b] with the team tomorrow",
+        "Your [bold]meeting[/bold] notes are ready to review",
+    ],
+)
+def test_send_quotes_the_reply_exactly_as_the_user_would_see_it(
+    cli_runner: CliRunner, config_path: Path, message: str
+) -> None:
+    with respx.mock(assert_all_called=True) as router:
+        router.post("http://receiver.test.local/hook").mock(return_value=httpx.Response(200, json={"message": message}))
+        result = _run(cli_runner, "--no-color", "app", "send", "realtime_transcript", "--to", HOOK_URL)
+
+    assert result.exit_code == 0, result.output
+    assert f"would notify the user: {message}" in result.stderr
+    assert "Delivery accepted." in result.stderr
+
+
 def test_send_says_when_a_reply_is_too_short_to_notify(cli_runner: CliRunner, config_path: Path) -> None:
     with respx.mock(assert_all_called=True) as router:
         router.post("http://receiver.test.local/hook").mock(return_value=httpx.Response(200, json={"message": "ok"}))

@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -105,12 +105,12 @@ def _unparseable_boolean(manifest: dict) -> None:
 
 
 def _unparseable_named_set_boolean(manifest: dict) -> None:
-    # LIVE_SPEAKER_SPAN_RESOLUTION is compared against a named module-level frozenset (_TRUTHY), not a
+    # LIVE_CAPTURE_WINDOW_RETENTION is compared against a named module-level frozenset (_TRUTHY), not a
     # literal tuple; a scanner that skips named sets never sees its tokens.
     for services in (_prod(manifest)['cloud_run']['services'],):
         for svc in services.values():
-            if 'LIVE_SPEAKER_SPAN_RESOLUTION' in svc.get('env', {}):
-                svc['env']['LIVE_SPEAKER_SPAN_RESOLUTION']['value'] = 'enabled'
+            if 'LIVE_CAPTURE_WINDOW_RETENTION' in svc.get('env', {}):
+                svc['env']['LIVE_CAPTURE_WINDOW_RETENTION']['value'] = 'enabled'
 
 
 def _sync_handler_wrong_route(manifest: dict) -> None:
@@ -166,6 +166,33 @@ def _worker_without_head_priority() -> dict[str, str]:
     return {WORKER_VALUES: yaml.safe_dump(values, sort_keys=False)}
 
 
+def _worker_without_independent_recovery_chart() -> dict[str, str]:
+    path = 'backend/charts/batch-pipeline-worker/templates/deployment.yaml'
+    original = (REPO_ROOT / path).read_text(encoding='utf-8')
+    lines = original.splitlines(keepends=True)
+    kept = [line for line in lines if 'name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED,' not in line]
+    assert len(kept) == len(lines) - 1
+    return {path: ''.join(kept)}
+
+
+def _worker_without_independent_recovery() -> dict[str, str]:
+    # The ship-on source default must not create a reader split in dev,
+    # where the recovery host remains pinned off.
+    return _worker_without_independent_recovery_chart()
+
+
+def _worker_without_independent_recovery_default_off() -> dict[str, str]:
+    # Retain coverage of the source rollback as well as today's ship-on default.
+    config_path = 'backend/config/batch_language_recovery.py'
+    source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
+    changed = source.replace(
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
+    )
+    assert changed != source
+    return {**_worker_without_independent_recovery_chart(), config_path: changed}
+
+
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'config_map_without_source': _manifest_mutation(_config_map_without_source),
     'recovery_without_audience': _manifest_mutation(_recovery_without_audience),
@@ -181,8 +208,18 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'uid_allowlist_appended': _manifest_mutation(_uid_allowlist_appended),
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
+    'worker_without_independent_recovery': _worker_without_independent_recovery,
+    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_default_off,
 }
-HELM_MUTATIONS = {'worker_without_head_priority'}
+HELM_MUTATIONS = {
+    'worker_without_head_priority',
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
+SOURCE_DEFAULT_MUTATIONS = {
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
 
 
 @dataclass
@@ -202,7 +239,10 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         if name in HELM_MUTATIONS and not HAS_HELM:
             continue
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
-        context = contract.build_context(source, readers=baseline.readers)
+        # Source-default mutations need a fresh reader inventory; manifest/chart
+        # mutations can reuse the baseline AST scan.
+        readers = None if name in SOURCE_DEFAULT_MUTATIONS else baseline.readers
+        context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
 
@@ -276,6 +316,26 @@ def test_worker_missing_head_priority_fails_like_22121(results: Results) -> None
     assert ('coupled-flag', 'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED') in found
 
 
+@pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
+@pytest.mark.parametrize(
+    'mutation,envs',
+    [
+        # Source default flipped on: dev's pinned-off recovery host would split.
+        ('worker_without_independent_recovery', {'dev'}),
+        # Source default off: prod's declared-on recovery host would split.
+        ('worker_without_independent_recovery_default_off', {'prod'}),
+    ],
+)
+def test_worker_missing_independent_recovery_kill_switch_fails(results: Results, mutation: str, envs: set) -> None:
+    found = results.mutations[mutation]
+    assert {
+        v.env
+        for v in found
+        if v.invariant == 'reader-split'
+        and v.scope == 'helm/batch-pipeline-worker/BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'
+    } == envs
+
+
 def test_unparseable_boolean_value_fails(results: Results) -> None:
     assert any(
         v.invariant == 'boolean-token'
@@ -285,10 +345,10 @@ def test_unparseable_boolean_value_fails(results: Results) -> None:
 
 
 def test_unparseable_named_set_boolean_fails(results: Results) -> None:
-    # LIVE_SPEAKER_SPAN_RESOLUTION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
+    # LIVE_CAPTURE_WINDOW_RETENTION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
     # resolve named collections or this deployed flag is invisible to boolean-token.
     assert any(
-        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_SPEAKER_SPAN_RESOLUTION')
+        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_CAPTURE_WINDOW_RETENTION')
         for v in results.mutations['unparseable_named_set_boolean']
     ), results.mutations['unparseable_named_set_boolean']
 
@@ -307,6 +367,13 @@ def test_append_route_edge_with_path_fails(results: Results) -> None:
         v.invariant == 'task-edge' and 'bare origin' in v.message
         for v in results.mutations['recovery_audience_with_path']
     ), results.mutations['recovery_audience_with_path']
+
+
+def test_provider_stt_edge_models_create_wake_route_join() -> None:
+    # utils/provider_stt_tasks.create_wake posts to PROVIDER_STT_TASKS_HANDLER_URL + ROUTE (test_wake_task_shape),
+    # so the configured URL is a bare origin; without append_route the contract demanded the doubled path.
+    edge = next(e for e in contract.TASK_EDGES if e.id == 'provider-stt')
+    assert edge.append_route is True
 
 
 def test_audience_pair_mismatch_fails(results: Results) -> None:
@@ -344,6 +411,49 @@ def test_prod_service_url_in_dev_fails(results: Results) -> None:
 def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
     assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+    assert (
+        'backend/config/batch_conversation_speakers.py'
+        in results.baseline.readers.all_reads['BATCH_FINAL_PASS_ENABLED'].modules
+    )
+
+
+@pytest.mark.parametrize('helper', ['_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'])
+def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
+    rel = 'backend/config/synthetic_wrapped_switch.py'
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                "SWITCH_ENV = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'\n"
+                "UNREAD_ENV = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'\n"
+                f"def {helper}(name):\n"
+                "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                "def enabled():\n"
+                f"    return {helper}(SWITCH_ENV)\n"
+                "def unrelated():\n"
+                "    return lookup(UNREAD_ENV)\n"
+            )
+        },
+    )
+    reads = contract.scan_env_reads(source, [rel])
+    assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
+    assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+
+
+def test_ops_kill_without_reader_still_fails(results: Results) -> None:
+    key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
+    # This check reads manifest entries and the reader inventory only; reuse
+    # the rendered fixture instead of rebuilding every deployment in the call.
+    manifest = {
+        'environments': {
+            'prod': {'gke': {'backend-listen': {'env': {key: {'value': 'false', 'category': 'ops_kill'}}}}}
+        }
+    }
+    model = replace(results.baseline.models['prod'], manifest=manifest)
+    context = replace(results.baseline, models={'prod': model})
+    violations = contract.check_kill_switches(context)
+    assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
 
 
 # Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:

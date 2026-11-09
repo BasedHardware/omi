@@ -15,7 +15,7 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, package_
 
 BACKEND = Path(__file__).resolve().parents[2]
 DUE = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
-PUBLIC_KEYS = {'id', 'description', 'completed', 'created_at', 'due_at', 'completed_at', 'conversation_id'}
+PUBLIC_KEYS = {'id', 'description', 'completed', 'created_at', 'due_at', 'completed_at', 'conversation_id', 'source'}
 
 
 @pytest.fixture
@@ -42,9 +42,11 @@ def world(monkeypatch):
     monkeypatch.delenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE', raising=False)
     with stub_modules(fakes):
         notifications = load_module_fresh('utils.notifications', str(BACKEND / 'utils/notifications.py'))
+        monkeypatch.setattr(notifications, 'account_deletion_blocks_user_work', lambda _uid: False)
         load_module_fresh('utils.mcp_data', str(BACKEND / 'utils/mcp_data.py'))
         actions = load_module_fresh('utils.mcp_action_items', str(BACKEND / 'utils/mcp_action_items.py'))
         dispatcher = load_module_fresh('utils.notification_dispatch', str(BACKEND / 'utils/notification_dispatch.py'))
+        monkeypatch.setattr(dispatcher, 'account_deletion_blocks_user_work', lambda _uid: False)
         refresh = load_module_fresh(
             'utils.conversations.action_item_refresh', str(BACKEND / 'utils/conversations/action_item_refresh.py')
         )
@@ -78,6 +80,28 @@ def task(task_id='task-1', **fields):
     }
 
 
+def test_mcp_legacy_projection_omits_explicitly_null_reminder_fields(world):
+    result = world.actions.clean_action_item(task(due=None, reminder_origin=None, creation_receipt=None))
+    assert set(result) == PUBLIC_KEYS
+
+
+def test_mcp_reminder_projection_preserves_date_precision_and_creation_evidence(world):
+    due = {'kind': 'date', 'date': '2030-01-01', 'timezone': 'UTC'}
+    origin = {
+        'policy_revision': 'explicit-reminders-v1',
+        'input_revision': 'synthetic-input',
+        'speaker_evidence_revision': 'synthetic-speakers',
+        'extracted_at': DUE.isoformat(),
+    }
+    receipt = {'actor': {'uid': 'synthetic-owner'}, 'history_coverage': 'reminder_creation_only'}
+    result = world.actions.clean_action_item(
+        task(due_at=None, due=due, reminder_origin=origin, creation_receipt=receipt, private_metadata='not-public')
+    )
+    assert set(result) == PUBLIC_KEYS | {'due', 'reminder_origin', 'creation_receipt'}
+    assert result['due_at'] is None and result['due'] == due
+    assert result['reminder_origin'] == origin and result['creation_receipt'] == receipt
+
+
 @pytest.mark.parametrize('status', ['cancelled', 'superseded'])
 def test_mcp_due_update_cancels_using_raw_status_but_keeps_public_response_unchanged(world, status):
     existing = task(status='active')
@@ -90,6 +114,7 @@ def test_mcp_due_update_cancels_using_raw_status_but_keeps_public_response_uncha
     assert world.sent == [('synthetic-owner', {'type': 'action_item_delete', 'action_item_id': 'task-1'})]
     assert set(result) == PUBLIC_KEYS
     assert result['completed'] is False
+    assert result['source'] == 'conversation'
     assert result['due_at'] == DUE
     assert 'status' not in result and 'private_metadata' not in result
 

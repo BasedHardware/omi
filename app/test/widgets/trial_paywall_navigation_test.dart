@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -19,6 +20,19 @@ const _offer = PaywallOffer(
 );
 
 class _Usage extends UsageProvider {
+  @override
+  UserSubscriptionResponse get subscription => UserSubscriptionResponse(
+        trialEligible: true,
+        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 18000,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        showSubscriptionUi: true,
+      );
+
   int restores = 0;
 
   @override
@@ -78,7 +92,8 @@ void main() {
     await tester.tap(find.byKey(const Key('trial_paywall_cta')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('trial_paywall_restore')), warnIfMissed: false);
-    await tester.tap(find.byKey(const Key('trial_paywall_free')), warnIfMissed: false);
+    // The free-plan dismissal now uses the close control; also exercise system back.
+    await tester.binding.handlePopRoute();
     await tester.tap(find.byKey(const Key('trial_paywall_close')), warnIfMissed: false);
     await tester.pump();
     expect(usage.restores, 0, reason: 'restore must not run concurrently with a checkout');

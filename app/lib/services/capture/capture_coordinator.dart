@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/logger.dart';
 
 part 'capture_silence_policy.dart';
 
@@ -1648,6 +1649,12 @@ class CaptureCoordinator {
     List<CaptureStage> cleanupStages = const [],
     CaptureCoordinatorState? safeState,
   }) async {
+    Logger.debug(
+      '[Capture] fail closed: failure_class=${error is String ? error : error.runtimeType} '
+      'reason=$error phase=${working.phase.name} '
+      'source=${working.active?.source.name} call_active=${working.callActive} '
+      'device_connected=${working.connectedDevice != null} absorbed=$absorbed',
+    );
     for (final deny in [
       () => _ports.setNativeWriterGate(CaptureSource.pendant, false),
       () => _ports.setNativeWriterGate(CaptureSource.phone, false),

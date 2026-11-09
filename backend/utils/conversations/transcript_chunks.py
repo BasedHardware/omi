@@ -10,18 +10,11 @@ from typing import Any, Dict, List, Optional
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.model_text import DisplayClock, format_instant, format_span
+from utils.speakers.display import display_participants
 
 # ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed precisely.
 CHUNK_WINDOW = 8
 CHUNK_STRIDE = 6
-
-
-def _speaker_label(seg: Dict[str, Any], people_by_id: Optional[Dict[str, str]] = None) -> str:
-    if seg.get('is_user'):
-        return 'User'
-    if (pid := seg.get('person_id')) and people_by_id and pid in people_by_id:
-        return people_by_id[pid]
-    return f"Speaker {sid}" if (sid := seg.get('speaker_id')) is not None else 'Speaker'
 
 
 def _coerce_started_at(raw: Any) -> Optional[datetime]:
@@ -52,11 +45,12 @@ def build_transcript_chunks(
 ) -> List[Dict[str, Any]]:
     """Return [{'text', 'created_at' (unix ts), 'chunk_index'}] for vector_db upsert."""
     lines: List[str] = []
+    display = display_participants(segments or [], names=people_by_id, owner_name='You')
     for seg in segments or []:
         text = (seg.get('text') or '').strip()
         if not text:
             continue
-        lines.append(f"{_speaker_label(seg, people_by_id)}: {text}")
+        lines.append(f"{display.label(seg)}: {text}")
     if not lines:
         return []
 

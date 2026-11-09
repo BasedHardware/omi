@@ -6,6 +6,21 @@ import 'package:omi/services/external_haptic_trigger.dart';
 void main() {
   ExternalHapticRateLimiter freshLimiter() => ExternalHapticRateLimiter();
 
+  group('app link stream', () {
+    test('lets the same haptic link through every time it is sent', () async {
+      final haptic = Uri.parse('omi://device/haptic?level=2');
+      final links = Stream.fromIterable([haptic, haptic, haptic]).distinct(isRepeatedAppLink);
+      expect(await links.toList(), [haptic, haptic, haptic]);
+    });
+
+    test('still drops a repeated link to a place in the app', () async {
+      final settings = Uri.parse('omi://app/settings');
+      final haptic = Uri.parse('omi://device/haptic?level=3');
+      final links = Stream.fromIterable([settings, settings, haptic, settings]).distinct(isRepeatedAppLink);
+      expect(await links.toList(), [settings, haptic, settings]);
+    });
+  });
+
   group('runExternalHapticTrigger', () {
     test('dispatches supported production, dev, and beta links', () async {
       for (final scheme in ['omi', 'omi-dev', 'omi-beta']) {

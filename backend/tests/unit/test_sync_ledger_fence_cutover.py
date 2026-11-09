@@ -254,7 +254,12 @@ def test_cutover_workflow_keeps_protected_candidate_gate_and_no_failure_resume_c
         Path(__file__).resolve().parents[3] / ".github" / "workflows" / "sync_ledger_fence_cutover.yml"
     ).read_text(encoding="utf-8")
 
-    assert "group: deploy-backend-stack-${{ github.event.inputs.environment }}" in workflow
+    # B5 (M3 review): prod serializes on the shared prod-train lock; break-glass and development keep the
+    # backend stack lock, so the cutover still shares the Cloud Run/queue mutation domain with backend deploys.
+    assert (
+        "group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' "
+        "&& 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
+    ) in workflow
     assert "candidate_image must be an immutable @sha256 digest" in workflow
     assert 'uses: ./.github/actions/transcription-release-candidate-probe' in workflow
     assert 'candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}' in workflow

@@ -15,21 +15,24 @@ from starlette.websockets import WebSocketState
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.observability.demand_cohort import current_transport_origin
 from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
+from utils.stt.edge_shadow import attach_tap as attach_edge_tap
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN, NONWINDOW_REPLAY_SETTLES
 from utils.stt.live_reason import normalize_live_stt_reason
-from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt.live_rollout import window_allocation, window_language, window_language_supported
+from config.parakeet_ja import window_endpoint
 from utils.stt import replay_delivery
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
-from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.live_stt_registry import DEFAULT_IDS, Target, registry, routing_on
 from config.stt_provider_policy import provider_for_model_token
 from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
@@ -42,10 +45,12 @@ from config.live_stt_replay import (
 )
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
+from config.live_stt_idle import idle_parakeet_failback_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.no_text_rescue import NoTextRescue
 from utils.stt.replay_capture_accounting import note_observed_spans
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
@@ -83,6 +88,43 @@ class LiveChainSession:
         self.total_speech_ms = 0
         self.vad_mode = 'off'
         self._routing_target_entry: Target | None = None
+        self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
+        self.parakeet_failbacks = 0
+
+    def window_eligible(self) -> bool:
+        host = self.receiver.host
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None and not demand.eligible:
+            demand = None
+        uid = host.request.uid
+        return bool(
+            window_allocation(uid)
+            and (demand.window_permitted if demand is not None else True)
+            and window_language_supported(host.language, host.stt_language, uid)
+            and window_endpoint(window_language(host.language, host.stt_language))
+        )
+
+    def parakeet_failback_due(self, service: st.STTService) -> bool:
+        """Spend this session's one idle-onset return to Parakeet (see config.live_stt_idle)."""
+        if self.parakeet_failbacks or service != st.STTService.soniox or not idle_parakeet_failback_enabled():
+            return False
+        if st.normalized_stt_language(self.receiver.host.language) != 'en' or not self.window_eligible():
+            return False
+        if 'parakeet-window' not in {model.strip() for model in service_models(st.stt_service_models)}:
+            return False  # The chain could not select the window: a handoff would only spend the attempt.
+        from utils.stt import parakeet_window
+
+        if not parakeet_window.admission.available() or st.parakeet_family_circuit_state() != 'closed':
+            return False
+        try:  # A benched or trial-stage window would reselect Soniox again: pure churn.
+            target = next(entry for entry in registry() if entry.id == 'parakeet-window')
+            state = health.cost_snapshot([target], 'en').get(target.id)
+        except Exception:
+            return False
+        if state is None or state.stage < 100:
+            return False
+        self.parakeet_failbacks += 1
+        return True
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
@@ -116,11 +158,12 @@ class LiveChainSession:
             demand = None
         if demand is not None:
             self.no_text_rescue.enabled = False
+        window_lang = window_language(host.language, language)
         window_eligible = (
             window_allocation(uid)
             and (demand.window_permitted if demand is not None else True)
-            and window_language_supported(host.language, language)
-            and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
+            and window_language_supported(host.language, language, uid)
+            and bool(window_endpoint(window_lang))
         )
         if demand is not None and not window_eligible:
             models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
@@ -142,6 +185,9 @@ class LiveChainSession:
         parakeet_allowed = parakeet_token is not None
         engine_models = {
             'parakeet': parakeet_token,
+            # Which window pool the session posts to; the router checks every
+            # required language against that pool's model.
+            'parakeet_window_language': window_lang if window else None,
             'modulate': 'velma-2',
             'soniox': 'soniox',
             'deepgram': dg_model,
@@ -154,7 +200,7 @@ class LiveChainSession:
                 reason=(
                     'capability_mismatch'
                     if not (
-                        window_language_supported(host.language, language)
+                        window_language_supported(host.language, language, uid)
                         if 'parakeet-window' in models
                         else st.parakeet_supports_language(st.STTServingSurface.STREAMING, language)
                     )
@@ -214,12 +260,16 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
-            stream_epoch = SpeakerProviderEpoch()
+            if same_provider and self.speaker_provider_epoch is not None:
+                stream_epoch = self.speaker_provider_epoch
+            else:
+                stream_epoch = SpeakerProviderEpoch()
+                self.speaker_provider_epoch = stream_epoch
             target = connecting_target.get()
             if target is not None and (
                 target.family != service.value
                 or not engine_matches(target, engine_models)
-                or (target.id == 'parakeet-window' and not os.getenv('HOSTED_PARAKEET_API_URL'))
+                or (target.id == 'parakeet-window' and not window_endpoint(window_lang))
             ):
                 raise TargetEngineMismatch('Selected target differs from the session engine')
             try:
@@ -232,6 +282,7 @@ class LiveChainSession:
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
+            attach_edge_tap(gate, self.receiver)
             passthrough = service == st.STTService.modulate
             if epoch is not None:
                 epoch.set_validation_callback(
@@ -283,37 +334,59 @@ class LiveChainSession:
                         elif gate is not None and not passthrough:
                             gate.remap_segments(translated)
                         translated.sort(key=lambda item: item['start'])
+                        retained = []
                         for segment in translated:
                             segment_offset = 0.0 if epoch.replay_origin_sample is not None else offset
-                            start = max(self.last_end, segment_offset + max(0.0, float(segment['start'])))
-                            end = max(start, segment_offset + max(0.0, float(segment['end'])))
+                            raw_start = segment_offset + max(0.0, float(segment['start']))
+                            raw_end = segment_offset + max(0.0, float(segment['end']))
+                            if raw_end <= self.last_end:
+                                continue
+                            start = max(self.last_end, raw_start)
+                            end = max(start, raw_end)
+                            if end <= start:
+                                continue
                             segment['start'], segment['end'] = start, end
                             self.last_end = end
-                        leg.note_selection_transcript(translated)
-                        self.receiver._enqueue_epoch_segments(
-                            translated, provider=service.value, speaker_epoch=stream_epoch
-                        )
+                            retained.append(segment)
+                        if retained:
+                            leg.note_selection_transcript(retained)
+                            self.receiver._enqueue_epoch_segments(
+                                retained, provider=service.value, speaker_epoch=stream_epoch
+                            )
 
                     self.receiver._run_on_listen_loop(attach_then_rebase, segments)
                     return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)
                 segments.sort(key=lambda item: item['start'])
+                retained = []
                 for segment in segments:
-                    start = max(self.last_end, offset + max(0.0, float(segment['start'])))
-                    end = max(start, offset + max(0.0, float(segment['end'])))
+                    raw_start = offset + max(0.0, float(segment['start']))
+                    raw_end = offset + max(0.0, float(segment['end']))
+                    if raw_end <= self.last_end:
+                        continue
+                    start = max(self.last_end, raw_start)
+                    end = max(start, raw_end)
+                    if end <= start:
+                        continue
                     segment['start'], segment['end'] = start, end
                     self.last_end = end
-                leg.note_selection_transcript(segments)
-                self.receiver._enqueue_stt_segments(segments, provider=service.value, speaker_epoch=stream_epoch)
+                    retained.append(segment)
+                if retained:
+                    leg.note_selection_transcript(retained)
+                    self.receiver._enqueue_stt_segments(retained, provider=service.value, speaker_epoch=stream_epoch)
 
             raw = None
+            origin = current_transport_origin.get()
+            origin_token = current_transport_origin.set(
+                'idle_reopened' if origin == 'idle_reopened' else ('replacement' if self.generation else 'initial')
+            )
             try:
                 if is_window:
                     from utils.stt.parakeet_window import connect_window
 
                     def new_window():
-                        window_raw = connect_window(callback, sample_rate)
+                        window_raw = connect_window(callback, sample_rate, language=window_lang)
                         if self.no_text_rescue.enabled:
                             window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
                             window_raw.progress_deadline_enabled = True
@@ -343,6 +416,7 @@ class LiveChainSession:
                         language,
                         profile=host.language_profile,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
+                        uid=uid,
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)
@@ -364,6 +438,7 @@ class LiveChainSession:
                     epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 leg.speaker_provider_epoch = stream_epoch
+                self.receiver.speaker_provider_epoch = stream_epoch
                 replay_ring = getattr(self.receiver, '_window_ring', None)
                 if not is_window and callable(replay_ring) and replay_ring() is not None:
                     # An empty snapshot still carries the obligation to retain
@@ -375,6 +450,8 @@ class LiveChainSession:
                 if raw is not None:
                     raw.finish()
                 raise
+            finally:
+                current_transport_origin.reset(origin_token)
 
         callbacks: dict[st.STTService, Callable[[], Awaitable[STTSocket]] | None] = {
             st.STTService.parakeet: (lambda: build(st.STTService.parakeet)) if parakeet_allowed else None,
@@ -841,14 +918,15 @@ class LiveLegSocket(STTSocket):
         circuit = target_circuit(target)
         if reason in ACCOUNT_REJECTION_REASONS:
             circuit.record_account_failure(
-                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
+                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')),
+                error_class=reason,
             )
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         elif getattr(self.raw, 'idle_reopen_failed', False) is True:
             circuit.record_failure()
         else:
-            circuit.record_serve_failure()
+            circuit.record_serve_failure(error_class=reason)
             health.quarantine(
                 self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
             )
@@ -1088,20 +1166,25 @@ class LiveLegSocket(STTSocket):
             else:
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         record_before_finalize = live_capture_window_translator_sends_enabled()
+        send_phase = 'usage_accounting'
         try:
             if audio:
                 if not self.window and not self._no_text_rescue.can_admit(len(audio) / (self.sample_rate * 2)):
                     self._expire_rescue()
                     return False
                 try:
+                    send_phase = 'capture_mapping'
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
+                        self._configure_idle_cost_reselect()
                         set_cap_capture(self.raw, audio, sent_spans)
+                        send_phase = 'raw_send'
                         sent = self.raw.send(audio)
                     finally:
                         if token is not None:
                             capture_spans.reset(token)
-                except Exception:
+                except Exception as error:
+                    record_local_send_failure(self.service, send_phase, self.raw, error)
                     # A raised send is transport evidence unless the socket
                     # already owns a more specific bounded cause.
                     self._latch_failure(reason='connection_lost')
@@ -1109,6 +1192,7 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     return False
                 if sent is not True:
+                    record_local_send_failure(self.service, 'raw_refused', self.raw)
                     # False is a send symptom only while the raw socket still
                     # reports alive. A dead socket with unknown diagnostics is
                     # a connection loss, and typed causes win in normalization.
@@ -1120,18 +1204,22 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                send_phase = 'usage_accounting'
                 if self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
                     self._routing_cohort.paid_audio(self.service.value, len(audio) / (self.sample_rate * 2))
                 if not self.window:
                     self._no_text_rescue.audio(self.service.value, len(audio) / (self.sample_rate * 2))
             if record_before_finalize and self._send_tracker is not None and not self._soniox_wire_ledger:
+                send_phase = 'capture_mapping'
                 note_observed_spans(self._send_tracker, sent_spans, 'managed_chain')
             if output is not None and output.should_finalize:
+                send_phase = 'finalize'
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
                 else:
                     self.raw.finalize()
-        except Exception:
+        except Exception as error:
+            record_local_send_failure(self.service, send_phase, self.raw, error)
             self._local_death_reason = 'send_failed'
             self._dead = True
             self._finish_transport()
@@ -1220,7 +1308,22 @@ class LiveLegSocket(STTSocket):
     def idle_close_enabled(self) -> bool:
         return getattr(self.raw, 'idle_close_enabled', False) is True
 
+    @property
+    def idle_cost_reselect_requested(self) -> bool:
+        return getattr(self.raw, 'idle_cost_reselect_requested', False) is True
+
+    def _configure_idle_cost_reselect(self) -> None:
+        configure = getattr(self.raw, 'set_cost_reselect_managed', None)
+        if callable(configure):
+            configure(
+                self.session.recovery_enabled and getattr(self.session.receiver, 'recovery', None) is not None,
+                lambda: self.session.parakeet_failback_due(self.service),
+            )
+
     async def complete_send(self) -> bool:
+        if getattr(self.raw, 'idle_reopen_cost_reselect_pending', False) is True:
+            request = cast(Callable[[], Awaitable[bool]], getattr(self.raw, 'request_cost_reselect'))
+            return await request()
         offset = getattr(self.raw, 'set_resume_provider_offset', None)
         if self._send_tracker is not None and callable(offset):
             offset(
@@ -1252,6 +1355,7 @@ class LiveLegSocket(STTSocket):
         self._idle_send_spans = spans
         token = capture_spans.set(tuple(spans)) if self._soniox_wire_ledger else None
         try:
+            self._configure_idle_cost_reselect()
             set_cap_capture(self.raw, data, spans)
             accepted = self.raw.send(data)
         finally:

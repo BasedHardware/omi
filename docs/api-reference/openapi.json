@@ -189,6 +189,52 @@
         "title": "CaptureEvidenceLineageUnit",
         "type": "object"
       },
+      "CaptureKey": {
+        "description": "Identifies one capture stream; the same fields as S1 ``CaptureEvidenceMetadata``.",
+        "properties": {
+          "capture_root": {
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "channel": {
+            "default": "default",
+            "title": "Channel",
+            "type": "string"
+          },
+          "clock_epoch": {
+            "default": "default",
+            "title": "Clock Epoch",
+            "type": "string"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "recording_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Session Id"
+          }
+        },
+        "required": [
+          "capture_root"
+        ],
+        "title": "CaptureKey",
+        "type": "object"
+      },
       "CategoryEnum": {
         "enum": [
           "personal",
@@ -464,6 +510,57 @@
                 "type": "null"
               }
             ]
+          },
+          "capture_key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capture_segment_ranges": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameRange"
+                },
+                "maxItems": 500,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Segment Ranges"
+          },
+          "chunk_count": {
+            "anyOf": [
+              {
+                "maximum": 128.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Count"
+          },
+          "chunk_index": {
+            "anyOf": [
+              {
+                "maximum": 127.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Index"
           },
           "client_device_id": {
             "anyOf": [
@@ -1061,6 +1158,17 @@
             ],
             "title": "Memories Created"
           },
+          "memories_learned_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories Learned Count"
+          },
           "proactive_moments": {
             "anyOf": [
               {
@@ -1071,6 +1179,28 @@
               }
             ],
             "title": "Proactive Moments"
+          },
+          "reported_device_watching_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported Device Watching Minutes"
+          },
+          "summarized_conversations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summarized Conversations"
           },
           "total_conversations": {
             "anyOf": [
@@ -1094,6 +1224,17 @@
             ],
             "title": "Total Duration Minutes"
           },
+          "watching_coverage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watching Coverage"
+          },
           "watching_minutes": {
             "anyOf": [
               {
@@ -1104,6 +1245,22 @@
               }
             ],
             "title": "Watching Minutes"
+          },
+          "watching_minutes_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watching Minutes Basis"
+          },
+          "watching_minutes_unit": {
+            "default": "minutes",
+            "title": "Watching Minutes Unit",
+            "type": "string"
           }
         },
         "title": "DailySummaryDayStats",
@@ -2628,6 +2785,25 @@
         ],
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
+      },
+      "FrameRange": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "FrameRange",
+        "type": "object"
       },
       "Geolocation": {
         "properties": {

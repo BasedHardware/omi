@@ -9,17 +9,23 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 let db: any;
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => db }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn(async () => ({ uid: "t" })) }));
+vi.mock("@/lib/auth", () => ({
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
+}));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),
   setPayload: vi.fn(async () => undefined),
   withFreshness: (data: object, freshAt: number) => ({ ...data, freshAt }),
 }));
 vi.mock("@/lib/posthog", () => ({
-  cachedPosthogFetch: vi.fn(async () => ({ ok: true, json: async () => ({ results: [] }) })),
+  cachedPosthogFetch: vi.fn(async () => ({
+    ok: true,
+    json: async () => ({ results: [] }),
+  })),
 }));
 
 import { computeNotifications } from "@/app/api/omi/stats/notifications/route";
+import { testIdentity } from "./support/test-identity";
 
 type Opts = {
   enabled: number;
@@ -39,20 +45,29 @@ function fakeDb(opts: Opts) {
 
   const usersRef: any = {
     // `.count().get()` with no filter = total users.
-    count: () => ({ get: async () => ({ data: () => ({ count: opts.total }) }) }),
+    count: () => ({
+      get: async () => ({ data: () => ({ count: opts.total }) }),
+    }),
     doc: () => userDoc(),
     where: (field: string, _op: string, value: unknown) => {
       if (field === "notifications_enabled") {
         const count = value === true ? opts.enabled : opts.disabled;
-        return { count: () => ({ get: async () => ({ data: () => ({ count }) }) }) };
+        return {
+          count: () => ({ get: async () => ({ data: () => ({ count }) }) }),
+        };
       }
       // mentor_notification_frequency > 0 -> the fallback user list
-      const docs = Array.from({ length: opts.mentorUserCount ?? 0 }, (_, i) => ({
-        id: `u${i}`,
-      }));
+      const docs = Array.from(
+        { length: opts.mentorUserCount ?? 0 },
+        (_, i) => ({
+          id: `u${i}`,
+        })
+      );
       return {
         select: () => ({
-          limit: (n: number) => ({ get: async () => ({ docs: docs.slice(0, n) }) }),
+          limit: (n: number) => ({
+            get: async () => ({ docs: docs.slice(0, n) }),
+          }),
         }),
       };
     },
@@ -89,7 +104,9 @@ describe("notifications enabled/disabled/unset", () => {
       total: 1000,
     });
     // The gauge divides enabled/total; the old math published 90%.
-    expect((payload.enabledDisabled.enabled / payload.enabledDisabled.total) * 100).toBe(30);
+    expect(
+      (payload.enabledDisabled.enabled / payload.enabledDisabled.total) * 100
+    ).toBe(30);
   });
 
   it("never reports a negative unset population", async () => {

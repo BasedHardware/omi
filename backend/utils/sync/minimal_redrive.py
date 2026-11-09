@@ -31,6 +31,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionFailure, is_destructive_operation_in_progress
 from utils.sync import empty_recovery
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 from utils.sync.live_overlap import compatible_capture
 
 logger = logging.getLogger(__name__)
@@ -105,11 +106,14 @@ def segment_target(
     source: Any,
     client_device_id: Optional[str],
     is_locked: bool,
+    clock_run: Optional[str] = None,
 ) -> Optional[str]:
     """The caller's explicit target wins; minimal mode adds an attach-first target."""
     if target_id or lineage_binding is not None or redrive_mode != MINIMAL:
         return target_id
     capture = {'source': getattr(source, 'value', source), 'client_device_id': client_device_id, 'is_locked': is_locked}
+    if clock_run:
+        capture[SYNC_CLOCK_RUN_FIELD] = clock_run
     return attach_target(uid, start, end, capture)
 
 

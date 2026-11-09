@@ -8,8 +8,10 @@ only, ``nudge`` adds the wedge pushes, ``heal`` also admits at most
 logging the action preview each row would have produced, and never advances
 the persisted sweep cursor.
 
-The scan is a fixed ``status == 'in_progress'`` collection-group window of at
-most ``MAX_SCAN`` rows rotating on a Firestore CAS cursor. Every reported
+The optional job uses a ``status == 'in_progress'`` collection-group window;
+the candidate-query lever pushes its admission cutoff into that scan. The
+always-on fast reconciler retains the indexed content-bearing due window.
+Both scan at most ``MAX_SCAN`` rows rotating on a Firestore CAS cursor. Every reported
 count describes that scanned window, never the whole fleet.
 """
 
@@ -24,6 +26,7 @@ from typing import Any, Callable, Mapping
 
 import database.conversation_finalization_jobs as jobs_db
 import database.conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from services.capture_wedge import run_capture_wedge_check
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -71,6 +74,10 @@ _ADMISSION_REFUSAL_REASONS = frozenset(
         'refused_has_job',
         'refused_no_finished_at',
         'refused_not_stale',
+        'refused_not_quiet',
+        'refused_active_recording_session',
+        'refused_account_deleting',
+        'refused_recording_lease_unknown',
         'refused_no_content',
         'refused_oversized_audio_files',
     }
@@ -138,6 +145,16 @@ def _verify_pending_attempts(
         uid = entry['uid']
         conversation_id = entry['conversation_id']
         job_id = entry['job_id']
+        try:
+            if account_deletion_blocks_user_work(uid):
+                remaining.append(entry)
+                counters['skipped'] += 1
+                continue
+        except Exception as error:
+            counters['errors'] += 1
+            remaining.append(entry)
+            logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
+            continue
         try:
             job = job_reader(job_id, firestore_client=firestore_client)
         except Exception as error:
@@ -325,6 +342,8 @@ def run_selfheal_tick(
     dry_run: bool | None = None,
     uid_allowlist: frozenset[str] | None = None,
     use_configured_uid_allowlist: bool = True,
+    stale_after: timedelta = STALE_AFTER,
+    content_due_scan: bool = False,
     scan_fn: Callable[..., dict[str, Any]] = jobs_db.scan_in_progress_conversations,
     cursor_getter: Callable[..., dict[str, Any]] = jobs_db.get_in_progress_content_sweep_cursor,
     cursor_advancer: Callable[..., bool] = jobs_db.advance_in_progress_content_sweep_cursor,
@@ -360,7 +379,7 @@ def run_selfheal_tick(
     exhausted = False
 
     if mode != 'off':
-        stale_cutoff = now - STALE_AFTER
+        stale_cutoff = now - stale_after
         page_cutoff = now - PAGE_AGE
         try:
             cursor = cursor_getter(firestore_client=firestore_client)
@@ -377,19 +396,37 @@ def run_selfheal_tick(
             scan = scan_fn(
                 page_size=PAGE_SIZE,
                 max_scan=MAX_SCAN,
+                finished_before=stale_cutoff,
                 resume_after_path=cursor.get('resume_after_path'),
                 firestore_client=firestore_client,
+                **({'content_due_before': stale_cutoff} if content_due_scan else {}),
             )
             counters['scanned'] = int(scan.get('scanned') or 0)
             exhausted = bool(scan.get('exhausted'))
+            resume_after_path = scan.get('resume_after_path')
             eligible: list[Mapping[str, Any]] = []
             for row in scan.get('rows') or []:
+                try:
+                    if account_deletion_blocks_user_work(row['uid']):
+                        counters['skipped'] += 1
+                        continue
+                except Exception as error:
+                    counters['errors'] += 1
+                    logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
+                    continue
                 if (
                     _evaluate_row(row, now=now, stale_cutoff=stale_cutoff, page_cutoff=page_cutoff, counters=counters)
                     is None
                 ):
                     if len(eligible) < MAX_ELIGIBLE_PER_TICK:
                         eligible.append(row)
+                    elif content_due_scan:
+                        # A refused lease prefix stays in this query. Resume
+                        # after the considered window instead of the scan tail
+                        # so those rows cannot starve a due row behind the cap.
+                        resume_after_path = eligible[-1]['path']
+                        exhausted = False
+                        break
             pending_before = len(pending)
             pending = _act_on_eligible(
                 eligible,
@@ -398,6 +435,7 @@ def run_selfheal_tick(
                 dry_run=dry_run,
                 uid_allowlist=allowlist,
                 stale_cutoff=stale_cutoff,
+                require_expired_recording_lease=content_due_scan,
                 request_finalization_fn=request_finalization_fn,
                 firestore_client=firestore_client,
                 counters=counters,
@@ -411,7 +449,7 @@ def run_selfheal_tick(
                 try:
                     advanced = cursor_advancer(
                         int(cursor.get('generation') or 0),
-                        scan.get('resume_after_path'),
+                        resume_after_path,
                         pending_verifications=pending,
                         firestore_client=firestore_client,
                     )
@@ -494,6 +532,7 @@ def _act_on_eligible(
     dry_run: bool,
     uid_allowlist: frozenset[str] | None,
     stale_cutoff: datetime,
+    require_expired_recording_lease: bool = False,
     request_finalization_fn: Callable[..., dict[str, Any]],
     firestore_client: Any,
     counters: dict[str, Any],
@@ -511,6 +550,20 @@ def _act_on_eligible(
 
     admitted = 0
     for row in eligible:
+        try:
+            if account_deletion_blocks_user_work(row['uid']):
+                _log_action(
+                    'skipped', reason='account_deleting', uid=row['uid'], conversation_id=row['conversation_id']
+                )
+                counters['skipped'] += 1
+                continue
+        except Exception as error:
+            counters['errors'] += 1
+            _log_action(
+                'skipped', reason='deletion_fence_unavailable', uid=row['uid'], conversation_id=row['conversation_id']
+            )
+            logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
+            continue
         if admitted >= MAX_HEAL_ADMISSIONS_PER_TICK:
             _log_action(
                 'skipped',
@@ -550,6 +603,7 @@ def _act_on_eligible(
                 require_cloud_tasks=True,
                 recovery_cutoff=stale_cutoff,
                 firestore_client=firestore_client,
+                **({'require_expired_recording_lease': True} if require_expired_recording_lease else {}),
             )
         except lifecycle.FinalizationDispatchUnavailable:
             _log_action(

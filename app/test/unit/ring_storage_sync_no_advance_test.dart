@@ -297,6 +297,8 @@ void main() {
       expect(card.advanceCalls, isEmpty);
       expect(wal.status, WalStatus.miss);
       expect(sync.isSyncing, isFalse);
+      expect(wal.isSyncing, isFalse);
+      expect(wal.syncStartedAt, isNull);
       expect(timers.every((timer) => !timer.isActive), isTrue);
       expect(local.added, hasLength(partialAudio ? 1 : 0));
       if (partialAudio) {
@@ -360,6 +362,45 @@ void main() {
       timer.fire();
     }
     expect(card.stopCalls, isEmpty);
+  });
+
+  test('a transfer marks the listed recording as syncing for the whole read', () async {
+    final card = _FakeRingDevice(
+        ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+    final local = _FakeLocalSync();
+    final wal = ringWal();
+    final timers = <_ManualTimer>[];
+    final sync = syncWith(local, card, wal, transferTimer: (_, callback) {
+      final timer = _ManualTimer(callback);
+      timers.add(timer);
+      return timer;
+    });
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    // A recording page opened before setDevice() rebuilt the list holds its own
+    // instance; the transfer UI reads the listed one.
+    final stale = Wal(
+      timerStart: wal.timerStart,
+      codec: wal.codec,
+      seconds: wal.seconds,
+      status: wal.status,
+      storage: wal.storage,
+      device: wal.device,
+      storageTotalBytes: wal.storageTotalBytes,
+    );
+    final transfer = sync.syncWal(wal: stale);
+    await _until(() => card.readCalls.isNotEmpty);
+    expect(wal.isSyncing, isTrue);
+    expect(wal.syncStartedAt, isNotNull);
+    card.emit(_readBegin(5, 1));
+    card.emit(_record());
+    card.emit(_done(0, 6));
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(wal.isSyncing, isFalse);
+    expect(wal.syncStartedAt, isNull);
+    expect(wal.syncEtaSeconds, isNull);
+    expect(wal.syncSpeedKBps, isNull);
   });
 
   for (final receivedDone in [false, true]) {

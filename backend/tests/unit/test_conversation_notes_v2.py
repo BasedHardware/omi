@@ -188,7 +188,7 @@ def test_one_shaped_note_call_projects_sections_and_preserves_action_detail(monk
     assert evidence['timezone'] == 'America/New_York'
     assert evidence['task_intelligence_capture'] is True
     identity = json.loads(evidence['capture_evidence'].split('\nFULL TRANSCRIPT\n', 1)[0])
-    assert identity['speaker_map'] == {'0': 'David', '1': None}
+    assert identity['speaker_map'] == {'c0': 'David', 'c1': None}
     assert identity['expected_calendar'] is None
     assert [person['name'] for person in identity['observed_screen_listing']['participants']] == ['David', 'Ash Kalb']
     assert 'prompt_cache_breakpoint' not in json.dumps(messages)
@@ -199,8 +199,8 @@ def test_one_shaped_note_call_projects_sections_and_preserves_action_detail(monk
     assert 'Speaker keys are diarization clusters, not names' in instructions
     assert 'whether or not calendar' in instructions
     assert 'Ash Kalb <ash@fulcradynamics.com>' in prefix.context
-    assert 'spk 0 David' in prefix.context
-    assert 'spk 1 Ash Kalb' in prefix.context
+    assert 'spk c0 David' in prefix.context
+    assert 'spk c1 Ash Kalb' in prefix.context
     assert 'Speaker 1:' not in prefix.context
     # Prompt-contract assertions only: live source replay, not this mock, measures model fidelity.
     assert "'- ' bullets in plain, readable sentences" in instructions
@@ -209,6 +209,11 @@ def test_one_shaped_note_call_projects_sections_and_preserves_action_detail(monk
     assert 'return empty source_segment_ids lists' in instructions
     assert 'Never invent IDs' in instructions
     assert 'Neither establishes attendance or binds an audio cluster' in instructions
+    assert 'They do not prove attendance, completion, pickup, purchase' in instructions
+    assert 'An explicit "remind me to ..."' in instructions
+    assert 'current session are not personal follow-up tasks' in instructions
+    assert 'retain an explicit date-only request in context' in instructions
+    assert 'Put timing only in due_at' not in instructions
     assert 'COVERAGE BEATS BREVITY' not in instructions
     assert 'terse fragments, not sentences' not in instructions
 
@@ -292,7 +297,7 @@ def test_memory_places_conversation_context_after_the_instruction_prefix(monkeyp
     )
     assert rebuilt_for_memory.messages(cache_enabled=True) == expected
     assert 'Speaker 1:' not in prefix.context
-    assert 'spk 1 Ash Kalb' in prefix.context
+    assert 'spk c1 Ash Kalb' in prefix.context
 
     class MemoryModel:
         model_name = LUNA_MODEL
@@ -664,8 +669,8 @@ def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(
     assert context is not None
     # Inputs exactly as the compact renderer emits them for one unresolved cluster
     # (renderer→map wiring is pinned in test_compact_speaker_transcript.py).
-    transcript = '[seg-1 1] the flight is at noon'
-    speaker_map = {1: None}
+    transcript = '[seg-1 c0] the flight is at noon'
+    speaker_map = {'c0': None}
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-telegram',
         transcript=transcript,
@@ -676,7 +681,7 @@ def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(
         speaker_map=speaker_map,
     )
     assert transcript in prefix.context
-    assert 'spk 1 Alice Chen' in prefix.context
+    assert 'spk c0 Alice Chen' in prefix.context
     assert 'Speaker' not in prefix.context
 
 
@@ -912,3 +917,81 @@ def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatc
     else:
         assert get_model_config('conv_structure') == get_model_config('memory_l1')
         assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
+
+
+def test_synthetic_reminder_uses_existing_notes_call_and_source_clock(monkeypatch):
+    from utils.llm import conversation_processing
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+
+    source = datetime(2026, 11, 1, 10, tzinfo=timezone.utc)
+    text = 'Remind me to renew the library card on January fifteenth.'
+    prefix = ConversationPromptPrefix(
+        conversation_id='synthetic-reminder-conversation',
+        context=f'FULL TRANSCRIPT\n[synthetic-turn-1 7] {text}',
+        transcript_segment_ids=frozenset({'synthetic-turn-1'}),
+    )
+    calls = []
+
+    class Model:
+        async def ainvoke(self, messages):
+            calls.append(_joined_message_text(messages))
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Library card reminder',
+                        'overview': 'Renew the library card.',
+                        'emoji': '📚',
+                        'category': 'personal',
+                        'events': [],
+                        'sections': [
+                            {
+                                'heading': 'Reminder',
+                                'body_markdown': '- Renew the library card.',
+                                'source_segment_ids': ['synthetic-turn-1'],
+                            }
+                        ],
+                        'action_items': [
+                            {
+                                'description': 'Renew the library card',
+                                'capture_kind': 'explicit_command',
+                                'capture_owner': 'user',
+                                'capture_confidence': 0.99,
+                                'ownership_confidence': 0.99,
+                                'concrete_deliverable': True,
+                                'source_segment_ids': ['synthetic-turn-1'],
+                                'reminder_intent': {'kind': 'explicit_reminder', 'due_expression': 'January fifteenth'},
+                            }
+                        ],
+                    }
+                )
+            )
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: Model())
+    result = conversation_processing.get_conversation_notes(
+        prefix,
+        started_at=source,
+        language_code='en',
+        tz='America/New_York',
+        task_intelligence_capture=True,
+        reminder_source={
+            'started_at': source,
+            'capture_timezone': 'Asia/Ho_Chi_Minh',
+            'transcript_segments': [
+                {
+                    'id': 'synthetic-turn-1',
+                    'text': text,
+                    'start': 10,
+                    'end': 14,
+                    'speaker_id': 7,
+                    'is_user': True,
+                    'speaker_label_source': 'manual',
+                }
+            ],
+        },
+    )
+    assert len(calls) == 1
+    assert 'EXPLICIT REMINDER CLAIMS' in calls[0]
+    assert result.action_items[0].due.date == '2027-01-15'
+    assert result.action_items[0].due.timezone == 'Asia/Ho_Chi_Minh'
+    assert result.action_items[0].due_at is None
+    assert result.action_items[0].source_segment_ids == ['synthetic-turn-1']

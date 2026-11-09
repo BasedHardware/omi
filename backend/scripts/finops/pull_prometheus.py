@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """VAD-gated audio hours actually forwarded to the cloud STT vendors, per usage day.
 
-`omi_vad_gate_audio_seconds_total{outcome="sent"}` is the only measured quantity of vendor
-STT volume we have: there is no Modulate/Soniox invoice feed. Multiplying it by a rate gives
-the `stt_vendor_*` MODELLED component -- it is never presented as measured.
+`omi_vad_gate_audio_seconds_total{outcome="sent"}` is the measured quantity of vendor
+STT volume behind the `stt_vendor_*` MODELLED component -- it is never presented as
+measured. `omi_live_stt_audio_seconds_total{provider}` adds the per-provider VAD
+speech seconds (the modulate series feeds pull_modulate_modelled.py); Soniox exact
+daily dollars come from the org-balance snapshots instead (pull_vendor_balance.py).
 
 Read through the Grafana datasource proxy on monitor.omi.me (kubectl port-forward is denied
 to the read-only identity). Token from ~/.hermes/skills/devops/omi-prometheus/references/.env;
@@ -32,6 +34,9 @@ ENV = pathlib.Path.home() / ".hermes/skills/devops/omi-prometheus/references/.en
 DAILY = {
     "d_vad_gate_audio_seconds": 'sum by (outcome, mode) (increase(omi_vad_gate_audio_seconds_total[1d]))',
     "d_live_stt_accepted": "sum by (provider) (increase(omi_live_stt_accepted_total[1d]))",
+    # VAD speech seconds flushed per backend provider (speech sent, not wall-clock);
+    # the modulate series feeds the modelled vendor line (pull_modulate_modelled.py).
+    "d_live_stt_audio_seconds": "sum by (provider) (increase(omi_live_stt_audio_seconds_total[1d]))",
     "d_parakeet_audio_duration_sum": "sum (increase(parakeet_audio_duration_seconds_sum[1d]))",
 }
 

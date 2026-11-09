@@ -126,8 +126,10 @@ def test_mcp_sse_memory_tools_keep_scope_grants_and_use_universal_service():
 
     assert "auth_context is None" in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in get_tool
-    assert "MemoryService(db_client=db).read" in get_tool
-    assert "collect_filtered_memories" in get_tool
+    assert "memories_page_core(" in get_tool
+    assert "MemoryService(db_client=db_client).read_mcp_filtered(" in source
+    assert "service.read_page(" in source
+    assert "collect_filtered_memories" not in source
     assert "read_default_read_rollout" not in get_tool
     assert "memories_db" not in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in search_tool
@@ -163,3 +165,32 @@ def test_mcp_sse_transport_authenticates_full_api_key_context_without_inferred_s
         in transport_source
     )
     assert "uid = auth_context.uid" in transport_source
+
+
+def test_mcp_search_projects_known_provenance_without_exposing_evidence(monkeypatch):
+    from datetime import datetime, timezone
+    from models.memories import MemoryDB
+
+    captured = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    memory = MemoryDB(
+        id='synthetic',
+        uid='owner',
+        content='Prefers tea',
+        category='interesting',
+        created_at=captured,
+        updated_at=captured,
+        evidence=[
+            {
+                'evidence_id': 'synthetic-evidence',
+                'independence_group': 'synthetic-source',
+                'captured_at': captured,
+                'source_id': 'synthetic-source',
+            }
+        ],
+    )
+    service = object.__new__(service_mod.MemoryService)
+    monkeypatch.setattr(service, 'search', lambda *a, **k: [SimpleNamespace(memory=memory, score=0.9)])
+    result = service.search_mcp('owner', 'tea')
+    assert result[0]['source_at'] == captured
+    assert result[0]['extracted_at'] is None
+    assert 'evidence' not in result[0]

@@ -3,11 +3,101 @@
 `STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. Its
 approved activation is a small cohort and live only. The shared cohort/lane
 scope below also applies when only ladder budget execution is enabled. Outside
-that scope the existing behavior stays unchanged.
+that scope live behavior stays unchanged. Sync/batch allowance refusal instead
+ships on by default under the kill switch described next.
+
+## Offline allowance enforcement (default on)
+
+`STT_CAP_OFFLINE_ENFORCEMENT` is a kill switch, default **true**. Sync v1/v2,
+ordinary sync segments, language probes, confirmation retries and multilingual
+recovery check the existing funded allowance before cloud spend. A denial uses
+the existing encrypted cap-hold path, preserves raw intake and excludes held audio
+from usage. A late multilingual denial is a custody outcome, not a provider error.
+No allowance, pricing, entitlement or paid-through rule changes.
+
+Batch vendor STT explicitly uses `lane=batch`, including its recheck after audio
+inspection. GPU queue admission and every worker ASR microbatch/recovery require
+backend allowance authorization even when the legacy batch readiness fence is
+closed or batch is absent from the legacy lane/cohort selection. A refusal leaves
+the lease/intent retryable without a provider-failure attempt. Immutable
+admission-time `policy.provider_reason=byok` / provider-route BYOK snapshots remain
+exempt from keyless rechecks; a request key never exempts an Omi-funded alternative.
+Reviewers and valid paid-through accounts retain the existing resolver decision.
+Offline admission uses non-provisioning subscription and desktop-trial lookups:
+an allowance check must not create a default subscription or restore a missing
+user root. Existing usage-publication erasure fences remain authoritative.
+
+This audio-only predicate does **not** widen live listen, generic LLM/generated
+processing or held-backlog consent. Existing holds outside the recovery cohort stay
+in custody until their recovery scope is enabled.
+
+Sync-origin (and pre-origin) holds created by this boundary recover under the same
+boundary: while `STT_CAP_OFFLINE_ENFORCEMENT` is on, `recovery_admission_enabled`
+admits lane `sync` for a cap-cohort owner even when `STT_CAP_DISPATCH_LANES` omits
+`sync`. Before this, the live-only lane list stranded every sync hold, including
+after the owner bought credits. Only recovery widens: intake, consent and
+`execution_admission_enabled` still read the lane list, and recovery still needs
+explicit owner consent, current allowance on the original lane and shared pacing.
+A malformed lane list still denies this recovery, as it denies every lane; `sync`
+itself need not be listed.
+
+Held audio recovers only for an owner on an active paid plan (David, 2026-11-01).
+`funded_processing.paid_owner` reads `get_user_valid_subscription(provision=False)`
+on every decision and applies `is_paid_plan`; an unreadable entitlement fails
+closed. It gates the recovery predicate (`cap_hold_recovery._scope`, so
+`_selected_lane`, `recover_selected` and the worker's per-item scope check on every
+lane), `processing_backlog.choose`, the worker `run` and the redrive sweep (which
+visits only paid owners). A Free owner's holds stay held, untouched, on every lane;
+a lapsed or downgraded owner parks at the next decision with choice and holds
+intact. `snapshot` reports `capped` for a Free owner with waiting work, so
+`POST /v1/users/processing-backlog/process` returns its existing 402 and clients
+show Upgrade, while `budget_exhausted` still says whether the monthly limit was
+actually reached. A Free skip counts as
+`omi_held_content_recovery_skipped_total{outcome="not_paid"}` and a Free tap as
+`omi_processing_backlog_choice_total{outcome="not_paid"}`; the recovery gate
+excludes `not_paid`, which is intended.
+
+Rollback for this recovery is `STT_CAP_RECOVERY_COHORT=pct:0` on every API/sync
+recovery executor: it stops every recovery path (consent, worker, redrive,
+selected manifests, provider dispatch) and leaves holds and consent in custody,
+while the offline allowance cap keeps holding new sync audio. Do **not** use
+`STT_CAP_OFFLINE_ENFORCEMENT=false` to roll this back: it also removes the
+allowance cap on new sync audio from this boundary (sync admission selected by the
+legacy lane list stays governed by that list).
+PTT voice-message allowance enforcement is a separate follow-up.
+
+Release owner: subscription session merges; deployment lead deploys. Offline
+refusal ships at 100% on the first approved release, independently of the existing
+`rollout_cohorts/stt-cap-dispatch` ramp. No new default-off cohort is introduced.
+Keep live cohort/lane configuration unchanged. Deploy the same switch value to
+sync/API policy hosts and GPU workers so both queued and per-microbatch checks agree.
+
+Rollback: set `STT_CAP_OFFLINE_ENFORCEMENT=false` on those hosts and drain the
+previous revision. This restores the prior lane/cohort behavior; legacy-selected
+admission remains enforced. Preserve all holds/receipts and keep custody cleanup
+running. Accepted in-flight work may finish. This is a configuration plan, not a
+production change made by the implementation PR.
+
+Watch `omi_stt_cap_dispatch_decisions_total{path,outcome,reason}`. The closed paths
+are `sync_v1`, `sync_v2`, `sync_segment`, `sync_language_probe`, `sync_empty_retry`,
+`sync_multilingual`, `batch_gpu`, `batch_provider`, `batch_speech_redrive`, and
+`batch_quarantine`. Outcomes are `allowed|held`; reasons are `scope_disabled`,
+`consent_denied`, `allowance_exhausted`, `budget_exhausted`,
+`allowance_unavailable`, `access_denied`, `entitled`, and `byok`. These count
+boundary decisions, not unique uploads, saved dollars or additional usage.
+No owner, session, content or raw error labels are accepted.
+
+At the first release, the lead checks a complete 15-minute post-revision window:
+held decisions should be visible per exercised path; a capped synthetic canary
+must make zero provider calls; entitled/BYOK canaries must still complete.
+Watch the held/decision ratio, existing `omi_stt_cap_provider_audio_seconds_total`,
+sync/provider errors and queue age against the preceding comparable window.
+Unexpected entitlement denials, lost custody, a stuck funded backlog or elevated
+errors trigger rollback and investigation before the release is accepted.
 
 ## Cohort and lane rollout (David 2026-10-18)
 
-Execution admission requires **both** an admission switch and a selected owner /
+Legacy live/recovery execution admission requires **both** an admission switch and a selected owner /
 original lane. `STT_CAP_DISPATCH_ENFORCEMENT` remains default false.
 `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` alone uses the same scope; it cannot widen
 STT execution to the fleet. `STT_CAP_DISPATCH_COHORT` unset or empty admits nobody.
@@ -24,11 +114,13 @@ or whitespace-only values select **live only**. Unknown tokens or empty tokens
 inside a list (for example `live,` or `live,,sync`) disable the whole selection.
 Unknown call-site lanes are never mapped to a permitted lane.
 
-Batch is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
+Legacy batch rollout selection is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
 for both admission switches and every cohort, even with explicit `batch` and
 `all`. Before that constant can change, lane8 must write `provider_reason=byok`
 into `binding.policy` at batch admission. This is a source readiness condition,
-not an environment flag. A valid lane list containing batch emits one static
+not an environment flag. The default-on offline spend boundary above bypasses
+this selection fence to refuse exhausted allowance, retaining the recorded BYOK
+funding exception. A valid lane list containing batch emits one static
 warning per process; it does not prevent explicit live/sync selection. Thus
 `live,batch` selects only live and `batch` selects nothing while the fence is
 closed. No UID or configuration data is included in the warning.
@@ -82,12 +174,79 @@ the reservation. Such ambiguous reservations conservatively block that choice
 until their lane is restored and normal recovery resolves them. A lost refund
 response leaves the choice active for a fresh read, never a second refund.
 At page completion the store refuses any actual reservation first, then consumes
-an already-authorized current-month pending upgrade into a fresh token, allowance
-and cutoff. Excluded rows do not block that upgrade. Without an eligible upgrade,
+an already-authorized current-month pending trial grant into a fresh token, allowance
+and cutoff. Excluded rows do not block that grant. Without an eligible grant,
 skipped scope keeps the choice processing and atomically rewinds its cursors;
 it never finishes to waiting-choice solely because excluded rows remain.
 Custody sealing/cleanup stays active during rollback because it is
 owed persistence, not permission to dispatch STT.
+
+### Shared recovery pacing
+
+Every new provider intent in `utils/sync/cap_hold_recovery.py` spends a shared
+audio-second token budget and an intent token, including the second persisted
+application attempt. Cached provider results and settlement spend no tokens.
+`held_single_attempt` continues to suppress adapter-local retries on recovery.
+The intent ceiling conservatively counts pieces/retries, so a multi-piece hold
+spends more than one token. Denials create no provider receipt or metered charge;
+the worker retains its existing chosen-allowance reservation for the same item.
+
+Plain env config, read per intent (no new rollout flag):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `CAP_HOLD_RECOVERY_AUDIO_HOURS_PER_HOUR` | `60` | 60 audio seconds per wall second |
+| `CAP_HOLD_RECOVERY_HOLDS_PER_HOUR` | `12000` | Maximum sustained provider intents/hour |
+
+Both must be finite and positive. Invalid/zero config refuses new work. Apply
+identical values and the same `REDIS_DB_*` endpoint to every API/sync recovery
+host before activation; different settings sharing a bucket are unsupported.
+No deployment/activation is performed by this change.
+
+The repo already uses Redis Lua for cross-pod rate limiting (`redis_db`), rather
+than a hot Firestore counter. Recovery uses one atomic script/key
+`rl:cap-hold-recovery:v1:global` and a dedicated lazy client with two-second
+connect/read timeouts, with no fail-open fallback. Redis's clock owns refill.
+Both dimensions must fit before either is spent. Capacity is one minute of
+refill (default 3,600 audio seconds and 200 intents); a token bucket bounds
+traffic over interval T by rate*T plus that burst, rather than enforcing a
+calendar-hour window. Missing/evicted state starts **empty**. The fixed key has
+no TTL and cannot grow with users. Ambiguous Redis replies or failed intent
+writes may waste tokens; never refund uncertain capacity.
+
+On capacity denial, the fenced hold checkpoint writes `next_attempt_at` from
+the larger deficit/refill interval and retains `pacing_deferred_since`. Redis
+unavailability, invalid config/cost or a piece exceeding the burst envelope
+refuses and defers for 60 seconds. Release preserves the deadline; claim will
+not take the hold early. Normal VAD pieces cap at 300 seconds by default.
+Oversized legacy frozen pieces need operator diagnosis/replanning; they stay
+held, without silently overriding the rate or issuing a paid call.
+
+The sweep's existing persisted owner cursor advances before awaited work,
+including past blocked owners. Five selected owners now take one newest-first
+candidate each per round, up to 100 candidates/owner and 900 seconds total,
+instead of letting a fast owner consume 100 before peers get another turn.
+Deferred owners stop for that sweep; other owners proceed. A hold's pieces
+remain one fenced application unit, so rotation is by candidate, not equal
+audio shares. Request-triggered wakes keep their existing UID leases/cooldown.
+Sealing and cleanup run before recovery and never acquire pacing tokens.
+
+Metrics use only `outcome=granted|deferred|refused`:
+`omi_held_recovery_pacing_intents_total` counts decisions and
+`omi_held_recovery_pacing_audio_seconds_total` counts requested audio tokens by
+decision. Only `granted` represents spent tokens. The histogram
+`omi_held_recovery_pacing_deferred_age_seconds` samples time since the first
+durable pacing deferral on each subsequent deferral. It measures observed
+deferred backlog age, not a fleet maximum or an unvisited population; use it
+with the existing authoritative fleet pending/oldest-age gauges. No user,
+hold, provider or free-form reason labels are emitted.
+
+Pacing is shipped on whenever recovery admission is active. Rollback is the
+existing execution-admission kill switch/cohort rollback; do not bypass this
+limiter to recover throughput. Deployment acceptance still requires API/sync
+activation, explicit-consent/restart and unsupported-language checks, and
+measured recovery throughput under ordinary peak live load before widening
+the STT cap to 100%.
 
 ### Controlled expansion and rollback
 
@@ -117,7 +276,7 @@ advance only with no unexplained regression and a synthetic consented live hold
 recovering across instance replacement. Dazheng owns each expansion and the
 **2026-10-27** completion checkpoint (runtime ramp brief, 2026-10-20); a missed checkpoint or an incomplete
 three-hour soak is a blocker to report, never authority to skip a stage. Keep
-`STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
+`STT_CAP_DISPATCH_LANES=live` throughout. The original sync/batch rollout required the separate
 batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
 approved widening. Batch also requires the lane8 binding-policy readiness change
 above before its code-owned fence can open; configuration alone cannot enable
@@ -275,8 +434,10 @@ sole provider attempt; a denied prepared intent remains recoverable.
 
 Encrypted source audio lives under the existing private-cloud bucket's
 `chunks/{uid}/cap-held/` owner prefix; encrypted metadata and progress live under
-`users/{uid}/stt_cap_holds`. The checkpoint has no application TTL. Existing
-account deletion recursively removes the manifest and purges this chunk prefix.
+`users/{uid}/stt_cap_holds`. The checkpoint has no application TTL. Account
+deletion retains the manifest and this chunk prefix through its default 14-day
+grace window, then the existing recursive wipe removes both; `erase_now=true`
+and the grace kill switch preserve immediate erasure.
 A failed object upload cannot publish a successful manifest or acknowledgment.
 Concurrent identical uploads cannot overwrite a recovery checkpoint.
 
@@ -298,9 +459,61 @@ reads resume only an already chosen, current-month run. The authenticated
 `POST /v1/users/processing-backlog/process` endpoint requires `Idempotency-Key`;
 a durable receipt prevents duplicate consent even after the original job finishes.
 A choice captures its month, cutoff and estimated remaining allowance. Renewable
-job and hold leases fence concurrent workers. Payment checkout/plan-change intent
-starts recovery only if the whole estimate fits; otherwise the same waiting-choice
-surface is shown. New recordings after reset process normally; older held audio
+job and hold leases fence concurrent workers. Renewals never start recovery.
+A Stripe trial's start (`customer.subscription.created` in status `trialing`; a later
+update, such as a plan change while trialing, never grants) does:
+`processing_backlog_worker.trial_started_async` chooses newest first with a budget
+of `TRIAL_RECOVERY_GRANT_HOURS` (25, `config/stt_cap_dispatch.py`) of held audio,
+or less when a finite allowance has less. The job's `remaining` is that budget.
+The request key is `trial-grant:<subscription id>`, so its durable receipt makes a
+retry or restart a no-op, `trial_granted_at` on the summary refuses a second trial on
+the account, and the trial's own `trial_start` dates the intent: a first delivery in
+a later month is recorded as `stale_intent` and declined. Recordings made during the
+trial are not held (Unlimited) and never debit the grant; anything held after the
+grant's cutoff is outside it. A trial's conversion, a purchase or an allowance
+increase starts a release (source `conversion`) newest first within the plan's
+remaining allowance, all of it at idle, but only once the Stripe subscription is
+`active`: a trialing subscription is covered by its grant and converts on
+trialing->active, and an unknown status waits. A paid subscription created `active`
+(a purchase) releases from `customer.subscription.created`, whose payload carries
+the status, so a checkout whose status lookup failed is still released; creation
+happens once per subscription, never at renewal. A hold whose legacy recovery
+already spent can only finish on the legacy route, so an automatic release passes
+over it (`legacy_started`) and it stays held for a manual choice.
+
+Every automatic release passes `utils/backlog_release.decide` per recording; a manual
+tap does not. A refusal leaves the recording held and the cursor unmoved, and the
+next sweep asks again:
+
+| Check | Limit | Where |
+| --- | --- | --- |
+| Kill switch | `BACKLOG_RELEASE_ENABLED`, on unless set off; stops running releases at their next recording. Audio already admitted finishes; nothing is deleted | `config/backlog_release.py` |
+| Owner | 5h per UTC day, summaries included | `release_day_units` on the summary |
+| Batch route | Audio only: the owner is out of legacy sync (`legacy_dark.current_mode` is not `on`). While legacy serves the owner a hold would recover on the live Parakeet pool or a vendor, which the idle gate cannot see, so nothing is released (`legacy_route`) | `backlog_release.batch_serves` |
+| Normal priority | First 2.5h of a trial grant (RECENT) | `release_priority_units` |
+| Idle (other audio, DEEP) | Fresh + recent ready under 64 and deep ready under 32, below the 128 units that would add a replica at the 4-replica floor. No sample reads as not idle | `IdleGate` |
+| Fleet | 20 audio-h/h and 400 audio-h per UTC day, Redis, fails closed | `database/backlog_release_budget.py` |
+
+DEEP-only flights time as `worker_flight_deep`, so the HPA's `worker_flight` chain
+metric does not size on them. Held audio never takes the cheaper-vendor table
+(`vendor_table=False`); a language Parakeet cannot serve still uses its provider
+route, and those hours count against the same fleet budget. A deferred summary (text)
+uses no GPU: it skips the route and idle checks and still spends the owner day and
+the fleet budget. Each released recording carries `release` (`trial` or `conversion`)
+on its intake record and every batch job row, so hard-3 and the 2h alarm can count
+released backfill apart from fresh audio. Metric:
+`omi_held_content_backlog_release_total{decision}`.
+
+A paid owner's tap expires at the monthly rollover only when recovery spends a
+finite allowance (Plus keeps the monthly tap, so prior consent never spends a new
+month). When the owner's current capacity is unlimited, the worker rolls an
+earlier month's unleased manual choice (`processing_backlog.rolls`,
+`database.processing_backlog.roll`) into the current month with a new token,
+period and cutoff, carrying any reservation to finish under its source's claim and
+receipts. This resumes choices parked by an earlier rollover without a new tap. A
+trial grant also rolls, whatever the capacity, keeping its remaining hours, cutoff
+and cursors, since the daily limit can carry it past the month's end. A conversion
+never rolls. New recordings after reset process normally; older held audio
 and deferred text stay waiting. For every explicitly chosen provider request, current
 funded allowance and the existing hard abuse restrictions must pass again before
 every new recovered provider request. Already persisted receipts can settle at
@@ -317,7 +530,21 @@ The original full audio remains retained throughout.
 `process_segment` explicitly reports `provider_called`, set immediately before
 `prerecorded`, never inferred from an error class. A known non-call atomically
 removes its intent (or reverts an unspent second attempt). The next claim retries
-normally. If a call may have happened, the piece waits 30 minutes. Then:
+normally. A reply the provider completed with **no words** is fenced into the
+receipt as `provider_empty` with `provider_completed_at`; recovery settles that
+piece as `transcribed` with no content, zero seconds and no usage charge
+(`settled_empty`), whether the same pass observes the checkpoint or a later pass
+resumes a `dispatched` receipt that carries it. It is never re-dispatched. A hold
+whose pieces all settle empty finalizes, settles its content ledger and purges
+like any fully successful recovery. Only a validated success-shaped reply earns
+that checkpoint: the prerecorded adapters raise on a 2xx body that is not the
+provider's success shape (Parakeet without both `text` and `segments`; Modulate
+without an `utterances` list, or with an empty one and neither `text` as a
+string nor `duration_ms` as a number beside it), so a JSON error envelope or
+partial payload is a provider failure with no completion checkpoint, and the
+dispatch stays ambiguous.
+If a call may have happened but no completion
+checkpoint exists, the piece waits 30 minutes. Then:
 
 1. A proof written in the **same transaction as conversation ingestion** identifies
    the hold, piece and deterministic conversation lineage. Recovery marks that
@@ -344,7 +571,7 @@ application TTL or is silently erased. Ordinary fully successful recovery delete
 source and frozen pieces only after content/usage settlement.
 
 `omi_stt_cap_recovery_reconciliation_total{outcome}` counts `cleared_noncall`,
-`reconciled_ingested`, `redispatched`, and `failed`. Structured
+`reconciled_ingested`, `redispatched`, `failed`, and `settled_empty`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
@@ -431,7 +658,7 @@ suppression and sync hold/recovery paths. Ladder allowance comes from units;
 legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds
 the decoded capture before VAD; v2 archives/queues it and holds in the coordinator.
-Explicit-choice or fitting-upgrade recovery rechecks the current ladder budget before dispatch.
+Explicit-choice or trial-grant recovery rechecks the current ladder budget before dispatch.
 
 Live sessions carry numeric remaining units, debited from accepted provider PCM
 at the pinned provider speech rate (silence is conservatively included). Shared
@@ -527,3 +754,48 @@ Local migration verification (loopback Firestore only):
 firebase emulators:exec --only firestore --project demo-held-audio \
   'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
 ```
+
+
+## Recovery-only probe narrowing
+
+`STT_CAP_RECOVERY_COHORT` optionally intersects **effective** dispatch membership
+(including the runtime `rollout_cohorts/stt-cap-dispatch` resolver), enforcement
+and original execution lane. It uses the same `uid:`, `pct:N`, and sole `all`
+token grammar. It cannot admit an owner outside dispatch scope. **Absent** means
+no extra restriction; empty, whitespace or malformed values deny all recovery,
+with one process-local warning that contains neither tokens nor owner identity.
+Listen-side hold admission and backlog display stay unchanged.
+
+The intersection gates manual/trial-grant consent creation, the backlog process API,
+redrive owner visits, worker entry, direct recovery wakes, selected manifests and
+each new provider dispatch (including sync pipeline retries). Excluded owners'
+persisted consent and holds are preserved. Staging seal/cleanup and fleet metrics
+continue independently of recovery membership. The one-hot gauge
+`omi_stt_cap_recovery_cohort_narrowed{state="unset|set|malformed"}` reports only
+configuration state; it does not prove which private owner is configured.
+
+For qualification, the deploy lead sets `uid:<test>` through the **private-values
+path**, never a committed manifest, on every API/sync recovery executor. Verify
+all serving revisions and scheduler targets carry the restriction **before**
+activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
+in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in
+`database/_client.py`), so on staging the restriction is defence in depth; in
+prod it is the guard that keeps other consented owners asleep. Keep the
+shared dispatch document and listen configuration unchanged, and verify the
+test account is already in the effective dispatch cohort. First qualify staging
+(`backend-staging`, `backend-sync-staging`), then one separately authorized prod
+receipt. Record running release SHA, fresh `state="set"` metric, held-to-published
+receipt, exactly-once usage/replay, source cleanup and normal-load error/backlog
+metrics. Use only the agent-owned test account; no other owners' data reads or
+consent changes. A stale qualification driver that insists the shared dispatch
+cohort itself is probe-only must be updated to attest this intersection before
+execution; do not alter the shared document to satisfy it.
+
+Owner: dazheng / subscription rollout lead. Ramp: staging probe, single prod
+receipt, then **remove the variable** to reach the full existing dispatch cohort
+by **2026-10-23**, after clean capture-integrity/reconciliation, no backlog stalls
+or sync 5xx regression, and reviewed receipts. Emptying it is a fail-closed stop,
+not widening. A missed deadline is a blocker; no automatic expansion. Widening
+can resume other owners' already-consented holds. To stop new recovery, set the narrowing to `pct:0` on every API/sync executor
+while keeping custody redrive on and listen admission unchanged; accepted provider
+calls can still finish.

@@ -465,6 +465,7 @@ export function ConversationSplitView() {
     setIsSelectionMode(true);
     setSelectedIds(new Set());
     setSelection(null); // Deselect any viewed tile
+    preventAutoSelect.current = true; // Stay on the gallery instead of re-selecting the newest tile
   }, []);
 
   // Enter selection mode and select the specified card (for double-click)
@@ -472,6 +473,7 @@ export function ConversationSplitView() {
     setIsSelectionMode(true);
     setSelectedIds(new Set([id]));
     setSelection(null); // Deselect any viewed tile
+    preventAutoSelect.current = true; // Stay on the gallery instead of re-selecting the newest tile
   }, []);
 
   const exitSelectionMode = useCallback(() => {

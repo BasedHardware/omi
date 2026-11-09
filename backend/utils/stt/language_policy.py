@@ -10,7 +10,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable, Collection
 
+from config.refactor_modes import serving_for, shadow_or_serve
+from utils.llm.notes_refactor_metrics import shadow
 from config.stt_provider_policy import (
+    LANGUAGE_EQUIVALENCE,
+    canonical_language,
     SONIOX_PROVIDER,
     STTServingSurface,
     normalized_stt_language,
@@ -30,15 +34,10 @@ MAX_PENDING_DETECTIONS = 32
 MAX_DETECTION_CHARS = 512
 LIVE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 MIN_LEARNED_SESSIONS = 3
-# Only near-identical spoken language pairs belong here. Codes are normalized
-# to their base form before this intentionally small equivalence map is used.
-LANGUAGE_EQUIVALENCE = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
 MAX_SONIOX_LANGUAGE_HINTS = 3
-
-
-def canonical_language(language: str | None) -> str:
-    code = normalized_stt_language(language)
-    return LANGUAGE_EQUIVALENCE.get(code, code)
+# Explicit declarations for config.refactor_modes' dynamically named cohort selectors.
+LANGUAGE_HINTS_SERVE_PERCENT_ENV = 'STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT'
+LANGUAGE_HINTS_SERVE_DIGESTS_ENV = 'STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S'
 
 
 def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str, ...]:
@@ -84,6 +83,7 @@ class LiveLanguageProfile:
     multi: bool
     in_scope: bool = True
     source: str = 'declared'
+    single_language_hints_admitted: bool = False
 
     @property
     def learning_enabled(self) -> bool:
@@ -119,7 +119,7 @@ class LiveLanguageProfile:
         group = 'non_en' if any(code != 'en' for code in expected) else ('en' if primary == 'en' else 'unknown')
         eligible = in_scope and multi and group == 'non_en'
         arm = 'hintable' if eligible and hintable_allocation(uid) else ('control' if eligible else 'na')
-        return cls(primary, expected, group, arm, multi, in_scope, source)
+        return cls(primary, expected, group, arm, multi, in_scope, source, serving_for('STT_LANGUAGE_HINTS_MODE', uid))
 
 
 def prefer_hintable_soniox(
@@ -143,7 +143,7 @@ def prefer_hintable_soniox(
     )
 
 
-def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> list[str]:
+def _legacy_soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> list[str]:
     normalized = normalized_stt_language(language)
     if (
         profile
@@ -172,6 +172,28 @@ def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> l
         if len(hints) >= MAX_SONIOX_LANGUAGE_HINTS:
             break
     return hints
+
+
+def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> list[str]:
+    """Layer single-language hints over the existing policy; off/shadow preserve its bytes.
+
+    Never changes learned profiles, multi-language hints, provider selection or
+    prerecorded language gates. Admission is computed with the session's uid.
+    """
+    legacy = _legacy_soniox_hints(language, profile)
+    if not shadow_or_serve('STT_LANGUAGE_HINTS_MODE'):
+        return legacy
+    proposed = legacy
+    if profile and profile.in_scope and len(profile.expected) == 1:
+        proposed = legacy or _legacy_soniox_hints(profile.expected[0])
+        shadow('single_language_hint', 'agree' if proposed == legacy else 'disagree', hints=len(proposed))
+        logger.info(
+            'event=refactor_shadow lane=L3 check=soniox_hint outcome=%s hint=%s',
+            'agree' if proposed == legacy else 'disagree',
+            ','.join(proposed) or 'none',
+        )
+    admitted = bool(profile and profile.single_language_hints_admitted) or serving_for('STT_LANGUAGE_HINTS_MODE', None)
+    return proposed if admitted else legacy
 
 
 def connection_constraint(provider: str, language: str, profile: LiveLanguageProfile) -> str:

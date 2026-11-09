@@ -25,6 +25,41 @@ ALERT_RULES_BY_EXPORT = {
 }
 
 
+@pytest.mark.parametrize('export', ['alerts/live-stt.json', 'alert-rules.json'])
+@pytest.mark.parametrize('duration,fires', [(285, False), (300, True), (900, True)])
+@pytest.mark.parametrize('failure', ['zero_fresh', 'frozen_positive_gauge'])
+def test_pressure_sampler_alarm_is_per_pod_without_a_traffic_floor(export, duration, fires, failure):
+    rule = ALERT_RULES_BY_EXPORT[export]['omi-stt-pressure-sampler-stuck']
+    expression = rule['data'][0]['model']['expr']
+    assert expression == (
+        '((max by (namespace, pod) (omi_stt_window_batch_pressure_replicas'
+        '{job="backend-listen-metrics",state="fresh"}) == 0) + 1) or on (namespace, pod) '
+        '(time() - max by (namespace, pod) (omi_stt_window_batch_pressure_progress_timestamp_seconds'
+        '{job="backend-listen-metrics"} > 0) > 15)'
+    )
+    assert 'admissions' not in expression
+    bad = (('namespace', 'prod'), ('pod', 'broken'))
+    healthy = (('namespace', 'prod'), ('pod', 'healthy'))
+    samples = []
+    for t in range(0, duration + 1, 15):
+        # Synthetic instant-query output for the committed selector/filter/union:
+        # zero fresh contributes 1; stalled progress contributes its age; healthy
+        # pods are absent. No request counters are needed to get an alert.
+        frame = {bad: [1 if failure == 'zero_fresh' else 16 + t]}
+        evaluated = backtest.evaluate(rule, {'A': frame})
+        assert healthy not in evaluated
+        samples.append((t, evaluated))
+    result = backtest.episodes(rule, samples, 0, duration, 15)
+    assert bool(result['episodes']) is fires
+    assert rule['for'] == '5m'
+    assert rule['noDataState'] == 'OK'
+    assert rule['notification_settings']['group_wait'] == '30s'
+    # Recovery/missing pod before five minutes must reset the pending state.
+    interrupted = [(t, {} if t == 285 else frame) for t, frame in samples]
+    if duration == 300:
+        assert backtest.episodes(rule, interrupted, 0, duration, 15)['never_fired']
+
+
 def _sum_increase(expression, series):
     match = re.fullmatch(r'sum\(increase\((\w+)(?:\{([^{}]+)\})?\[(?:10|15|30)m\]\)\)', expression)
     assert match, f'Unsupported counter query: {expression}'

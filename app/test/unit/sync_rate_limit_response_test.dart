@@ -29,6 +29,36 @@ void main() {
       }
     });
 
+    test('dispatch holds use the transient account cooldown', () {
+      final response = http.Response(
+        '{"code":"dispatch_hold"}',
+        503,
+        headers: {
+          'x-omi-rate-limit-reason': 'dispatch_hold',
+          'retry-after': '3600',
+        },
+      );
+
+      expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.backendCapacity);
+      expect(isSyncUploadRateLimitResponse(response), isTrue);
+      expect(isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(response)), isTrue);
+    });
+
+    test('unknown scoped 503 reasons remain unpaced', () {
+      final response = http.Response(
+        '{"code":"future_reason"}',
+        503,
+        headers: {
+          'x-omi-rate-limit-reason': 'future_reason',
+          'retry-after': '3600',
+        },
+      );
+
+      expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.edgeThrottle);
+      expect(isSyncUploadRateLimitResponse(response), isFalse);
+      expect(isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(response)), isFalse);
+    });
+
     test('keeps unknown JSON, text, and misleading detail generic', () {
       final unknown = http.Response('{"code":"burst_limit"}', 429);
       final text = http.Response('Account temporarily restricted due to fair-use policy', 429);

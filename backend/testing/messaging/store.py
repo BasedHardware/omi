@@ -8,7 +8,7 @@ from threading import RLock
 from uuid import uuid4
 
 from utils.messaging.identity import key, advances_inbound_head
-from database.messaging import STALE_SECONDS, PENDING_MAX_SECONDS
+from database.messaging import STALE_SECONDS, PENDING_MAX_SECONDS, can_supersede
 
 
 class MemoryStore:
@@ -104,6 +104,8 @@ class MemoryStore:
                 created_at=created_at,
                 album_ready_at=ready,
                 identity=(message.channel, message.provider, message.external_user_id),
+                supersedes=row.get('supersedes', False) if row else can_supersede(message),
+                chat=key(message.external_chat_id),
             )
             if album_path is not None:
                 self.jobs[album_path].update(album_tail=sequence, album_part_count=total)
@@ -255,6 +257,20 @@ class MemoryStore:
         if not row:
             raise PermissionError('Invalid proof')
         return row['uid']
+
+    def superseding_pending(self, path):
+        with self.lock:
+            identity, chat = self.jobs[path].get('identity'), self.jobs[path].get('chat')
+            if not chat:
+                return False  # a row from before the field is never replaced
+            return any(
+                other != path
+                and row['status'] == 'pending'
+                and row.get('identity') == identity
+                and row.get('chat') == chat
+                and row.get('supersedes')
+                for other, row in self.jobs.items()
+            )
 
     def pending(self, message):
         return [

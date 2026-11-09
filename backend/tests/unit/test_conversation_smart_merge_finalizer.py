@@ -46,12 +46,19 @@ class _Conversation:
         self.geolocation = None
         self.client_device_id = None
 
+    def model_dump(self):
+        return {'id': self.id, 'status': self.status}
+
 
 @pytest.fixture
 def harness(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     calls = []
     row = {'id': 'n', 'status': 'completed', 'source': 'omi', 'discarded': False, **_BOUND}
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    # The live-episode hook runs after fanout completion; its own tests cover it.
+    monkeypatch.setenv('EPISODES_ENABLED', 'off')
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
@@ -59,6 +66,8 @@ def harness(monkeypatch):
             return row
         if function is finalizer.reserve_recording:
             # Exercise the real default-off gate; it must not claim a route or touch Firestore.
+            return function(*args, **kwargs)
+        if function is finalizer.apply_call_metadata:
             return function(*args, **kwargs)
         calls.append(function)
         if function is finalizer.finalization_jobs_db.get_finalization_job:
@@ -102,6 +111,72 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
     return await finalizer.finalize_persisted_conversation(
         'u', 'n', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
+
+
+@pytest.mark.parametrize('registered', [True, False])
+async def test_generic_batch_registration_refusal_is_visible_and_blocks_fanout(
+    harness, monkeypatch, caplog, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    original = finalizer.run_blocking
+    before = finalizer.RECORD_REGISTER_REFUSED._value.get()
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with caplog.at_level('WARNING', logger=finalizer.logger.name):
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize()
+    assert (finalizer.lifecycle_service.claim_finalization_fanout in calls) is registered
+    assert finalizer.RECORD_REGISTER_REFUSED._value.get() == before + int(not registered)
+    messages = [r.getMessage() for r in caplog.records if 'register_refused' in r.getMessage()]
+    assert messages == ([] if registered else ['event=register_refused owner=batch_live_v1'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SILENT_BACKFILL])
+@pytest.mark.parametrize('registered', [True, False])
+async def test_record_registration_precedes_terminal_fanout_even_for_silent_backfill(
+    harness, monkeypatch, trigger, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    conversation = _Conversation()
+    conversation.model_dump = lambda: {'id': 'n', 'status': 'completed'}
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            assert args[1]['record_lane_owner'] == 'batch_live_v1'
+            calls.append(function)
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    async def absorbed(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    monkeypatch.setattr(finalizer, 'smart_merge_step', absorbed)
+    if registered:
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.fenced
+            assert finalizer.register_recording in calls
+            assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        else:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.completed
+            assert calls.index(finalizer.register_recording) < calls.index(
+                finalizer.lifecycle_service.claim_finalization_fanout
+            )
+    else:
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize(trigger)
+        assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        assert finalizer.lifecycle_service.complete_finalization_fanout not in calls
 
 
 @pytest.mark.asyncio
@@ -278,3 +353,54 @@ async def test_pusher_finalizer_refreshes_expired_shadow_cohort_before_admission
                 await _finalize()
     assert seen == [True, False]
     assert reads == ['u', 'u']
+
+
+@pytest.mark.asyncio
+async def test_donor_resume_incomplete_surfaces_its_bounded_fence_code(harness, monkeypatch):
+    async def incomplete(*args, **kwargs):
+        raise SmartMergeIncomplete('refresh_lease_busy')
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', incomplete)
+    with pytest.raises(finalizer.ConversationFinalizationError) as raised:
+        await _finalize()
+    assert raised.value.code == 'refresh_lease_busy'
+
+
+@pytest.mark.asyncio
+async def test_non_smart_merge_failures_still_yield_the_generic_code(harness, monkeypatch):
+    async def provider_failure(*args, **kwargs):
+        raise RuntimeError('provider exploded')
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', provider_failure)
+    with pytest.raises(finalizer.ConversationFinalizationError) as raised:
+        await _finalize()
+    assert raised.value.code == 'processing_failed'
+
+
+def test_resumed_ok_line_carries_the_job_hash_only(monkeypatch, caplog):
+    import logging
+
+    from utils.observability.finalization import finalization_diagnostic_id
+
+    caplog.set_level(logging.INFO, logger=smart_merge.logger.name)
+    donor = {
+        'deleted': True,
+        'discarded': True,
+        'sync_merged_into': 'p',
+        'smart_merge': {'role': 'donor', 'survivor_id': 'p', 'survivor_revision': 1},
+    }
+
+    def get_conversation(uid, conversation_id, read_site=None):
+        return donor if conversation_id == 'n' else None
+
+    monkeypatch.setattr(smart_merge.conversations_db, 'get_conversation', get_conversation)
+    monkeypatch.setattr(smart_merge, '_cleanup_donor', lambda *args, **kwargs: None)
+    monkeypatch.setattr(smart_merge, '_cleanup_flattened_ancestors', lambda *args, **kwargs: None)
+    monkeypatch.setattr(smart_merge, 'refresh_survivor', lambda *args, **kwargs: None)
+
+    smart_merge.finish_absorb('u', 'n', owner='job-1', resumed=True)
+
+    resumed = [r.getMessage() for r in caplog.records if 'outcome=resumed_ok' in r.getMessage()]
+    assert resumed == [f'event=smart_merge outcome=resumed_ok job_hash={finalization_diagnostic_id("job-1")}']
+    # Closed vocabulary: the raw finalization job id never appears.
+    assert 'job-1' not in resumed[0]
