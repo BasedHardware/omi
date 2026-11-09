@@ -4718,6 +4718,7 @@ environments:
             PROVIDER_STT_TASKS_OIDC_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app
               category: service_auth
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
