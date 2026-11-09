@@ -77,7 +77,7 @@ def _delete_client(monkeypatch) -> TestClient:
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
     monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
-    monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
+    monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
     monkeypatch.setattr(conversations.action_items_db, 'get_action_items_by_conversation', lambda *args, **kwargs: [])
     monkeypatch.setattr(conversations.action_items_db, 'delete_action_items_for_conversation', MagicMock())
@@ -206,7 +206,7 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
         monkeypatch.setattr(
             conversations.conversations_db,
             'get_conversation_raw_snapshot',
-            lambda *args: {'sync_merged_from': ['donor-a', 'donor-b']},
+            lambda *args, **kwargs: {'sync_merged_from': ['donor-a', 'donor-b']},
         )
         conversations.delete_conversation_and_frame_evidence.side_effect = [
             object_lake.LakeFetchError('lake down'),
@@ -220,6 +220,19 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
     conversations.delete_privacy_conversation_audio.assert_called_once_with(
         'uid-delete-contract', 'conversation-1', source_ids=['donor-a', 'donor-b']
     )
+
+
+def test_cascade_donor_inventory_read_failure_is_retryable_503(monkeypatch):
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'synthetic-canonical')
+        read = MagicMock(side_effect=RuntimeError('synthetic Firestore read failure'))
+        monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', read)
+        response = client.delete('/v1/conversations/conversation-1?cascade=true')
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
+    assert read.call_args.kwargs == {'field_paths': ['sync_merged_from']}
+    conversations.delete_privacy_conversation_audio.assert_not_called()
+    conversations.delete_conversation_and_frame_evidence.assert_not_called()
 
 
 def _real_lake_delete(monkeypatch, tmp_path):
@@ -299,7 +312,7 @@ def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monke
         statuses = []
 
         def finish_after_delete(method, uri, data, headers):
-            if method != 'PUT' or headers.get('Content-Range'):
+            if method != 'PUT' or str(headers.get('Content-Range', '')).startswith('bytes */'):
                 return
             bucket.client._http.before_request = None
             response = client.delete('/v1/conversations/conversation-1')

@@ -280,9 +280,11 @@ class _LocalSessionHTTP:
             if method == 'DELETE':
                 if status == 308:
                     state['http_status'] = status = 499
-            elif method == 'PUT' and not (headers or {}).get('Content-Range'):
+            elif method == 'PUT' and not str((headers or {}).get('Content-Range', '')).startswith('bytes */'):
                 if status == 308:
-                    if len(data) != state['size']:
+                    expected = f"bytes 0-{state['size'] - 1}/{state['size']}"
+                    # GCS accepts one whole-object PUT with or without its full range.
+                    if len(data) != state['size'] or (headers or {}).get('Content-Range', expected) != expected:
                         status = 400
                     else:
                         blob = self.client.bucket(state['bucket']).blob(state['key'])

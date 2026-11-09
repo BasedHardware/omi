@@ -679,13 +679,13 @@ def test_nonterminal_fence_preserves_discovery_and_key(world, scope, failure):
     http = bucket.client._http
 
     def before(method, uri, data, headers):
-        if (method == 'PUT' and headers.get('Content-Range') and failure == 'transport') or (
-            method == 'DELETE' and failure == 'cancel'
-        ):
+        if (
+            method == 'PUT' and str(headers.get('Content-Range', '')).startswith('bytes */') and failure == 'transport'
+        ) or (method == 'DELETE' and failure == 'cancel'):
             raise OSError(uri)  # The raw transport error must never escape.
 
     def after(method, uri, data, headers, response):
-        if method == 'PUT' and headers.get('Content-Range'):
+        if method == 'PUT' and str(headers.get('Content-Range', '')).startswith('bytes */'):
             response.status_code = 308 if failure == 'open' else 503
 
     http.before_request = before

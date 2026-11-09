@@ -1526,11 +1526,15 @@ def _delete_conversation_under_gate(
                 )
         # Snapshot retained bridge donors before shared metadata cleanup removes them.
         # A previous lake-purge attempt may already have removed the transcript blob.
-        source_ids = (
-            (conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}).get('sync_merged_from', [])
-            if os.getenv('BUCKET_CANONICAL_AUDIO')
-            else []
-        )
+        source_ids = []
+        if os.getenv('BUCKET_CANONICAL_AUDIO'):
+            try:
+                raw = conversations_db.get_conversation_raw_snapshot(
+                    uid, conversation_id, field_paths=['sync_merged_from']
+                )
+            except Exception as error:
+                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+            source_ids = (raw or {}).get('sync_merged_from', [])
         background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation

@@ -333,7 +333,11 @@ class _UploadSession:
             session,
             'PUT',
             data=payload,
-            headers={'Content-Length': str(len(payload))},
+            # One final chunk names its whole range (measured: GCS finalizes it).
+            headers={
+                'Content-Length': str(len(payload)),
+                'Content-Range': f'bytes 0-{len(payload) - 1}/{len(payload)}',
+            },
             timeout=(remaining / 2, remaining / 2),
             blob=blob,
         )

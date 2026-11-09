@@ -866,7 +866,7 @@ def test_real_gcs_session_seam_uses_one_put_and_generation_zero(storage, monkeyp
             http.request.assert_called_once()
             args, kwargs = http.request.call_args
             assert args == ('PUT', session) and kwargs['data'] == b'payload'
-            assert kwargs['headers'] == {'Content-Length': '7'}
+            assert kwargs['headers'] == {'Content-Length': '7', 'Content-Range': 'bytes 0-6/7'}
             assert kwargs['allow_redirects'] is False
         assert create.call_args.kwargs['size'] == 7
         assert create.call_args.kwargs['if_generation_match'] == 0
@@ -899,7 +899,7 @@ def test_expired_creator_preserves_concurrently_published_pointer(storage, monke
     published = []
 
     def publish_before_expiry(method, uri, data, headers, response):
-        if method == 'PUT' and not headers.get('Content-Range'):
+        if method == 'PUT' and not str(headers.get('Content-Range', '')).startswith('bytes */'):
             bucket.client._http.after_request = None
             published.append(put())
             clock.monotonic.return_value += lake.config.put_deadline_seconds()

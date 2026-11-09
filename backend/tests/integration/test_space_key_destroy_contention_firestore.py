@@ -120,7 +120,7 @@ def test_inflight_put_cannot_finalize_after_account_wipe(state):
     uploading, release = Event(), Event()
 
     def paused_upload(method, uri, data, headers):
-        if method == 'PUT' and not headers.get('Content-Range'):
+        if method == 'PUT' and not str(headers.get('Content-Range', '')).startswith('bytes */'):
             uploading.set()
             assert release.wait(timeout=30)
 
@@ -149,7 +149,7 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
     uploading, release = Event(), Event()
 
     def paused_upload(method, uri, data, headers):
-        if method == 'PUT' and not headers.get('Content-Range'):
+        if method == 'PUT' and not str(headers.get('Content-Range', '')).startswith('bytes */'):
             uploading.set()
             assert release.wait(timeout=30)
 
