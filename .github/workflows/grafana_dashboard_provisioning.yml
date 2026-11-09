@@ -151,14 +151,17 @@ jobs:
   # push to main that matches the trigger paths applies the current Ops
   # dashboards to prod without a dispatch. The apply is idempotent and runs on
   # every surviving push, so a superseded push run cannot skip a dashboard
-  # change (review P1). It uses only the repo-level MONITOR_GRAFANA_TOKEN, so it has no
-  # environment and no approval gate. The Business TV boards keep the gated
-  # prod path because their token lives only in the prod environment.
-  # Alert rules and the admin deploy keep their gates.
+  # change (review P1). It uses the production Grafana token from the
+  # grafana-dashboards-prod environment, which holds only that token and has no
+  # required reviewers, so it runs without an approval tap. The repo-level
+  # MONITOR_GRAFANA_TOKEN is the dev token and must never reach monitor.omi.me.
+  # The Business TV boards keep the gated prod path because their token lives
+  # only in the prod environment. Alert rules and the admin deploy keep their gates.
   provision-prod-ops-dashboards:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
+    environment: grafana-dashboards-prod
     # Same group as a prod dispatch run, so an approval-waiting dispatch and an
     # automatic apply never write the same Ops UIDs at once.
     concurrency:
