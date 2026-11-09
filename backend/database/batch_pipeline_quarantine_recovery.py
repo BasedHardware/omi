@@ -756,6 +756,44 @@ def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | 
     return [(doc.id, doc.to_dict() or {}) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
+@read_origin('job:batch_pipeline_quarantine_recovery:input_expiring_candidates')
+def input_expiring_candidates(client, namespace, now, *, after=None):
+    """Two indexed clock streams, each at most 128 snapshots; no legacy backfill.
+
+    Legacy enqueue rows and stamped replacements have different expiry anchors.
+    Advance independent age cursors even over filtered/fenced rows: fresh
+    replacements in the legacy index must never pin its oldest prefix.
+    """
+    from utils.batch_pipeline.input_retention import held_input_leg, staged_enqueue, TERMINAL_SECONDS
+
+    collection = client.collection(f'{namespace}_jobs')
+    cutoff = now - TERMINAL_SECONDS
+    candidates, cursors = [], {}
+    for field in ('enqueued_at', 'audio_staged_at'):
+        query = (
+            collection.where('state', 'in', ['quarantined', 'committed'])
+            .where('recovery_state', 'in', ['held', 'failed_held'])
+            .where(field, '<=', cutoff)
+            .order_by(field)
+            .order_by('__name__')
+        )
+        cursor = (after or {}).get(field)
+        if cursor:
+            query = query.start_after({field: cursor['at'], '__name__': collection.document(cursor['id'])})
+        docs = list(query.limit(128).stream())
+        for doc in docs:
+            job = doc.to_dict() or {}
+            # Missing ordered fields are excluded by Firestore. Only legacy
+            # objects belong in the enqueue stream; replacements use their own.
+            if field == 'enqueued_at' and 'audio_staged_at' in job:
+                continue
+            stamp = staged_enqueue(job)
+            if stamp is not None and stamp <= cutoff and held_input_leg(job):
+                candidates.append((doc.id, job))
+        cursors[field] = {'at': docs[-1].to_dict()[field], 'id': docs[-1].id} if len(docs) == 128 else None
+    return sorted(candidates, key=lambda pair: (staged_enqueue(pair[1]), pair[0])), cursors
+
+
 def cancel_fenced_recovery(store, segment_id):
     """Revocation-only write, allowed after privacy rejects ordinary job writes."""
     from google.cloud import firestore

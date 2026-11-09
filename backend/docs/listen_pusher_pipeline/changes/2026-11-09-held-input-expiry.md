@@ -33,3 +33,13 @@ The runtime base and prod overlay explicitly bind the kill true on all five
 existing held-sweep serving surfaces. Listen dev/prod and worker default,
 dev/staging/prod charts bind it as well, including both worker GPU deployments.
 The runtime manifest and feature-flag registry are regenerated from source.
+
+The correctness finding is also confirmed: the ordinary name-cursor pass could
+exceed the one-day expiry margin. Urgency now runs first using two oldest-first
+indexed streams, each capped at 128 rows, for legacy enqueue and current restage
+anchors. Independent age cursors advance over filtered/fenced rows. For the
+review's 22,583-row cohort the bounded pass is 14h45m, rather than 58h50m at 32
+rows per five minutes. No timer or ordinary page-size change is made. The new
+prod/dev restage-clock composites are in the index registry and generated
+manifest; existing index/deploy guards enforce them. No legacy backfill is
+needed. The earlier coalesced-query question is resolved by the two streams.

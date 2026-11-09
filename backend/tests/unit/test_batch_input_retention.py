@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -34,9 +35,12 @@ BACKEND = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(autouse=True)
 def runtime(monkeypatch):
+    disabled = logging.root.manager.disable
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
     monkeypatch.delenv('BATCH_INPUT_EXPIRING_ENABLED', raising=False)
+    yield
+    logging.disable(disabled)
 
 
 def seed(setup, leg='gpu'):
@@ -83,6 +87,7 @@ def test_existing_sweep_reaches_both_held_legs_without_nightly_terminal_redrive(
     from utils.batch_pipeline import held_dead_letter as sweep
 
     client, store, _ = seed(setup, leg)
+    monkeypatch.setattr(sweep, 'input_expiring_candidates', lambda *a, **kw: ([], {}))
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **kw: [('bad', deepcopy(row(client)))])
     monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **kw: [])
     monkeypatch.setattr(sweep, 'held_expired_stock', lambda *a: 0)

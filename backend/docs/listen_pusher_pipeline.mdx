@@ -9518,7 +9518,11 @@ Exact-bundle repair stamps the new object time without changing original enqueue
 The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
 results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
 with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
-No record-pending or sweep cadence change is involved. The existing
+Before the ordinary held name page, two indexed urgency streams (legacy enqueue
+and current restage clocks, limit 128 each) use independent age cursors. The
+restage-clock composites are declared in the index registry and generated
+manifest; index readiness precedes rollout. No legacy backfill, record-pending
+or sweep cadence change is involved. The existing
 `BATCH_HELD_DEAD_LETTER_ENABLED` sweep kill also remains effective.
 
 The existing `failed/batch_artifact_missing` upload wire shape and exact-bundle

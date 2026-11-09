@@ -27,9 +27,33 @@ and writes job `state=dead`, `dead_letter_reason=input_expiring`, plus its prior
 leg and transition time. It retains audio, result receipts, intent/attempt
 history, binding and privacy generation. It refuses active tokens/leases,
 open operator/paid intents, privacy refusals and lost content ownership.
-`record_pending` and provider-STT rows do not enter this path. Sweep pagination
-means transition occurs when the existing scan visits the row, not a wall-clock
-deadline guarantee.
+`record_pending` and provider-STT rows do not enter this path.
+
+Before the ordinary held name-cursor page, each five-minute sweep tick reads
+oldest-first cutoff pages for `enqueued_at` (legacy objects) and `audio_staged_at`
+(replacements), **128 rows per indexed query**, at most 256 candidates total.
+The legacy stream excludes stamped replacements; the transaction rechecks the
+current object clock. Separate durable age cursors advance even over fresh
+restages, malformed rows and transaction refusals, so none can pin a prefix.
+Neither urgency cursor depends on the ordinary held name cursor. Crash replay
+and competing sweeps retain the existing idempotent transaction/checkpoint CAS.
+
+For the supplied review's 22,583-row cohort, an urgency pass takes at most
+`ceil(22583 / 128) * 300 = 53,100 seconds` (14h45m), inside the day-29/day-30
+window. Per-stream capacity is 36,864 rows/day; this is a bounded sweep, not an
+unlimited throughput claim. The 300-second cadence and ordinary 32-row page
+are unchanged. Missing indexes fail the urgency scan rather than silently
+falling back to the slow name cursor.
+
+The legacy stream reuses `*_batch_timeliness_assignment_held`. Replacement
+streams require the new prod/dev `*_batch_staged_input_age` composite indexes
+on `(state, recovery_state, audio_staged_at, __name__)`. They are declared in
+`database/batch_pipeline_indexes.py` and the generated Firestore manifest.
+The repository index guard/deploy gate must establish them READY before this
+serving rollout. Follow the [index apply/deploy workflow](../../../.github/agent-docs/firestore-queries-and-indexes.md#apply-and-deploy)
+for production approval and READY verification. This lane does not create live
+indexes or backfill Firestore;
+legacy documents remain queryable through their existing enqueue index.
 
 `BATCH_INPUT_EXPIRING_ENABLED` is a default-on kill switch in
 `config/refactor_modes.py`; `false`, `off`, `0` or `no` restores the previous held

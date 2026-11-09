@@ -9,6 +9,7 @@ import math
 import time
 
 from config.batch_pipeline import batch_held_dead_letter_enabled
+from config.refactor_modes import batch_input_expiring_enabled
 from database.batch_pipeline_record_dead_letter import record_dead_letter_stock
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -17,6 +18,7 @@ from database.batch_pipeline_quarantine_recovery import (
     held_candidates,
     dead_held_candidates,
     held_expired_stock,
+    input_expiring_candidates,
 )
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
@@ -49,6 +51,27 @@ class HeldDeadLetter:
         if state.get('next_at', 0) > now:
             return {'expired': 0, 'requeued': 0}
         counts = {'expired': 0, 'requeued': 0}
+        urgency_after = state.get('input_after')
+        urgent = []
+        if batch_input_expiring_enabled():
+            urgent, urgency_after = input_expiring_candidates(
+                self.store.client, self.store.namespace, now, after=urgency_after
+            )
+        # Urgency discovery is independent of held_after and runs first. Its
+        # age cursors advance over refusals; the transaction still owns every
+        # current-object, privacy, content and active-intent check.
+        for sid, _ in urgent:
+            try:
+                if self.recovery.expire_held(sid, now) == 'expired':
+                    counts['expired'] += 1
+                    self._record('expired')
+            except (BatchPrivacyBlocked, ProjectionBlocked):
+                continue
+            except Exception as error:
+                logger.warning(
+                    'event=batch_held_dead_letter action=input_expire outcome=retry exception_type=%s',
+                    type(error).__name__,
+                )
         page = held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=state.get('held_after'))
         for sid, _ in page:
             try:
@@ -64,6 +87,8 @@ class HeldDeadLetter:
                 counts['expired'] += 1
                 self._record('expired')
         updated = {**state, 'held_after': page[-1][0] if len(page) == PAGE_SIZE else None}
+        if batch_input_expiring_enabled():
+            updated['input_after'] = urgency_after
         day = int(now // 86400)
         # First tick after UTC midnight starts a pass. Full pages continue on
         # later maintenance ticks; a finished pass sleeps until the next day.
