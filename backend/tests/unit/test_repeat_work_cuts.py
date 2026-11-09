@@ -142,7 +142,7 @@ def test_revision_mode_reuses_loaded_snapshot_without_firestore_reads(monkeypatc
     monkeypatch.setattr(conversations, 'get_conversation', Mock(side_effect=AssertionError('extra read')))
     monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', Mock(side_effect=AssertionError('extra read')))
     conv = SimpleNamespace(id='c', sync_content_revision=4, structured=Structured(title='old'), discarded=False)
-    generate = Mock(return_value=Structured(title='Durable notes'))
+    generate = Mock(return_value=Structured(title='Durable notes', overview='Ship on Friday.'))
     hashes = {}
     output = dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, hashes, language='en')
     conv.structured = output

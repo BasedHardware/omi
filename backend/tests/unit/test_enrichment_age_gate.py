@@ -32,7 +32,7 @@ def test_old_wake_returns_200_without_calling_llm_and_preserves_debt(rows, clien
 def test_fresh_wake_keeps_processing(rows, client, monkeypatch):  # noqa: F811
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
     rows[0][KEY].update(first_pending_at=time.time() - 3600, due_at=0)
-    process = Mock()
+    process = Mock(return_value=None)
     monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda _: process)
     assert (
         client.post(
@@ -103,7 +103,6 @@ def test_debt_repair_parks_old_conversation_without_rewaking(state, monkeypatch)
     }
     client = StrictFirestore({('users', 'u'): {}, ('users', 'u', 'conversations', 'c'): conversation})
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
-    monkeypatch.setattr(repair, 'enabled', lambda *_: True)
     monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda *_: False)
     monkeypatch.setattr(repair, 'assert_batch_write_allowed', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(repair.delivery, 'refusal', lambda *_: None)
@@ -129,7 +128,6 @@ def test_historical_debt_cannot_hide_fresh_work_behind_the_admission_cap(monkeyp
     page.append(SimpleNamespace(reference=SimpleNamespace(path='users/u/conversations/fresh'), to_dict=lambda: fresh))
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
     monkeypatch.setattr(repair, 'repair_enabled', lambda: True)
-    monkeypatch.setattr(repair, 'enabled', lambda *_: True)
     monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda *_: False)
     monkeypatch.setattr(repair.delivery, 'refusal', lambda *_: None)
     monkeypatch.setattr(repair, 'due_conversations', lambda *_args, **_kwargs: page)
