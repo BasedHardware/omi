@@ -15,6 +15,11 @@ import zipfile
 
 WORKFLOW = '.github/workflows/firmware_release.yml'
 ARTIFACT = 'cv1-qa-release'
+SIM_REPORT = 'sim-report.json'
+# The release gate needs the whole fast-lane suite plus a fuzz batch. Raise
+# these as the catalog grows; never lower them to let a candidate through.
+SIM_MIN_SCENARIOS = 40
+SIM_MIN_FUZZ_SEEDS = 20
 
 
 def require(condition, message):
@@ -83,7 +88,30 @@ def validate_signed_version(archive, ver):
     )
 
 
-def stage(build, out, ver, include_network, context):
+def validate_sim_report(data, sha, ver):
+    """Fail closed unless the simulator gate passed in full for exactly this source and version."""
+    require(isinstance(data, dict), 'Simulator report is not an object')
+    require(data.get('kind') == 'omi-cv1-sim-report' and data.get('schema_version') == 1, 'Unknown simulator report')
+    require(data.get('mode') == 'current', 'Simulator report must check current expectations, not --baseline')
+    require(data.get('source_sha') == sha, 'Simulator report source SHA mismatch')
+    require(data.get('firmware_version') == ver, 'Simulator report firmware version mismatch')
+    require(data.get('selection') == ['*'], 'Simulator report must cover the whole scenario suite')
+    rows = data.get('scenarios')
+    require(isinstance(rows, list) and len(rows) >= SIM_MIN_SCENARIOS, 'Simulator report has too few scenarios')
+    require(all(isinstance(r, dict) and r.get('verdict') == 'pass' for r in rows), 'Simulator scenario failed')
+    require(len({r.get('id') for r in rows}) == len(rows), 'Simulator report repeats a scenario')
+    counts = data.get('counts') or {}
+    require(counts.get('failed') == 0 and counts.get('passed') == len(rows), 'Simulator report counts mismatch')
+    fuzz = data.get('fuzz') or {}
+    require(fuzz.get('verdict') == 'pass', 'Simulator fuzz batch must pass')
+    require(int(fuzz.get('seeds', 0)) >= SIM_MIN_FUZZ_SEEDS, 'Simulator fuzz batch too small')
+    require(data.get('verdict') == 'pass' and not data.get('failed'), 'Simulator gate did not pass')
+
+
+def stage(build, out, ver, include_network, context, sim_report):
+    require(sim_report is not None and Path(sim_report).is_file(), 'QA staging requires the simulator report')
+    report = json.loads(Path(sim_report).read_text())
+    validate_sim_report(report, context['sha'], ver)
     out.mkdir(parents=True, exist_ok=False)
     names = asset_names(ver)
     repackage(build / 'dfu_application.zip', out / names[0], include_network)
@@ -93,6 +121,7 @@ def stage(build, out, ver, include_network, context):
     shutil.copyfile(build / 'merged.hex', out / names[1])
     shutil.copyfile(build / 'merged_CPUNET.hex', out / names[2])
     require(all((out / name).stat().st_size for name in names), 'Empty release asset')
+    shutil.copyfile(sim_report, out / SIM_REPORT)
     provenance = dict(
         context,
         mode='build-only',
@@ -100,6 +129,7 @@ def stage(build, out, ver, include_network, context):
         include_network_core=include_network,
         signed_sha256=signed_sha256,
         sha256={name: digest(out / name) for name in names},
+        sim_report_sha256=digest(out / SIM_REPORT),
     )
     (out / 'qa-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
 
@@ -131,8 +161,11 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
         'QA provenance mismatch (mode/version/source/attempt/network)',
     )
     names = asset_names(ver)
-    require(set(p.name for p in out.iterdir()) == {*names, 'qa-provenance.json'}, 'Unexpected QA assets')
+    require(set(p.name for p in out.iterdir()) == {*names, 'qa-provenance.json', SIM_REPORT}, 'Unexpected QA assets')
     require(data.get('sha256') == {name: digest(out / name) for name in names}, 'QA asset checksum mismatch')
+    # The simulator evidence binds to the same run/attempt and source SHA as the bench receipt.
+    require(data.get('sim_report_sha256') == digest(out / SIM_REPORT), 'Simulator report checksum mismatch')
+    validate_sim_report(json.loads((out / SIM_REPORT).read_text()), run['head_sha'], ver)
     with zipfile.ZipFile(out / names[0]) as archive:
         manifest = ota_manifest(archive)
         validate_signed_version(archive, ver)
@@ -225,7 +258,8 @@ def main():
             'workflow': WORKFLOW,
             'repository': env['GITHUB_REPOSITORY'],
         }
-        stage(Path(env['BUILD']), out, ver, include_network, context)
+        report = env.get('SIM_REPORT')
+        stage(Path(env['BUILD']), out, ver, include_network, context, Path(report) if report else None)
     elif args.command == 'promote':
         require(publishing, 'Promotion requires publish=publish')
         promote(

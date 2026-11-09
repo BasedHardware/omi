@@ -20,6 +20,25 @@ import zipfile
 import cv1_release as release
 
 
+def sim_report(sha, ver, **overrides):
+    rows = [{'id': f'suite/scenario-{i}', 'verdict': 'pass'} for i in range(release.SIM_MIN_SCENARIOS)]
+    report = {
+        'kind': 'omi-cv1-sim-report',
+        'schema_version': 1,
+        'verdict': 'pass',
+        'mode': 'current',
+        'source_sha': sha,
+        'firmware_version': ver,
+        'selection': ['*'],
+        'counts': {'scenarios': len(rows), 'passed': len(rows), 'failed': 0},
+        'failed': [],
+        'scenarios': rows,
+        'fuzz': {'verdict': 'pass', 'seeds': release.SIM_MIN_FUZZ_SEEDS},
+    }
+    report.update(overrides)
+    return report
+
+
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -73,7 +92,62 @@ class ReleaseTests(unittest.TestCase):
             'repository': 'BasedHardware/omi',
         }
         self.assets = self.root / 'qa'
-        release.stage(self.build, self.assets, '3.0.21', False, self.context)
+        self.sim = self.root / 'sim-report.json'
+        self.sim.write_text(json.dumps(sim_report('a' * 40, '3.0.21')))
+        release.stage(self.build, self.assets, '3.0.21', False, self.context, self.sim)
+
+    def test_stage_requires_a_passing_full_simulator_report(self):
+        bad_rows = [{'id': 'x', 'verdict': 'pass'}] * release.SIM_MIN_SCENARIOS
+        failing = [dict(r, verdict='fail') for r in sim_report('a' * 40, '3.0.21')['scenarios']]
+        for name, report in {
+            'missing': None,
+            'verdict': sim_report('a' * 40, '3.0.21', verdict='fail'),
+            'baseline-mode': sim_report('a' * 40, '3.0.21', mode='baseline'),
+            'other-sha': sim_report('b' * 40, '3.0.21'),
+            'dirty-sha': sim_report('a' * 40 + '-dirty', '3.0.21'),
+            'other-version': sim_report('a' * 40, '3.0.22'),
+            'partial-selection': sim_report('a' * 40, '3.0.21', selection=['safe/*']),
+            'too-few': sim_report('a' * 40, '3.0.21', scenarios=[{'id': 'a', 'verdict': 'pass'}]),
+            'duplicate-ids': sim_report('a' * 40, '3.0.21', scenarios=bad_rows),
+            'scenario-failed': sim_report('a' * 40, '3.0.21', scenarios=failing),
+            'counts': sim_report('a' * 40, '3.0.21', counts={'scenarios': 1, 'passed': 0, 'failed': 1}),
+            'no-fuzz': sim_report('a' * 40, '3.0.21', fuzz=None),
+            'fuzz-failed': sim_report('a' * 40, '3.0.21', fuzz={'verdict': 'fail', 'seeds': 50}),
+            'fuzz-small': sim_report('a' * 40, '3.0.21', fuzz={'verdict': 'pass', 'seeds': 1}),
+            'wrong-kind': sim_report('a' * 40, '3.0.21', kind='other'),
+        }.items():
+            out = self.root / f'qa-{name}'
+            path = self.root / f'sim-{name}.json'
+            if report is not None:
+                path.write_text(json.dumps(report))
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                release.stage(self.build, out, '3.0.21', False, self.context, path if report else None)
+            self.assertFalse(out.exists(), name)
+
+    def test_simulator_report_travels_with_the_tested_attempt(self):
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        self.assertEqual(provenance['sim_report_sha256'], release.digest(self.assets / release.SIM_REPORT))
+        report_path = self.assets / release.SIM_REPORT
+        original = report_path.read_text()
+        # Tampering with the report breaks the provenance checksum.
+        report_path.write_text(json.dumps(sim_report('a' * 40, '3.0.21', verdict='fail')))
+        with self.assertRaisesRegex(ValueError, 'Simulator report checksum'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        # A consistent but failing report (checksum updated too) still fails closed.
+        path = self.assets / 'qa-provenance.json'
+        path.write_text(json.dumps(dict(provenance, sim_report_sha256=release.digest(report_path))))
+        with self.assertRaisesRegex(ValueError, 'Simulator'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        # An artifact without the report (an old QA run) cannot be promoted.
+        report_path.unlink()
+        path.write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'Unexpected QA assets'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        report_path.write_text(original)
+        release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        # A report from a different source SHA cannot ride along with these bytes.
+        with self.assertRaisesRegex(ValueError, 'source SHA'):
+            release.validate_sim_report(json.loads(original), 'b' * 40, '3.0.21')
 
     def test_repackage_only_app_preserves_bytes_and_metadata(self):
         with zipfile.ZipFile(self.assets / release.asset_names('3.0.21')[0]) as archive:
@@ -383,6 +457,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(args[:3], ('release', 'create', 'Omi_CV1_v3.0.21'))
             self.assertEqual(list(args[-3:]), [str(self.assets / n) for n in release.asset_names('3.0.21')])
             self.assertNotIn('qa-provenance.json', ' '.join(args))
+            self.assertNotIn(release.SIM_REPORT, ' '.join(args))
             self.assertNotIn('.elf', ' '.join(args))
             self.assertIn('--draft', args)
             self.assertIn('--verify-tag', args)
