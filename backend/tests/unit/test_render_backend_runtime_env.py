@@ -1377,6 +1377,13 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
                 'usage_month_cache',
                 'usage_month_total',
             }
+        # Ruling ec191a row 3: pin the live Cloud Run literals without widening other hosts.
+        if enabled:
+            wanted.update(
+                privacy_negative_lookup_cache=100,
+                privacy_checks_shadow=100 if name == 'cloud_run/backend-sync-backfill' else 10,
+                batch_timeliness_leader=0,
+            )
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
         assert lever_percent('episode_members_cache') == 0, name
@@ -1389,6 +1396,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
                     {key: env[key] for key in ('FIRESTORE_READ_LEVERS', 'FSR_USAGE_MONTH_TOTAL_EPOCH')}
                 )
             }
+            assert rendered['FIRESTORE_READ_LEVERS'] == literal['value'], name
             assert json.loads(rendered['FIRESTORE_READ_LEVERS']) == wanted, name
             assert rendered['FSR_USAGE_MONTH_TOTAL_EPOCH'] == epoch, name
     for chart in ('backend-listen', 'pusher'):
