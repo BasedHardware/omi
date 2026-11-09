@@ -554,10 +554,10 @@ def test_final_batch_projection_fences_a_delayed_modulate_preview_flush():
 RULE_DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'}
 
 
-def test_projection_text_supersedes_an_automatic_discard():
+def test_projection_text_preserves_an_automatic_discard():
     original = recording(transcript_segments=[], discarded=True, relevance_decision=dict(RULE_DISCARD))
     result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
-    assert result['discarded'] is False and result['relevance_decision'] is None
+    assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
     assert [s['id'] for s in result['transcript_segments']] == ['new']
     assert original['discarded'] is True
 
@@ -914,3 +914,23 @@ async def test_privacy_fenced_claim_does_not_stop_the_worker(monkeypatch):
     assert await live.drain_recordings(store) is False
     assert admitted == ['b-ok']
     assert store.rows['jobs', 'a-fenced']['available_at'] == 0
+
+
+def test_record_replacement_preserves_discard_until_restore_metadata_commits():
+    start = datetime.fromtimestamp(100, timezone.utc)
+    current = {
+        'id': 'capture',
+        'record_lane_owner': 'batch_live_v1',
+        'status': 'completed',
+        'discarded': True,
+        'relevance_decision': {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript'},
+        'started_at': start,
+        'transcript_segments': [],
+    }
+    incoming = {
+        'id': 'record-pass',
+        'started_at': start,
+        'transcript_segments': [{'id': 'speech', 'start': 0, 'end': 1, 'text': 'Synthetic speech'}],
+    }
+    replaced, _ = replace_record(current, incoming, {'start': 100, 'end': 110})
+    assert replaced['discarded'] is True, 'record replacement cleared discard without a restore metadata commit'

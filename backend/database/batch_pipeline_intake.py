@@ -60,6 +60,15 @@ def admit(
         serialized_binding.pop('partial_record')
 
     def commit(tx):
+        row = {}
+        if binding.record_origin:
+            key = f'{binding.owner_id}/{binding.target_conversation_id}'
+            row = tx.get('conversations', key)
+            # Restore registers custody before committing visibility metadata.
+            # Fence every record path, including full archives and replays,
+            # until that metadata transaction has cleared the discard.
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or row.get('discarded'):
+                raise ValueError('registered record target unavailable')
         existing = tx.get('content', content_key)
         if existing.get('dispatch_protocol') == PROTOCOL:
             return {'outcome': 'batch', 'job_id': existing['job_id']}
@@ -114,9 +123,6 @@ def admit(
             raise AdmissionDisabled('recorded admission policy does not enable batch')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
-            row = tx.get('conversations', key)
-            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
-                raise ValueError('registered record target unavailable')
             if binding.native_record:
                 require_record_protocol_ready()
                 require_record_audio_barrier(row, expected=record_barrier)

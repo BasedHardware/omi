@@ -75,6 +75,38 @@ def test_legacy_owner_cannot_be_taken_even_when_redis_expired(cohort):
     assert not any(table == 'jobs' for table, _ in store.rows)
 
 
+@pytest.mark.parametrize('native_record', [False, True])
+@pytest.mark.parametrize(
+    'ledger',
+    [
+        {},
+        {'dispatch_protocol': 'batch_v1', 'job_id': 'batch'},
+        {'status': 'processing'},
+        {
+            'status': 'completed',
+            'result': {
+                'new_memories': [],
+                'updated_memories': [],
+                'failed_segments': 0,
+                'total_segments': 1,
+                'errors': [],
+            },
+        },
+    ],
+)
+def test_discarded_record_is_fenced_before_new_admission_or_ledger_replay(cohort, native_record, ledger):
+    store = MemoryStore()
+    works, binding = proposal()
+    binding = replace(binding, record_origin=True, native_record=native_record, target_conversation_id='capture')
+    store.rows['conversations', 'synthetic-owner/capture'] = {'discarded': True}
+    if ledger:
+        store.rows['content', 'synthetic-owner/content'] = dict(ledger)
+    with pytest.raises(ValueError, match='^registered record target unavailable$'):
+        submit(store, works, binding)
+    assert not any(table in {'jobs', 'intakes'} for table, _ in store.rows)
+    assert store.rows.get(('content', 'synthetic-owner/content'), {}) == ledger
+
+
 def test_late_capture_admits_without_rewriting_high_watermark(cohort):
     store = MemoryStore()
     watermark = {'capture_at': 2, 'segment_id': 'committed'}

@@ -130,12 +130,9 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
         has_content=bool(segments),
         sync_live_target=True,
     )
-    if new and is_automatic_discard(current):
-        # The pipeline judged the provisional text, often empty before batch
-        # lands; enrichment reassesses the record with this text, as sync intake
-        # does for appended speech. A no-op pass keeps the verdict.
-        result['discarded'] = False
-        result['relevance_decision'] = None
+    # Transcript replacement cannot commit a restore. Automatic discards keep
+    # their visibility and verdict until restore_conversation_from_discarded
+    # commits the user's restore metadata, even when this pass adds speech.
     finish = incoming.get('finished_at')
     if finish is not None and (result.get('finished_at') is None or finish > result['finished_at']):
         result['finished_at'] = finish
