@@ -1,0 +1,57 @@
+version: 2
+name: google-calendar-selection
+tier: manual
+description: Persist multiple Google calendar read choices, cancel drafts, and surface unavailable calendars without changing the event creation destination.
+app: non-prod
+# Qualification uses a disposable Google test account with Personal (primary)
+# and Project team calendars. Never change calendars or sign out on a production
+# bundle. This definition is coverage, not evidence of a completed run.
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/GoogleCalendarSelectionEditor.swift
+preconditions:
+  - auth_ready
+  - automation_bridge_ready
+steps:
+  - id: S1
+    name: Discover calendars from a connected grant
+    do: "In a named non-production app connected to the disposable Google test account, open Apps, Imports, then Calendar. Verify Personal and Project team appear, with the primary calendar selected before any saved preference."
+    expect:
+      text_visible:
+        - Personal
+        - Project team
+        - Reload Calendars
+      interactive_count: { min: 3 }
+  - id: S2
+    name: Save multiple readable calendars
+    do: "Select Project team while keeping Personal selected, then activate the calendar Save control (identifier: google-calendar-save). Wait for the success message, not merely for the button to become enabled."
+    expect:
+      text_visible:
+        - Calendar selection saved
+  - id: S3
+    name: Reload verifies persistence
+    do: "Activate Reload Calendars. Verify both Personal and Project team remain checked and the help text still says new events use Personal."
+    expect:
+      text_visible:
+        - Read selected calendars. New events use Personal.
+  - id: S4
+    name: Cancel restores the saved choices
+    do: "Uncheck Project team, then activate Cancel. Verify Project team is checked again. Reload and verify the saved choices were not changed."
+    expect:
+      interactive_count: { min: 3 }
+  - id: S5
+    name: Exclude primary without changing the write destination
+    do: "Uncheck Personal, leave Project team checked, and Save. Reload and verify only Project team is checked, while the help text still names Personal for new events. Verify selected secondary events appear on the next Calendar import/read and unselected primary events are absent."
+    expect:
+      text_visible:
+        - Read selected calendars. New events use Personal.
+  - id: S6
+    name: Lost access is visible and removable
+    do: "Using only the disposable test account, revoke access to Project team outside Omi. Reload the picker. Verify its saved choice is labeled No longer available, can be unchecked, and cannot be newly checked after removal. Select Personal, Save and Reload. Verify Personal is now the sole selection."
+    expect:
+      text_visible:
+        - Personal
+  - id: S7
+    name: No silent alternate account fallback
+    do: "With a saved secondary-only selection on the disposable account, simulate a backend or existing-grant read failure. Verify the picker/read shows an error with a retry path and does not import a browser account's primary calendar. Restore the provider and reload before ending the run."
+    expect:
+      interactive_count: { min: 1 }
