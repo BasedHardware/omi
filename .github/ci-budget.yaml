@@ -1796,6 +1796,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "grafana_dashboard_provisioning.yml/provision-prod-dashboards": {
+      "budget_p50_minutes": 5,
+      "display_name": "provision-prod-dashboards",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "validate",
+      "owner": "CI maintainers",
+      "rationale": "Prod dashboard auto-apply on merge to main, approved by David 2026-11-09. Runs only when a dashboard file changed in the push; the step skips otherwise. expected_runs_per_day 1 is a conservative daily ceiling for merged dashboard changes. The 5-minute p50 is a reviewed estimate for two small Grafana API applies; re-measure with --reseed after the first runs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "grafana_dashboard_provisioning.yml/validate": {
       "budget_p50_minutes": 6,
       "display_name": "validate",
@@ -5500,7 +5518,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; a push that changes a dashboard file auto-applies prod dashboards through provision-prod-dashboards (environment grafana-dashboards-prod, no reviewers, approved by David 2026-11-09); the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
       "triggers": {
         "push": {
           "branches": [
