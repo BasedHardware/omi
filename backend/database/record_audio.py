@@ -65,8 +65,11 @@ def set_record_upload_pending(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
 
+    observed = {}
+
     @firestore.transactional
     def commit(tx):
+        observed.clear()
         row = ref.get(transaction=tx).to_dict()
         if row is None:
             return False
@@ -88,14 +91,23 @@ def set_record_upload_pending(
                     'signal_source': 'frames',
                 }
             sessions[session] = value
-            tx.update(
-                ref,
-                {
-                    'record_upload_sessions': sessions,
-                    'record_audio_closed': False,
-                    'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
-                },
-            )
+            patch = {
+                'record_upload_sessions': sessions,
+                'record_audio_closed': False,
+                'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
+            }
+            if row.get('record_audio_closed'):
+                observed['late'] = record_seal_rules.token_lease_mode() != 'off'
+                if record_seal_rules.token_lease_serving(uid):
+                    from database.batch_pipeline_record_lease_recovery import prepare_recovery
+
+                    recovered, recovery = prepare_recovery(
+                        client, tx, uid, conversation_id, row, patch['record_upload_revision'], time.time()
+                    )
+                    patch.update(recovered)
+                    if recovery:
+                        tx.set(*recovery)
+            tx.update(ref, patch)
         elif session in sessions:
             if isinstance(sessions[session], dict) and 'abandoned_at' in sessions[session]:
                 return False  # Only repair's retained-tail proof may release this fence.
@@ -103,7 +115,10 @@ def set_record_upload_pending(
             tx.update(ref, {'record_upload_sessions': sessions})
         return True
 
-    return run_transactional(client, commit, transient=True)
+    result = run_transactional(client, commit, transient=True)
+    if result and observed.get('late'):
+        lease_metrics.LATE_APPEND.inc()
+    return result
 
 
 def abandon_record_upload_session(uid: str, conversation_id: str, session: str, *, firestore_client=None) -> bool:

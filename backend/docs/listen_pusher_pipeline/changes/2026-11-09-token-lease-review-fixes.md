@@ -40,9 +40,10 @@ unlike the existing tail-only gap-fill path. The normal partial worker sees
 the new chunks. A conservative 503 can still retain chunks while the phone
 keeps its WAL: the partial inventory is explicitly re-armed and its old CAS
 invalidated, without bumping upload revision or counting that refused request.
+The WAL inventory shares the partial worker's existing MAX_SOURCES bound (8192).
 Original raw archives and original retained chunks are never deleted/overwritten.
 
-Serve-only frames on a complete seal reopen `record_audio_closed=false`, restore
+Serve-only frames on a complete seal, including a fresh socket mint before any renewal, reopen `record_audio_closed=false`, restore
 the exact socket token with fresh clocks, bump revision and increment late_append.
 The existing partial continuation processes newly retained audio, including an
 interior gap when the old tail already reached finished_at. A distinct durable

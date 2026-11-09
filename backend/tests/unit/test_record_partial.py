@@ -1047,7 +1047,8 @@ async def test_custody_fence_old_partial_pass_then_bytes_land_is_rerun(source, a
     assert any(ref['path'] == audio.chunks[-1]['path'] for _, _, refs in plan['units'] for ref in refs)
 
 
-async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_work(source, audio, monkeypatch):
+@pytest.mark.parametrize('writer', ['renew', 'begin'])
+async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_work(source, audio, monkeypatch, writer):
     from database.batch_pipeline_record_lease_recovery import recovery_segment
 
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
@@ -1060,21 +1061,37 @@ async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_wo
     source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
     source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
     revision = source[1].rows[ROW].get('record_upload_revision', 0)
-    assert renew_record_token_lease(
-        'synthetic',
-        'record',
-        source='frames',
-        session='resumed',
-        producer={'pod': 'resumed-pusher', 'process_started_at': 100},
-        firestore_client=source[1],
-    )
+    barrier = None
+    if writer == 'begin':
+        from database import record_audio
+        from utils import pusher_record_barrier
+
+        monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: source[1])
+        monkeypatch.setattr(
+            pusher_record_barrier, 'producer_identity', lambda: {'pod': 'resumed-pusher', 'process_started_at': 100}
+        )
+        barrier = pusher_record_barrier.PusherRecordBarrier('synthetic')
+        await barrier.begin_recording('record')
+        assert barrier.upload_sessions['record'] in source[1].rows[ROW]['record_upload_sessions']
+    else:
+        assert renew_record_token_lease(
+            'synthetic',
+            'record',
+            source='frames',
+            session='resumed',
+            producer={'pod': 'resumed-pusher', 'process_started_at': 100},
+            firestore_client=source[1],
+        )
     audio.add(105)  # Interior audio, not a missing tail.
     interior_pcm = audio.pcm[audio.chunks[-1]['path']]
     audio.chunks.sort(key=lambda chunk: chunk['timestamp'])
     assert source[1].rows[ROW]['record_upload_revision'] == revision + 1
     assert not source[1].rows[ROW]['record_audio_closed']
-    set_record_upload_pending('synthetic', 'record', 'resumed', False, firestore_client=source[1])
-    assert seal_record_audio('synthetic', 'record', firestore_client=source[1]) is None
+    if barrier is not None:
+        assert await barrier.finish_recording('record')
+    else:
+        set_record_upload_pending('synthetic', 'record', 'resumed', False, firestore_client=source[1])
+        assert seal_record_audio('synthetic', 'record', firestore_client=source[1]) is None
     segment = recovery_segment('synthetic', 'record')
     await live.admit_recording(source[0], source[0].run(lambda tx: tx.get('jobs', segment)), now=NOW)
     await live.admit_recording(source[0], source[0].run(lambda tx: tx.get('jobs', segment)), now=NOW)

@@ -8,6 +8,7 @@ import math
 
 from database._client import run_transactional
 from config.record_audio import record_identity
+from config.record_partial import MAX_SOURCES
 from config.record_gap_fill import MAX_FILL_SECONDS, PIECE_SECONDS, FINISH_SLACK_SECONDS
 from database.batch_pipeline_record_lease_recovery import recovery_segment
 from utils.batch_pipeline import record_gap_fill as gap
@@ -22,7 +23,7 @@ from utils.sync import record_token_lease as custody
 
 def retain(uid, cid, row, paths):
     client = gap.create_storage_client()
-    chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
+    chunks = list_audio_chunks(uid, cid, max_count=MAX_SOURCES, require_archive=True)
     iterator = retained_record_units(uid, cid, chunks, client, encryption.derive_key(uid), partial=True)
     coverage = []
     try:
