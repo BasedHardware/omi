@@ -329,8 +329,8 @@ def test_pending_query_oldest_first_keyset_survives_removed_cursor():
     ]
 
 
-@pytest.mark.parametrize('bad_stamp', [0, -100])
-def test_invalid_finish_clock_preserves_debt_and_candidates_but_not_age(monkeypatch, bad_stamp):
+@pytest.mark.parametrize('stamp,invalid', [(0, True), (-100, True), (1, False), (1577836799, False)])
+def test_finish_clock_uses_shared_guard_without_changing_debt_or_candidates(monkeypatch, stamp, invalid):
     now = 1800000000
     monkeypatch.setattr(worker.time, 'time', lambda: now)
     jobs = [(name, {'conversation_id': name}) for name in ('invalid', 'normal')]
@@ -340,7 +340,7 @@ def test_invalid_finish_clock_preserves_debt_and_candidates_but_not_age(monkeypa
             'record_lane_owner': 'batch_live_v1',
             'finished_at': datetime.fromtimestamp(stamp, timezone.utc),
         }
-        for name, stamp in [('invalid', bad_stamp), ('normal', now - 1000)]
+        for name, stamp in [('invalid', stamp), ('normal', now - 1000)]
     }
     monkeypatch.setattr(claims, 'pending_page', Mock(side_effect=[(jobs[:1], 'cursor'), (jobs[1:], None), ([], None)]))
     monkeypatch.setattr(claims, 'conversation_ref', lambda _, job: SimpleNamespace(path=job['conversation_id']))
@@ -354,13 +354,10 @@ def test_invalid_finish_clock_preserves_debt_and_candidates_but_not_age(monkeypa
     assert metrics.invalid_clocks._value.get() != metrics.invalid_clocks._value.get()
     assert scanner.page() == (['normal'], True)
     assert metrics.backlog._value.get() == 2
-    assert metrics.oldest._value.get() == 1000
-    assert (
-        metrics.registry.get_sample_value(
-            'omi_record_seal_invalid_clock_rows', {'worker_release': 'r', 'namespace': 'n'}
-        )
-        == 1
-    )
+    assert metrics.oldest._value.get() == (1000 if invalid else max(1000, now - stamp))
+    assert metrics.registry.get_sample_value(
+        'omi_record_seal_invalid_clock_rows', {'worker_release': 'r', 'namespace': 'n'}
+    ) == int(invalid)
     assert scanner.page() == ([], True)
     assert metrics.backlog._value.get() == metrics.oldest._value.get() == metrics.invalid_clocks._value.get() == 0
 

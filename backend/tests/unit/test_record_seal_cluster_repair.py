@@ -1445,16 +1445,17 @@ def pending_job(index, enqueued=0, **extra):
 
 
 @pytest.mark.parametrize('order', ['on', 'off'])
-@pytest.mark.parametrize('page', ['mixed', 'all_zero', 'implausible', 'valid_floor'])
+@pytest.mark.parametrize('page', ['mixed', 'all_zero', 'nonpositive', 'positive_sentinel'])
 def test_run_gauge_excludes_invalid_enqueue_clocks_without_changing_discovery(source, proof, monkeypatch, order, page):
     horizon = datetime(2026, 11, 9, tzinfo=timezone.utc)
     stamp = horizon.timestamp()
-    floor = cluster.MIN_METRIC_ENQUEUED_AT
     enqueued, expected = {
         'mixed': ([0, stamp - 7200, stamp - 3600], 7200),
         'all_zero': ([0, 0], 0),
-        'implausible': ([-1, 1, floor - 1], 0),
-        'valid_floor': ([floor, stamp - 3600], stamp - floor),
+        'nonpositive': ([-1, 0], 0),
+        # Main's shared guard accepts every positive finite clock. Repair and
+        # worker must agree, including a positive sentinel; no private floor.
+        'positive_sentinel': ([1, stamp - 3600], stamp - 1),
     }[page]
 
     class FrozenDatetime(datetime):

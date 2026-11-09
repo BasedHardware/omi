@@ -37,9 +37,6 @@ from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
-# Telemetry only: the record pipeline did not exist before 2020. Reject
-# sentinel/implausible enqueue clocks without changing discovery or repairs.
-MIN_METRIC_ENQUEUED_AT = datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp()
 _age_order_index_warned = False
 DISPOSITIONS = frozenset(
     {
@@ -459,7 +456,7 @@ def discover_jobs(
         # Keep invalid-clock jobs eligible and preserve their exact cursor.
         # Only the exported gauge excludes them; future clocks already fail
         # the unchanged minimum-age check above.
-        if metric_ages is not None and enqueued >= MIN_METRIC_ENQUEUED_AT:
+        if metric_ages is not None and valid_metric_clock(enqueued):
             metric_ages.append(max(0, int(age)))
         if selected_cursors is not None:
             selected_cursors[path] = cursor
