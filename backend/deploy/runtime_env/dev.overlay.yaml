@@ -31,7 +31,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -113,7 +112,6 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
@@ -363,7 +361,6 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
-            value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
@@ -443,7 +440,6 @@ overlay:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -528,7 +524,6 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
-            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
@@ -600,7 +595,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'

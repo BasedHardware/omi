@@ -120,7 +120,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           category: rollout
-          category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -602,7 +601,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           category: rollout
-          category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -1005,7 +1003,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
-            category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
@@ -1391,7 +1388,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
-            category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
@@ -1757,7 +1753,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
-            category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
@@ -2094,7 +2089,6 @@ environment_shared:
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            category: rollout
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout

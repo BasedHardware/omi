@@ -90,7 +90,6 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -287,7 +286,6 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
@@ -597,7 +595,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'
@@ -1731,7 +1728,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'

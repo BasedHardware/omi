@@ -1283,18 +1283,13 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         record_client_journey_accepted('conversation_finalization', client_kind)
         record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
-    # Limitless uploads commonly begin as a short discarded fragment and only
-    # become a real conversation after later WAL segments are merged. The
-    # initial discarded pass is not a useful creation event, while the generic
-    # reprocess path deliberately suppresses webhooks. Emit exactly at the
-    # discarded -> visible transition so pendant conversations reach developer
-    # integrations without duplicating events on ordinary later reprocessing.
-    if (
-        not silent_redrive
-        and conversation.source == ConversationSource.limitless
-        and was_discarded
-        and not processed_conversation.discarded
-    ):
+    # Conversations (such as Limitless or Omi pendants with custom STT / WAL uploads)
+    # commonly begin as a short discarded fragment and only become a real conversation
+    # after later segments are merged. The initial discarded pass is not a useful creation
+    # event, while the generic reprocess path deliberately suppresses webhooks. Emit exactly
+    # at the discarded -> visible transition so conversations reach developer integrations
+    # without duplicating events on ordinary later reprocessing.
+    if not silent_redrive and was_discarded and not processed_conversation.discarded:
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     # Episodes: the WAL row joins the live episode covering it, so Home folds it under the

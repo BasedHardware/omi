@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,79 +19,22 @@ from feature_flag_registry import (
     ROOT,
     _ramp_applies_to,
     duplicate_declaration_sources,
+    due_dates,
     extract_action_declarations,
     extract_code_reads,
     extract_deploy_declarations,
     load_registry,
-    overdue,
-    overdue_beyond_grace,
+    ramp_due,
     validate_registry,
 )
 
 AS_OF = re.compile(r"<!-- feature-flag-registry as-of: (\d{4}-\d{2}-\d{2}) -->")
 
-# Existing duplicate declarations are assigned to workstream B, which is
-# consolidating runtime_env and Helm values to one source per service. This
-# reviewed 2026-10-20 allowlist expires 2026-11-20; newly introduced duplicates
-# fail immediately and entries must be removed when their source overlap ends.
-DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES = date(2026, 11, 20)
-DUPLICATE_DECLARATION_ALLOWLIST = {
-    "AUDIO_ARCHIVE_PERCENT",
-    "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT",
-    "AUDIO_ARCHIVE_STOP_PCM_PERCENT",
-    "AUDIO_ARCHIVE_UID_ALLOWLIST",
-    "BATCH_LIVE_STT_RETIRE_PERCENT",
-    "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST",
-    "BATCH_PIPELINE_SHADOW_PERCENT",
-    "BATCH_PIPELINE_UID_ALLOWLIST",
-    "CONVERSATION_RELEVANCE_JEV_PERCENT",
-    "DEMAND_PROCESSING_PERCENT",
-    "DEMAND_PROCESSING_UID_ALLOWLIST",
-    "DREAM_AGENT_UID_ALLOWLIST",
-    "MOBILE_STANDARD_BATCH_PERCENT",
-    "OBJECT_LAKE_WRITE_PERCENT",
-    "PARAKEET_STREAM_ALLOCATION_PERCENT",
-    "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-    "SPEAKER_GROUPING_SHADOW_PERCENT",
-    "SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST",
-    "STT_LIVE_DEMAND_PERCENT",
-    "STT_LIVE_DEMAND_UID_ALLOWLIST",
-    "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
-    "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
-    "TRANSCRIPTION_FINAL_PASS_PERCENT",
-    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST",
-    "TRANSCRIPTION_SHADOW_PERCENT",
-    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
-}
-# Rows already past review_by may carry a dated exception (expiry + reason); it is
-# printed on every run and turns back into an error when it expires. Entries for
-# rows not yet past review_by are stale and fail.
-# 2026-11-08: the ad1268 ramp-or-retire sweep (auditfix) covers every row that
-# would pass its grace before 2026-11-14; the registry v2 checker replaces these
-# with per-row extension fields before they expire.
-_AD1268_SWEEP = {"expires": "2026-11-15", "reason": "ad1268 ramp-or-retire sweep in progress (auditfix)"}
-REVIEW_OVERDUE: dict[str, dict[str, str]] = {
-    "MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_CLAIMS_ENABLED": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_TIERED_ENABLED": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_TIER_MIN_WORDS": _AD1268_SWEEP,
-    "MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS": _AD1268_SWEEP,
-    "OMI_SHAPED_AGENT_MODE": _AD1268_SWEEP,
-    "STT_CAP_RECOVERY_COHORT": _AD1268_SWEEP,
-    "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED": _AD1268_SWEEP,
-    "SYNC_LINEAGE_RESOLVE_ENABLED": _AD1268_SWEEP,
-    "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST": _AD1268_SWEEP,
-    "onboarding-setup-rating-prompt": _AD1268_SWEEP,
-}
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
-# Keys use normalize_owner(); exceptions require an ISO expires date and reason.
-OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {
-    # 167 legacy rows name the account, not a lane; the retro N3 batch ruling ramps or retires them.
-    # New rows should name the owning lane. Expiry turns this back into an error.
-    "dazheng": {"expires": "2026-11-15", "reason": "retro N3 ramp-or-retire batch pending"},
-}
+ACCOUNT_OWNERS = {"dazheng"}
+# Keys use owner_tokens(); exceptions require an ISO expires date and reason.
+OWNER_BACKLOG_EXCEPTIONS: dict[str, dict[str, str]] = {}
 
 
 def normalize_owner(owner: str) -> str:
@@ -101,13 +44,26 @@ def normalize_owner(owner: str) -> str:
     return " ".join(owner.lower().split())
 
 
-def owner_backlog(registry: dict[str, Any]) -> Counter[str]:
+def owner_tokens(owner: str) -> tuple[str, ...]:
+    """Split shared owners into distinct normalized lanes, preserving multiword names."""
+    return tuple(dict.fromkeys(
+        token.strip()
+        for token in re.split(r"[/,&+|]|\s+and\s+", normalize_owner(owner))
+        if token.strip()
+    ))
+
+
+def owner_backlog(registry: dict[str, Any], as_of: date | None = None) -> Counter[str]:
+    """Count each debt row once per distinct normalized lane token, including shared owners."""
+    current_date = as_of or datetime.now(timezone.utc).date()
     return Counter(
-        normalize_owner(entry["owner"])
+        owner
         for entry in registry.get("flags", [])
         if entry.get("lifecycle") == "rollout"
         and entry.get("decision") in {"pending", "undecided"}
         and isinstance(entry.get("owner"), str)
+        and ("ramp" not in entry or ramp_due(entry) + timedelta(days=REVIEW_GRACE_DAYS) < current_date)
+        for owner in owner_tokens(entry["owner"])
     )
 
 
@@ -138,56 +94,92 @@ def load_base_registry(root: Path) -> dict[str, Any]:
         return load_registry(path)
 
 
-def check_owner_backlog(
-    root: Path, registry: dict[str, Any], current_date: date, errors: list[str], warnings: list[str]
-) -> None:
-    try:
-        base = load_base_registry(root)
-        base_keys = {entry["key"] for entry in base["flags"]}
-        counts = owner_backlog(base)
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
-        warnings.append(
-            f"WARNING: owner backlog gate skipped: cannot load registry at merge-base with origin/main: {error}"
-        )
-        return
+def check_diff_rules(base: dict[str, Any], registry: dict[str, Any], errors: list[str]) -> None:
+    base_flags = {entry["key"]: entry for entry in base["flags"]}
     for entry in registry["flags"]:
-        owner = normalize_owner(entry["owner"])
-        if entry["key"] in base_keys or entry["lifecycle"] != "rollout" or counts[owner] < MAX_UNRAMPED_PER_OWNER:
+        key = entry["key"]
+        if key not in base_flags:
+            if ACCOUNT_OWNERS.intersection(owner_tokens(entry["owner"])):
+                errors.append(f"{key}: owner names an account; name the owning lane or area")
             continue
-        message = (
-            f"{entry['key']}: owner={owner} had {counts[owner]} unramped flags at merge-base "
-            f"(cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
-        )
-        exception = OWNER_BACKLOG_EXCEPTIONS.get(owner)
-        if exception is None:
-            errors.append(message)
+        old = base_flags[key]
+        if "extension" in old and old["extension"]["until"] != entry.get("extension", {}).get("until"):
+            errors.append(f"{key}: second extension refused: ramp or retire")
+        if old.get("ramp", {}).get("done_by") and "ramp" not in entry and _ramp_applies_to(entry):
+            errors.append(f"{key}: ramp deadline removed; keep the plan, ramp, or retire")
+        for previous, current in (
+            (old.get("review_by"), entry.get("review_by")),
+            (old.get("ramp", {}).get("done_by"), entry.get("ramp", {}).get("done_by")),
+        ):
+            if previous and current and date.fromisoformat(current) > date.fromisoformat(previous):
+                errors.append(f"{key}: due date moved later without an extension; add extension: instead")
+
+
+def check_owner_backlog(
+    base: dict[str, Any], registry: dict[str, Any], current_date: date, errors: list[str], warnings: list[str]
+) -> None:
+    base_keys = {entry["key"] for entry in base["flags"]}
+    counts = owner_backlog(base, current_date)
+    added_debt = owner_backlog(
+        {"flags": [entry for entry in registry["flags"] if entry["key"] not in base_keys]}, current_date
+    )
+    for entry in registry["flags"]:
+        if entry["key"] in base_keys or entry["lifecycle"] != "rollout":
             continue
-        try:
-            expires = date.fromisoformat(exception["expires"])
-            reason = exception["reason"].strip()
-            if not reason:
-                raise ValueError("empty reason")
-        except (KeyError, TypeError, ValueError, AttributeError):
-            errors.append(f"owner_backlog_exceptions[{owner}] requires an ISO expires date and nonempty reason")
-            continue
-        if current_date > expires:
-            errors.append(f"owner backlog exception expired {expires}: {message}")
-        else:
-            warnings.append(f"WARNING: owner backlog exception expires {expires}: {message} ({reason})")
+        for owner in owner_tokens(entry["owner"]):
+            if counts[owner] < MAX_UNRAMPED_PER_OWNER and counts[owner] + added_debt[owner] <= MAX_UNRAMPED_PER_OWNER:
+                continue
+            message = (
+                f"{entry['key']}: owner={owner} had {counts[owner]} unramped flags at merge-base "
+                f"(cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
+            )
+            if counts[owner] < MAX_UNRAMPED_PER_OWNER:
+                message = (
+                    f"{entry['key']}: owner={owner} would have {counts[owner] + added_debt[owner]} unramped flags "
+                    f"after this diff (cap {MAX_UNRAMPED_PER_OWNER}); ramp or retire before adding"
+                )
+            exception = OWNER_BACKLOG_EXCEPTIONS.get(owner)
+            if exception is None:
+                errors.append(message)
+                continue
+            try:
+                expires = date.fromisoformat(exception["expires"])
+                reason = exception["reason"].strip()
+                if not reason:
+                    raise ValueError("empty reason")
+            except (KeyError, TypeError, ValueError, AttributeError):
+                errors.append(f"owner_backlog_exceptions[{owner}] requires an ISO expires date and nonempty reason")
+                continue
+            if current_date > expires:
+                errors.append(f"owner backlog exception expired {expires}: {message}")
+            else:
+                warnings.append(f"WARNING: owner backlog exception expires {expires}: {message} ({reason})")
 
 
 def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -> tuple[list[str], list[str]]:
-    # UTC, so a pre-push hook on a host ahead of UTC agrees with CI.
     current_date = as_of or datetime.now(timezone.utc).date()
     registry_path = root / "config/feature-flags.yaml"
     registry = load_registry(registry_path)
-    errors = validate_registry(registry, root=root)
-    for owner, count in sorted(owner_backlog(registry).items()):
-        print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
+    errors = validate_registry(registry, root=root, as_of=current_date)
     if errors:
         return errors, []
+    for owner, count in sorted(owner_backlog(registry, current_date).items()):
+        print(f"FLAG_OWNER_BACKLOG owner={owner} unramped={count}")
     warnings: list[str] = []
-    check_owner_backlog(root, registry, current_date, errors, warnings)
+    diff_errors: list[str] = []
+    diff_warnings: list[str] = []
+    try:
+        base = load_base_registry(root)
+        check_diff_rules(base, registry, diff_errors)
+        check_owner_backlog(base, registry, current_date, diff_errors, diff_warnings)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
+        warnings.append(
+            "WARNING: registry diff rules and owner backlog gate skipped: "
+            f"cannot load registry at merge-base with origin/main: {error}"
+        )
+    else:
+        errors.extend(diff_errors)
+        warnings.extend(diff_warnings)
     flags = {entry["key"]: entry for entry in registry["flags"]}
     for key, expected in parser_defaults(root).items():
         if key in flags and flags[key]["fail"] != expected:
@@ -226,24 +218,11 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
             errors.append(f"{declared.path}:{declared.line}: retired name redeclared: {declared.key}")
 
     duplicate_sources = duplicate_declaration_sources(declarations)
-    for key, sources in duplicate_sources.items():
-        source_list = ", ".join(sources)
-        if key not in DUPLICATE_DECLARATION_ALLOWLIST:
-            errors.append(f"duplicate ramp/allowlist declaration: {key} appears in {source_list}")
-        elif current_date > DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES:
-            errors.append(
-                f"duplicate declaration exception expired {DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES}: "
-                f"{key} still appears in {source_list}"
-            )
-        else:
-            warnings.append(
-                f"WARNING: duplicate declaration allowlisted until {DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES}: "
-                f"{key} appears in {source_list} (workstream B source consolidation)"
-            )
-    if root.resolve() == ROOT.resolve():
-        stale_allowlist = sorted(DUPLICATE_DECLARATION_ALLOWLIST - set(duplicate_sources))
-        if stale_allowlist:
-            errors.append("remove stale duplicate declaration allowlist entries: " + ", ".join(stale_allowlist))
+    for (key, _platform, workload, environment), sources in duplicate_sources.items():
+        errors.append(
+            f"duplicate declaration: {key} for {workload}/{environment} appears in {', '.join(sources)}: keep one source, "
+            "or declare it in the manifest gke section that validates this chart"
+        )
 
     doc = root / "backend/docs/feature-flag-registry.md"
     if check_render:
@@ -262,42 +241,45 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
                 errors.append(
                     f"{doc.relative_to(root)}: rendered doc drift; regenerate with python3 scripts/render_feature_flag_registry.py --as-of {as_of.isoformat()}"
                 )
-    past_due = overdue(registry, current_date)
-    beyond_grace = set(overdue_beyond_grace(registry, current_date))
-    in_grace = sorted(set(past_due) - beyond_grace)
-    if in_grace:
-        details = ", ".join(f"{key} (review_by {flags[key]['review_by']})" for key in in_grace)
-        warnings.append(f"WARNING: review_by passed but remains within the {REVIEW_GRACE_DAYS}-day grace: {details}")
-
-    active_review_exceptions: set[str] = set()
-    for key in sorted(beyond_grace - set(REVIEW_OVERDUE)):
-        errors.append(
-            f"review overdue beyond the {REVIEW_GRACE_DAYS}-day grace: {key} "
-            f"(review_by {flags[key]['review_by']})"
-        )
-    for key in sorted(set(REVIEW_OVERDUE) & set(past_due)):
-        exception = REVIEW_OVERDUE[key]
-        try:
-            expires = date.fromisoformat(exception["expires"])
-            reason = exception["reason"].strip()
-        except (KeyError, TypeError, ValueError, AttributeError):
-            errors.append(f"review_overdue[{key}] requires an ISO expires date and nonempty reason")
-            continue
-        if not reason:
-            errors.append(f"review_overdue[{key}] requires an ISO expires date and nonempty reason")
-        elif current_date > expires:
-            active_review_exceptions.add(key)
-            if key in beyond_grace:
-                errors.append(f"review_overdue exception expired {expires}: {key} (review_by {flags[key]['review_by']})")
-        else:
-            active_review_exceptions.add(key)
-            warnings.append(
-                f"review_overdue exception {key} (review_by {flags[key]['review_by']}) expires {expires}: {reason}"
-            )
-    if root.resolve() == ROOT.resolve():
-        stale_review_exceptions = sorted(set(REVIEW_OVERDUE) - active_review_exceptions)
-        if stale_review_exceptions:
-            errors.append("remove stale review_overdue entries: " + ", ".join(stale_review_exceptions))
+    in_grace_rows: set[str] = set()
+    beyond_grace_rows: set[str] = set()
+    dark_over_14d = 0
+    for key, entry in sorted(flags.items()):
+        owner = entry["owner"]
+        if entry["lifecycle"] == "rollout" and entry["decision"] in {"keep", "with_legacy"}:
+            warnings.append(f"{key}: rollout row decided keep; relabel config_switch or ops_kill")
+        if (
+            _ramp_applies_to(entry)
+            and entry["fail"] == "closed"
+            and date.fromisoformat(entry["created"]) + timedelta(days=14) < current_date
+        ):
+            dark_over_14d += 1
+        for kind, due in due_dates(entry):
+            breaks = due + timedelta(days=REVIEW_GRACE_DAYS + 1)
+            if current_date < breaks <= current_date + timedelta(days=3):
+                print(f"FLAG_DUE_SOON key={key} owner={owner} kind={kind} due={due} breaks={breaks}")
+            if due < current_date < breaks:
+                in_grace_rows.add(key)
+                warnings.append(
+                    f"WARNING: {kind} passed but remains within the {REVIEW_GRACE_DAYS}-day grace: "
+                    f"{key} (due {due}, owner {owner})"
+                )
+            elif current_date >= breaks:
+                beyond_grace_rows.add(key)
+                if entry["decision"] in {"graduate", "ship", "kill", "kill_after_readout"} and (
+                    key in present or any(alias in present for alias in entry.get("aliases", []))
+                ):
+                    errors.append(
+                        f"{key} decided {entry['decision']} but code still reads it (due {due}): retire the code path"
+                    )
+                else:
+                    field = "due" if kind == "review" else "done_by"
+                    errors.append(
+                        f"{kind} overdue beyond the {REVIEW_GRACE_DAYS}-day grace: {key} "
+                        f"({field} {due}, owner {owner}): ramp, retire, or add one extension"
+                    )
+    print(f"FLAG_OVERDUE_COUNT n={len(in_grace_rows - beyond_grace_rows)}")
+    print(f"FLAG_DARK_OVER_14D n={dark_over_14d}")
     return sorted(set(errors)), warnings
 
 
@@ -305,9 +287,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--skip-render", action="store_true")
+    parser.add_argument("--as-of", type=date.fromisoformat, help="YYYY-MM-DD; defaults to today")
     args = parser.parse_args()
     try:
-        errors, warnings = check(args.root.resolve(), check_render=not args.skip_render)
+        errors, warnings = check(args.root.resolve(), check_render=not args.skip_render, as_of=args.as_of)
+        sys.stdout.flush()
     except (OSError, ValueError, SyntaxError) as error:
         print(f"feature-flag registry: {error}", file=sys.stderr)
         return 1
