@@ -157,8 +157,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
+    # Same group as a prod dispatch run, so an approval-waiting dispatch and an
+    # automatic apply never write the same Ops UIDs at once.
     concurrency:
-      group: grafana-dashboard-provisioning-prod-auto
+      group: grafana-dashboard-provisioning-prod
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
