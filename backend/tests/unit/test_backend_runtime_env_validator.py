@@ -188,6 +188,7 @@ def with_memory_env(payload: str) -> str:
     memory_env = '''\
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
+        {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
         {"name": "STT_CAP_DISPATCH_COHORT", "value": ""},
         {"name": "STT_CAP_DISPATCH_LANES", "value": "live"},
