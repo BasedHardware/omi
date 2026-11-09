@@ -372,6 +372,20 @@ never-received reservation only under the existing expired lease, quiet cutoff,
 identity and content fences. Missing/unknown markers and buffered audio stay
 protected even after archive closure when no committed span exists.
 
+`QUIET_EMPTY_EXIT_ENABLED` defaults off. When explicitly true, expired quiet
+checks may return `empty_ready` outside V2 only for exact batch-live-owned,
+proven-empty captures with no pointers/tokens/failure and an empty raw/archive
+storage proof. Cleanup repeats that proof in the expired-lease transaction.
+Other shapes follow base admission; unbounded refusals retire the check with a
+named repair/operator-review exit while preserving the row.
+Due times, dispatch and recording lease durations are unchanged.
+`BATCH_LIVE_ORPHAN_REPAIR_ENABLED` also defaults off. The digest-approved operator
+repair re-proves retained spans and atomically stamps content/window, completes
+the sealed capture barrier and registers its canonical batch job. Empty deletion
+requires a closed archive, received=false, empty storage proof and the expired-lease/consent/job
+absence transaction fences; received or unknown custody is never deleted.
+See [operator runbook](../deploy/record-orphan-repair/README.md).
+
 Server-only native records carry their marker into the immutable intake. The
 batch projector uses its existing idempotent hourly/monthly usage and fair-use
 charge chain for these captures; ordinary native live-preview records keep the
