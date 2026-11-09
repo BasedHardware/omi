@@ -119,7 +119,7 @@ the sweep (an active wake doubled owner-chain conflicts on 2026-11-09). The hold
 passive only while this process runs a recurring sweep (the serving loop with
 `BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` on, or the projection pump), signalled by
 the runtime itself; otherwise (serving off, sweep off, one-off reconcile requests)
-it keeps its expiry and overflow wake, so no owner is stranded. Counted by
+it keeps its expiry and overflow wake, so no owner is stranded. Known pre-existing edge (lead2 8567be): with no serving runtime, a `defer()` overflow past `MAX_DELAYED_OWNERS` only queues `request_drain`, which nothing consumes until the next reconcile; it needs serving off plus a manual reconcile burst over 1,024 owners. Counted by
 `omi_batch_projection_live_target_backoffs_total`; progress or any other stop
 resets the bounded process-local attempt state. Only
 `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` disables this backoff (restoring
