@@ -3,11 +3,12 @@
 import json
 from pathlib import Path
 import re
-import subprocess
+import runpy
 import sys
 import urllib.request
 
 import pytest
+import yaml
 
 from tests.unit.test_record_seal_cluster_repair_deploy import documents
 from tests.unit.test_record_seal_sweeper_deploy import render
@@ -22,27 +23,64 @@ def containers(docs):
     ]
 
 
-@pytest.mark.parametrize('frame_seconds', ['1800', '3600', '7200'])
-def test_custody_lease_covers_the_rendered_sync_request_timeout(monkeypatch, frame_seconds):
+@pytest.fixture
+def production_render_inputs(monkeypatch):
     root = Path(__file__).resolve().parents[3]
-    source = (root / 'backend/deploy/staging/deploy.sh').read_text()
-    shape = source.split('shape_flags() {', 1)[1].split('\n}', 1)[0]
-    # Execute only the pure shape function, never deploy.sh or a cloud CLI.
-    result = subprocess.run(
-        [
-            'bash',
-            '-c',
-            'REPO_ROOT="$1"; PY="$2"; shape_flags() {' + shape + '\n}; shape_flags backend-sync',
-            'shape-test',
-            str(root),
-            sys.executable,
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
+    manifest = root / 'backend/deploy/runtime_env.yaml'
+    renderer = runpy.run_path(str(root / 'backend/scripts/render_backend_runtime_env.py'))
+    parsed = renderer['_load_yaml'](manifest)
+    # Match the canonical renderer suite: parse real source during setup, then
+    # exercise main and all emitted artifacts in the guarded test call.
+    monkeypatch.setitem(renderer['main'].__globals__, '_load_yaml', lambda path: parsed)
+
+    def bind_synthetic_inputs(value):
+        if isinstance(value, dict):
+            if isinstance(value.get('env_var'), str):
+                monkeypatch.setenv(value['env_var'], str(value.get('default') or 'synthetic-rendered-value'))
+            for child in value.values():
+                bind_synthetic_inputs(child)
+        elif isinstance(value, list):
+            for child in value:
+                bind_synthetic_inputs(child)
+
+    bind_synthetic_inputs(parsed['environments']['prod'])
+    return root, manifest, renderer
+
+
+@pytest.mark.parametrize('frame_seconds', ['1800', '3600', '7200'])
+def test_custody_lease_covers_the_rendered_sync_request_timeout(
+    monkeypatch, tmp_path, production_render_inputs, frame_seconds
+):
+    # Actual production renderer outputs and action consumption; no cloud CLI.
+    root, manifest, renderer = production_render_inputs
+    workflow_output = tmp_path / 'github-output'
+    state_output = tmp_path / 'state.json'
+    monkeypatch.setenv('GITHUB_OUTPUT', str(workflow_output))
+    monkeypatch.setattr(
+        sys, 'argv', ['render', '--env', 'prod', '--manifest', str(manifest), '--state-output', str(state_output)]
     )
-    timeout = int(re.search(r'--timeout=(\d+)', result.stdout)[1])
+    assert renderer['main']() == 0
+    emitted = workflow_output.read_text()
+    outputs = {}
+    for name in ('cloud_run_flags', 'backend_sync_flags'):
+        match = re.search(rf'{name}<<([^\n]+)\n(.*?)\n\1\n', emitted, re.DOTALL)
+        assert match, f'production renderer did not emit {name}'
+        outputs[name] = match[2]
+    action = yaml.safe_load((root / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    step = next(item for item in action['runs']['steps'] if item.get('id') == 'deploy-backend-sync')
+    assert step['uses'] == 'google-github-actions/deploy-cloudrun@v3'
+    flags = step['with']['flags']
+    for name, value in outputs.items():
+        expression = '${{ steps.runtime-env.outputs.' + name + ' }}'
+        assert expression in flags, f'backend-sync deploy dropped {name}'
+        flags = flags.replace(expression, value)
+    timeouts = re.findall(r'(?<!\S)--timeout=(\d+)s?(?!\S)', flags)
+    assert len(timeouts) == 1, 'prod backend-sync must declare exactly one request timeout'
+    timeout = int(timeouts[0])
+    state = json.loads(state_output.read_text())
+    assert state['services']['backend-sync']['flags']['--timeout'] == f'{timeout}s'
+    overlay = yaml.safe_load((root / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())
+    assert overlay['overlay']['cloud_run']['services']['backend-sync']['flags']['--timeout'] == f'{timeout}s'
     config = json.loads((root / 'backend/config/cloud_run_request_timeouts.json').read_text())
     assert timeout == config['backend-sync'] == lease.custody_request_timeout_seconds()
     monkeypatch.setenv('RECORD_TOKEN_LEASE_SECONDS', frame_seconds)
@@ -50,9 +88,6 @@ def test_custody_lease_covers_the_rendered_sync_request_timeout(monkeypatch, fra
     assert lease.CUSTODY_REQUEST_MARGIN_SECONDS > 0
     assert duration >= timeout + lease.CUSTODY_REQUEST_MARGIN_SECONDS > timeout
     assert lease.token_lease_seconds() == int(frame_seconds)
-    # Other explicit checked-in upload-service timeouts must also fit.
-    fixed = [int(value) for value in re.findall(r'--timeout=(\d+)', shape)]
-    assert all(duration > value for value in fixed)
 
 
 def test_lease_chart_defaults_are_dark_and_no_age_grace_remains():
