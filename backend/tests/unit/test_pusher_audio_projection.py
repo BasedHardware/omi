@@ -246,7 +246,7 @@ def test_real_update_conversation_checks_cached_revision_and_write_precondition(
     snapshot.to_dict.return_value = {'audio_files': [{'id': 'old', 'source_fingerprint': 'old'}]}
     monkeypatch.setattr(db, 'db', client)
     monkeypatch.setattr(db, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(db, '_prepare_conversation_for_write', lambda data, *_: data)
+    monkeypatch.setattr(db, '_prepare_conversation_for_write', lambda data, *_, **_kwargs: data)
     monkeypatch.setattr(db, 'guard_match_score_size', lambda *_: None)
     # Restore the actual function instead of world's projection update fake.
     update = REAL_UPDATE

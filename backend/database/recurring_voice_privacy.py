@@ -1,8 +1,10 @@
 """Recurring transcript IDs are revocable pointers; opt-out erases stored pointers."""
 
+from database import transcript_pointer
+
 from google.cloud import firestore
 
-from database import _client, recurring_voices
+from database import recurring_voices, transcript_pointer
 from database.legal_holds import external_write_fence
 from utils.observability.fallback import record_fallback
 
@@ -84,12 +86,15 @@ def scrub_transcripts(uid, *, firestore_client):
                         return
                     # Decode the stored blob, without reader filtering or identity
                     # canonicalization: only the recurring pointer is erased.
-                    segments = conversations.decode_transcript_segments_blob(
-                        uid,
-                        raw['transcript_segments'],
-                        bool(raw.get('transcript_segments_compressed')),
-                        require_decryption=True,
-                    )
+                    try:
+                        segments = conversations.decode_transcript_segments_blob(
+                            uid,
+                            raw['transcript_segments'],
+                            bool(raw.get('transcript_segments_compressed')),
+                            require_decryption=True,
+                        )
+                    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                        return
                     if not any('recurring_voice_id' in s for s in segments):
                         return
                     for segment in segments:
@@ -104,7 +109,7 @@ def scrub_transcripts(uid, *, firestore_client):
                         },
                     )
 
-            _client.run_transactional(client, scrub)
+            transcript_pointer.run_preloaded_transactional(client, scrub)
         if len(page) < SCRUB_PAGE_SIZE:
             return
         cursor = page[-1]

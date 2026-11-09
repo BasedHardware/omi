@@ -93,7 +93,6 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -300,7 +299,6 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
           value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
@@ -579,12 +577,13 @@ overlay:
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
-          # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
-          # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
-          # carries people=5, memory=0, privacy=0 (finjob=5).
-          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
+          # usage_month_cache=0; usage_month_total=0 (only backend-sync has 100/100).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -615,7 +614,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'
@@ -963,10 +961,13 @@ overlay:
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          # Restore monthly usage reads only for compute admission on backend-sync (admitscope 2026-11-01).
-          # Writers maintain totals and cache invalidation while reader levers are off.
-          # Preserve the existing epoch and every other service/lever (#24194 guard).
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
+          # usage_month_cache=100; usage_month_total=100 (backend-sync only; the other three stay 0/0).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1251,9 +1252,6 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
@@ -1359,12 +1357,13 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
-          # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
-          # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
-          # carries people=5, memory=0, privacy=0 (finjob=5).
-          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=100; batch_timeliness_leader=0.
+          # usage_month_cache=0; usage_month_total=0 (only backend-sync has 100/100).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1612,9 +1611,6 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
@@ -1689,11 +1685,14 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        - HOSTED_DIARIZATION_API_URL
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
-          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
+          # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
+          # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
+          BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
@@ -1725,12 +1724,13 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
-          # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
-          # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
-          # carries people=5, memory=0, privacy=0 (finjob=5).
-          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
+          # usage_month_cache=0; usage_month_total=0 (only backend-sync has 100/100).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1786,7 +1786,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'

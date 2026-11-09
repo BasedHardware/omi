@@ -355,6 +355,7 @@ async def run_listen_finalization_job(
                 claimed_lease_epoch,
             )
         else:
+            # Discarded is terminal success, just like completed; do not defer or retry it.
             completed = await run_blocking(
                 db_executor,
                 jobs_db.mark_finalization_completed,

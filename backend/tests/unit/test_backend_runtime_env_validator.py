@@ -777,6 +777,61 @@ def test_repo_prod_gke_values_match_manifest():
     assert errors == []
 
 
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+@pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '1'), ('true', '100')])
+def test_runtime_manifest_lake_writes_allow_dev_but_require_c4_for_prod(tmp_path, stage, enabled, percent):
+    validator = load_validator()
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    bindings = manifest['environments'][stage]['gke']['pusher']['env']
+    for name, value in {
+        'BUCKET_OBJECT_LAKE': 'bound-lake',
+        'OBJECT_LAKE_KMS_KEY': 'projects/p/locations/l/keyRings/r/cryptoKeys/k',
+        'OBJECT_LAKE_WRITE_ENABLED': enabled,
+        'OBJECT_LAKE_WRITE_PERCENT': percent,
+    }.items():
+        bindings[name]['value'] = value
+    # Keep the rendered GKE fixture aligned; this test changes admission, not
+    # the independent manifest-versus-Helm drift contract.
+    host = manifest['environments'][stage]['gke']['pusher']
+    values = yaml.safe_load((ROOT.parent / host['values_file']).read_text())
+    for entry in values['env']:
+        if entry['name'] in (
+            'BUCKET_OBJECT_LAKE',
+            'OBJECT_LAKE_KMS_KEY',
+            'OBJECT_LAKE_WRITE_ENABLED',
+            'OBJECT_LAKE_WRITE_PERCENT',
+        ):
+            entry['value'] = bindings[entry['name']]['value']
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(values_path, values)
+    host['values_file'] = str(values_path)
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env=stage, manifest_path=path)
+    if stage == 'dev':
+        assert errors == []
+    else:
+        assert any('C4 wipe-coverage' in str(error) for error in errors)
+
+
+@pytest.mark.parametrize('missing', ['BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'])
+def test_dev_lake_writes_require_real_bindings(tmp_path, missing):
+    validator = load_validator()
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    bindings = manifest['environments']['dev']['gke']['pusher']['env']
+    for name, value in {
+        'BUCKET_OBJECT_LAKE': 'bound-lake',
+        'OBJECT_LAKE_KMS_KEY': 'projects/p/locations/l/keyRings/r/cryptoKeys/k',
+        'OBJECT_LAKE_WRITE_ENABLED': 'true',
+        'OBJECT_LAKE_WRITE_PERCENT': '1',
+    }.items():
+        bindings[name]['value'] = '' if name == missing else value
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert any(f'enabled writes require a real {missing}' in str(error) for error in errors)
+
+
 def test_translation_cache_ttls_are_set_on_cloud_run_backend_services_in_both_envs():
     manifest = yaml.safe_load((ROOT / 'deploy' / 'runtime_env.yaml').read_text(encoding='utf-8'))
     for environment in ('dev', 'prod'):

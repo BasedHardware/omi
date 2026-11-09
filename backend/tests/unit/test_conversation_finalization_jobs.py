@@ -550,7 +550,8 @@ def test_retryable_processing_failure_increments_the_attempt_budget():
     assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
 
 
-def test_repeated_record_owner_contention_does_not_consume_processing_budget():
+@pytest.mark.parametrize('reason', ['record_owner_contention', 'live_episode_notes'])
+def test_repeated_scheduling_wait_does_not_consume_processing_budget(reason):
     now = _now()
     ref = _Ref(
         'job-1',
@@ -563,7 +564,7 @@ def test_repeated_record_owner_contention_does_not_consume_processing_budget():
         ref.data.update(claim_tx.updates[0][1])
         transaction = _Transaction()
         assert jobs._mark_finalization_retryable_txn(
-            transaction, ref, 2, claim['lease_epoch'], 'record_owner_contention', now, count_attempt=False
+            transaction, ref, 2, claim['lease_epoch'], reason, now, count_attempt=False
         )
         update = transaction.updates[0][1]
         assert update['status'] == 'queued' and update['attempt_count'] == 4
@@ -771,6 +772,40 @@ def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transacti
 
     assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
     assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
+
+
+def test_fanout_claim_retries_lease_conflict_when_discarded_processing_races_with_restore():
+    """A finalizer processed the row as discarded (expected_discarded=True), but a concurrent
+    restore flipped discarded=False before the fanout transaction. Fanout must not admit the row
+    without its audio obligation; it must return lease_conflict to retry."""
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
+        },
+    )
+    restored_conversation = _completed_finalization_conversation(data={'discarded': False})
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        4,
+        now,
+        lambda *_: restored_conversation,
+        expected_discarded=True,
+    )
+
+    assert claim == {'status': 'lease_conflict', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    assert transaction.updates == []
 
 
 def test_fanout_claim_terminally_fences_a_superseded_finalization_binding():

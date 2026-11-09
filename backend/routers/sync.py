@@ -235,7 +235,6 @@ from utils.sync.backfill import (
     release_backfill_slot,
     reserve_backfill_speech,
     retry_after_next_utc_day,
-    try_acquire_backfill_slot,
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
@@ -1059,6 +1058,10 @@ async def sync_local_files_v2(
             total_files=len(files),
             total_segments=0,
             job_id=job_id,
+            # Live WAL uploads already supply their target and recording session.
+            # Session-only uploads keep an unknown target; do not infer membership.
+            recording_ids=[recording_session_id] if recording_session_id else [],
+            target_conversation_id=conversation_id if isinstance(conversation_id, str) else None,
             lane=lane_decision.lane.value,
             capture_time_trust=lane_decision.trust.value,
             recording_age_seconds=lane_decision.maximum_age_seconds,

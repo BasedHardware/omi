@@ -106,6 +106,7 @@ from utils.conversations.process_conversation import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.episodes import finalize as episode_finalize
+from utils.episodes.member_notes import open_recording
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -838,6 +839,13 @@ def reprocess_conversation(
             user_kept=user_kept,
             derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
         )
+    except lifecycle_service.RestoredRecordingRegistrationUnavailable as error:
+        attention_db.finish(uid, operation, 'failed')
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'recording_restore_retry_required', 'message': 'Recording restore needs a retry'},
+            headers={'Retry-After': '1'},
+        ) from error
     except Exception:
         attention_db.finish(uid, operation, 'failed')
         raise
@@ -889,6 +897,7 @@ def execute_reprocess(
         conversation,
         trigger=ProcessingTrigger.USER_REPROCESS,
         user_kept=was_discarded or user_kept,
+        restores_discarded=was_discarded,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -899,11 +908,12 @@ def execute_reprocess(
         derived_effects_transcript_sha256=derived_effects_transcript_sha256,
     )
 
-    # Reprocessing a hidden conversation is an explicit recovery: persist it as
-    # the user's choice (``restore_discarded``) so no later reassessment hides it
-    # again, including when the selected app supplies the summary.
-    if was_discarded and not processed_conversation.discarded:
+    # Reprocessing a hidden conversation is an explicit recovery. Processing kept it
+    # hidden; restore registers its recording obligation, then commits visibility.
+    # A failure before this point leaves the row hidden with no visible state.
+    if (was_discarded or user_kept) and not processed_conversation.discarded:
         restored = lifecycle_service.restore_discarded(uid, conversation_id)
+        processed_conversation.discarded = not restored
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
 
@@ -1000,7 +1010,11 @@ def get_conversations(
 
     held_request = home_membership.held_for(request)
     # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = home_transcription_presentation_gate_enabled() or home_step_projection_enabled()
+    time_dependent = (
+        home_transcription_presentation_gate_enabled()
+        or home_step_projection_enabled()
+        or home_membership.live_suppression_for(uid, request)
+    )
     version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified
@@ -1134,6 +1148,7 @@ def get_conversation_by_id(
     include_translations: bool = Query(False),
     translation_cursor: Optional[str] = Query(None),
     response: Response = None,
+    request: Request = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
@@ -1152,6 +1167,9 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Home lifecycle probes also read details; only a detail-page open escalates notes.
+    if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
+        open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred') and not conversation.get('processing_deferred'):

@@ -42,17 +42,20 @@ class _Ref:
 class _Query:
     """The slice of the Firestore query API the sample uses: where, order_by, limit, stream, count, document."""
 
-    def __init__(self, rows, filters=(), order=None, limit=None):
-        self.rows, self.filters, self.order, self._limit = rows, filters, order, limit
+    def __init__(self, rows, filters=(), order=None, limit=None, after=None):
+        self.rows, self.filters, self.order, self._limit, self.after = rows, filters, order, limit, after
 
     def where(self, field, op, value):
-        return _Query(self.rows, self.filters + ((field, op, value),), self.order, self._limit)
+        return _Query(self.rows, self.filters + ((field, op, value),), self.order, self._limit, self.after)
 
     def order_by(self, field):
-        return _Query(self.rows, self.filters, field, self._limit)
+        return _Query(self.rows, self.filters, field, self._limit, self.after)
 
     def limit(self, n):
-        return _Query(self.rows, self.filters, self.order, n)
+        return _Query(self.rows, self.filters, self.order, n, self.after)
+
+    def start_after(self, doc):
+        return _Query(self.rows, self.filters, self.order, self._limit, doc.id)
 
     def document(self, doc_id):
         return _Ref(self.rows, doc_id)
@@ -77,6 +80,9 @@ class _Query:
         rows = [r for r in self.rows if self._match(r)]
         if self.order:
             rows.sort(key=lambda r: r[self.order])
+        if self.after is not None:
+            offset = next(i for i, row in enumerate(rows) if row['id'] == self.after) + 1
+            rows = rows[offset:]
         return rows[: self._limit] if self._limit is not None else rows
 
     def stream(self):
@@ -379,7 +385,7 @@ def test_rules_page_on_new_delivery_breach_and_keep_diagnostics_agent_tier():
 
 def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
     # The oldest row is before the timeliness epoch and far older than the lifecycle 24h cohort.
-    old = EPOCH - 3 * 86400
+    old = EPOCH - 86400
     sample = _sample(
         jobs=[
             {'state': 'record_pending', 'enqueued_at': old},
@@ -414,7 +420,7 @@ def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
 
 
 def test_held_oldest_does_not_depend_on_stock_size_or_first_input_row():
-    old = EPOCH - 2 * 86400
+    old = EPOCH - 86400
     sample = _sample(
         jobs=[
             *({'state': 'record_pending', 'enqueued_at': NOW - i} for i in range(1200)),
@@ -748,3 +754,44 @@ def test_refresh_jitter_and_rpc_time_do_not_break_continuous_breach_visibility(m
         first.refresh_timeliness(store, clock.now)
         assert list(first.timeliness_age.collect())
     assert store.timeliness.call_count == 4
+
+
+@pytest.mark.parametrize('bad_clock', [0, -1, float('nan'), float('-inf'), float('inf')])
+@pytest.mark.parametrize('leg', ['record_pending', 'assignment_held', 'quarantine_held', 'held_expired'])
+def test_held_oldest_skips_invalid_clocks_without_mutating_rows(leg, bad_clock):
+    is_result = leg in ('quarantine_held', 'held_expired')
+    field = 'committed_at' if is_result else 'enqueued_at'
+    row = (
+        {'projection_state': 'quarantine_held', 'held_expired_reason': 'held_expired'}
+        if is_result
+        else (
+            {'state': 'record_pending'} if leg == 'record_pending' else {'state': 'committed', 'recovery_state': 'held'}
+        )
+    )
+    old = EPOCH - 86400
+    rows = [{**row, field: bad_clock}, {**row, field: old}, {**row, field: NOW - 60}]
+    client = _Client(results=rows) if is_result else _Client(jobs=rows)
+    before = {name: [dict(row) for row in table] for name, table in client.tables.items()}
+    sample = timeliness_sample(client, 'ns', EPOCH, NOW, SLA)
+    assert sample['held_oldest'][leg] == old
+    assert client.tables == before
+    # An all-invalid stock has no usable clock; it must not publish an epoch-scale age.
+    invalid = _Client(results=rows[:1]) if is_result else _Client(jobs=rows[:1])
+    assert timeliness_sample(invalid, 'ns', EPOCH, NOW, SLA)['held_oldest'][leg] is None
+
+
+def test_held_oldest_keeps_walking_past_a_page_of_epoch_clocks():
+    sample = _sample(
+        jobs=[
+            *({'state': 'record_pending', 'enqueued_at': 0} for _ in range(TIMELINESS_HOLD_SCAN_LIMIT + 1)),
+            {'state': 'record_pending', 'enqueued_at': EPOCH - 86400},
+        ]
+    )
+    assert sample['held_oldest']['record_pending'] == EPOCH - 86400
+
+
+@pytest.mark.parametrize('bad_clock', [None, 'undated', True, False])
+def test_held_oldest_rejects_nonnumeric_or_boolean_record_pending_clocks(bad_clock):
+    assert (
+        _sample(jobs=[{'state': 'record_pending', 'enqueued_at': bad_clock}])['held_oldest']['record_pending'] is None
+    )

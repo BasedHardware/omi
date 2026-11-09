@@ -5,7 +5,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 """
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
-from config.policy import ProjectionPolicy
+from config.policy import ProjectionPolicy, kill_switch
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
@@ -40,7 +40,7 @@ from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusal
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
-from utils.batch_pipeline.projection_walk_stop import walk_block_stop
+from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
@@ -458,7 +458,7 @@ class Projector:
 
     def owe_followups(self, segment_ids) -> None:
         with self.handoff:
-            self.chain_followups.extend(segment_ids)
+            self.chain_followups = list(dict.fromkeys(self.chain_followups + list(segment_ids)))
 
     @property
     def owes_followups(self) -> bool:
@@ -602,7 +602,7 @@ class Projector:
             except SyncAssignmentConflict as error:
                 if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
-                receipt = persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True, hold_reason='conflict')
                 if receipt.get('state') == 'quarantined':
                     log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
@@ -798,18 +798,20 @@ class Projector:
             RELEASE_TICK_SECONDS,
             GHOST_SKIP_CLASSES,
             GHOST_AGE_BUCKETS,
-            release_scan_pass,
+            release_scan_pass_settled,
         )
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
-        counts, self.release_after = release_scan_pass(
+        counts, self.release_after, settled = release_scan_pass_settled(
             self.store,
             limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
             after_id=self.release_after,
             now=self.clock(),
             deadline=time.monotonic() + RELEASE_TICK_SECONDS if enabled else None,
         )
+        if settled and kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_WAKE_ENABLED'):
+            self.owe_followups(settled)
         if counts.get('examined'):
             logger.info(
                 'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d ghost_settled=%d classified=%d skipped_by_class=%s age_buckets=%s',
@@ -885,7 +887,7 @@ class Projector:
         try:
             policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
             session = self.store.session(segment_id, binding, self.clock(), policy=policy)
-            persist_disposition(session, quarantined=True)
+            persist_disposition(session, quarantined=True, hold_reason='poison_head')
             return True
         except Exception as error:
             logger.error(
@@ -1071,13 +1073,13 @@ class Projector:
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:
-                receipt = persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True, hold_reason='ambiguous_generation')
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
             except SyncAssignmentConflict as error:
                 if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
-                receipt = persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True, hold_reason='conflict')
                 if receipt.get('state') == 'quarantined':
                     log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
@@ -1112,7 +1114,7 @@ class Projector:
         assignment conflict: quarantine receipt, watermark advance, recovery
         owns the unit, audio retained."""
         session = session or self.store.session(item.segment_id, binding, self.clock(), policy=policy)
-        receipt = persist_disposition(session, quarantined=True)
+        receipt = persist_disposition(session, quarantined=True, hold_reason='payload_contract')
         logger.warning(
             'event=batch_projection action=assignment outcome=payload_contract_quarantined exception_type=%s%s',
             error_type(error),
@@ -1486,7 +1488,7 @@ class Projector:
             except Exception as error:
                 failed(error)
                 if binding is None or not self.resolve_failing_head(segment_id, job, entry, binding, error):
-                    stop = 'head_error'
+                    stop = walk_head_stop(error) if binding is not None else 'head_error'
                     break
                 # Held (or already terminal): continue iff the chain advanced.
                 try:

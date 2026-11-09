@@ -45,7 +45,7 @@ The exact outcome vocabulary is `permission_denied`, `bluetooth_off`, `no_advert
 
 Read from `origin/fw/cv1-release-candidate`, commit `2810eaf332c50e4c9a6b72d1a1f9c2838e754371` (layout source, not a claim about connected firmware):
 
-- `omi/firmware/docs/gatt-map.md`: base suffix `-E8F2-537E-4F6C-D104768A1214`, audio `19B10000/01`, features `19B10020/21`, diagnostics `19B10040/41`.
+- `omi/firmware/docs/gatt-map.md`: base suffix `-E8F2-537E-4F6C-D104768A1214`, audio `19B10000/01`, features `19B10020/21`, diagnostics `19B10040/41`, safe-mode recovery state `19B10042` (read as raw bytes).
 - `omi/firmware/omi/src/lib/core/transport.c`, `push_to_gatt`: three-byte header `[sequence low, sequence high, fragment index]`; `packet_next_index` is a `uint16_t` incremented per notification, and fragment index restarts at zero for each encoded frame. Wrap at 65535 is valid. First packet/fragment may begin mid-stream. Fragment zero counts frame starts; there is no final-fragment bit, so complete decoded audio-frame counts cannot be established. No codec or audio-content decoding is attempted.
 - `transport.c`, `features_read_handler`: four-byte native nRF5340 little-endian feature mask; preserved as raw hex and decoded uint32, without inventing unknown feature meanings.
 - `omi/firmware/omi/src/diagnostics.h` and `diagnostics_packet.c`: exactly 25 bytes. Version at 0 (1), reset cause u32 LE at 1, uptime seconds u32 LE at 5, battery mV u16 LE at 9, charging u8 at 11, reserved zero at 12, mic-overrun u32 LE at 13, BLE-TX-drop u32 LE at 17, storage-error u32 LE at 21.

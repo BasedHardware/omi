@@ -192,7 +192,9 @@ def test_worker_metrics_are_scraped_into_the_hpa_prometheus():
     entry = next(job for job in inventory if job['name'] == 'batch-pipeline-worker-metrics')
     assert entry['mechanism'] == 'additionalScrapeConfigs'
     assert entry['namespace'] == 'prod-omi-backend'
-    assert entry['auth'] is None and entry['coverage_status'] == 'declared'
+    assert entry['auth'] is None and entry['coverage_status'] == 'enforced'
+    assert entry['coverage_alert'] == 'omi-scrape-batch-pipeline-worker-metrics'
+    assert entry['coverage_modes'] == ['down', 'empty']
 
 
 @pytest.mark.parametrize(

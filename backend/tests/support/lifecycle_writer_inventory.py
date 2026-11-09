@@ -1,6 +1,80 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/cells/adapters/action_items.py': [
+        (
+            'CellActionItems.retire_for_conversation',
+            'status',
+            "'superseded' if replacement else 'cancelled'",
+            ('completed', 'completed_at', 'deleted', 'status', 'superseded_by', 'updated_at'),
+        )
+    ],
+    'database/cells/adapters/goals.py': [
+        (
+            'CellGoals.create.build',
+            'status',
+            "data.get('status', 'background')",
+            (
+                'account_generation',
+                'created_at',
+                'focus_rank',
+                'goal_id',
+                'id',
+                'is_active',
+                'latest_progress_sequence',
+                'status',
+                'updated_at',
+            ),
+        ),
+        (
+            'CellGoals.delete',
+            'status',
+            "'abandoned'",
+            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+        ),
+        ('CellGoals.focus.build', 'status', "'background'", ('focus_rank', 'status', 'updated_at')),
+        ('CellGoals.focus.build', 'status', "'focused'", ('focus_rank', 'is_active', 'status', 'updated_at')),
+        (
+            'CellGoals.transition_lifecycle.build',
+            'status',
+            'status',
+            ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
+        ),
+        ('CellGoals.unfocus.build', 'status', "'background'", ('focus_rank', 'status', 'updated_at')),
+    ],
+    'database/cells/adapters/workstreams.py': [
+        (
+            'CellWorkstreams.create.build',
+            'status',
+            "data.get('status', 'open')",
+            (
+                'account_generation',
+                'created_at',
+                'current_state_summary',
+                'id',
+                'latest_event_sequence',
+                'objective',
+                'revision',
+                'status',
+                'updated_at',
+                'workstream_id',
+            ),
+        ),
+        (
+            'CellWorkstreams.create_artifact_descriptor.build',
+            'status',
+            "'draft'",
+            ('artifact_id', 'created_at', 'status', 'workstream_id'),
+        ),
+        ('CellWorkstreams.create_artifact_descriptor.build', 'status', "'superseded'", ('status',)),
+        (
+            'CellWorkstreams.resolve_candidate',
+            'status',
+            "'accepted'",
+            ('candidate_id', 'newly_resolved', 'receipt_id', 'resolved_at', 'status', 'task_id', 'workstream_id'),
+        ),
+        ('CellWorkstreams.transition_artifact_status.build', 'status', 'target', ('status',)),
+    ],
     'database/_client.py': [
         ('run_transactional', 'status', "'exhausted'", ('status',)),
         ('run_transactional', 'status', "'retried_ok'", ('status',)),
@@ -200,6 +274,21 @@ FIELD_SITES = {
     ],
     'database/batch_pipeline_purge.py': [
         ('_write_erased_result', 'projection_state', "'erased'", ('previous_segment_id', 'projection_state'))
+    ],
+    'database/batch_pipeline_record_dead_letter.py': [
+        (
+            'requeue_record.commit',
+            'state',
+            "'record_pending'",
+            (
+                'available_at',
+                'dead_letter_reason',
+                'merge_pending',
+                'record_dead_letter_at',
+                'record_dead_letter_deadline_at',
+                'state',
+            ),
+        ),
     ],
     'database/batch_pipeline_quarantine_recovery.py': [
         (
@@ -1073,6 +1162,21 @@ FIELD_SITES = {
                 'status',
                 'updated_at',
             ),
+        ),
+    ],
+    # Transport acknowledgements use the same reviewed inventory as conversation mutations.
+    'database/cells/mutations.py': [
+        (
+            'apply_space_mutation',
+            'status',
+            "'ok'",
+            ('client_mutation_id', 'entity', 'entity_id', 'replayed', 'rev', 'seq', 'status'),
+        ),
+        (
+            'apply_space_mutation.conflict',
+            'status',
+            "'conflict'",
+            ('client_mutation_id', 'code', 'entity', 'entity_id', 'row', 'status'),
         ),
     ],
     'database/conversation_mutations.py': [
@@ -2036,11 +2140,13 @@ FIELD_SITES = {
                 'processed_segments',
                 'reason_code',
                 'recording_age_seconds',
+                'recording_ids',
                 'result',
                 'retry_after',
                 'started_at',
                 'status',
                 'successful_segments',
+                'target_conversation_id',
                 'total_files',
                 'total_segments',
                 'uid',
@@ -2393,6 +2499,12 @@ FIELD_SITES = {
     ],
     'utils/batch_pipeline/live.py': [
         (
+            'drain_recordings.admit_and_defer.defer',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'merge_pending', 'record_dead_letter_at', 'state'),
+        ),
+        (
             'register_recording.commit',
             'state',
             "'record_pending'",
@@ -2412,7 +2524,7 @@ FIELD_SITES = {
                 'segment_id',
                 'state',
             ),
-        )
+        ),
     ],
     'utils/batch_pipeline/merge.py': [
         (

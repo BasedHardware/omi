@@ -22,6 +22,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.validate_object_lake_bucket_contract import validate_write_admission  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
@@ -673,6 +674,7 @@ def validate_runtime_env(
     if errors:
         return errors
 
+    errors.extend(ValidationError(env, error) for error in validate_write_admission(env, env_config))
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
