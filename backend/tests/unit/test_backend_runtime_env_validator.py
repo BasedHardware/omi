@@ -673,6 +673,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'HOSTED_LID_API_URL',
+                'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -2011,6 +2012,20 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
 
     assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
     assert errors[0].scope == 'cloud_run/backend'
+
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
+            '{"name": "BATCH_INPUT_EXPIRING_ENABLED", "value": "true"},\n        ', ''
+        ),
+        encoding='utf-8',
+    )
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
+        ('cloud_run/backend-sync', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
+        ('cloud_run/backend-integration', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+    }
 
     # A complete synthetic revision carries the new kill switch. Removing it
     # must still fail validation; completing the fixture must not weaken the guard.
