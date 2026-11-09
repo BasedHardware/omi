@@ -1081,6 +1081,9 @@ def account_held_redrive(job: dict) -> None:
     # and unalerted; there the reset is a no-op and main's behavior is kept. The
     # terminal stop is not in core, so an uncounted or spent unit keeps main's
     # retained held loop (attempt at the cap) and the spent-budget signal.
+    # Rollback: switching class 3 OFF stops new budget resets; existing grants
+    # persist until their unit runs or finishes; each grant is capped at
+    # MAX_ATTEMPTS.
     if (
         held_redrive_budget_enabled()
         and counted

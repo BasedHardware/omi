@@ -655,3 +655,61 @@ def test_class_3_reset_only_where_the_retry_cap_enforces_for_the_owner(monkeypat
         assert attempts[0] == 1
     else:
         assert attempts and attempts[0] == 3  # continues from the cap: no fresh budget
+
+
+def test_class_3_on_to_off_keeps_existing_grants_and_stops_new_resets(monkeypatch):
+    """Coordinator ruling 13:07Z (option 2): rollback semantics of class 3.
+
+    Switching class 3 OFF stops new budget resets. Existing grants persist
+    until their unit runs or finishes. Each grant is capped at MAX_ATTEMPTS.
+    """
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('granted', owner=uuid4().hex), 0)
+    queue.pull(0)
+    held = dict(
+        state='quarantined',
+        quarantine_reason='worker_failed',
+        recovery_state='held',
+        attempt=2,
+        token='',
+        lease_until=0,
+        merge_pending=False,
+    )
+    store.rows['jobs', 'granted'].update(held)
+
+    def redrive(now):
+        assert store.run(lambda tx: Scheduler.requeue_quarantined_in_transaction(tx, tx.get('jobs', 'granted'), now))
+        return store.rows['jobs', 'granted']
+
+    # Class 3 ON: the re-drive grants a fresh budget.
+    job = redrive(5000)
+    assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 2 and job['held_redrives'] == 1
+
+    # Class 3 switched OFF: the existing grant is not clawed back.
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'false')
+    assert store.rows['jobs', 'granted']['attempt'] == 0
+
+    # The grant runs, capped at MAX_ATTEMPTS: lease expiries until the cap holds it.
+    attempts = []
+    for n in range(4):
+        now = 6000 + n * 1000
+        queue.recover(now)
+        leases = queue.pull(now)
+        if not leases:
+            break
+        attempts.append(leases[0].attempt)
+        queue.recover(now + 121)
+    assert attempts == [1, 2]
+    job = store.rows['jobs', 'granted']
+    assert job['state'] == 'quarantined' and job['attempt'] == 2
+
+    # A later re-drive while OFF gets no new reset: attempt stays at the cap.
+    job.update(held)
+    job = redrive(20000)
+    assert job['attempt'] == 2 and job['held_redrives'] == 2
+    assert job['held_redrive_last_attempt'] == 2  # the old grant's record, not a new one

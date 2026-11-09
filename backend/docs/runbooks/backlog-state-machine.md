@@ -24,7 +24,7 @@ inert.
 | Switch | Default | Class | Turning it off |
 | --- | --- | --- | --- |
 | `CAPTURE_RETRY_CAP_ENFORCED` | OFF | 1: the cap only observed outside the serve cohort | The batch lease-expiry cap returns to the `CAPTURE_COVERAGE_MODE` cohort decision |
-| `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | OFF | 3: requeue kept `attempt` at the cap | Requeue keeps `attempt`, so the first failure after a re-drive re-quarantines |
+| `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | OFF | 3: requeue kept `attempt` at the cap | Switching class 3 OFF stops new budget resets. Existing grants persist until their unit runs or finishes. Each grant is capped at `MAX_ATTEMPTS`. |
 | `BATCH_HELD_REDRIVE_COUNTER_ENABLED` | ON | 6 (counter): held re-drives were not counted | No `held_redrives` increments and no spent-budget observation |
 
 ## Class 1: retry cap enforcement
