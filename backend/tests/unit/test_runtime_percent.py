@@ -103,7 +103,12 @@ def test_error_serves_last_known_good_indefinitely(reader, clock):
     snap = rp.ramp_snapshot()
     assert snap.source == 'lkg'
     assert snap.error_seconds >= 300
-    assert rp.RUNTIME_PERCENT_SOURCE.labels(source='lkg')._value.get() == 1
+    assert (
+        rp.RUNTIME_PERCENT_SOURCE.labels(
+            source='lkg', revision=rp.runtime_revision(), revision_name=rp.os.getenv('K_REVISION', '')
+        )._value.get()
+        == 1
+    )
 
 
 def test_malformed_document_is_an_error_not_a_value(reader, clock):
