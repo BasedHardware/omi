@@ -339,8 +339,7 @@ class ProjectionStore:
         return dispatch
 
     def run(self, operation, *, policy=None):
-        # Same bounded opt-in read-contention retry as legacy sync (#21680).
-        import os
+        # Same permanent bounded read-contention retry as legacy sync (#21680).
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 

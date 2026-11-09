@@ -4592,7 +4592,6 @@ def assign_sync_conversation(
     before_assign: Callable[[Any], None] | None = None,
     validate_plan: Callable[[Any, dict], None] | None = None,
     after_assign: Callable[[Any, tuple], None] | None = None,
-    retry_contention: bool = False,
     timing: bool = False,
     defer_index: Callable[[str, str, list[str]], None] | None = None,
 ):
@@ -4699,7 +4698,7 @@ def assign_sync_conversation(
             discover_live_candidates()
         with clock.timed('transaction'):
             result = discovery.run(
-                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+                lambda full_ids: run_sync_assignment(client, assign, full_ids),
                 lambda: attempted.get('canonical'),
                 discover_live_candidates,
             )

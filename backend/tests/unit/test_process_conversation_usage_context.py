@@ -1324,8 +1324,7 @@ def test_user_reprocess_preserves_results_and_returns_generic_app_failure(monkey
     with pytest.raises(HTTPException) as exc_info:
         _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
 
-    # Keep-until-replaced is the default for every user reprocess; the flag
-    # selects only the error code.
+    # Keep-until-replaced is the default for every user reprocess.
     assert seen_kwargs[0]['replace_selected_result'] is True
     assert exc_info.value.status_code == 500
 

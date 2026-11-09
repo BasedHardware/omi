@@ -81,6 +81,28 @@ def test_session_end_metric_uses_state_outside_context_after_env_flip(monkeypatc
     assert len(window) == 1 and window[0][1]['arm'] == 'window'
 
 
+@pytest.mark.parametrize('old_mode', ['off', 'shadow'])
+def test_reconnect_routing_telemetry_matches_permanent_admission(monkeypatch, old_mode):
+    saved = replace(
+        resolve_listen_policy('owner', flags={}),
+        routing_mode_raw=old_mode,
+        routing_on_percent=0.0,
+        routing_on=False,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.state = ListenSessionState(listen_policy=saved)
+    runtime.request = SimpleNamespace(uid='owner')
+    monkeypatch.setattr(runtime_module, 'managed_chain_enabled', lambda _: True)
+    token = current_listen_policy.set(saved)
+    try:
+        assert runtime_module.routing_on('owner')
+        runtime._capture_cost_routing_arm()
+        assert runtime._cost_routing_arm == 'on'
+        assert runtime._routing_cohort.arm == 'on'
+    finally:
+        current_listen_policy.reset(token)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('reconnect_identity', ['conversation', 'rotated-recording'])
 async def test_alias_persists_once_without_overwriting_existing(monkeypatch, reconnect_identity):

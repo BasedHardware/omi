@@ -173,7 +173,7 @@ def revoke_local_preview(host, *, reason: str) -> None:
     record_fallback(
         component='stt_live_session',
         from_mode='local_preview',
-        to_mode='visible_restore' if batch_only_live_path(host) else 'live',
+        to_mode='batch_only' if batch_only_live_path(host) else 'live',
         reason=reason,
         outcome='degraded',
     )

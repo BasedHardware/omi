@@ -419,11 +419,6 @@ class ListenSessionRuntime:
         self._cost_routing_arm: str | None = None
         self._routing_cohort: RoutingCohort | None = None
         if managed_chain_enabled(self):
-            policy = getattr(self.state, 'listen_policy', None)
-            if policy is not None:
-                self._cost_routing_arm = policy.routing_arm
-                self._routing_cohort = RoutingCohort(policy.routing_cohort)
-                return
             try:
                 self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
             except (ValueError, TypeError):

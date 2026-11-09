@@ -1,6 +1,7 @@
 """Role-owned stage policy resolution, called only on the first persisted claim."""
 
 from dataclasses import dataclass
+import math
 from typing import Literal, overload
 
 from config.policy.batch import COHORT_SALTS, parse_percent, cohort_bucket
@@ -124,9 +125,29 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             terminal_empty_disposition=boolean(env, 'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED'),
         )
     if stage == 'first_summary':
+        # Keep the independently owned preservation and allowlist readers until
+        # their lanes resolve them. Full percentage admission makes both
+        # redundant for a nonempty owner, without retiring either control here.
+        existing_deadline = (obligation or {}).get('summary_deadline_at')
+        preserved = bool(
+            obligation
+            and not obligation.get('summary_seen')
+            and not obligation.get('effects_only')
+            and isinstance(existing_deadline, (int, float))
+            and not isinstance(existing_deadline, bool)
+            and math.isfinite(existing_deadline)
+            and boolean(env, 'FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED')
+        )
+        enabled = (
+            preserved
+            or member(uid, env, 'first-summary', 'FIRST_SUMMARY_UID_ALLOWLIST', explicit=flags is not None)
+            or bool(uid)
+        )
         try:
             deadline = int(env.get('FIRST_SUMMARY_DEADLINE_SECONDS', '120'))
         except ValueError:
             deadline = 120
-        return FirstSummaryPolicy(source_role=role, first_summary_enabled=True, first_summary_deadline_seconds=deadline)
+        return FirstSummaryPolicy(
+            source_role=role, first_summary_enabled=enabled, first_summary_deadline_seconds=deadline
+        )
     raise ValueError('unknown batch policy owner')

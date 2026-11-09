@@ -2994,7 +2994,7 @@ def process_conversation(
     # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
-    # User reprocess preserves template results on failure; the flag selects 502.
+    # User reprocess preserves template results on failure.
 
     def _emit_derived_effects() -> None:
         assigned_folder_id = None

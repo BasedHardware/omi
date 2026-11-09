@@ -152,8 +152,7 @@ def build_deterministic_minimum_structured(
     so a minimum never masquerades as historical full processing.
     An unknown owner (None) gets no stamp.
     """
-    in_cohort = uid is not None
-    raw_provenance = in_cohort or (uid is not None and merge_before_processing_enabled())
+    raw_provenance = uid is not None
     metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if raw_provenance else {}
     return Structured(
         **metadata,

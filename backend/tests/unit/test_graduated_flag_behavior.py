@@ -37,6 +37,7 @@ def test_retired_admission_knobs_cannot_withhold_graduated_behavior(monkeypatch,
     assert not server_batch.selected('owner', 'ios', 'phone_call')
     assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert resolve_stage_policy('owner', 'first_summary', flags={}).first_summary_enabled
+    assert not resolve_stage_policy('', 'first_summary', flags={}).first_summary_enabled
     policy = resolve_listen_policy('owner', flags={})
     assert policy.routing_on and policy.routing_on_percent == 100
     assert routing_enabled('owner')

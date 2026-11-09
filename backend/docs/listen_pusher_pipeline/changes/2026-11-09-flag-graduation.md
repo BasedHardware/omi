@@ -22,9 +22,10 @@ move to `retired`, preventing reads or declarations from being reintroduced.
 
 ## Mixed-service controls retained for review on 2026-11-23
 
-The shared `main.py` mounts `routers.transcribe`, including `/v4/listen`, for
-Cloud Run services as well as the GKE listener; there is no role restriction on
-those routes. `test_backend_runtime_env_validator.py` also documents the four
+The shared `main.py` mounts through `app_roles.py`; `routers.transcribe`, including
+`/v4/listen`, belongs to the API and realtime roles. The serving manifests do not
+set `OMI_ROLE`, so its default `all` mounts it for Cloud Run services as well as
+the GKE listener. `test_backend_runtime_env_validator.py` also documents the four
 Cloud Run copies as serving capture, sync, developer processing and reprocess.
 The docket assigns false to Cloud Run and true to listener/pusher for four of
 these controls. These are reachable readers, so neither value can be made
