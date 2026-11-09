@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,29 @@ DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep"
 TERMINALS = {"on", "off", "keep", "undecided"}
 REVIEW_GRACE_DAYS = 7
 RAMP_REQUIRED_FROM = date(2026, 10, 21)
+# Temporary migration debt; relabel these opt-in controls in the registry sweep.
+OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES = date(2026, 11, 29)
+OPS_KILL_DEFAULT_OFF_ALLOWLIST = {
+    "BATCH_FINAL_PASS_PERCENT",
+    "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED",
+    "BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED",
+    "BATCH_PIPELINE_WORKER_ENABLED",
+    "CAP_HOLD_DURABLE_REDRIVE_ENABLED",
+    "CAP_HOLD_FLEET_SNAPSHOT_ENABLED",
+    "CAP_HOLD_LIVE_FRAGMENT_ENABLED",
+    "CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED",
+    "EPISODE_F_JOIN_ENABLED",
+    "EPISODE_F_JOIN_PERCENT",
+    "FAIR_USE_ENABLED",
+    "MEMORY_ENABLED",
+    "PARAKEET_STREAM_ALLOCATION_PERCENT",
+    "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+    "PLAYBACK_MANIFEST_RECOVERY_ENABLED",
+    "RECORD_GAP_FILL",
+    "STT_GPU_FLEET_OFF",
+    "STT_STREAMING_PARAKEET_SLOT_ENABLED",
+}
+
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
 FLAG_SUFFIX = re.compile(r"(?:_ENABLED|_MODE|_KILL_SWITCH|_COHORT|_PERCENT|_PAUSED|_STOP|_SHADOW(?:_[A-Z0-9]+)?)$")
 SWIFT_FLAG = re.compile(
@@ -68,6 +91,59 @@ def _ramp_applies_to(entry: dict[str, Any]) -> bool:
     )
 
 
+def effective_due(entry: dict[str, Any]) -> date:
+    """The review date, extended only by the row's single bounded extension."""
+    due = date.fromisoformat(entry["review_by"])
+    if "extension" in entry:
+        due = max(due, date.fromisoformat(entry["extension"]["until"]))
+    return due
+
+
+def ramp_due(entry: dict[str, Any]) -> date:
+    """Use the same extension for the ramp deadline and review deadline."""
+    due = date.fromisoformat(entry["ramp"]["done_by"])
+    if "extension" in entry:
+        due = max(due, date.fromisoformat(entry["extension"]["until"]))
+    return due
+
+
+def due_dates(entry: dict[str, Any]) -> list[tuple[str, date]]:
+    if entry.get("lifecycle") not in {"rollout", "experiment"}:
+        return []
+    deadlines = [("review", effective_due(entry))]
+    if _ramp_applies_to(entry) and "ramp" in entry:
+        deadlines.append(("ramp", ramp_due(entry)))
+    return deadlines
+
+
+def _validate_extension(entry: dict[str, Any], key: str, errors: list[str], as_of: date) -> None:
+    if "extension" not in entry:
+        return
+    extension = entry["extension"]
+    if not isinstance(extension, dict):
+        errors.append(f"{key}: extension must be an object")
+        return
+    dates: dict[str, date] = {}
+    for field in ("until", "granted"):
+        try:
+            dates[field] = date.fromisoformat(extension[field])
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"{key}: extension.{field} must be an ISO date")
+    if len(dates) == 2 and not 0 <= (dates["until"] - dates["granted"]).days <= 14:
+        errors.append(f"{key}: extension.until must be 0 to 14 days after extension.granted")
+    if "granted" in dates and dates["granted"] > as_of:
+        errors.append(f"{key}: extension.granted must not be in the future")
+    reason = extension.get("reason")
+    if (
+        not isinstance(reason, str)
+        or len(reason.strip()) < 15
+        or reason.strip().casefold() in {"renew", "extend", "tbd", "later"}
+    ):
+        errors.append(f"{key}: extension.reason must be at least 15 characters and explain the delay")
+    if not isinstance(extension.get("by"), str) or not extension["by"].strip():
+        errors.append(f"{key}: extension.by must name the owning lane")
+
+
 def _single_user_cohort_step(step: str) -> bool:
     normalized = step.strip().casefold().replace("_", " ")
     return bool(
@@ -111,8 +187,12 @@ def _validate_ramp(entry: dict[str, Any], label: str, errors: list[str]) -> None
             errors.append(f"{label}: ramp.done_by must be on or before review_by")
 
 
-def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path = ROOT) -> list[str]:
+def validate_registry(
+    registry: dict[str, list[dict[str, Any]]], *, root: Path = ROOT, as_of: date | None = None
+) -> list[str]:
     errors: list[str] = []
+    current_date = as_of or datetime.now(timezone.utc).date()
+    default_off_ops: set[str] = set()
     names: dict[str, str] = {}
     resolved_root = root.resolve()
     if set(registry) != {"flags", "ignore", "retired"}:
@@ -174,6 +254,17 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                         except (TypeError, ValueError):
                             errors.append(f"{label}: {field} must be an ISO date")
                 _validate_ramp(entry, label, errors)
+                _validate_extension(entry, key, errors, current_date)
+                if lifecycle == "ops_kill" and entry.get("fail") == "closed":
+                    default_off_ops.add(key)
+                    if key not in OPS_KILL_DEFAULT_OFF_ALLOWLIST:
+                        errors.append(
+                            f"{key}: ops_kill must default on (off is the kill); use rollout or config_switch"
+                        )
+                    elif current_date > OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES:
+                        errors.append(
+                            f"ops_kill default-off exception expired {OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES}: {key}"
+                        )
                 if _ramp_applies_to(entry) and "ramp" not in entry:
                     try:
                         created = date.fromisoformat(entry["created"])
@@ -251,6 +342,10 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 if name in names:
                     errors.append(f"duplicate key or alias: {name} ({names[name]}, {label})")
                 names[name] = label
+    if resolved_root == ROOT.resolve():
+        stale = sorted(OPS_KILL_DEFAULT_OFF_ALLOWLIST - default_off_ops)
+        if stale:
+            errors.append("remove stale ops_kill default-off allowlist entries: " + ", ".join(stale))
     return errors
 
 
@@ -524,7 +619,7 @@ def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]
         for entry in registry.get("flags", [])
         if entry.get("lifecycle") in {"rollout", "experiment"}
         and entry.get("review_by")
-        and date.fromisoformat(entry["review_by"]) < as_of
+        and effective_due(entry) < as_of
     )
 
 
@@ -535,5 +630,5 @@ def overdue_beyond_grace(registry: dict[str, list[dict[str, Any]]], as_of: date)
         for entry in registry.get("flags", [])
         if entry.get("lifecycle") in {"rollout", "experiment"}
         and entry.get("review_by")
-        and date.fromisoformat(entry["review_by"]) + timedelta(days=REVIEW_GRACE_DAYS) < as_of
+        and effective_due(entry) + timedelta(days=REVIEW_GRACE_DAYS) < as_of
     )

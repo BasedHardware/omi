@@ -31,8 +31,8 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert pod['containers'][0]['image'] == worker['containers'][0]['image']
     assert pod['containers'][0]['command'] == ['python', 'scripts/record_seal_repair_job.py']
     env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
-    # lead2 f1ffa1: one measured rung to 24; 48 saturated startup/client stages (#24729).
-    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '24'
+    # Prod runs repair at 16 workers: 48 saturated per-row I/O (2026-11-05, #24729 rolled back).
+    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '16'
     assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_JOBS'] == 'on'
