@@ -1,0 +1,21 @@
+id: safe/sporadic-panics-no-false-latch
+summary: >
+  Panics separated by healthy 60 s trials never accumulate into SAFE; each
+  healthy trial clears the attempt count and GOOD is written once.
+committee: [1]
+tags: [guard]
+timeline:
+  - {t: 65000, panic: true}
+  - {t: 131000, panic: true}
+  - {t: 197000, panic: true}
+  - {t: 263000, panic: true}
+end: 300000
+expect:
+  boot_count: 5
+  every: {safe: false}
+  boots:
+    - {exit: fatal, log: ["Safe mode self-test passed", "omi/bootstate=GOOD"]}
+    - {exit: fatal, boot_count: 1, log: ["Safe mode self-test passed"], not_log: ["omi/bootstate=GOOD"]}
+    - {exit: fatal, boot_count: 1}
+    - {exit: fatal, boot_count: 1}
+    - {exit: stop, boot_count: 1}

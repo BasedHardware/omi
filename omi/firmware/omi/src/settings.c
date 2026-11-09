@@ -243,7 +243,11 @@ int app_settings_init(void)
 {
 #ifdef CONFIG_OMI_FAULT_INJECT_SETTINGS_HANG
     printk("FAULT_INJECT: app settings init hang\n");
-    for (;;) {}
+    /* Spin without feeding WDT; busy-waiting lets simulated time (and the
+     * simulator's watchdog) advance on native_sim too. */
+    for (;;) {
+        k_busy_wait(1000);
+    }
 #endif
     int err = settings_subsys_init();
     if (err) {

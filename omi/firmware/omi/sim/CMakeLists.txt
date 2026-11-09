@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
-list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
+list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(omi_startup_sim)
 include(../cmake/safe-mode-build.cmake)
@@ -8,8 +8,10 @@ if(NOT CONFIG_OMI_NATIVE_SIM)
   message(FATAL_ERROR "This target is only for native_sim")
 endif()
 
-# Keep production CMake/config untouched. Compile the actual entrypoint and
-# portable settings/time/feedback code; replace device boundaries at link time.
+# Keep production CMake/config untouched. Compile the actual entrypoint, the
+# safe-mode state machine (including its power-on hold sampling and recovery
+# loop), the button FSM and the capture-mute/settings code; replace device
+# boundaries at link time (stubs.c) and model power/reset/pins (sim_power.c).
 target_sources(app PRIVATE
   ../src/main.c
   ../src/safe_mode.c
@@ -20,7 +22,22 @@ target_sources(app PRIVATE
   ../src/settings.c
   ../src/rtc.c
   ../src/feedback.c
+  ../src/lib/core/button.c
+  ../src/lib/core/capture_mute.c
+  sim_power.c
   stubs.c
 )
 # Do not add src/lib/core: its features.h would shadow glibc's <features.h>.
-target_include_directories(app PRIVATE ../src .)
+# Core sources include their siblings with quotes, which needs no -I.
+# include/ carries the sim reset-register shim (hal/nrf_reset.h).
+target_include_directories(app PRIVATE ../src . include)
+
+# Runner side (host libc): reads boot.cfg / retained.bin in the boot's cwd.
+target_sources(native_simulator INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/host/sim_host.c)
+
+# Settings fault injection without touching production code.
+zephyr_ld_options(
+  -Wl,--wrap=settings_subsys_init
+  -Wl,--wrap=settings_load_subtree
+  -Wl,--wrap=settings_save_one
+)

@@ -19,10 +19,8 @@
 #include <zephyr/storage/flash_map.h>
 #endif
 
-#if !defined(CONFIG_OMI_NATIVE_SIM) || defined(OMI_SAFE_MODE_HOST)
 #include <hal/nrf_reset.h>
-#endif
-#ifndef CONFIG_OMI_NATIVE_SIM
+#ifndef OMI_SAFE_MODE_HOST
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/fatal.h>
 #include <zephyr/init.h>
@@ -155,7 +153,6 @@ static void new_trial(void)
     retained_seal();
 }
 
-#if !defined(CONFIG_OMI_NATIVE_SIM) || defined(OMI_SAFE_MODE_HOST)
 static void record_fatal(void)
 {
     /* Do not bless preexisting corruption by computing a new CRC over it. */
@@ -166,13 +163,19 @@ static void record_fatal(void)
     retained.telemetry_fatal = 1;
     retained_seal();
 }
+#ifdef CONFIG_OMI_NATIVE_SIM
+/* Simulator power model: lets the sim persist this record across warm resets. */
+volatile void *omi_sim_retained_ram(size_t *size)
+{
+    *size = sizeof(retained);
+    return &retained;
+}
 #endif
 
 void safe_mode_early_boot(void)
 {
     uint32_t reason = 0;
     bool crash = false;
-#if !defined(CONFIG_OMI_NATIVE_SIM) || defined(OMI_SAFE_MODE_HOST)
     reason = nrf_reset_resetreas_get(NRF_RESET);
     crash = (reason &
              (NRF_RESET_RESETREAS_DOG0_MASK | NRF_RESET_RESETREAS_DOG1_MASK | NRF_RESET_RESETREAS_LOCKUP_MASK)) != 0;
@@ -183,7 +186,6 @@ void safe_mode_early_boot(void)
     crash |= (reason & RESET_RESETREAS_SDERR_Msk) != 0;
 #endif
     nrf_reset_resetreas_clear(NRF_RESET, reason);
-#endif
     bool valid = retained_valid();
     uint32_t total_before = valid ? retained.total_boots : 0;
     uint32_t seeded_before = valid ? retained.total_seeded : 0;
@@ -418,7 +420,7 @@ bool safe_mode_boot(void)
     dfu_callback.event_id =
         MGMT_EVT_OP_IMG_MGMT_DFU_PENDING | MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK | MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED;
     mgmt_callback_register(&dfu_callback);
-#ifndef CONFIG_OMI_NATIVE_SIM
+#ifndef OMI_SAFE_MODE_HOST
     const struct gpio_dt_spec button = GPIO_DT_SPEC_GET(DT_NODELABEL(usr_btn), gpios);
     if (gpio_is_ready_dt(&button) && !gpio_pin_configure_dt(&button, GPIO_INPUT)) {
         int held = 0;
@@ -514,15 +516,19 @@ void safe_mode_snapshot_get(struct safe_mode_snapshot *out)
                                        .bootstate = saved.state};
 }
 
-#ifndef CONFIG_OMI_NATIVE_SIM
+#ifndef OMI_SAFE_MODE_HOST
 /* No logging, settings, locks or device calls in a possibly corrupted context. */
 void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
     ARG_UNUSED(reason);
     ARG_UNUSED(esf);
     record_fatal();
+#ifdef CONFIG_OMI_NATIVE_SIM
+    omi_sim_reset_fatal();
+#else
     __DSB();
     NVIC_SystemReset();
+#endif
     CODE_UNREACHABLE;
 }
 
