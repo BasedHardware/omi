@@ -472,11 +472,17 @@ def test_concurrent_finalize_registration_and_replay_create_one_pending_obligati
 
 
 @pytest.mark.parametrize('recorded_enabled', [True, False])
-def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypatch, recorded_enabled):
+@pytest.mark.parametrize('automatic_discard', [False, True])
+def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(
+    monkeypatch, recorded_enabled, automatic_discard
+):
     store = MemoryStore()
     register_recording('synthetic', recording(), store=store, now=0)
     content, segment = record_identity('synthetic', 'record')
-    store.rows['conversations', 'synthetic/record'] = recording(record_audio_closed=True)
+    store.rows['conversations', 'synthetic/record'] = recording(
+        record_audio_closed=True,
+        **({'discarded': True, 'relevance_decision': dict(RULE_DISCARD)} if automatic_discard else {}),
+    )
     item = WorkItem(
         segment,
         'synthetic',
@@ -554,10 +560,10 @@ def test_final_batch_projection_fences_a_delayed_modulate_preview_flush():
 RULE_DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'}
 
 
-def test_projection_text_preserves_an_automatic_discard():
+def test_projection_later_speech_clears_an_ordinary_automatic_discard():
     original = recording(transcript_segments=[], discarded=True, relevance_decision=dict(RULE_DISCARD))
     result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
-    assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
+    assert result['discarded'] is False and result['relevance_decision'] is None
     assert [s['id'] for s in result['transcript_segments']] == ['new']
     assert original['discarded'] is True
 
@@ -932,5 +938,7 @@ def test_record_replacement_preserves_discard_until_restore_metadata_commits():
         'started_at': start,
         'transcript_segments': [{'id': 'speech', 'start': 0, 'end': 1, 'text': 'Synthetic speech'}],
     }
-    replaced, _ = replace_record(current, incoming, {'start': 100, 'end': 110})
+    replaced, _ = replace_record(
+        current, incoming, {'start': 100, 'end': 110}, obligations=({'registration_origin': 'restore'},)
+    )
     assert replaced['discarded'] is True, 'record replacement cleared discard without a restore metadata commit'

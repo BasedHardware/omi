@@ -1,18 +1,30 @@
-# Restore metadata fences recording admission
+# Restore-only pending metadata fence
 
 Recording restore registers its durable obligation before committing visibility
 metadata. If that metadata transaction fails, the conversation stays discarded
-and the obligation stays retryable. Admission now reads the conversation inside
-its transaction on every record path, including full archives and replay, and
-refuses a discarded target with the existing retryable refusal.
+and the obligation stays retryable. Admission reads the conversation and the
+relevant jobs inside its transaction on every record path, including full
+archives, partial children, and ledger replay. It refuses admission with the
+existing retryable error only when the discarded row has a
+`registration_origin == 'restore'` job being admitted or canonical recording
+obligation. Deleted, missing, and custom-STT targets retain their refusals.
 
-Record replacement preserves automatic discards and their relevance verdicts
-even when the final pass adds speech. Only the explicit restore metadata
-transaction (`restore_conversation_from_discarded`) clears the discard; a
-registered obligation alone does not authorize making the conversation visible.
+Ordinary jobs on automatically discarded conversations retain main's admission
+behavior. Later speech replacement clears an ordinary automatic discard and its
+old relevance verdict so enrichment can reassess it. Replacement rereads the
+canonical recording obligation in the assignment transaction: a restore-pending
+row keeps its discard and verdict until `restore_conversation_from_discarded`
+commits the user's metadata. User discards remain protected.
 
-This ships on with no new flag. Revert the PR to roll back. Regression coverage:
-`tests/unit/test_restore_recording_obligation.py` exercises metadata failure
-through real recording admission, and `tests/unit/test_batch_pipeline_live.py`
-checks that replacement preserves a discard until restore commits. No env,
-wire, or payload contract changes.
+This ships on with no new flag. Risk: restore-origin obligations remain retryable
+and parked when metadata cannot commit; this change does not repair or cancel
+them. Rollback: revert the PR. Deployment belongs to the lead's backend image
+train and affected sync/projection hosts after review and merge.
+
+Regression coverage: `tests/unit/test_batch_pipeline_intake.py` covers ordinary
+admission and restore-origin unit/canonical/partial-parent fences across ledger
+states; `tests/unit/test_batch_pipeline_live.py` covers ordinary speech revival
+and the replacement repro; `tests/unit/test_restore_recording_obligation.py`
+covers failed restore metadata through real admission and strict transactional
+assignment. Both repros remain unmarked by xfail. No env, wire, payload,
+workflow, or production data changes. `utils/batch_pipeline/live.py` is untouched.

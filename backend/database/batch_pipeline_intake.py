@@ -6,7 +6,7 @@ from typing import Callable
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
-from config.record_audio import require_record_audio_barrier
+from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
@@ -62,13 +62,25 @@ def admit(
     def commit(tx):
         row = {}
         if binding.record_origin:
-            key = f'{binding.owner_id}/{binding.target_conversation_id}'
-            row = tx.get('conversations', key)
-            # Restore registers custody before committing visibility metadata.
-            # Fence every record path, including full archives and replays,
-            # until that metadata transaction has cleared the discard.
-            if not row or row.get('deleted') or row.get('uses_custom_stt') or row.get('discarded'):
+            target = binding.target_conversation_id
+            if not target:
                 raise ValueError('registered record target unavailable')
+            key = f'{binding.owner_id}/{target}'
+            row = tx.get('conversations', key)
+            if not row or row.get('deleted') or row.get('uses_custom_stt'):
+                raise ValueError('registered record target unavailable')
+            if row.get('discarded'):
+                # Full archives, partial children and ledger replays can name
+                # another unit. Read the row's canonical obligation as well.
+                obligation_ids = {
+                    binding.segment_ids[0],
+                    record_identity(binding.owner_id, target)[1],
+                }
+                partial_parent = (intake or {}).get('record_partial_parent')
+                if partial_parent:
+                    obligation_ids.add(partial_parent)
+                if restore_pending(row, *(tx.get('jobs', key) for key in obligation_ids)):
+                    raise ValueError('registered record target unavailable')
         existing = tx.get('content', content_key)
         if existing.get('dispatch_protocol') == PROTOCOL:
             return {'outcome': 'batch', 'job_id': existing['job_id']}

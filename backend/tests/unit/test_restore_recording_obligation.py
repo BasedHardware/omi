@@ -380,6 +380,45 @@ def test_restore_with_closed_empty_server_archive_creates_no_obligation(restore_
     assert restore_store.rows[ROW_PATH]['discarded'] is False
 
 
+@pytest.mark.parametrize('origin', [None, 'restore'])
+def test_record_assignment_reads_restore_obligation_before_clearing_discard(restore_store, monkeypatch, origin):
+    start = datetime.fromtimestamp(100, timezone.utc)
+    restore_store.rows[ROW_PATH].update(
+        started_at=start,
+        transcript_segments=[],
+        relevance_decision={'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript'},
+    )
+    restore_store.rows[JOB_PATH] = {'state': 'record_pending', 'registration_origin': origin}
+    # The strict fake measures read-before-write, not SDK commit/retry behavior.
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda body: body)
+    monkeypatch.setattr(
+        conversations_db,
+        'run_sync_assignment',
+        lambda client, body, full_ids, **kwargs: body(client.transaction(), full_ids),
+    )
+    monkeypatch.setattr(
+        conversations_db, 'encode_sync_assignment_plan', lambda uid, client, tx, row, old: deepcopy(row)
+    )
+    monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations_db, 'index_sync_assignment', lambda *args: None)
+    incoming = {
+        'id': CID,
+        'started_at': start,
+        'transcript_segments': [{'id': 'speech', 'start': 0, 'end': 1, 'text': 'Synthetic speech'}],
+        '_batch_replace_live': {'start': 100, 'end': 110},
+    }
+    result, created, survivors = conversations_db.assign_sync_conversation(
+        UID,
+        incoming,
+        target_id=CID,
+        firestore_client=restore_store,
+    )
+    assert not created and survivors
+    assert result['discarded'] is (origin == 'restore')
+    assert restore_store.rows[ROW_PATH]['discarded'] is (origin == 'restore')
+    assert bool(result['relevance_decision']) is (origin == 'restore')
+
+
 @pytest.mark.asyncio
 async def test_failed_restore_metadata_does_not_admit_or_process_full_archive(restore_store, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
@@ -402,6 +441,7 @@ async def test_failed_restore_metadata_does_not_admit_or_process_full_archive(re
     with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='restore metadata unavailable'):
         lifecycle.restore_discarded(UID, CID)
     pending = restore_store.rows[JOB_PATH]
+    assert pending['registration_origin'] == 'restore'
     now = pending['available_at']
     if row['discarded'] is not True or pending['state'] != 'record_pending':
         raise RuntimeError('repro requires a discarded row with successful restore registration')
