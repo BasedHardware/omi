@@ -1327,6 +1327,9 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+          OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
@@ -1687,6 +1690,9 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+          OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}

@@ -1,0 +1,17 @@
+"""Bounded server flag comparison telemetry, registered by the shared exporter."""
+
+from prometheus_client import Counter, disable_created_metrics
+
+# Four idle series per evaluator key; no per-user labels or _created companions.
+disable_created_metrics()
+
+OMI_FLAG_DUAL_READ_TOTAL = Counter(
+    'omi_flag_dual_read_total',
+    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
+    ['flag', 'outcome'],
+)
+# Export idle zeros at startup for the bounded set of dual-read evaluator keys.
+# Missing series then indicate missing runtime/scrape coverage, not no comparisons.
+for _flag in ('proactivity_v2',):
+    for _outcome in ('match', 'mismatch', 'omi_absent', 'omi_error'):
+        OMI_FLAG_DUAL_READ_TOTAL.labels(flag=_flag, outcome=_outcome)

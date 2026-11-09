@@ -1,6 +1,8 @@
 """Omi flag store: evaluation, snapshot refresh/fallback, /v1/flags, proactivity_v2 source switch, CLI rules."""
 
 import json
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -15,7 +17,7 @@ from routers import omi_flags as flags_router
 from database import omi_flags as omi_flags_store
 from scripts import omi_flags as cli
 from utils import omi_flags, proactivity_flags
-from utils.metrics import OMI_FLAG_DUAL_READ_TOTAL
+from utils.omi_flag_metrics import OMI_FLAG_DUAL_READ_TOTAL
 from utils.other.endpoints import get_current_user_uid
 
 
@@ -180,6 +182,27 @@ def test_client_flags_endpoint_filters_by_surface(store):
 
 def _dual_count(outcome):
     return OMI_FLAG_DUAL_READ_TOTAL.labels(flag='proactivity_v2', outcome=outcome)._value.get()
+
+
+def test_dual_read_scrape_exports_all_outcomes_before_any_evaluation():
+    # A fresh process proves startup registration without creating children in
+    # the test or inheriting comparisons performed by another test.
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            'from utils.metrics import metrics_response; print(metrics_response().body.decode())',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    samples = {line for line in result.stdout.splitlines() if line.startswith('omi_flag_dual_read_')}
+    assert samples == {
+        f'omi_flag_dual_read_total{{flag="proactivity_v2",outcome="{outcome}"}} 0.0'
+        for outcome in ('match', 'mismatch', 'omi_absent', 'omi_error')
+    }
 
 
 def test_proactivity_default_source_is_posthog(store, monkeypatch):
