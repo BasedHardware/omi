@@ -143,3 +143,63 @@ def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypa
 
     assert response.status_code == 204
     assert events == ['gate', 'intent', 'retract', 'delete', 'release']
+
+
+class _GateDocs:
+    """Minimal Firestore for the real account gate and external write fence."""
+
+    def __init__(self):
+        self.docs = {}
+
+    def document(self, path):
+        docs = self.docs
+        return MagicMock(
+            path=path,
+            get=lambda transaction=None: MagicMock(exists=path in docs, to_dict=lambda: dict(docs.get(path) or {})),
+        )
+
+    def transaction(self):
+        docs = self.docs
+        return MagicMock(set=lambda ref, payload, merge=False: docs.__setitem__(ref.path, dict(payload)))
+
+
+def test_cascade_delete_nested_fenced_writes_do_not_hit_their_own_gate(monkeypatch):
+    """Prod regression: every cascade delete 409'd on its own explicit_memory_deletion gate.
+
+    The real gate is acquired; nested cleanup then performs the same fenced writes
+    production does (transactional speaker retraction inside conversation deletion,
+    non-transactional Pinecone transcript-chunk delete).
+    """
+    from database import legal_holds
+
+    gate_docs = _GateDocs()
+    monkeypatch.setattr(
+        legal_holds,
+        '_acquire_destructive_operation_transaction',
+        legal_holds._acquire_destructive_operation_transaction.to_wrap,
+    )
+    monkeypatch.setattr(
+        legal_holds,
+        '_finish_destructive_operation_transaction',
+        legal_holds._finish_destructive_operation_transaction.to_wrap,
+    )
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setattr(conversations, 'destructive_operation_gate', legal_holds.destructive_operation_gate)
+        monkeypatch.setattr(conversations, 'db_client_module', MagicMock(db=gate_docs))
+
+        def speaker_retraction_then_delete(uid, conversation_id):
+            with legal_holds.external_write_fence(uid, firestore_client=gate_docs, transaction=gate_docs.transaction()):
+                pass
+
+        def transcript_chunk_delete(uid, conversation_id):
+            with legal_holds.external_write_fence(uid, firestore_client=gate_docs):
+                pass
+
+        conversations.delete_conversation_and_frame_evidence.side_effect = speaker_retraction_then_delete
+        conversations.delete_transcript_chunk_vectors.side_effect = transcript_chunk_delete
+        response = client.delete('/v1/conversations/conversation-1?cascade=true')
+
+    assert response.status_code == 204
+    gate = gate_docs.docs['legal_hold_deletion_gates/uid-delete-contract']
+    assert gate['state'] == 'completed'
+    conversations.delete_transcript_chunk_vectors.assert_called_once()
