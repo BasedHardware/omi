@@ -311,6 +311,19 @@ class EpisodeProvider extends ChangeNotifier {
     return _clock().difference(closedAt) < previousExpiry ? episode : null;
   }
 
+  /// The end of the newest closed Home episode that ended by [now]. With no server live episode, a
+  /// capture that began earlier (a pendant wear session) must not count time those episodes own.
+  DateTime? closedEpisodeFloor(DateTime now) {
+    DateTime? floor;
+    for (final episode in homeEpisodes) {
+      if (episode.live) continue;
+      final ended = episode.closedAt ?? episode.lastActivityAt;
+      if (ended.isAfter(now)) continue;
+      if (floor == null || ended.isAfter(floor)) floor = ended;
+    }
+    return floor;
+  }
+
   String _ownerUid = SharedPreferencesUtil().uid;
 
   void _ensureOwner() {
