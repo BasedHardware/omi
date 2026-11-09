@@ -725,7 +725,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                   ],
               };
         final projectedEpisodes = <String, HomeRow>{};
-        final projectedMemberIds = <String>{};
+        final projectedMemberIds = <String>{...hiddenByLive};
         final projectedProcessingIds = <String>{};
         if (defaultHome) {
           final today = DateTime.now();
@@ -745,6 +745,15 @@ class _ConversationsPageState extends State<ConversationsPage>
           final paintEpisodes = holdingLayout
               ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
               : latestEpisodes;
+          // Home and live snapshots can disagree about the latest membership.
+          // The same live episode owns its closed members in both insertion paths.
+          for (final episode in paintEpisodes) {
+            if (episode.live &&
+                (episodeLive && episode.id == episodes?.live?.id ||
+                    episode.conversationIds.any(hiddenByLive.contains))) {
+              projectedMemberIds.addAll(episode.conversationIds);
+            }
+          }
           final listed = [for (final list in conversationsByDate.values) ...list];
           final listedIds = {for (final c in listed) c.id};
           final projected = buildHomeRows(
@@ -760,6 +769,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
+            liveEpisodeId: episodeLive ? episodes?.live?.id : null,
             deletedIds: {...convoProvider.memoriesToDelete.keys, ...(episodes?.hiddenHomeMembers ?? const <String>{})},
             knownConversations: snapshot.conversations,
             processingConversations: snapshot.processingConversations,

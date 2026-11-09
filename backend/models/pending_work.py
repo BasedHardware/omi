@@ -11,6 +11,7 @@ class PendingWorkItem(BaseModel):
     kind: Literal['conversation', 'sync_job']
     state: Literal['queued', 'transcribing', 'summarizing']
     conversation_ids: list[str]
+    recording_count: int = 1
     started_at: datetime | None
     duration_seconds: float
     updated_at: datetime | None

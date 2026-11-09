@@ -555,6 +555,32 @@ void main() {
     });
   }
 
+  test('Home acknowledges only fetched live episode snapshots', () async {
+    final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));
+    final history = _HomeHistory()..conversations = [member];
+    final episodes =
+        EpisodeProvider(fetchPage: (_, __, {cursor}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)))
+          ..debugSetLive(null);
+    addTearDown(history.dispose);
+    addTearDown(episodes.dispose);
+    episodes.observeHomeConversations(history);
+    expect(await episodes.refreshHome(_t0, _t0), isFalse);
+    expect(history.heldHomeEpisodes!(), isEmpty, reason: 'failed or missing snapshot never grants suppression');
+    episodes.debugSetHomeEpisodes([
+      Episode(
+          id: 'live',
+          live: true,
+          startedAt: _t0,
+          lastActivityAt: _t0,
+          conversationIds: const ['c1'],
+          members: [member]),
+    ]);
+    expect(history.heldHomeEpisodes!().keys, ['live']);
+    expect(history.heldHomeEpisodes!()['live']!.single.id, 'c1');
+    episodes.debugSetHomeEpisodes([]);
+    expect(history.heldHomeEpisodes!(), isEmpty);
+  });
+
   test('local member deletion stays hidden after DELETE settles, while Undo restores it', () async {
     final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));
     final history = _HomeHistory()..conversations = [member];

@@ -283,14 +283,20 @@ async def test_idle_pump_stops_during_tick_sleep_without_starting_drains(monkeyp
         return fn(*args)
 
     monkeypatch.setattr(serving, 'run_blocking', run_blocking)
+    from utils.batch_pipeline import projection_drain
+
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', None)
     runtime = serving.start_serving_from_env()
     try:
         await asyncio.wait_for(swept.wait(), timeout=5)
+        # A live pump marks its recurring sweep, so live-target holds may be passive.
+        assert projection_drain.recurring_sweep_active()
     finally:
         await serving.stop_serving(runtime)
     projector.sweep.assert_called_once()
     projector.start_drains.assert_not_called()
     assert runtime[1].done()
+    assert not projection_drain.recurring_sweep_active()
 
 
 @pytest.mark.asyncio

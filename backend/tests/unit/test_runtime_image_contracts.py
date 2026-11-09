@@ -69,6 +69,31 @@ def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):
     assert not (dest / '.openapi-venv').exists()
 
 
+@pytest.mark.parametrize('scratch', ['_temp', '_samples', '_speech_profiles', '_segments'])
+def test_source_copy_skips_untracked_scratch_directories(contracts_module, tmp_path, scratch):
+    source = tmp_path / 'backend'
+    source.mkdir()
+    (source / 'main.py').write_text('ok\n', encoding='utf-8')
+    (source / scratch).mkdir()
+    (source / scratch / 'written-by-a-test.bin').write_text('transient\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'main.py').is_file()
+    assert not (dest / scratch).exists()
+
+
+def test_scratch_directory_names_do_not_hide_nested_source(contracts_module, tmp_path):
+    source = tmp_path / 'backend'
+    (source / 'utils' / '_segments').mkdir(parents=True)
+    (source / 'utils' / '_segments' / 'merge.py').write_text('ok\n', encoding='utf-8')
+    (source / 'utils' / '_temp').mkdir()
+    (source / 'utils' / '_temp' / 'helper.py').write_text('ok\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'utils' / '_segments' / 'merge.py').is_file()
+    assert (dest / 'utils' / '_temp' / 'helper.py').is_file()
+
+
 def _contract_with_dockerfile(contracts_module, tmp_path, dockerfile_text):
     dockerfile = tmp_path / 'Dockerfile'
     dockerfile.write_text(dockerfile_text, encoding='utf-8')
@@ -248,6 +273,89 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     assert not any(error.startswith('complete:') for error in errors)
     assert any(error.startswith('missing-lazy:') and "'added'" in error for error in errors)
     assert any(error.startswith('missing-child:') and "'package.child'" in error for error in errors)
+
+
+def test_shared_staging_keeps_context_and_entrypoint_boundaries(contracts_module, tmp_path):
+    first = tmp_path / 'first'
+    second = tmp_path / 'second'
+    first.mkdir()
+    second.mkdir()
+    (first / 'main.py').write_text('import json\n')
+    (first / 'other.py').write_text('import json\n')
+    (second / 'main.py').write_text('import missing\n')
+    (second / 'missing.py').write_text('import json\n')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n')
+    template = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=first,
+        source_root=first,
+        entrypoint_source_root=first,
+        entrypoints=('main',),
+    )
+    contracts = [
+        replace(template, name='complete'),
+        replace(template, name='other-entrypoint', entrypoints=('other',)),
+        replace(
+            template, name='other-context', build_context=second, source_root=second, entrypoint_source_root=second
+        ),
+    ]
+
+    errors = contracts_module.check_source_closures(contracts)
+
+    assert not any(error.startswith('complete:') for error in errors)
+    assert any(error.startswith('other-entrypoint:') and "'other'" in error for error in errors)
+    assert any(error.startswith('other-context:') and "'missing'" in error for error in errors)
+    # The same COPY key must be restaged after a source edit, even after errors.
+    (first / 'main.py').write_text('def lazy():\n    import other\n')
+    errors = contracts_module.check_source_closures(contracts)
+    assert any(error.startswith('complete:') and "'other'" in error for error in errors)
+    (first / 'main.py').write_text('import json\n')
+    assert contracts_module.check_source_closures([contracts[0]]) == []
+
+
+def test_shared_staging_still_validates_each_workdir(contracts_module, tmp_path):
+    from pathlib import PurePosixPath
+
+    (tmp_path / 'main.py').write_text('import json\n')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py /app/main.py\n')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+        workdir=PurePosixPath('/app'),
+    )
+
+    with pytest.raises(contracts_module.ContractError, match='outside WORKDIR'):
+        contracts_module.check_source_closures([contract, replace(contract, workdir=PurePosixPath('/elsewhere'))])
+
+
+def test_shared_import_summary_observes_edits_and_invalid_syntax(contracts_module, tmp_path):
+    source = tmp_path / 'main.py'
+    source.write_text('import json\n')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+    )
+    trees = {}
+    assert 'added' not in contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+
+    source.write_text('class Nested:\n    def lazy(self):\n        from package import child\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'child.py').write_text('import json\n')
+    assert 'package.child' in contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+    source.write_text('def broken(:\n')
+    with pytest.raises(SyntaxError):
+        contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
 
 
 def test_pusher_dependency_probe_includes_jsonschema(contracts_module):

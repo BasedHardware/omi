@@ -1,0 +1,10 @@
+{
+  "providers": {
+    "soniox": {
+      "2026-11-04": "8.2477"
+    }
+  },
+  "skipped": [
+    "deepgram"
+  ]
+}

@@ -45,7 +45,9 @@ def _patch_sync_pipeline(
     *,
     transcript_text: str,
     reprocessed: list[str],
+    user_selections: list[bool] | None = None,
 ):
+    import database.conversations as conversations_db
     import routers.sync as sync_router
     import utils.sync.pipeline as sync_pipeline
 
@@ -130,9 +132,13 @@ def _patch_sync_pipeline(
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
         return conversation_obj.dict(), target_id is None, list(incoming["transcript_segments"])
 
-    def fake_reprocess_after_update(uid, conversation_id, language):
+    def fake_reprocess_after_update(uid, conversation_id, language, *, user_selected=False):
         reprocessed.append(conversation_id)
-        conversation = read_conversation(uid, conversation_id)
+        if user_selections is not None:
+            user_selections.append(user_selected)
+        # Read through the normal decoder: the persisted transcript/corrections
+        # are encrypted, and the explicit Process Now path uses the returned model.
+        conversation = conversations_db.get_conversation(uid, conversation_id)
         assert conversation is not None
         conversation["id"] = conversation_id
         structured = dict(conversation.get("structured") or {})
@@ -149,7 +155,8 @@ def _patch_sync_pipeline(
         updated = dict(conversation)
         updated["id"] = conversation_id
         updated["structured"] = structured
-        seed_conversation(uid, updated)
+        conversations_db.update_conversation(uid, conversation_id, {"structured": structured})
+        return Conversation(**updated)
 
     monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
     monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)

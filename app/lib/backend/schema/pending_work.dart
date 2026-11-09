@@ -14,6 +14,7 @@ class PendingWorkItem {
     required this.kind,
     required this.state,
     required this.conversationIds,
+    this.recordingCount = 1,
     this.startedAt,
     this.durationSeconds,
   });
@@ -27,6 +28,7 @@ class PendingWorkItem {
   /// `queued`, `transcribing` or `summarizing`.
   final String state;
   final List<String> conversationIds;
+  final int recordingCount;
   final DateTime? startedAt;
   final int? durationSeconds;
 
@@ -47,6 +49,7 @@ class PendingWorkItem {
                 if (c is String) c,
             ]
           : const [],
+      recordingCount: _int(json['recording_count']) ?? 1,
       startedAt: _date(json['started_at']),
       durationSeconds: _int(json['duration_seconds']),
     );

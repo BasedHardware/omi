@@ -114,6 +114,7 @@ recordSealRepair:
   rowSeconds: 270
   # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
   # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
+  # 24 workers (#24962) missed the 3-run gate 2026-11-09: sealed/run 126-170 vs >=190, per-row time ~118 s -> ~178 s; reverted.
   workers: 16
   serverFlags:
     K_SERVICE: backend
@@ -127,3 +128,6 @@ recordSealRepair:
 # recordSealWorker.serverFlags stays at the chart default {} (worker IO refused, as in live release r71). Running the
 # worker AND repair with IO would let both pick the same pending row: the transactional seal prevents a double seal,
 # but both would do the proof and audio reads (Luna r1 P2 on #24643). Enable one IO path at a time after measuring.
+recordSealWorker:
+  # Serve /metrics idle; an enabled runtime with the refused policy exits before readiness.
+  runtimeEnabled: false

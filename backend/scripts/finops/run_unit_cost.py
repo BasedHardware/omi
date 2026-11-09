@@ -66,7 +66,13 @@ def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) ->
     with open(log, "a") as fh:
         fh.write("\n===== %s: %s\n" % (label, " ".join(str(x) for x in argv)))
         fh.flush()
+        offset = fh.tell()
         p = subprocess.run([sys.executable] + argv, stdout=fh, stderr=subprocess.STDOUT)
+    with open(log) as fh:
+        fh.seek(offset)
+        for line in fh:
+            if line.startswith("WARNING:"):
+                sys.stderr.write(line)
     ok = p.returncode == 0
     sys.stderr.write("[%s] %s in %.0fs\n" % (label, "ok" if ok else "FAILED rc=%d" % p.returncode, time.time() - t0))
     if not ok and required:
@@ -173,7 +179,7 @@ def settlement_frontier(raw: pathlib.Path) -> str | None:
 
 
 def main() -> None:
-    today = dt.date.today()
+    today = dt.datetime.now(dt.timezone.utc).date()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
         "--date",
@@ -317,6 +323,9 @@ def main() -> None:
         sys.stderr.write(p.stderr[-3000:])
         raise SystemExit("assembly failed")
 
+    from assemble_spend_daily import assemble as assemble_spend
+
+    assemble_spend(raw, derived, start, end, frontier)
     recon = validate(derived, raw, a.recon_tolerance_pct, dates)
     manifest = {
         "run_id": run_id,

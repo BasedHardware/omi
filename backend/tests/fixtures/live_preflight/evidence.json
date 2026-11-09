@@ -1,0 +1,8 @@
+{
+  "service": {"status": {"traffic": [{"revisionName": "backend-serving", "percent": 100}]}},
+  "revision": {"metadata": {"labels": {}}, "spec": {"containers": [{"image": "gcr.io/based-hardware/backend:SERVING", "env": [{"name": "OMI_BACKEND_RELEASE_SHA", "value": "SERVING"}]}]}},
+  "pods": {"items": [{"spec": {"containers": [{"name": "batch-pipeline-worker", "image": "gcr.io/based-hardware/batch-pipeline-worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}, "status": {"phase": "Running"}}]},
+  "matrix": {"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {}, "values": [[1, "1"], [2, "1"]]}]}},
+  "manifest": {"config": {"digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "config": {"config": {"Labels": {"omi.release.tree": "TREE"}}}
+}

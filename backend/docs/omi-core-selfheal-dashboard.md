@@ -74,13 +74,10 @@ later pages are unexplored.
   `omi-core-features.json` rather than a new dashboard JSON.
 - **No deployment manifests or workflows.** Only the job module is added;
   scheduling/Docker/CI wiring is a separate delivery step.
-- **One in-flight backfill job per uid, default-on.** The proposal allowed two
-  concurrent backfill jobs; the shipped guard claims a single
-  `sync_backfill:inflight:{uid}` Redis NX slot (48h TTL, token = job_id) and
-  refuses extra admissions with 429 `backfill_paced`. It is enabled unless
-  `SYNC_BACKFILL_INFLIGHT_LIMIT=false`, independent of the legacy
-  `SYNC_BACKFILL_ADMISSION_LIMITS` daily speech caps, and releases with the
-  existing compare-delete owner's-token script.
+- **Retired Redis admission slot.** C6 removed its last serving caller;
+  `SYNC_BACKFILL_INFLIGHT_LIMIT` and slot acquisition are retired. Existing
+  token-fenced slot release and `SYNC_BACKFILL_ADMISSION_LIMITS` daily speech
+  caps remain; v2 dispatch is paced by Cloud Tasks and the UID sequencer.
 - **Durable dead-letter ledger, unchanged client status.** Terminal backfill
   failures write `sync_dead_letters/{job_id}` (pending → dead_letter) before
   and after the Redis terminal publish. The app still sees only the existing

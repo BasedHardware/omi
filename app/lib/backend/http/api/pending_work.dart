@@ -18,7 +18,8 @@ Map<String, dynamic> _object(String body) {
 String _id(String id) => Uri.encodeComponent(id);
 
 Future<ApiResult<PendingWorkSnapshot>> getPendingWork() => executeApi(
-      request: ApiRequest(url: '${Env.apiBaseUrl}v1/pending-work', method: 'GET'),
+      request: ApiRequest(
+          url: '${Env.apiBaseUrl}v1/pending-work', method: 'GET', headers: const {'X-Omi-Home-Ownership': '1'}),
       decode: (body) => PendingWorkSnapshot.fromGenerated(wire.GeneratedPendingWorkSnapshot.fromJson(_object(body))),
     );
 
