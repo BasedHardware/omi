@@ -123,6 +123,12 @@ FIELD_SITES = {
         (
             'ArtifactMissingStore.restore_reupload.commit',
             'state',
+            "'quarantined'",
+            ('merge_pending', 'recovery_state', 'state'),
+        ),
+        (
+            'ArtifactMissingStore.restore_reupload.commit',
+            'state',
             "'restored'",
             ('restored_at', 'restored_uri_sha256', 'state'),
         ),
@@ -208,6 +214,7 @@ FIELD_SITES = {
             "'ready'",
             ('ghost_settled_cohort', 'projection_state'),
         ),
+        ('ProjectionReleaseStore.release.commit', 'state', "'committed'", ('dead_letter_reason', 'state')),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),
@@ -315,6 +322,12 @@ FIELD_SITES = {
             'state',
             "'dead'",
             ('dead_letter_reason', 'held_expired_at', 'merge_pending', 'state'),
+        ),
+        (
+            'expire_input_in_transaction',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'input_expiring_at', 'input_expiring_leg', 'merge_pending', 'state'),
         ),
     ],
     'database/batch_pipeline_recovery.py': [
@@ -2406,6 +2419,25 @@ FIELD_SITES = {
             '_deleted_conversation_status',
             'status',
             "'completed'",
+            (
+                'errors',
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'reason_code',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+        (
+            'durable_status.read',
+            'status',
+            "'failed'",
             (
                 'errors',
                 'failed_segments',

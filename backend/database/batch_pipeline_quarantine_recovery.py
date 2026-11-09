@@ -123,15 +123,19 @@ class RecoveryStore:
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
+            if expire_input_in_transaction(tx, job, now):
+                return 'expired'
             return expire_held_in_transaction(tx, job, now)
 
         return self.store.run(commit)
 
-    def requeue_quarantined(self, segment_id, now, *, dead_before=None):
+    def requeue_quarantined(self, segment_id, now, *, dead_before=None, expected_job=None):
         """Operator and nightly entry: retain the content/privacy ownership CAS."""
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
+            if expected_job is not None and job != expected_job:
+                return False
             if dead_before is not None:
                 expired_at = job.get('held_expired_at')
                 if (
@@ -615,6 +619,67 @@ class RecoveryStore:
                 'no_recoverable_speech' if outcome == 'no_recoverable_speech' else 'recovered', seconds=seconds
             )
         return changed
+
+
+def expire_input_in_transaction(tx, job, now):
+    """Use the existing held scan and content/privacy CAS; never delete retained artifacts."""
+    from config.refactor_modes import batch_input_expiring_enabled
+    from utils.batch_pipeline.input_retention import held_input_leg, staged_enqueue, TERMINAL_SECONDS, REASON
+    from database.batch_pipeline_projection import assignment_held_without_recovery
+
+    if not batch_input_expiring_enabled():
+        return False
+    stamp = staged_enqueue(job)
+    leg = held_input_leg(job)
+    lease = job.get('lease_until', 0)
+    if (
+        stamp is None
+        or not leg
+        or not math.isfinite(now)
+        or now < stamp + TERMINAL_SECONDS
+        or job.get('token')
+        or type(lease) not in (int, float)
+        or not math.isfinite(lease)
+        or lease > now
+    ):
+        return False
+    if leg == 'gpu':
+        if not Scheduler.held_requeue_eligible(tx, job, now, allow_dead=False):
+            return False
+    else:
+        entry = tx.get('results', job['segment_id'])
+        receipts = [entry.get('projection') or {}, *(entry.get('projection_parts') or {}).values()]
+        if (
+            entry.get('projection_state') != 'quarantine_held'
+            or entry.get('owner_key') != owner_key(job['owner_id'])
+            or entry.get('segment_id') != job['segment_id']
+            or entry.get('projection_privacy_refusal')
+            or any(part.get('privacy_reason') for part in receipts)
+            or not any(
+                part.get('disposition') == 'ambiguous_generation'
+                and assignment_held_without_recovery(job, {**entry, 'projection': part})
+                for part in receipts
+            )
+        ):
+            return False
+    if leg == 'gpu':
+        binding = normalized_binding(job['projection_binding'])
+        if not (binding.native_record or binding.record_origin or binding.partial_record):
+            ledger_key = f'{binding.owner_id}/{binding.content_id}'
+            ledger = tx.get('content', ledger_key)
+            ledger['artifact_missing_units'] = sorted(
+                set(ledger.get('artifact_missing_units') or []) | {job['segment_id']}
+            )
+            tx.put('content', ledger_key, ledger)
+    job.update(
+        state='dead',
+        merge_pending=leg == 'gpu',
+        dead_letter_reason=REASON,
+        input_expiring_at=now,
+        input_expiring_leg=leg,
+    )
+    tx.put('jobs', job['segment_id'], job)
+    return True
 
 
 def expire_held_in_transaction(tx, job, now):

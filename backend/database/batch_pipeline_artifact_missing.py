@@ -13,6 +13,7 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.scheduler import owner_key
 from database.sync_ledger import batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from utils.batch_pipeline.input_retention import input_expiring
 
 REASON_CODE = 'batch_artifact_missing'
 PROOF_MAX_AGE_SECONDS = 30
@@ -20,7 +21,11 @@ PROOF_MAX_AGE_SECONDS = 30
 
 def artifact_missing(job: dict) -> bool:
     # Fail closed even if a later writer changes the state around this marker.
-    return (job.get('artifact_disposition') or {}).get('state') == 'missing'
+    # An expiring GPU input uses the SAME exact-bundle repair protocol. This
+    # marker authorizes replacement, never a claim that GCS confirmed absence.
+    return (job.get('artifact_disposition') or {}).get('state') == 'missing' or (
+        input_expiring(job) and job.get('input_expiring_leg') == 'gpu'
+    )
 
 
 def fingerprint(job: dict) -> str:
@@ -74,8 +79,10 @@ class ArtifactMissingStore:
                 RecoveryStore(self.store).checked(tx, sid)
                 if (
                     not held_without_recovery(job)
-                    or job.get('state') != 'quarantined'
-                    or job.get('recovery_state') != 'failed_held'
+                    or not (
+                        (job.get('state') == 'quarantined' and job.get('recovery_state') == 'failed_held')
+                        or (input_expiring(job) and job.get('input_expiring_leg') == 'gpu')
+                    )
                     or job.get('result')
                     or tx.get('results', sid)
                     or (job.get('stt_route') or {}).get('stt_route') == 'provider'
@@ -111,12 +118,19 @@ class ArtifactMissingStore:
                 uri = uris[sid]
                 parsed = urlsplit(uri)
                 reservation = tx.get('artifacts', artifact_id(sid, uri))
+                expiring = input_expiring(job)
                 if (
                     job != snapshots[sid]
                     or not held_without_recovery(job)
-                    or job['artifact_disposition'].get('privacy_generation') != binding.privacy_generation
-                    or job['artifact_disposition'].get('evidence', {}).get('uri_sha256')
-                    != hashlib.sha256(job['audio_uri'].encode()).hexdigest()
+                    or (
+                        not expiring
+                        and job['artifact_disposition'].get('privacy_generation') != binding.privacy_generation
+                    )
+                    or (
+                        not expiring
+                        and job['artifact_disposition'].get('evidence', {}).get('uri_sha256')
+                        != hashlib.sha256(job['audio_uri'].encode()).hexdigest()
+                    )
                     or tx.get('results', sid)
                     or parsed.scheme != 'gs'
                     or not re.fullmatch(r'[1-9][0-9]{0,19}', parsed.fragment)
@@ -137,11 +151,15 @@ class ArtifactMissingStore:
                 tx.put('artifacts', artifact_id(sid, uri), reservation)
                 job['audio_uri'] = uri
                 job['artifact_disposition'] = {
-                    **job['artifact_disposition'],
+                    **(job.get('artifact_disposition') or {}),
                     'state': 'restored',
                     'restored_at': now,
                     'restored_uri_sha256': hashlib.sha256(uri.encode()).hexdigest(),
                 }
+                if input_expiring(job):
+                    # The existing restore CAS requires a dormant quarantined
+                    # unit. Paid history and sibling receipts remain untouched.
+                    job.update(state='quarantined', recovery_state='failed_held', merge_pending=False)
                 Scheduler.restore_audio_in_transaction(tx, job, now)
             # Keep partial status and usage_steps: changing it to processing
             # would charge already projected speech a second time on completion.

@@ -124,6 +124,11 @@ def record_seal_repair_age_order() -> bool:
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
 
 
+def batch_input_expiring_enabled() -> bool:
+    """Stop held staging inputs at day 29; off restores the existing held lifecycle."""
+    return default_on('BATCH_INPUT_EXPIRING_ENABLED')
+
+
 def uid_digest(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 

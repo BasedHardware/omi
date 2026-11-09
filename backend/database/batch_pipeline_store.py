@@ -830,11 +830,17 @@ def timeliness_sample(
         docs = list(query.order_by(field).limit(1).stream())
         return docs[0].to_dict()[field] if docs else None
 
-    def first_valid_clock(query, field):
+    def first_valid_clock(query, field, predicate=None):
         # Metrics-only: a malformed clock must not mask a later dated held row.
         # Keep limit(1) on each RPC: valid stock still costs one document read.
         query = query.order_by(field).limit(1)
+        examined = 0
         while docs := list(query.stream()):
+            # Do not publish a false healthy zero or run an unbounded fleet scan.
+            # The existing sample-error/staleness path reports incomplete ages.
+            examined += 1
+            if predicate is not None and examined > 128:
+                raise RuntimeError('staged input age scan incomplete')
             doc = docs[0]
             started = doc.to_dict().get(field)
             if (
@@ -842,6 +848,7 @@ def timeliness_sample(
                 and not isinstance(started, bool)
                 and math.isfinite(started)
                 and started > 0
+                and (predicate is None or predicate(doc.to_dict()))
             ):
                 return started
             query = query.start_after(doc)
@@ -945,11 +952,23 @@ def timeliness_sample(
         quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
+    from utils.batch_pipeline.input_retention import held_input_leg, staged_enqueue
+
+    staged = [
+        first_valid_clock(
+            jobs.where('state', '==', state).where('recovery_state', 'in', ['held', 'failed_held']),
+            'enqueued_at',
+            lambda job: held_input_leg(job) is not None and staged_enqueue(job) is not None,
+        )
+        for state in ('quarantined', 'committed')
+    ]
     sample: dict[str, Any] = {
         # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
         # reads stay exact even when the stock is larger than a scan page; held legs skip invalid clocks.
         'drain_oldest': first(projection, 'committed_at'),
         'held_oldest': {
+            # Staging happens at admission. This is an enqueue-time proxy, never an object metadata read.
+            'staged_input': min((stamp for stamp in staged if stamp is not None), default=None),
             'quarantine_held': first_valid_clock(legs['quarantine_held_rows'][0], 'committed_at'),
             'held_expired': first_valid_clock(legs['held_expired_rows'][0], 'committed_at'),
             'assignment_held': first_valid_clock(legs['assignment_held'][0], 'enqueued_at'),
