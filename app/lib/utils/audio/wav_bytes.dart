@@ -271,9 +271,8 @@ class WavBytesUtil {
   Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
     Uint8List wavBytes;
     if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
-      Int16List samples = getPcmSamples(frames);
-      // TODO: try pcm16
-      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000);
+      List<int> samples = getPcmSamples(frames);
+      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000, sampleWidth: codec == BleAudioCodec.pcm8 ? 1 : 2);
     } else if (codec == BleAudioCodec.mulaw8 || codec == BleAudioCodec.mulaw16) {
       throw UnimplementedError('mulaw codec not implemented');
       // Int16List samples = getMulawSamples(frames);
@@ -308,18 +307,22 @@ class WavBytesUtil {
     return file;
   }
 
-  static Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
+  static Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate, {int sampleWidth = 2}) {
     // https://discord.com/channels/1192313062041067520/1231903583717425153/1256187110554341386
     // https://github.com/BasedHardware/omi/blob/main/docs/_developer/Protocol.md
-    Uint8List wavHeader = getWavHeader(audioBytes.length * 2, sampleRate);
-    return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes));
+    Uint8List wavHeader = getWavHeader(audioBytes.length * sampleWidth, sampleRate, sampleWidth: sampleWidth);
+    return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes, sampleWidth: sampleWidth));
   }
 
   // Utility to convert audio data to little-endian format
-  static Uint8List convertToLittleEndianBytes(List<int> audioData) {
-    final byteData = ByteData(2 * audioData.length);
+  static Uint8List convertToLittleEndianBytes(List<int> audioData, {int sampleWidth = 2}) {
+    final byteData = ByteData(sampleWidth * audioData.length);
     for (int i = 0; i < audioData.length; i++) {
-      byteData.setUint16(i * 2, audioData[i], Endian.little);
+      if (sampleWidth == 1) {
+        byteData.setUint8(i, audioData[i]);
+      } else {
+        byteData.setUint16(i * 2, audioData[i], Endian.little);
+      }
     }
     return byteData.buffer.asUint8List();
   }
@@ -362,7 +365,10 @@ class WavBytesUtil {
     return byteData.buffer.asUint8List();
   }
 
-  Int16List getPcmSamples(List<List<int>> frames) {
+  List<int> getPcmSamples(List<List<int>> frames) {
+    if (codec == BleAudioCodec.pcm8) {
+      return frames.expand((f) => f).toList();
+    }
     int totalLength = frames.fold(0, (sum, frame) => sum + frame.length);
 
     // Create an Int16List to store the samples
@@ -378,7 +384,7 @@ class WavBytesUtil {
         samples[sampleIndex++] = sample;
       }
     }
-    return samples;
+    return samples.toList();
   }
 
   Int16List getMulawSamples(List<List<int>> frames) {
