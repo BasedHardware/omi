@@ -254,3 +254,25 @@ def test_goal_update_rejects_oversized_title(authed_profile, respx_mock, cli_run
     assert result.exit_code == 1
     assert "Invalid goal title" in result.output
     assert not route.called
+
+
+def test_goal_create_rejects_inverted_scale_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["--json", "goal", "create", "read pages", "--target", "10", "--min", "20", "--max", "5"],
+    )
+    assert result.exit_code == 1
+    assert "invalid scale range" in result.stderr.lower()
+    assert "--min" in result.stderr
+    assert not respx_mock.calls
+
+
+def test_goal_update_rejects_inverted_scale_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["--json", "goal", "update", "g1", "--min", "15", "--max", "5"],
+    )
+    assert result.exit_code == 1
+    assert "invalid scale range" in result.stderr.lower()
+    assert "--min" in result.stderr
+    assert not respx_mock.calls

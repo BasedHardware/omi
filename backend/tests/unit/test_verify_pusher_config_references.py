@@ -193,6 +193,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_TERMINAL_FAMILY_MODE": "on",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
+        "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
         "STT_CAP_DISPATCH_ENFORCEMENT": "false",

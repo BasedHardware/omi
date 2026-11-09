@@ -87,6 +87,7 @@ int device_is_ready(const struct device *dev);
 #define sdhc0 1
 """,
             "zephyr/kernel.h": """#define printk(...) ((void)0)
+static inline void k_busy_wait(unsigned int us) { (void)us; }
 #define ARG_UNUSED(x) (void)(x)
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 """,

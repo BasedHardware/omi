@@ -112,6 +112,8 @@ env:
     value: "true"
   - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
     value: "7200"
+  - name: HOME_PROCESSING_MAX_AGE_SECONDS
+    value: "21600"
   - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
     value: "true"
   - name: STT_CAP_DISPATCH_ENFORCEMENT

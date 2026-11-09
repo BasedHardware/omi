@@ -21,6 +21,9 @@ static int save_error;
 static unsigned writes;
 static size_t stored_len = 1;
 static int read_result = 1;
+static int init_error;
+static int load_error;
+static bool stored = true;
 
 static int read_muted(void *arg, void *destination, size_t length)
 {
@@ -34,13 +37,16 @@ static int read_muted(void *arg, void *destination, size_t length)
 
 int settings_subsys_init(void)
 {
-    return 0;
+    return init_error;
 }
 
 int settings_load_subtree(const char *name)
 {
     assert(strcmp(name, "omi") == 0);
-    return registered_settings_set("muted", stored_len, read_muted, NULL);
+    if (load_error) {
+        return load_error;
+    }
+    return stored ? registered_settings_set("muted", stored_len, read_muted, NULL) : 0;
 }
 
 int settings_save_one(const char *name, const void *value, size_t len)
@@ -57,6 +63,12 @@ int settings_save_one(const char *name, const void *value, size_t len)
 int main(void)
 {
     const uint8_t pause = 1, resume = 0;
+    /* Before settings load, and for a fresh device with no stored value. */
+    assert(capture_mute_is_set());
+    stored = false;
+    assert(app_settings_init() == 0);
+    assert(capture_mute_should_capture());
+    stored = true;
     assert(app_settings_init() == 0);
     assert(capture_mute_should_capture());
     assert(capture_mute_gatt_write(&pause, 1, 0) == 1);
@@ -75,9 +87,30 @@ int main(void)
     assert(capture_mute_should_capture());
     save_error = -ENOSPC;
     assert(capture_mute_gatt_write(&pause, 1, 0) == BT_GATT_ERR(BT_ATT_ERR_UNLIKELY));
-    assert(!capture_mute_is_set()); /* failure cannot masquerade as durable mute */
+    assert(!capture_mute_should_capture()); /* the app asked to stop: fail closed now */
     assert(app_settings_init() == 0);
-    assert(!capture_mute_is_set());
+    assert(!capture_mute_is_set()); /* ... but the error told the app it is not durable */
+
+    /* A muted pendant whose settings backend fails at boot stays muted. */
+    save_error = 0;
+    assert(capture_mute_gatt_write(&pause, 1, 0) == 1);
+    init_error = -EIO;
+    assert(app_settings_init() == -EIO);
+    assert(capture_mute_is_set());
+    init_error = 0;
+    load_error = -EIO;
+    assert(app_settings_init() == -EIO);
+    assert(capture_mute_is_set());
+    /* Even an unmuted pendant fails closed when the stored state is unknown. */
+    load_error = 0;
+    assert(capture_mute_gatt_write(&resume, 1, 0) == 1);
+    load_error = -EIO;
+    assert(app_settings_init() == -EIO);
+    assert(capture_mute_is_set());
+    load_error = 0;
+    assert(app_settings_init() == 0);
+    assert(capture_mute_should_capture());
+    save_error = -ENOSPC;
 
     /* An unreadable stored mute may be a user's pause: it must not resume capture. */
     stored_len = 2;

@@ -971,7 +971,7 @@
       "runs_on": "ubuntu-latest"
     },
     "firmware_release.yml/build-cv1": {
-      "budget_p50_minutes": 30,
+      "budget_p50_minutes": 55,
       "display_name": "Omi CV1 (nRF5340)",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -980,7 +980,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Manual-only frequency forecast remains zero; no added jobs or automatic runs.",
+      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Build-only runs now also run the CV1 simulator gate (full scenario suite plus 40 fuzz seeds in the same pinned image; not yet measured on a hosted runner), so the p50 allowance rises from 30 to 55 until the first QA run re-seeds it. Manual-only frequency forecast remains zero; no added jobs or automatic runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

@@ -404,7 +404,9 @@ def columns():
                                               ("revenuePerDay", "Revenue", "number"),
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
-                   unit="currencyUSD", draw="bars", stack=True, time_from="35d", extra=legend_right,
+                   # Legend under the plot, not beside it: Health is a 4-column
+                   # panel, and a right-hand legend left the 35 days ~100px wide.
+                   unit="currencyUSD", draw="bars", stack=True, time_from="35d",
                    overrides=[*[short_label(color(n, h), STACK_LABELS[n]) for n, h in COST.items()],
                               *[short_label(color(n, h), STACK_LABELS[n]) for n, h in MEASURED.items()],
                               *[short_label(estimate(n, h), STACK_LABELS[n]) for n, h in ESTIMATE.items()],

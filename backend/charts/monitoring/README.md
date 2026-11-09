@@ -868,7 +868,13 @@ It never prints contact-point settings or token material.
 
 The same script can classify every committed rule in `alerts/*.json` against
 live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
-live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
+live-but-uncommitted, present-but-paused, and present-but-divergent UIDs.
+Paused rules also count as live-and-matching when the committed source explicitly
+sets `isPaused=true` and the rest of the definition matches. The paused bucket is
+informational; either direction of pause-state drift is divergent and fails the
+selected gate. An unapproved live unpause bypasses the source's reviewed hold,
+so it fails rather than merely warning. Missing or malformed live pause state fails too.
+Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
 import` to upsert, by stable UID (POST when absent, PUT when present), the
@@ -884,7 +890,8 @@ value still fails. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
 it never deletes or pauses other rules. It then runs `--mode fleet --alert-set live-stt
 --fail-on gated`, which covers the canaries and every gated UID. The `live-stt` verification scope includes those Redis rules and the gated finalization rules, and fails closed
-when any of them is absent, paused, or divergent. They are Grafana-managed alerts,
+when any of them is absent or divergent, including a pause state that differs
+from the committed source. They are Grafana-managed alerts,
 not PrometheusRule CRDs. Their `component="other"` selector matches the shared
 fallback bucket for `redis_cache`; cache-write children are initialized at zero.
 The token is read from a mode-0600 file and
