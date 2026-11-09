@@ -21,6 +21,13 @@
       "description": "Saved secondary calendar becomes inaccessible; its selected row remains removable without substituting primary. Synthetic provider fault.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "004-desktop-macos-connect-to-choose.png",
+      "platform": "desktop-macos",
+      "description": "Production native picker setup without a Google grant. The explicit connection control was exercised through local synthetic consent, then reload and multi-calendar save against real Omi routes and Firestore. No live Google OAuth claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
