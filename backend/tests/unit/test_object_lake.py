@@ -908,14 +908,15 @@ def test_expired_creator_preserves_concurrently_published_pointer(storage, monke
     assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
 
 
-@pytest.mark.parametrize('status', [200, 201, 400, 404, 410, 499, 308, 503, 302, 202, 0])
+@pytest.mark.parametrize('status', [200, 201, 400, 404, 410, 499, 308, 503, 302, 202, 0, 401, 403, 407, 408, 425, 429])
 def test_fence_requires_terminal_storage_status(storage, monkeypatch, status):
     bucket, store = storage
     session = 'local-session://' + 'a' * 32
     calls = []
     monkeypatch.setattr(lake._UploadSession, 'cancel', lambda client, uri: calls.append(('DELETE', uri)))
     monkeypatch.setattr(lake._UploadSession, 'status', lambda client, uri: calls.append(('status', uri)) or status)
-    if status in (200, 201) or 400 <= status < 500:
+    # Auth, timeout and throttling refusals do not prove the session is terminal.
+    if status in (200, 201) or 400 <= status < 500 and status not in (401, 403, 407, 408, 425, 429):
         lake._fence_upload_attempt({'session': session})
     else:
         with pytest.raises(lake.LakeFetchError):

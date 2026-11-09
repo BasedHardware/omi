@@ -528,11 +528,16 @@ def _candidate_pending(row: dict) -> dict:
     return pending
 
 
+# Auth, proxy, timeout and throttling refusals say nothing about the session's
+# state; only a session-level 4xx (cancelled 499, expired 404/410, ...) is terminal.
+_NON_TERMINAL_4XX = frozenset({401, 403, 407, 408, 425, 429})
+
+
 def _fence_upload_attempt(attempt: dict) -> None:
     client = create_storage_client()
     _UploadSession.cancel(client, attempt['session'])
     status = _UploadSession.status(client, attempt['session'])
-    if status not in (200, 201) and not 400 <= status < 500:
+    if status not in (200, 201) and not (400 <= status < 500 and status not in _NON_TERMINAL_4XX):
         raise LakeFetchError('Lake upload session is not terminal')
 
 
