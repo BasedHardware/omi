@@ -168,7 +168,7 @@ def test_never_recreates_or_mutates_ineligible_rows(enabled, change):
 
 
 def test_manifest_heartbeat_never_counts_a_late_append_or_deletes_audio(enabled):
-    enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions=deepcopy(sessions), raw_audio='retained')
+    enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions={}, raw_audio='retained')
     before = deepcopy(enabled.rows)
     counter = record_audio.lease_metrics.LATE_APPEND._value.get()
     record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
@@ -368,7 +368,7 @@ def test_custody_heartbeat_writes_at_most_once_per_half_lease(enabled, monkeypat
 @pytest.mark.parametrize('sessions', [{}, {'s': TOKEN}])
 def test_complete_frame_reopen_is_serve_only_and_shadow_only_counts(enabled, monkeypatch, mode, sessions):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions={}, raw_audio='retained')
+    enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions=deepcopy(sessions), raw_audio='retained')
     before = deepcopy(enabled.rows)
     counter = record_audio.lease_metrics.LATE_APPEND._value.get()
     record_audio.renew_record_token_lease(
