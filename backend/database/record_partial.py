@@ -54,7 +54,15 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
         observation.clear()
         tx = FirestoreTransaction(store.client, store.namespace, raw)
         row = tx.get('conversations', f'{uid}/{cid}')
+        selected_segment = segment
         job = tx.get('jobs', segment)
+        if row.get('record_audio_partial') and not job.get('partial_coordinator'):
+            from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+            recovery = recovery_segment(uid, cid)
+            continuation = tx.get('jobs', recovery)
+            if continuation.get('partial_coordinator'):
+                selected_segment, job = recovery, continuation
         if not config.enabled():
             return 'disabled'
         if not proof or not proof.get('resource_version') or not producer_tokens_dead({}, proof):
@@ -127,7 +135,7 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             row=row,
             job=job,
         )
-        tx.put('jobs', segment, job)
+        tx.put('jobs', selected_segment, job)
         tx.flush()
         raw.update(row_ref, {'record_audio_closed': False, 'record_audio_partial': mark, 'record_upload_sessions': {}})
         return 'partial_finished'

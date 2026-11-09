@@ -116,6 +116,13 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     budget.check()
     row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
     budget.check()
+    if row.get('record_audio_partial') and not job.get('partial_coordinator'):
+        from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+        continuation_id = recovery_segment(uid, cid)
+        continuation = store.run(lambda tx: tx.get('jobs', continuation_id))
+        if continuation.get('partial_coordinator'):
+            job_id, job = continuation_id, continuation
     blocker = pending_blocker(row)
     if reason_out is not None:
         reason_out['blocker'] = blocker

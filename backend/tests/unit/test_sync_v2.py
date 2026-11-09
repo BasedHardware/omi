@@ -3966,6 +3966,31 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
+    async def test_memoized_custody_retry_never_acquires_or_renews_a_token(self, sync_endpoint_module, monkeypatch):
+        _, _, module = sync_endpoint_module
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+        waiting = JSONResponse(status_code=503, content={'code': 'record_jobs_missing'})
+        monkeypatch.setattr(module, 'memoized_record_wait', AsyncMock(return_value=waiting))
+        monkeypatch.setattr(module, 'prepare_sync_uploads', lambda files, uid: files)
+        acquire = AsyncMock(side_effect=AssertionError('memoized retry acquired custody'))
+        renew = AsyncMock(side_effect=AssertionError('memoized retry renewed custody'))
+        monkeypatch.setattr(module.custody_lease, 'begin_upload', acquire)
+        monkeypatch.setattr(module, '_renew_custody_lease', renew)
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        monkeypatch.setattr(module, 'run_blocking', run)
+        result = await module.sync_local_files_v2(
+            files=[SimpleNamespace(filename='synthetic.bin')],
+            uid='synthetic',
+            conversation_id='record',
+        )
+        assert result is waiting
+        acquire.assert_not_called()
+        renew.assert_not_called()
+
     @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
     async def test_custody_manifest_lease_fences_before_claim(self, sync_endpoint_module, monkeypatch, mode):
 

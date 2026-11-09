@@ -351,6 +351,9 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    from utils.batch_pipeline.record_lease_append import retain_upload
+
+    await retain_upload(uid, conversation_id, row, paths, store)
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
         return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)

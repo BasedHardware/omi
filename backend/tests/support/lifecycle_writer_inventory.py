@@ -1863,6 +1863,40 @@ FIELD_SITES = {
             ('dispatch_generation', 'due_at', 'reconcile_after_at', 'status', 'updated_at'),
         ),
     ],
+    'database/record_custody_append.py': [
+        ('begin.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
+        ('finish.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
+    ],
+    'database/batch_pipeline_record_lease_recovery.py': [
+        ('prepare_recovery', 'record_audio_closed', 'False', ('record_audio_closed', 'record_audio_partial')),
+        ('prepare_recovery', 'record_audio_partial', 'mark', ('record_audio_closed', 'record_audio_partial')),
+        (
+            'prepare_recovery',
+            'state',
+            "'record_pending'",
+            (
+                'available_at',
+                'conversation_id',
+                'enqueued_at',
+                'merge_pending',
+                'owner_id',
+                'owner_key',
+                'partial_coordinator',
+                'partial_reason',
+                'policy',
+                'policy_source',
+                'priority',
+                'privacy_generation',
+                'record_content_id',
+                'record_snapshot',
+                'segment_id',
+                'state',
+            ),
+        ),
+    ],
+    'utils/batch_pipeline/record_lease_append.py': [
+        ('wake_partial.commit', 'state', "'record_pending'", ('available_at', 'state')),
+    ],
     'database/record_audio.py': [
         ('abandon_record_upload_session.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         (
@@ -1877,6 +1911,7 @@ FIELD_SITES = {
             'True',
             ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
         ),
+        ('renew_record_token_lease.commit', 'record_audio_closed', 'False', ('record_audio_closed',)),
         ('renew_record_token_lease.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'None', ('record_seal_refused_at',)),

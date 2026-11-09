@@ -232,8 +232,15 @@ async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, ex
     )
     if exit_name == 'reactivated':
         revision = sim.row()['record_upload_revision']
-        record_audio.renew_record_token_lease(
-            sim.uid, sim.cid, source='custody_append', firestore_client=sim.stack.firestore
+        from database import record_custody_append
+
+        assert record_custody_append.begin(sim.uid, sim.cid, 'custody:lifecycle', firestore_client=sim.stack.firestore)
+        assert sim.row()['record_upload_revision'] == revision
+        sim.sweep(live_producer=True)
+        assert 'custody:lifecycle' in sim.row()['record_upload_sessions']
+        # Simulated durable append precedes the acceptance transaction.
+        record_custody_append.finish(
+            sim.uid, sim.cid, 'custody:lifecycle', accepted=True, firestore_client=sim.stack.firestore
         )
         assert sim.row()['record_upload_revision'] == revision + 1
         sim.sweep(live_producer=True)

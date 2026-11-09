@@ -1012,3 +1012,86 @@ def test_renewal_before_partial_transaction_keeps_live_uploader_fenced(source, m
     }
     renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=source[1])
     assert finish(source) == 'upload_pending'
+
+
+@pytest.mark.parametrize('accepted', [False, True])
+async def test_custody_fence_old_partial_pass_then_bytes_land_is_rerun(source, audio, monkeypatch, accepted):
+    from database import record_custody_append as custody
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    await audio.drain()  # Old-audio plan exists before the upload starts.
+    revision = source[1].rows[ROW].get('record_upload_revision', 0)
+    assert custody.begin('synthetic', 'record', 'custody:interleaving', firestore_client=source[1])
+    assert source[1].rows[ROW].get('record_upload_revision', 0) == revision
+    assert finish(source) == 'upload_pending'
+    with pytest.raises(ValueError, match='barrier'):
+        await audio.drain()  # No old-audio pass may commit through the fence.
+    audio.add(105)  # The late bytes now land durably.
+    if not accepted:
+        from utils.batch_pipeline.record_lease_append import wake_partial
+
+        wake_partial(source[0], 'synthetic', 'record', NOW)
+    custody.finish('synthetic', 'record', 'custody:interleaving', accepted=accepted, firestore_client=source[1])
+    assert source[1].rows[ROW].get('record_upload_revision', 0) == revision + accepted
+    # An incomplete old plan may finish its old page, but the new revision and
+    # changed inventory schedule a subsequent generation containing these bytes.
+    assert pending(source)['partial_run']['next_inventory_at'] == NOW
+    assert not source[1].rows[ROW]['record_upload_sessions']
+    await audio.drain()
+    run = pending(source)['partial_run']
+    assert run['generation'] == 2
+    plan = audio.artifacts.load_record_plan(record_partial.seed_for(pending(source)), run['plan_uri'])
+    assert any(ref['path'] == audio.chunks[-1]['path'] for _, _, refs in plan['units'] for ref in refs)
+
+
+async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_work(source, audio, monkeypatch):
+    from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    audio.add(100)
+    audio.add(109)  # Old retained tail already reaches finished_at.
+    assert finish(source) == 'partial_finished'
+    original = pending(source)
+    original.update(state='committed', partial_coordinator=False)
+    source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
+    source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    revision = source[1].rows[ROW].get('record_upload_revision', 0)
+    assert renew_record_token_lease(
+        'synthetic',
+        'record',
+        source='frames',
+        session='resumed',
+        producer={'pod': 'resumed-pusher', 'process_started_at': 100},
+        firestore_client=source[1],
+    )
+    audio.add(105)  # Interior audio, not a missing tail.
+    interior_pcm = audio.pcm[audio.chunks[-1]['path']]
+    audio.chunks.sort(key=lambda chunk: chunk['timestamp'])
+    assert source[1].rows[ROW]['record_upload_revision'] == revision + 1
+    assert not source[1].rows[ROW]['record_audio_closed']
+    set_record_upload_pending('synthetic', 'record', 'resumed', False, firestore_client=source[1])
+    assert seal_record_audio('synthetic', 'record', firestore_client=source[1]) is None
+    segment = recovery_segment('synthetic', 'record')
+    await live.admit_recording(source[0], source[0].run(lambda tx: tx.get('jobs', segment)), now=NOW)
+    await live.admit_recording(source[0], source[0].run(lambda tx: tx.get('jobs', segment)), now=NOW)
+    jobs = [
+        row
+        for path, row in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and row.get('projection_binding', {}).get('partial_record')
+    ]
+    interior = next(row for row in jobs if row['capture_at'] <= 105 < row['capture_at'] + row['duration_seconds'])
+    item = live.WorkItem(**{key: interior[key] for key in live.WorkItem.__dataclass_fields__ if key in interior})
+    wav = audio.artifacts.fetch_audio(item)
+    with wave.open(io.BytesIO(wav), 'rb') as stream:
+        stream.setpos(round((105 - interior['capture_at']) * 16000))
+        assert stream.readframes(16000) == interior_pcm
+    worker, _, saved, _, _, failures = setup_worker(
+        decode=lambda work: decode_pcm16_wav(audio.artifacts.fetch_audio(work))
+    )
+    assert worker.process_batch([item])[0].segment_id == item.segment_id
+    assert saved[item.segment_id]['words'] and not failures
+    assert source[0].run(lambda tx: tx.get('jobs', original['segment_id'])) == original

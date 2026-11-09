@@ -404,13 +404,15 @@ STATES = (
             entry_writers=(
                 Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
                 Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                Writer('database/record_custody_append.py', 'begin.commit'),
             ),
             exit=Exit('lease', 'utils/batch_pipeline/record_producer_proof.py:producer_tokens_dead'),
             derived=True,
             metric='omi_record_token_lease_active',
             alert=Alert('omi-record-token-lease-late-append', 'page'),
             deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
-            note='Exact-token finish clear; abandon attestation; or computed lease lapse. Off preserves original producer proof.',
+            note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal); '
+            'abandon attestation; or computed lease lapse. Off preserves original producer proof.',
         ),
         row(
             'record_token',
@@ -434,8 +436,9 @@ STATES = (
             alert=Alert('omi-record-token-lease-late-append', 'page'),
             deadline_exemption='Computed from nested lease clocks; never persisted as expiry state',
             note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
-            'clears token map and re-arms hourly inventory; late append re-activates via renew_record_token_lease '
-            'and bumps record_upload_revision. Never deletes audio.',
+            'clears token map and re-arms hourly inventory; late frames re-activate via renew_record_token_lease. '
+            'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
+            'only after durable acceptance in finish. Never deletes audio.',
         ),
         row(
             'record_audio',

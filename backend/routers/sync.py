@@ -59,6 +59,7 @@ from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
 from database import record_audio as record_audio_db
 from config import record_seal_rules as record_lease
+from utils.sync import record_token_lease as custody_lease
 from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
@@ -619,6 +620,7 @@ def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
     responses=SYNC_LOCAL_FILES_V2_RESPONSES,
 )
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
+@custody_lease.custody_upload
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -669,8 +671,6 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
-    if isinstance(conversation_id, str) and conversation_id:
-        await _renew_custody_lease(uid, conversation_id)
     if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
         # The same conversation-level custody wait answered moments ago: repeat
         # it before saving, archiving or decoding these bytes (audio retained).
@@ -842,6 +842,7 @@ async def sync_local_files_v2(
     sequencer_registration_started = False
 
     try:
+        await custody_lease.begin_upload(uid, conversation_id, job_id)
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
@@ -921,8 +922,7 @@ async def sync_local_files_v2(
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
-        archive_paths = await run_blocking(
-            sync_executor,
+        archive_paths = await custody_lease.archive(
             archive_mobile_batch_raw_files,
             uid,
             paths,
@@ -935,6 +935,7 @@ async def sync_local_files_v2(
             },
         )
 
+        custody_lease.stored(paths, archive_paths)
         candidate_policy = resolve_batch_policy(uid)
         intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(

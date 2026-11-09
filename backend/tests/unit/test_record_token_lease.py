@@ -10,7 +10,7 @@ import pytest
 
 from config import record_seal_rules as lease, refactor_modes
 from config.policy.batch import cohort_bucket
-from database import record_audio
+from database import record_audio, record_custody_append
 from utils.observability import firestore_probe_export
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
@@ -34,7 +34,9 @@ def enabled(monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setattr(record_audio.time, 'time', lambda: NOW)
-    return StrictFirestore({PATH: ROW})
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(record_custody_append.time, 'time', lambda: NOW)
+    return StrictFirestore({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
 
 
 @pytest.mark.parametrize(
@@ -121,7 +123,7 @@ def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled,
     before = deepcopy(enabled.rows[PATH])
     assert record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
     row = enabled.rows[PATH]
-    assert row['record_upload_revision'] == before['record_upload_revision'] + 1
+    assert row['record_upload_revision'] == before['record_upload_revision'] + (source == 'frames')
     assert row['record_upload_sessions']['s'] == {
         **POD,
         'last_signal_at': NOW,
@@ -129,8 +131,10 @@ def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled,
         'signal_source': source,
     }
     assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
-    assert record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
-    assert row['record_upload_revision'] == 8  # one bump, no repeated invalidation
+    assert bool(
+        record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
+    ) is (source == 'frames')
+    assert row['record_upload_revision'] == (8 if source == 'frames' else 7)
 
 
 def test_custody_renews_all_identified_tokens_but_frames_are_exact(enabled):
@@ -163,13 +167,13 @@ def test_never_recreates_or_mutates_ineligible_rows(enabled, change):
     assert not enabled.rows
 
 
-def test_after_seal_append_counted_without_inventing_token_or_deleting_audio(enabled):
+def test_manifest_heartbeat_never_counts_a_late_append_or_deletes_audio(enabled):
     enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions={}, raw_audio='retained')
     before = deepcopy(enabled.rows)
     counter = record_audio.lease_metrics.LATE_APPEND._value.get()
     record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
     assert enabled.rows == before
-    assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter + 1
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter
 
 
 @pytest.mark.parametrize(
@@ -239,12 +243,20 @@ def test_only_strictly_newer_signal_supersedes_abandon_proof(enabled, proof_offs
     assert producer_tokens_dead({'s': token}, None, uid='synthetic', row=ROW) is (proof_offset >= 0)
 
 
-def test_partial_late_custody_bytes_invalidate_barrier_even_after_map_was_cleared(enabled):
+def test_partial_custody_fences_before_and_bumps_only_after_durable_acceptance(enabled):
     enabled.rows[PATH].update(record_upload_sessions={}, record_audio_partial={'upload_revision': 7})
-    record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
-    assert enabled.rows[PATH]['record_upload_revision'] == 8
-    assert enabled.rows[PATH]['record_audio_partial']['upload_revision'] == 7
-    assert not enabled.rows[PATH].get('record_audio_closed')
+    assert record_custody_append.begin('synthetic', 'record', 'custody:upload', firestore_client=enabled)
+    row = enabled.rows[PATH]
+    assert row['record_upload_revision'] == 7
+    assert row['record_upload_sessions']['custody:upload']['signal_source'] == 'custody_append'
+    assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
+    assert record_custody_append.finish(
+        'synthetic', 'record', 'custody:upload', accepted=True, firestore_client=enabled
+    )
+    row = enabled.rows[PATH]
+    assert row['record_upload_revision'] == row['record_audio_partial']['upload_revision'] == 8
+    assert not row['record_upload_sessions']
+    assert not row['record_audio_closed']
 
 
 def test_generic_mode_reader_uses_dark_default(monkeypatch):
@@ -265,7 +277,7 @@ def test_legacy_custody_reactivation_shares_repair_deployment_epoch(enabled, mon
     enabled.rows[PATH]['record_upload_sessions'] = {'s': POD}
     assert producer_tokens_dead({'s': POD}, None, uid='synthetic', row=enabled.rows[PATH])
     record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
-    assert enabled.rows[PATH]['record_upload_revision'] == 8
+    assert enabled.rows[PATH]['record_upload_revision'] == 7  # heartbeat is not a stored append
     assert not producer_tokens_dead(
         enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic', row=enabled.rows[PATH]
     )
@@ -281,7 +293,7 @@ def test_unclaimed_owner_keeps_its_token_live_until_batch_owner_resolution(enabl
     assert not producer_tokens_dead(enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic')
 
 
-def test_partial_clear_reactivates_exact_server_token_but_complete_seal_never_reopens(enabled):
+def test_partial_and_complete_seals_restore_exact_frame_token_in_serve(enabled):
     enabled.rows[PATH].update(record_upload_sessions={}, record_audio_partial={'upload_revision': 7})
     assert record_audio.renew_record_token_lease(
         'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
@@ -289,11 +301,12 @@ def test_partial_clear_reactivates_exact_server_token_but_complete_seal_never_re
     assert enabled.rows[PATH]['record_upload_revision'] == 8
     assert enabled.rows[PATH]['record_upload_sessions']['s']['pod'] == POD['pod']
     enabled.rows[PATH].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
-    before = deepcopy(enabled.rows)
-    assert not record_audio.renew_record_token_lease(
+    assert record_audio.renew_record_token_lease(
         'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
     )
-    assert enabled.rows == before
+    assert not enabled.rows[PATH]['record_audio_closed']
+    assert set(enabled.rows[PATH]['record_upload_sessions']) == {'s'}
+    assert enabled.rows[PATH]['record_upload_revision'] == 9
 
 
 def test_off_terminal_metrics_keep_old_wire_output_even_after_rollback(monkeypatch):
@@ -307,3 +320,72 @@ def test_off_terminal_metrics_keep_old_wire_output_even_after_rollback(monkeypat
     assert any(
         row[0] == 'omi_record_token_lease_expired_would_total' for row in firestore_probe_export.terminal_totals()
     )
+
+
+@pytest.mark.parametrize('accepted', [False, True])
+def test_custody_exact_clear_and_late_counter_follow_acceptance(enabled, accepted):
+    before = record_audio.lease_metrics.LATE_APPEND._value.get()
+    assert record_custody_append.begin('synthetic', 'record', 'custody:first', firestore_client=enabled)
+    assert record_custody_append.begin('synthetic', 'record', 'custody:other', firestore_client=enabled)
+    assert enabled.rows[PATH]['record_upload_revision'] == 7
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == before
+    record_custody_append.finish('synthetic', 'record', 'custody:first', accepted=accepted, firestore_client=enabled)
+    assert 'custody:first' not in enabled.rows[PATH]['record_upload_sessions']
+    assert 'custody:other' in enabled.rows[PATH]['record_upload_sessions']
+    assert enabled.rows[PATH]['record_upload_revision'] == 7 + accepted
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == before + accepted
+    # A repeated/lost completion response cannot double-count or bump again.
+    if accepted:
+        with pytest.raises(record_custody_append.RecordCustodyFenceLost):
+            record_custody_append.finish(
+                'synthetic', 'record', 'custody:first', accepted=True, firestore_client=enabled
+            )
+    else:
+        assert not record_custody_append.finish(
+            'synthetic', 'record', 'custody:first', accepted=False, firestore_client=enabled
+        )
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == before + accepted
+
+
+def test_custody_heartbeat_writes_at_most_once_per_half_lease(enabled, monkeypatch):
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', firestore_client=enabled
+    )
+    for seconds in (0, 1, 60, 1799):
+        monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + seconds)
+        assert not record_audio.renew_record_token_lease(
+            'synthetic', 'record', source='custody_append', firestore_client=enabled
+        )
+        assert not enabled.transactions[-1].updates
+    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + 1800)
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', firestore_client=enabled
+    )
+    assert len(enabled.transactions[-1].updates) == 1
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_complete_frame_reopen_is_serve_only_and_shadow_only_counts(enabled, monkeypatch, mode):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions={}, raw_audio='retained')
+    before = deepcopy(enabled.rows)
+    counter = record_audio.lease_metrics.LATE_APPEND._value.get()
+    record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
+    )
+    if mode == 'serve':
+        assert not enabled.rows[PATH]['record_audio_closed']
+        assert enabled.rows[PATH]['raw_audio'] == 'retained'
+        assert enabled.rows[PATH]['record_upload_revision'] == 8
+        assert any(row.get('partial_coordinator') for row in enabled.rows.values())
+    else:
+        assert enabled.rows == before
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter + (mode != 'off')
+
+
+def test_off_custody_begin_has_no_io(enabled, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    monkeypatch.setattr(record_custody_append, 'get_firestore_client', Mock(side_effect=AssertionError('off IO')))
+    before = deepcopy(enabled.rows)
+    assert not record_custody_append.begin('synthetic', 'record', 'custody:upload')
+    assert enabled.rows == before

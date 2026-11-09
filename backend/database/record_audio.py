@@ -161,12 +161,10 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
 
 
 def renew_record_token_lease(uid, conversation_id, *, source, session=None, producer=None, firestore_client=None):
-    """Fence before admitting bytes. Off does no IO, even with inert lease fields.
+    """Renew observed signals; upload custody uses a separate exact-token fence.
 
-    Custody appends renew every identified open producer for the conversation;
-    frame batches renew only the socket's exact server identity, including a
-    partial finish's cleared token. Bare True never gains an invented identity;
-    complete seals and deleted conversations are never reopened.
+    Manifest heartbeats never invalidate revisions or count accepted appends.
+    Serve-only frames after a complete seal re-arm partial continuation.
     """
     if record_seal_rules.token_lease_mode() == 'off':
         return False
@@ -188,16 +186,28 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
         sessions = dict(row.get('record_upload_sessions') or {})
         gaps = []
         late = bool(row.get('record_audio_closed') or row.get('record_audio_partial'))
-        reactivated = bool(row.get('record_audio_partial'))
+        reactivated = source == 'frames' and bool(row.get('record_audio_partial'))
+        closed_frame = source == 'frames' and bool(row.get('record_audio_closed'))
+        serving = record_seal_rules.token_lease_serving(uid)
+        identified = [token for token in sessions.values() if isinstance(token, dict)]
+        if (
+            source == 'custody_append'
+            and identified
+            and all(
+                (signal := record_seal_rules.lease_timestamp(token.get('last_signal_at')))
+                and now - signal < record_seal_rules.token_lease_seconds() / 2
+                for token in identified
+            )
+        ):
+            return False, False, []
         changed = False
-        # Partial finish can clear a lapsed token while this pusher still holds
-        # queued bytes. A new frame batch restores only its exact server-minted
-        # identity before the next append; a complete seal stays closed.
+        # Restore only this socket's identity. Serve also reopens complete
+        # seals so newly retained interior audio gets a continuation pass.
         if (
             source == 'frames'
             and session is not None
             and session not in sessions
-            and not row.get('record_audio_closed')
+            and (not row.get('record_audio_closed') or serving)
             and isinstance(producer, dict)
             and isinstance(producer.get('pod'), str)
             and producer['pod']
@@ -214,7 +224,8 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
                 continue
             clocks = record_seal_rules.token_lease_clocks(token, row=row)
             lapsed = record_seal_rules.token_lease_lapsed(token, now, row=row)
-            reactivated |= lapsed
+            if source == 'frames':
+                reactivated |= lapsed or closed_frame and serving
             late |= lapsed
             if clocks:
                 gaps.append(max(0, now - clocks[0]))
@@ -230,8 +241,17 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
             changed = True
         if changed or reactivated:
             patch: dict[str, object] = {'record_upload_sessions': sessions}
+            recovery = None
             if reactivated:
-                patch['record_upload_revision'] = int(row.get('record_upload_revision') or 0) + 1
+                revision = int(row.get('record_upload_revision') or 0) + 1
+                patch['record_upload_revision'] = revision
+                if closed_frame and serving and changed:
+                    from database.batch_pipeline_record_lease_recovery import prepare_recovery
+
+                    recovered, recovery = prepare_recovery(client, tx, uid, conversation_id, row, revision, now)
+                    patch.update(recovered, record_audio_closed=False)
+            if recovery:
+                tx.set(*recovery)
             tx.update(ref, patch)
         return changed, late, gaps
 
@@ -240,6 +260,6 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
         lease_metrics.RENEWALS.labels(source=source).inc()
         for gap in gaps:
             lease_metrics.SIGNAL_GAP.observe(gap)
-    if late:
+    if late and source == 'frames':
         lease_metrics.LATE_APPEND.inc()
     return changed

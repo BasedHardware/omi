@@ -194,7 +194,12 @@ frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` insi
 the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
 Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` serve-enable epoch. Stock lapses by enable + lease; retry wakes and refusal
 stamps cannot extend it. Only explicit server-observed activity renews it. Lease lapse never substitutes for retained-tail
-proof. Late appends renew and bump upload revision; raw audio stays retained.
+proof. Custody uploads first acquire an exact fence and bump revision only after
+durable acceptance; failed/refused uploads clear only that fence. Memoized waits
+do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames
+after complete seal re-open the row and use the existing partial continuation
+for interior gaps. Late WAL holes are retained create-only for that same worker;
+raw audio stays retained. See the [review fixes](listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md).
 See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).
 
 Only the independent repair job opts into retrying `record_upload_failed` rows.
