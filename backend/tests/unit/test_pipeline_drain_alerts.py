@@ -173,3 +173,59 @@ def test_pump_gauges_are_declared_without_claiming_production_observation():
     for name in ('omi_batch_projection_pump_last_tick_seconds', 'omi_batch_projection_pump_last_success_seconds'):
         assert name in inventory['declared_metrics']
         assert name not in inventory['metrics']
+
+
+@pytest.mark.parametrize(
+    'fresh_new,stale_new,fresh_old,duplicate_new,should_alert',
+    [
+        (0, 0, 0, False, True),
+        (0, 0, 4, False, True),
+        (0, 4, 4, False, True),
+        (3, 0, 4, True, True),
+        (4, 0, 4, True, False),
+        (4, 0, 0, False, False),
+    ],
+)
+def test_pump_bundle_liveness_selector_excludes_old_revisions(
+    fresh_new, stale_new, fresh_old, duplicate_new, should_alert
+):
+    doc = (BACKEND / 'docs/listen_pusher_pipeline/changes/2026-11-08-projection-pump-deploy-bundle.md').read_text()
+    expressions = re.findall(r'```promql\n(.*?)\n```', doc, re.DOTALL)
+    query = next(expr for expr in expressions if 'omi_batch_projection_pump_last_success_seconds' in expr)
+    selector = re.search(r'omi_batch_projection_pump_last_success_seconds\{([^}]+)\}', query).group(1)
+    labels = dict(re.findall(r'(\w+)="([^"]+)"', selector))
+    assert labels == {
+        'project_id': 'based-hardware',
+        'service_name': 'backend-projection-pump',
+        'revision_name': 'NEW_REV',
+    }
+    assert 'count(count by (instance)' in query
+    assert 'or vector(0)' in query
+    max_age = int(re.search(r'<=\s*(\d+)', query).group(1))
+    floor = int(re.search(r'<\s*(\d+)$', query).group(1))
+    assert (max_age, floor) == (120, 4)
+
+    # Exercise the documented selector/age/count contract with overlap fixtures;
+    # this is not a live PromQL engine or collector-ingestion proof.
+    samples = []
+    for revision, count, age in [('NEW_REV', fresh_new, 10), ('NEW_REV', stale_new, 121), ('PRIOR_REV', fresh_old, 10)]:
+        for index in range(count):
+            sample = ({**labels, 'revision_name': revision, 'instance': f'{revision}-{age}-{index}'}, 1000 - age)
+            samples.append(sample)
+            if duplicate_new and revision == 'NEW_REV':
+                samples.append(sample)
+    fresh_instances = {
+        sample_labels['instance']
+        for sample_labels, timestamp in samples
+        if all(sample_labels.get(key) == value for key, value in labels.items()) and 1000 - timestamp <= max_age
+    }
+    assert (len(fresh_instances) < floor) is should_alert
+
+
+def test_pump_bundle_requires_revision_metadata_and_readback():
+    doc = (BACKEND / 'docs/listen_pusher_pipeline/changes/2026-11-08-projection-pump-deploy-bundle.md').read_text()
+    assert 'metadata: [service, revision]' in doc
+    assert 'K_REVISION' in doc
+    assert 'do **not** emit a revision label' in doc
+    assert 'never remove the revision matcher to get data' in doc
+    assert 'Retarget this matcher on every rollout and traffic rollback' in doc
