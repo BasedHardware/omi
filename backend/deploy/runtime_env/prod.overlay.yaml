@@ -874,6 +874,9 @@ overlay:
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
             category: rollout
+          SYNC_DURABLE_STATUS_RECONCILIATION:
+            value: 'true'
+            category: rollout
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
@@ -1261,6 +1264,9 @@ overlay:
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
             category: rollout
+          SYNC_LEGACY_COMPLETION_CONVERGENCE:
+            value: 'true'
+            category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
             category: rollout
@@ -1608,6 +1614,9 @@ overlay:
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
+            category: rollout
+          SYNC_LEGACY_COMPLETION_CONVERGENCE:
+            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'

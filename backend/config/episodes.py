@@ -13,8 +13,16 @@ per-conversation UI, and no episode state is read, written or computed.
 
 Every nonempty owner is admitted while the kill switch is on. Admission alone
 never spends money: episode work still requires the existing recent capable-client
-marker. Both recognized app channels, beta and store, are admitted. Missing or
-unrecognized channels remain denied and never set the marker.
+marker.
+
+``EPISODES_CLIENT_CHANNELS`` (default ``beta``) is the client cohort. The app
+sends ``X-Omi-App-Channel: beta|store`` on every request (TestFlight and
+non-production build profiles are ``beta``; anything else, including an
+unknown install, is ``store``). An episodes API call from a channel outside the
+list answers ``enabled: false`` and leaves no marker, so that client keeps
+today's UI and its user costs nothing. A missing or unrecognised channel (old
+builds, desktop, web) is never admitted. Expanding to store users is the config
+flip ``beta,store``.
 
 Pure module: stdlib only, flags read at the call boundary, never at import.
 """
@@ -30,6 +38,7 @@ from config.app_channel import APP_CHANNELS, app_channel
 from config.jev_decisions import JEV_CLIENT_TIMEOUT_SECONDS, percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
+EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
@@ -41,6 +50,7 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+_DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -56,8 +66,11 @@ def episodes_enabled_for(uid: str) -> bool:
 
 
 def episodes_client_channels() -> frozenset[str]:
-    """Both recognized app channels are permanently admitted."""
-    return APP_CHANNELS
+    """Admitted client channels. Unset or blank is ``beta``; unrecognised entries are ignored."""
+    raw = os.getenv(EPISODES_CLIENT_CHANNELS_ENV, '')
+    if not raw.strip():
+        return _DEFAULT_CLIENT_CHANNELS
+    return frozenset(item.strip().lower() for item in raw.split(',')) & APP_CHANNELS
 
 
 def episode_output_language_pinned() -> bool:

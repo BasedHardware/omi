@@ -3545,6 +3545,7 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+            SYNC_DURABLE_STATUS_RECONCILIATION: {value: 'true', category: rollout}
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
@@ -3974,6 +3975,7 @@ environments:
             SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
             SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_LEGACY_COMPLETION_CONVERGENCE: {value: 'true', category: rollout}
             SYNC_TASKS_MAX_ATTEMPTS:
               value: '5'
               category: reliability
@@ -4369,6 +4371,7 @@ environments:
             SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
             SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_LEGACY_COMPLETION_CONVERGENCE: {value: 'true', category: rollout}
             SYNC_TASKS_MAX_ATTEMPTS:
               value: '5'
               category: reliability

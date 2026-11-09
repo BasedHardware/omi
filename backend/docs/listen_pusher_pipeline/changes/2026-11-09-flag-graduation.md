@@ -4,12 +4,11 @@ David accepted all seven flag-rulings cards on 2026-11-09. This change uses only
 `graduate-list.json` from the dated flag-decisions docket; its recorded production
 snapshot was read at 03:20Z. No live flags or customer data were accessed.
 
-Eleven listed controls are removed: `AUDIO_ARCHIVE_COALESCE_ENABLED`,
-`CONVERSATION_NOTES_AGENT_PERCENT`, `EPISODES_CLIENT_CHANNELS`, `EPISODES_PERCENT`,
+Eight listed controls are removed: `AUDIO_ARCHIVE_COALESCE_ENABLED`,
+`CONVERSATION_NOTES_AGENT_PERCENT`, `EPISODES_PERCENT`,
 `SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT`, `SPEAKER_MATCH_SCORES_ENABLED`,
-`SYNC_DURABLE_STATUS_RECONCILIATION`, `CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED`,
-`FIRST_SUMMARY_DEADLINE_ENABLED`, `FIRST_SUMMARY_DEADLINE_PERCENT`, and
-`SYNC_LEGACY_COMPLETION_CONVERGENCE`. Paid mobile visible restore remains disabled
+`CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED`,
+`FIRST_SUMMARY_DEADLINE_ENABLED`, and `FIRST_SUMMARY_DEADLINE_PERCENT`. Paid mobile visible restore remains disabled
 and its code is removed. Empty explicit-app reprocess retains the generic
 processing failure. The Episodes cohort allowlist `EPISODES_UID_ALLOWLIST` is
 redundant at 100 percent and retired with its percentage. The notes-agent allowlist
@@ -17,16 +16,15 @@ remains owned by the separate retirement lane. Other kill, health, privacy,
 client-capability, consent, custody and stage gates remain authoritative.
 
 The [pipeline contract](../../listen_pusher_pipeline.mdx) describes the resulting
-behavior. The pipeline ledger contains 266 names and 163 seeded/replacement budget
-slots, down from 268 names and 165 slots. Only sync status reconciliation and legacy
-completion convergence move to its retired ledger; STT routing remains registered.
+behavior. None of the graduated controls is in the pipeline flag ledger, so
+`flag_budget.json` is unchanged (268 names, 165 slots).
 Graduated feature-registry entries move to `retired`, preventing their reads or
 declarations from being reintroduced.
 
-## Six graduations deferred after service-scope review
+## Nine graduations deferred after service-scope review
 
 David's 2026-11-09 ruling is to retain a flag whenever graduation would widen its
-behavior beyond the recorded production scope. These six controls retain main's
+behavior beyond the recorded production scope. These nine controls retain main's
 env readers, gates, manifests, tests and registry metadata. Their registry notes
 record the deferral; review dates, ramp deadlines and extensions are unchanged.
 
@@ -38,6 +36,9 @@ record the deferral; review dates, ramp deadlines and extensions are unchanged.
 | `STT_ROUTING_ON_PERCENT` | `prod-omi-backend-listen` | Universal routing admission would remove the separate service cohorts. |
 | `REVIEW_SURFACE_MODE` | `prod-omi-backend-listen`, `run:backend`, `run:backend-sync`, `run:backend-sync-backfill` | Removing route and storage guards would enable Review on `run:backend-integration`. |
 | `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` | `run:backend-integration`, `run:backend-sync`, `run:backend-sync-backfill` | Always retrying would change the listener's late-audio sync-assignment path. |
+| `EPISODES_CLIENT_CHANNELS` | `run:backend` (`beta,store`) | The Episodes router mounts on every role; admitting store unconditionally would let store clients set the capable-client marker on other copies, including the listener and integration service. |
+| `SYNC_LEGACY_COMPLETION_CONVERGENCE` | `run:backend-sync`, `run:backend-sync-backfill` | A stage-only policy would enable under-lock convergence on every production-stage copy that mounts the sync router. |
+| `SYNC_DURABLE_STATUS_RECONCILIATION` | `run:backend` | Removing the guard would add durable Firestore status reads on every copy that serves the sync polling route. |
 
 The shared `main.py` mounts through `app_roles.py`; `routers.transcribe`, including
 `/v4/listen`, belongs to the API and realtime roles. The serving manifests do not
@@ -56,7 +57,7 @@ outside the supplied production snapshot.
 | `FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED` | `config/summary_guarantee.py` is consumed by `utils/enrichment/outbox.py` and `utils/enrichment/consumer.py` across processing hosts; the docket splits backend/listen from sync/integration. |
 
 All five retain their code and deployment wiring, with a dated deferral on their
-own registry rows. Their decision and terminal fields retain main's pending and
+own registry rows (review by 2026-11-22, the end of each row's bounded extension). Their decision and terminal fields retain main's pending and
 undecided values, rather than claiming graduation. The independent registry-only
 and retirement dockets are untouched.
 

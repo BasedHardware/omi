@@ -327,10 +327,11 @@ request (`app/lib/utils/app_channel.dart`). It sends `beta` from an iOS
 TestFlight install (sandbox App Store receipt) or a non-production build
 profile, and `store` otherwise. That includes every Play install, since internal
 and production tracks look the same on device, and any install it can't
-classify. The episodes API admits both beta and store channels. Any other call answers
+classify. The episodes API admits a call only when its channel is in
+`EPISODES_CLIENT_CHANNELS` (default `beta`). Any other call answers
 `enabled: false` (404 for writes) and leaves no marker, so that client keeps
 today's UI. A missing or unrecognised header (old builds, desktop, web) is
-never admitted.
+never admitted. Expanding to store users is the flip `beta,store`.
 
 Admission alone costs nothing. `client_gate.py` infers whether the user's app
 can show episodes, with no app change: a capable app calls `/v1/episodes/live`
@@ -446,7 +447,7 @@ Each membership CAS writes `conversation.episode_id` alongside its overlay
 link. A conversation crossing the cap stays with its starting episode; only
 a different conversation starts the next window. An attach-before-create
 link is adopted by the conversation create transaction without fabricating a
-conversation. Episode writes retain recognized-client-channel admission; span
+conversation. Episode writes retain `EPISODES_CLIENT_CHANNELS` admission; span
 writes are global. No new composite index or reconciliation is required.
 
 Boundary arithmetic cannot read ambient wall time. Pollers supply `arrival_at`

@@ -20,6 +20,7 @@ from utils.sync import completed_status
 @pytest.fixture
 def poll(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'true')
     monkeypatch.setattr(router, 'admit_sync_job_poll', lambda uid: True)
     monkeypatch.setattr(sync_jobs, 'r', fakeredis.FakeRedis())
     database = StrictFirestore({('users', 'owner'): {'data_protection_level': 'standard'}})
@@ -271,9 +272,11 @@ def test_privacy_denial_matches_old_contract_without_ack(poll, monkeypatch, capl
     if state is not None:
         sync_jobs.create_sync_job('owner', 1, 1, 'original', content_id='content')
         sync_jobs.update_sync_job('original', {'status': state, 'reason_code': 'sync_worker_stale'})
+    monkeypatch.setenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'false')
     legacy = client.get('/v2/sync-local-files/original')
     before = deepcopy(database.rows)
     redis_before = sync_jobs.get_sync_job('original')
+    monkeypatch.setenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'true')
     response = client.get('/v2/sync-local-files/original')
     assert response.status_code == legacy.status_code == (404 if state is None else 200)
     assert response.json() == legacy.json()
@@ -343,6 +346,18 @@ def test_read_failure_is_transient_not_unknown(poll, monkeypatch):
     client, database = poll
     monkeypatch.setattr(completed_status, 'get_firestore_client', Mock(side_effect=RuntimeError('unavailable')))
     assert client.get('/v2/sync-local-files/original').status_code == 503
+
+
+def test_flag_off_preserves_legacy_contract_without_firestore(poll, monkeypatch):
+    client, database = poll
+    monkeypatch.delenv('SYNC_DURABLE_STATUS_RECONCILIATION')
+    lookup = Mock(side_effect=AssertionError('dark path must not read Firestore'))
+    monkeypatch.setattr(completed_status, 'get_firestore_client', lookup)
+    receipt(database)
+    assert client.get('/v2/sync-local-files/original').status_code == 404
+    sync_jobs.create_sync_job('owner', 1, 1, 'original', content_id='content')
+    assert client.get('/v2/sync-local-files/original').json()['status'] == 'queued'
+    lookup.assert_not_called()
 
 
 HELD = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'held_audio': True}

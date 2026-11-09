@@ -20,6 +20,7 @@ def clean_env(monkeypatch):
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.delenv(cohort.SPEAKER_PER_WINDOW_ENV, raising=False)
+    monkeypatch.delenv('EPISODES_CLIENT_CHANNELS', raising=False)
     monkeypatch.setattr(cohort, 'client_seen_cached', lambda uid: False)
 
 
@@ -32,8 +33,14 @@ def test_store_user_outside_batch_stays_on_the_old_path():
     assert not cohort.per_window_evidence('u1', SYNC)
 
 
+def test_beta_client_marker_qualifies(monkeypatch):
+    monkeypatch.setattr(cohort, 'client_seen_cached', lambda uid: True)
+    assert cohort.per_window_evidence('u1', SYNC)
+
+
 def test_marker_stops_meaning_testflight_once_store_clients_are_admitted(monkeypatch):
     monkeypatch.setattr(cohort, 'client_seen_cached', lambda uid: True)
+    monkeypatch.setenv('EPISODES_CLIENT_CHANNELS', 'beta,store')
     assert not cohort.per_window_evidence('u1', SYNC)
     assert cohort.per_window_evidence('u1', BATCH)
 

@@ -92,6 +92,7 @@ def test_real_store_transactions_100_to_24_and_retry_scope_reset(monkeypatch, re
 
 
 def test_actual_sync_durable_status_path_counts_and_identical_results(monkeypatch, reads):
+    monkeypatch.setenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'true')
     results, counts = [], []
     for on in (False, True):
         enabled(monkeypatch, on)
