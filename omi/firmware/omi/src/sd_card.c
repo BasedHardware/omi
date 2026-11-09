@@ -1309,6 +1309,64 @@ static int sd_unmount(void)
     return 0;
 }
 
+/* Every mount attempt after boot goes through here (3.0.24). A card that keeps
+ * failing is retried with exponential backoff, never back-to-back: before,
+ * each dequeued audio write on an unmounted dead card ran a full five-try
+ * mount (power cycling the card) and the boot mount gave up for good.
+ */
+#define SD_MOUNT_RETRY_MIN_MS 1000
+#define SD_MOUNT_RETRY_MAX_MS 60000
+#define SD_BOOT_MOUNT_LOCK_WAIT_MS 10000
+static uint32_t sd_mount_backoff_ms;
+static int64_t sd_mount_retry_at_ms;
+static uint32_t sd_mount_failures;
+K_MUTEX_DEFINE(sd_boot_mount_lock);
+
+static int sd_mount_gated(void)
+{
+    if (is_mounted) {
+        return 0;
+    }
+    if (sd_mount_backoff_ms && k_uptime_get() < sd_mount_retry_at_ms) {
+        return -EAGAIN;
+    }
+    int ret = sd_mount();
+    if (ret == 0) {
+        sd_mount_backoff_ms = 0;
+        return 0;
+    }
+    sd_mount_failures++;
+    sd_mount_backoff_ms =
+        sd_mount_backoff_ms ? MIN(sd_mount_backoff_ms * 2U, SD_MOUNT_RETRY_MAX_MS) : SD_MOUNT_RETRY_MIN_MS;
+    sd_mount_retry_at_ms = k_uptime_get() + sd_mount_backoff_ms;
+    return ret;
+}
+
+/* Boot mount: keep retrying (with backoff) until the card answers or shutdown
+ * starts. Writes are dropped as "SD not ready" meanwhile. app_sd_off() takes
+ * the same lock, so no attempt can power the card after shutdown began.
+ */
+static int sd_boot_mount(void)
+{
+    for (;;) {
+        k_mutex_lock(&sd_boot_mount_lock, K_FOREVER);
+        if (sd_shutdown_in_progress) {
+            k_mutex_unlock(&sd_boot_mount_lock);
+            return -ESHUTDOWN;
+        }
+        int res = sd_mount_gated();
+        k_mutex_unlock(&sd_boot_mount_lock);
+        if (res == 0) {
+            return 0;
+        }
+        if (res != -EAGAIN) {
+            LOG_ERR("[SD_WORK] mount failed: %d; retry in %u ms", res, sd_mount_backoff_ms);
+        }
+        int64_t wait = sd_mount_retry_at_ms - k_uptime_get();
+        k_msleep(wait > 0 ? (int32_t) wait : 1);
+    }
+}
+
 static int get_packet_name_for_seq(uint64_t seq, char *buf, size_t buf_size)
 {
     if (!buf || buf_size == 0U) {
@@ -1331,9 +1389,9 @@ void sd_worker_thread(void)
 {
     sd_req_t req;
 
-    int res = sd_mount();
+    int res = sd_boot_mount();
     if (res != 0) {
-        LOG_ERR("[SD_WORK] mount failed: %d", res);
+        LOG_ERR("[SD_WORK] boot mount abandoned: %d", res);
         sd_write_blocked = true;
         return;
     }
@@ -1399,9 +1457,12 @@ void sd_worker_thread(void)
                  * POWER_ON (that would discard unrelated sync/read prio requests).
                  * The pending POWER_ON stays queued and is a no-op once mounted. */
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
-                if (sd_mount() != 0) {
+                int mret = sd_mount_gated();
+                if (mret != 0) {
                     sd_write_drop_count++;
-                    LOG_ERR("dropping write: SD mount failed");
+                    if (mret != -EAGAIN) {
+                        LOG_ERR("dropping write: SD mount failed (%d)", mret);
+                    }
                     break;
                 }
             }
@@ -1541,7 +1602,7 @@ void sd_worker_thread(void)
                 /* CS back to inactive (physical high) before powering the card, per
                  * SD SPI power-up sequencing. */
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
-                int mret = sd_mount();
+                int mret = sd_mount_gated();
                 if (mret == 0) {
                     LOG_INF("SD powered on + remounted");
                 } else {
@@ -1581,6 +1642,13 @@ int app_sd_init(void)
 int app_sd_off(void)
 {
     sd_shutdown_in_progress = true;
+    /* Let an in-flight boot mount attempt finish; the worker rechecks the flag
+     * under this lock, so no later attempt powers the card back on. */
+    if (k_mutex_lock(&sd_boot_mount_lock, K_MSEC(SD_BOOT_MOUNT_LOCK_WAIT_MS)) == 0) {
+        k_mutex_unlock(&sd_boot_mount_lock);
+    } else {
+        LOG_WRN("SD boot mount still busy at shutdown");
+    }
     bool unmount_completed = false;
 
     if (is_mounted && sd_worker_tid) {

@@ -21,6 +21,7 @@
 #include <zephyr/sys/ring_buffer.h>
 
 #include "accel.h"
+#include "battery_guard.h"
 #include "button.h"
 #include "config.h"
 #include "custody.h"
@@ -971,8 +972,8 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 #define BATTERY_REFRESH_INTERVAL_CONNECTED 5000     // 5 seconds
 #define BATTERY_REFRESH_INTERVAL_DISCONNECTED 10000 // 10 seconds
-#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500         // mV
 uint8_t battery_percentage = 0;
+static struct battery_critical_guard battery_critical;
 static int8_t charging_status_last_notified = -1;
 void broadcast_battery_level(struct k_work *work_item);
 
@@ -1037,7 +1038,9 @@ void broadcast_battery_level(struct k_work *work_item)
         if (err) {
             LOG_ERR("Error updating battery level: %d", err);
         }
-        if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
+        /* Debounced and never while charging (3.0.24): one sag below the
+         * threshold, or a reading on the charger, no longer powers off. */
+        if (battery_critical_should_shutdown(&battery_critical, battery_millivolt, is_charging)) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
             turnoff_all();
         }

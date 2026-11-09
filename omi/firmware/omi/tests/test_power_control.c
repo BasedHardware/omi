@@ -46,8 +46,11 @@ int main(void)
     assert(!storage_paused && capture_mute_should_capture());
     save_error = -ENOSPC;
     assert(power_control_gatt_write(&pause, 1, 0) == BT_GATT_ERR(BT_ATT_ERR_UNLIKELY));
-    assert(!capture_mute_is_set() && !storage_paused);
+    assert(capture_mute_is_set() && storage_paused); /* fails closed for this boot (3.0.24) */
     save_error = 0;
+    assert(app_settings_init() == 0);
+    assert(!capture_mute_is_set()); /* the reported error was honest: not durable */
+    capture_mute_apply_runtime();
     unsigned before = writes;
     assert(power_control_gatt_write(&pause, 1, 1) == BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET));
     assert(power_control_gatt_write(&pause, 0, 0) == BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN));

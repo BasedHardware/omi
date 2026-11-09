@@ -12,7 +12,6 @@
 #include <zephyr/pm/device_runtime.h>
 #include <zephyr/sys/poweroff.h>
 
-#include "capture_mute.h"
 #include "haptic.h"
 #include "imu.h"
 #include "led.h"
@@ -144,6 +143,8 @@ static inline void notify_long_tap()
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
 #define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
+#define POWEROFF_RELEASE_WAIT_MS 60000
+#define POWEROFF_RELEASE_POLL_MS 50
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -219,12 +220,9 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_DOUBLE_TAP) {
         LOG_INF("double tap detected\n");
         btn_last_event = event;
+        /* Notify only (3.0.21 behaviour). 3.0.23's offline local mute toggle
+         * ignored the app's configured action and had no feedback (3.0.24). */
         notify_double_tap();
-        /* Offline: the app cannot write mute. Toggle locally so disconnect
-         * does not resume capture, and reconnect can sync the UI. */
-        if (get_current_connection() == NULL) {
-            (void) capture_mute_set(!capture_mute_is_set());
-        }
     }
 
     // Long press, one time event
@@ -402,6 +400,15 @@ void turnoff_all()
     if (rc < 0) {
         LOG_ERR("Could not configure usr_btn GPIO (%d)", rc);
         return;
+    }
+
+    /* Arm the level wake only after release. Armed while the button is still
+     * held, System OFF wakes at once, and that wake begins with a held button
+     * (committee item 5). A stuck button gives up after a bounded wait. */
+    for (int waited = 0; gpio_pin_get_dt(&usr_btn) > 0 && waited < POWEROFF_RELEASE_WAIT_MS;
+         waited += POWEROFF_RELEASE_POLL_MS) {
+        watchdog_feed();
+        k_msleep(POWEROFF_RELEASE_POLL_MS);
     }
 
     rc = gpio_pin_interrupt_configure_dt(&usr_btn, GPIO_INT_LEVEL_LOW);
