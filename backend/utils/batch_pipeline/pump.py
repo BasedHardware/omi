@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 from database.batch_privacy_attempt import with_batch_privacy_attempt
+from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
 
 from config.batch_pipeline import (
     MAX_PUBLISH_CONCURRENCY,
@@ -17,6 +18,7 @@ from config.batch_pipeline import (
     admission_parallel_calls_enabled,
     idle_poll_max_seconds,
     maintenance_contention_continuation_enabled,
+    publication_restrike_enabled,
 )
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.contracts import (
@@ -96,6 +98,61 @@ def deferred_drain_delay(attempt: int) -> float:
         # caller data, and the schedule's shape past the cap is just the cap.
         return DRAIN_RETRY_MAX_SECONDS
     return min(DRAIN_RETRY_MAX_SECONDS, DRAIN_RETRY_BASE_SECONDS * (2 ** (attempt - 1)))
+
+
+# Bounded publication re-strike lane. A publication transition that exhausts
+# its store-level contention budget today discards a completed GPU result:
+# the pump marks the segment lost, the lease expires, and lease recovery
+# re-leases the unit for a full GPU re-run — minutes of added latency and a
+# whole inference pass spent re-producing a result this pump already held.
+# The lane gives the same lease-fenced transition a bounded in-process
+# re-strike with the documented doubling backoff before that fallback. Every
+# re-strike rides the production lease fence (``owns_lease`` inside each
+# scheduler transition), so a lease that died mid-lane is rejected exactly
+# like a stale replay and the durable decision stands; only the bounded
+# contention budget classifies as a re-strikeable loss
+# (``publication_loss_is_contention``), and every other exception aborts the
+# lane to the legacy catch site byte-for-byte. The terminal
+# ``event=batch_completion outcome=retry`` ERROR line fires only past the
+# lane, so the sensor's true-loss semantics are unchanged; a lane that lands
+# the result reports ``restrike_committed`` at INFO and the owner's ordered
+# drain proceeds as with any accepted publication.
+#
+# Failure-Class: FC-publication-contention-discards-completed-gpu-results
+PUBLICATION_RESTRIKE_BASE_SECONDS = 0.25
+PUBLICATION_RESTRIKE_MAX_SECONDS = 2.0
+PUBLICATION_RESTRIKE_MAX_ATTEMPTS = 3
+
+
+def publication_restrike_delay(attempt: int) -> float:
+    """Backoff before the lane's ``attempt``-th re-strike (1-based).
+
+    The first re-strike waits one base step, then doubles, bounded at the
+    max: a contention wave is seconds-wide, so the schedule spends its
+    first steps inside the wave and the whole lane stays an order of
+    magnitude under the 120-second lease the fence still honors when the
+    lane ends. Past the cap the shape is just the cap, so a caller-counted
+    attempt number can never grow the schedule.
+    """
+    if attempt <= 1:
+        return PUBLICATION_RESTRIKE_BASE_SECONDS
+    if attempt > PUBLICATION_RESTRIKE_MAX_ATTEMPTS:
+        return PUBLICATION_RESTRIKE_MAX_SECONDS
+    return min(PUBLICATION_RESTRIKE_MAX_SECONDS, PUBLICATION_RESTRIKE_BASE_SECONDS * (2 ** (attempt - 1)))
+
+
+def publication_loss_is_contention(error: BaseException) -> bool:
+    """True for exactly the bounded contention budget a re-strike may replay.
+
+    ``FirestoreContentionExhausted`` — including the Postgres job-store
+    subclass — and any exception whose cause chain classifies as atomic
+    transaction contention. Everything else (a revoked lease, an admission
+    refusal, a real write failure) is the durable fallback's decision, not
+    a lost race, and re-striking it would only replay the same refusal.
+    """
+    if isinstance(error, FirestoreContentionExhausted):
+        return True
+    return is_transaction_contention(error)
 
 
 async def _drain_task(task):
@@ -180,6 +237,9 @@ class Pump:
         self._deferred_evictions = 0
         # Injectable monotone clock so suites can step the backoff schedule.
         self._monotonic = time.monotonic
+        # Injectable lane delay so suites can step the publication re-strike
+        # schedule without waiting out the real one.
+        self._publication_sleep = asyncio.sleep
         self.shadow = shadow
         self._normal_flights = 0
         self.timings = timings or StageTimings()
@@ -858,79 +918,137 @@ class Pump:
                 return False
             lost.discard(segment)
         try:
-            result = result_map.get(segment)
-            if isinstance(result, HeldWork):
-                await self._run_blocking(
-                    'publication',
-                    db_executor,
-                    self.scheduler.defer,
-                    segment,
-                    lease.token,
-                    time.time(),
-                    result.retry_after,
-                    held_reason=result.reason or None,
-                    admission_refused=True,
-                )
-                return False
-            if isinstance(result, ValidationFailureWork):
-                return bool(
-                    await self._run_blocking(
-                        'publication',
-                        db_executor,
-                        self.scheduler.fail,
-                        segment,
-                        lease.token,
-                        time.time(),
-                        worker_failure={'stage': result.stage, 'reason': result.reason},
-                        measured_held_vad_speech_seconds=result.measured_held_vad_speech_seconds,
-                        worker_vad_receipt=result.worker_vad_receipt,
-                    )
-                )
-            if isinstance(result, RecoveryWork):
-                return bool(
-                    await self._run_blocking(
-                        'publication',
-                        db_executor,
-                        self.scheduler.fail,
-                        segment,
-                        lease.token,
-                        time.time(),
-                        quarantine=True,
-                        padded_retry_empty=result.padded_retry_empty,
-                        padded_retry=result.padded_retry,
-                        worker_failure={'stage': 'assemble_words', 'reason': result.reason},
-                        measured_held_vad_speech_seconds=result.measured_held_vad_speech_seconds,
-                        worker_vad_receipt=result.worker_vad_receipt,
-                    )
-                )
-            if result is None or isinstance(result, FailedWork):
-                return bool(
-                    await self._run_blocking(
-                        'publication',
-                        db_executor,
-                        self.scheduler.fail,
-                        segment,
-                        lease.token,
-                        time.time(),
-                        measured_held_vad_speech_seconds=(
-                            result.measured_held_vad_speech_seconds if result is not None else None
-                        ),
-                        worker_vad_receipt=result.worker_vad_receipt if result is not None else None,
-                        worker_failure_evidence=result.worker_failure if isinstance(result, FailedWork) else None,
-                    )
-                )
-            return bool(
-                await self._run_blocking(
-                    'publication', db_executor, self.scheduler.complete, result, lease.token, time.time()
-                )
-            )
+            return await self._publish_transition(lease, result_map)
         except Exception as error:
             # One revoked owner or ambiguous DB reply cannot suppress
             # unrelated results in the same compute batch. Durable
             # lease/log recovery decides this item's next transition.
+            # A contention loss is different: the completed result is
+            # still in hand and the lease fence is still valid, so the
+            # bounded lane re-strikes the same fenced transition before
+            # falling back to lease-expiry recovery. A non-contention
+            # failure aborts the lane on the spot and the legacy catch
+            # site below runs byte-for-byte as before.
+            if publication_restrike_enabled():
+                settled, accepted, error = await self._restrike_publication(lease, result_map, error)
+                if settled:
+                    return accepted
             lost.add(segment)
             logger.error('event=batch_completion outcome=retry exception_type=%s', type(error).__name__)
             return False
+
+    async def _publish_transition(self, lease: LeasedWork, result_map: dict) -> bool:
+        """The one lease-fenced transition ``_publish`` runs for a result.
+
+        Extracted verbatim from the legacy ``_publish`` try block so the
+        re-strike lane replays exactly the transition that lost, never a
+        re-derived one. Every branch stays a single scheduler call fenced
+        by ``owns_lease`` inside the transaction.
+        """
+        segment = lease.item.segment_id
+        result = result_map.get(segment)
+        if isinstance(result, HeldWork):
+            await self._run_blocking(
+                'publication',
+                db_executor,
+                self.scheduler.defer,
+                segment,
+                lease.token,
+                time.time(),
+                result.retry_after,
+                held_reason=result.reason or None,
+                admission_refused=True,
+            )
+            return False
+        if isinstance(result, ValidationFailureWork):
+            return bool(
+                await self._run_blocking(
+                    'publication',
+                    db_executor,
+                    self.scheduler.fail,
+                    segment,
+                    lease.token,
+                    time.time(),
+                    worker_failure={'stage': result.stage, 'reason': result.reason},
+                    measured_held_vad_speech_seconds=result.measured_held_vad_speech_seconds,
+                    worker_vad_receipt=result.worker_vad_receipt,
+                )
+            )
+        if isinstance(result, RecoveryWork):
+            return bool(
+                await self._run_blocking(
+                    'publication',
+                    db_executor,
+                    self.scheduler.fail,
+                    segment,
+                    lease.token,
+                    time.time(),
+                    quarantine=True,
+                    padded_retry_empty=result.padded_retry_empty,
+                    padded_retry=result.padded_retry,
+                    worker_failure={'stage': 'assemble_words', 'reason': result.reason},
+                    measured_held_vad_speech_seconds=result.measured_held_vad_speech_seconds,
+                    worker_vad_receipt=result.worker_vad_receipt,
+                )
+            )
+        if result is None or isinstance(result, FailedWork):
+            return bool(
+                await self._run_blocking(
+                    'publication',
+                    db_executor,
+                    self.scheduler.fail,
+                    segment,
+                    lease.token,
+                    time.time(),
+                    measured_held_vad_speech_seconds=(
+                        result.measured_held_vad_speech_seconds if result is not None else None
+                    ),
+                    worker_vad_receipt=result.worker_vad_receipt if result is not None else None,
+                    worker_failure_evidence=result.worker_failure if isinstance(result, FailedWork) else None,
+                )
+            )
+        return bool(
+            await self._run_blocking(
+                'publication', db_executor, self.scheduler.complete, result, lease.token, time.time()
+            )
+        )
+
+    async def _restrike_publication(self, lease: LeasedWork, result_map: dict, first_error: Exception):
+        """Bounded re-strike lane for one contention-lost publication transition.
+
+        Returns ``(settled, accepted, error)``: ``settled`` means the
+        fenced transition ran again and ``accepted`` is its authoritative
+        answer (a lease that died mid-lane is rejected exactly like a
+        stale replay — the durable decision, not a lane failure).
+        ``settled`` is False when the loss is not contention (re-striking
+        would only replay the same refusal) or when every re-strike also
+        lost; ``error`` then carries the final exception for the legacy
+        catch site, whose lost-marker and ERROR line are unchanged.
+        """
+        error = first_error
+        for attempt in range(1, PUBLICATION_RESTRIKE_MAX_ATTEMPTS + 1):
+            if not publication_loss_is_contention(error):
+                return False, False, error
+            delay = publication_restrike_delay(attempt)
+            logger.info(
+                'event=batch_publication outcome=restrike_wait attempt=%d delay_ms=%d exception_type=%s',
+                attempt,
+                round(delay * 1000),
+                type(error).__name__,
+            )
+            await self._publication_sleep(delay)
+            try:
+                accepted = await self._publish_transition(lease, result_map)
+            except Exception as retry_error:
+                error = retry_error
+                continue
+            logger.info(
+                'event=batch_publication outcome=restrike_committed attempt=%d accepted=%s',
+                attempt,
+                'true' if accepted else 'false',
+            )
+            return True, accepted, error
+        return False, False, error
 
     async def _drain_after_publication(self, owner_id: str) -> None:
         try:

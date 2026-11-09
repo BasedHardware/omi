@@ -145,6 +145,11 @@ def make_pump(merge, concurrency):
     pump = Pump(types.SimpleNamespace(), types.SimpleNamespace(), merge=merge, publish_concurrency=concurrency)
     clock = Clock()
     pump._monotonic = clock
+
+    async def instant_publication_sleep(delay, *args, **kwargs):
+        pass  # the re-strike lane steps its schedule instantly in this matrix
+
+    pump._publication_sleep = instant_publication_sleep
     return pump, clock
 
 
@@ -226,7 +231,7 @@ async def test_matrix_success_c1_empty_mixed_accept():
     }
     lost = set()
     await pump._publish_flight(leases, result_map, lost)
-    assert scheduler.calls == [('complete', 'seg-a'), ('complete', 'seg-b')]
+    assert scheduler.calls == [('complete', 'seg-a'), ('complete', 'seg-b')] + [('complete', 'seg-b')] * 3
     assert merge.drained == ['owner-a']
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
     await pump.flush_deferred_drains()
@@ -330,7 +335,7 @@ async def test_matrix_success_c4_empty_mixed_accept():
     }
     lost = set()
     await pump._publish_flight(leases, result_map, lost)
-    assert scheduler.calls == [('complete', 'seg-a'), ('complete', 'seg-b')]
+    assert scheduler.calls == [('complete', 'seg-a'), ('complete', 'seg-b')] + [('complete', 'seg-b')] * 3
     assert merge.drained == ['owner-a']
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
     await pump.flush_deferred_drains()
@@ -434,7 +439,11 @@ async def test_matrix_held_c1_empty_mixed_accept():
     }
     lost = set()
     await pump._publish_flight(leases, result_map, lost)
-    assert scheduler.calls == [('defer', 'seg-a', 45, 'cap_hold', True), ('defer', 'seg-b', 45, 'cap_hold', True)]
+    assert (
+        scheduler.calls
+        == [('defer', 'seg-a', 45, 'cap_hold', True), ('defer', 'seg-b', 45, 'cap_hold', True)]
+        + [('defer', 'seg-b', 45, 'cap_hold', True)] * 3
+    )
     assert merge.drained == []
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
     await pump.flush_deferred_drains()
@@ -538,7 +547,11 @@ async def test_matrix_held_c4_empty_mixed_accept():
     }
     lost = set()
     await pump._publish_flight(leases, result_map, lost)
-    assert scheduler.calls == [('defer', 'seg-a', 45, 'cap_hold', True), ('defer', 'seg-b', 45, 'cap_hold', True)]
+    assert (
+        scheduler.calls
+        == [('defer', 'seg-a', 45, 'cap_hold', True), ('defer', 'seg-b', 45, 'cap_hold', True)]
+        + [('defer', 'seg-b', 45, 'cap_hold', True)] * 3
+    )
     assert merge.drained == []
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
     await pump.flush_deferred_drains()
@@ -704,6 +717,39 @@ async def test_matrix_validation_c1_empty_mixed_accept():
         (
             'fail',
             'seg-a',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('worker_failure', {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('worker_failure', {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('worker_failure', {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
             (
                 (
                     ('measured_held_vad_speech_seconds', 1.5),
@@ -920,6 +966,39 @@ async def test_matrix_validation_c4_empty_mixed_accept():
                 )
             ),
         ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('worker_failure', {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('worker_failure', {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('worker_failure', {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
     ]
     assert merge.drained == ['owner-a']
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
@@ -1113,6 +1192,48 @@ async def test_matrix_recovery_c1_empty_mixed_accept():
         (
             'fail',
             'seg-a',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('padded_retry', 'empty'),
+                    ('padded_retry_empty', True),
+                    ('quarantine', True),
+                    ('worker_failure', {'stage': 'assemble_words', 'reason': 'empty_asr'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('padded_retry', 'empty'),
+                    ('padded_retry_empty', True),
+                    ('quarantine', True),
+                    ('worker_failure', {'stage': 'assemble_words', 'reason': 'empty_asr'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('padded_retry', 'empty'),
+                    ('padded_retry_empty', True),
+                    ('quarantine', True),
+                    ('worker_failure', {'stage': 'assemble_words', 'reason': 'empty_asr'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
             (
                 (
                     ('measured_held_vad_speech_seconds', 1.5),
@@ -1359,6 +1480,48 @@ async def test_matrix_recovery_c4_empty_mixed_accept():
                 )
             ),
         ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('padded_retry', 'empty'),
+                    ('padded_retry_empty', True),
+                    ('quarantine', True),
+                    ('worker_failure', {'stage': 'assemble_words', 'reason': 'empty_asr'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('padded_retry', 'empty'),
+                    ('padded_retry_empty', True),
+                    ('quarantine', True),
+                    ('worker_failure', {'stage': 'assemble_words', 'reason': 'empty_asr'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 1.5),
+                    ('padded_retry', 'empty'),
+                    ('padded_retry_empty', True),
+                    ('quarantine', True),
+                    ('worker_failure', {'stage': 'assemble_words', 'reason': 'empty_asr'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
     ]
     assert merge.drained == ['owner-a']
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
@@ -1540,6 +1703,39 @@ async def test_matrix_failed_c1_empty_mixed_accept():
         (
             'fail',
             'seg-a',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 2.5),
+                    ('worker_failure_evidence', {'stage': 'vad_windows', 'reason': 'unsupported_language'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 2.5),
+                    ('worker_failure_evidence', {'stage': 'vad_windows', 'reason': 'unsupported_language'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 2.5),
+                    ('worker_failure_evidence', {'stage': 'vad_windows', 'reason': 'unsupported_language'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
             (
                 (
                     ('measured_held_vad_speech_seconds', 2.5),
@@ -1756,6 +1952,39 @@ async def test_matrix_failed_c4_empty_mixed_accept():
                 )
             ),
         ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 2.5),
+                    ('worker_failure_evidence', {'stage': 'vad_windows', 'reason': 'unsupported_language'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 2.5),
+                    ('worker_failure_evidence', {'stage': 'vad_windows', 'reason': 'unsupported_language'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', 2.5),
+                    ('worker_failure_evidence', {'stage': 'vad_windows', 'reason': 'unsupported_language'}),
+                    ('worker_vad_receipt', {'receipt': True}),
+                )
+            ),
+        ),
     ]
     assert merge.drained == ['owner-a']
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
@@ -1942,6 +2171,39 @@ async def test_matrix_missing_c1_empty_mixed_accept():
                 )
             ),
         ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', None),
+                    ('worker_failure_evidence', None),
+                    ('worker_vad_receipt', None),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', None),
+                    ('worker_failure_evidence', None),
+                    ('worker_vad_receipt', None),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', None),
+                    ('worker_failure_evidence', None),
+                    ('worker_vad_receipt', None),
+                )
+            ),
+        ),
     ]
     assert merge.drained == ['owner-a']
     assert {} == {o: v["attempts"] for o, v in pump._deferred_drains.items()}
@@ -2107,6 +2369,39 @@ async def test_matrix_missing_c4_empty_mixed_accept():
         (
             'fail',
             'seg-a',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', None),
+                    ('worker_failure_evidence', None),
+                    ('worker_vad_receipt', None),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', None),
+                    ('worker_failure_evidence', None),
+                    ('worker_vad_receipt', None),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
+            (
+                (
+                    ('measured_held_vad_speech_seconds', None),
+                    ('worker_failure_evidence', None),
+                    ('worker_vad_receipt', None),
+                )
+            ),
+        ),
+        (
+            'fail',
+            'seg-b',
             (
                 (
                     ('measured_held_vad_speech_seconds', None),

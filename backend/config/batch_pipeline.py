@@ -296,6 +296,37 @@ def contention_storm_damper_enabled() -> bool:
     )
 
 
+def publication_restrike_enabled() -> bool:
+    """Re-strike a contention-lost publication transition in-process by default; false is the kill switch.
+
+    The worker pump's publication transitions (``batch_complete``,
+    ``batch_fail``, ``batch_defer``) are lease-fenced single-document
+    transactions. When one exhausts its store-level five-attempt
+    contention budget, the pump today discards a completed GPU result and
+    waits for lease-expiry recovery to re-lease the unit — which re-runs
+    the whole GPU chain to re-produce a result the pump already held
+    (the ``event=batch_completion outcome=retry
+    exception_type=FirestoreContentionExhausted`` sensor family). With
+    this gate on, the pump's bounded re-strike lane replays the same
+    fenced transition with a documented doubling backoff (0.25s -> 2.0s,
+    at most three re-strikes) while the 120-second lease still holds;
+    every re-strike is authorized by the production ``owns_lease`` fence,
+    so a lease that died mid-lane is rejected exactly like a stale
+    replay. Only the bounded contention budget classifies as a
+    re-strikeable loss; any other exception aborts the lane and the
+    legacy catch site (lost marker + terminal ERROR line) runs
+    byte-for-byte as before. The store-level storm damper still spaces
+    the re-strike behind an armed exhaustion window; false restores the
+    immediate fallback for every loss.
+
+    Failure-Class: FC-publication-contention-discards-completed-gpu-results
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_PUBLICATION_RESTRIKE_ENABLED',
+        os.getenv('BATCH_PIPELINE_PUBLICATION_RESTRIKE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def maintenance_contention_continuation_enabled() -> bool:
     """Continue the maintenance sweep past a contended step or item by default; false is the kill switch.
 
