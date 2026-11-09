@@ -7,6 +7,15 @@ by the operator command (prod-operator for production writes); it never selects
 a tier, installs credentials or calls the fleet bus. Dry-run ramp commands do
 not perform production preflight reads.
 
+All writers use `widens_exposure` before invoking liveness evidence. Percent
+increases, activation, allow UID additions and deny UID removals widen exposure.
+Percent decreases, deactivation, allow UID removals, deny UID additions and
+deletes narrow it. A mixed write refuses with `RAMP_PREFLIGHT REFUSE mixed_write`
+and exit 2, including dry-run requests; run the narrowing change alone first,
+then the raise. `--accept-not-live` cannot override a mixed write.
+
+The prover first fetches `origin main` with a bounded timeout; a failed fetch
+emits `RAMP_PREFLIGHT UNREAD origin reason=fetch_failed` (exit 4).
 The runtime containment roster comes from named-ref backend reading sites and
 `backend/runtime_images.json`. Shared utils/config/database/models code checks
 the backend, pusher and batch image families; routers/services check backend
@@ -24,7 +33,9 @@ The gate refuses at the first missing proof:
   single 100% Cloud Run revision / no GKE pod can be established.
 - `commit_unbound`: a serving image cannot be bound to a local Git commit.
 - `scrape_unknown runtime=<name>`: the runtime has no job in the expected-targets
-  inventory. This includes jobs without a declared scrape; no coverage is invented.
+  inventory. Cloud Run jobs instead prove their current template image/release
+  SHA and emit `NOTE scrape_not_applicable runtime=<name>`; the clean metric
+  check still applies. Other unknown platforms fail closed.
 - `scrape_dead`: the declared job has no samples or any `up` sample differs
   from 1 during the last 30 minutes.
 - `metric_dead`: the first `\bomi_[a-z0-9_]+\b` name in `ramp.clean_metric` has
@@ -34,7 +45,7 @@ The gate refuses at the first missing proof:
 Transport, malformed responses, missing Git history and deadline errors emit
 `RAMP_PREFLIGHT UNREAD <what> reason=<fixed-token>`. Refusals exit 3, unread
 exits 4, PASS/OVERRIDE exit 0. Controller failures HOLD the affected advances.
-Kills, percentage decreases and deletes bypass this preflight, including when
+Pure narrowing bypasses both this preflight and its Git fetch, including when
 production evidence is unavailable. Existing writer authority, CAS, quality
 floor and fleet-gate rules still apply.
 
