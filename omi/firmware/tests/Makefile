@@ -11,6 +11,9 @@ test:
 	$(BUILD_DIR)/test_safe_mode
 	$(CC) $(CPPFLAGS) $(CFLAGS) test_watchdog.c -o $(BUILD_DIR)/test_watchdog
 	$(BUILD_DIR)/test_watchdog
+	$(CC) $(CFLAGS) test_battery_guard.c -o $(BUILD_DIR)/test_battery_guard
+	$(BUILD_DIR)/test_battery_guard
+	python3 ../omi/sim/test_power_model.py
 	$(CC) $(CFLAGS) -iquote ../omi/src/lib/core ../omi/src/lib/core/audio_packet_logic.c ../omi/tests/host/audio_packet_logic_test.c -o $(BUILD_DIR)/test_audio_packet_logic
 	$(BUILD_DIR)/test_audio_packet_logic
 	$(CC) $(CPPFLAGS) $(CFLAGS) test_boot_telemetry.c ../omi/src/boot_telemetry_logic.c ../omi/src/diagnostics_packet.c -o $(BUILD_DIR)/test_boot_telemetry

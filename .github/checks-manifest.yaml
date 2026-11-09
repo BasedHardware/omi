@@ -12,7 +12,7 @@ checks:
     reason: "Retro P6 / #24481 retune: numeric capacity changes disclose before/after values and new pipeline states name an exit; explicit reasoned waivers keep this a disclosure ratchet"
   - id: cv1-battery-soc
     command: ["bash", "omi/firmware/omi/tests/battery/run.sh"]
-    triggers: ["omi/firmware/omi/src/battery.c", "omi/firmware/omi/src/lib/core/lib/battery/battery.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/battery/**"]
+    triggers: ["omi/firmware/omi/src/battery.c", "omi/firmware/omi/src/lib/core/lib/battery/battery.h", "omi/firmware/omi/src/lib/core/battery_guard*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/battery/**"]
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "#20483: charger voltage must not inflate the last off-charger SOC; reject edge-spanning samples and keep disconnected BAS current"

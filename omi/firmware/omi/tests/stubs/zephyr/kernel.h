@@ -1,6 +1,7 @@
 #ifndef Z_STUB_KERNEL_H
 #define Z_STUB_KERNEL_H
 
+#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -42,6 +43,26 @@ static inline void k_sleep(k_timeout_t t)
     }
 }
 static inline void k_yield(void) {}
+
+/* Single-threaded harness: a mutex only needs to count ownership. */
+struct k_mutex {
+    int locked;
+};
+#define K_MUTEX_DEFINE(name) struct k_mutex name = {0}
+static inline int k_mutex_lock(struct k_mutex *mutex, k_timeout_t timeout)
+{
+    (void) timeout;
+    if (mutex->locked) {
+        return -EAGAIN;
+    }
+    mutex->locked = 1;
+    return 0;
+}
+static inline int k_mutex_unlock(struct k_mutex *mutex)
+{
+    mutex->locked = 0;
+    return 0;
+}
 
 struct k_sem {
     unsigned int count;
