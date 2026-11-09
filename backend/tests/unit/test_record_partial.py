@@ -1095,3 +1095,34 @@ async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_wo
     assert worker.process_batch([item])[0].segment_id == item.segment_id
     assert saved[item.segment_id]['words'] and not failures
     assert source[0].run(lambda tx: tx.get('jobs', original['segment_id'])) == original
+
+
+def test_crashed_post_seal_producer_has_partial_finish_exit_on_recovery_coordinator(source, monkeypatch):
+    from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    assert finish(source) == 'partial_finished'
+    original = pending(source)
+    original.update(state='committed', partial_coordinator=False)
+    source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
+    source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    renew_record_token_lease(
+        'synthetic',
+        'record',
+        source='frames',
+        session='crashed',
+        producer={'pod': 'resumed', 'process_started_at': 100},
+        firestore_client=source[1],
+    )
+    now = NOW + 3601
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: now)
+    proof = {**source[2], 'captured_at': now}
+    assert (
+        finish_partial(source[0], '/'.join(ROW), reason='tail_lagging', proof=proof, now=now, retry_aged=True)
+        == 'partial_finished'
+    )
+    assert not source[1].rows[ROW]['record_upload_sessions']
+    recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    assert recovery['state'] == 'record_pending' and recovery['partial_coordinator']
+    assert source[0].run(lambda tx: tx.get('jobs', original['segment_id'])) == original

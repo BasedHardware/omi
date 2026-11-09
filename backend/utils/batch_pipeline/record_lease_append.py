@@ -99,5 +99,9 @@ def wake_partial(store, uid, cid, now):
 async def retain_upload(uid, cid, row, paths, store):
     if not custody.owns_upload(uid, cid):
         return
-    await run_blocking(storage_executor, retain, uid, cid, row, paths)
-    await run_blocking(db_executor, wake_partial, store, uid, cid, gap.time.time())
+    try:
+        await run_blocking(storage_executor, retain, uid, cid, row, paths)
+    finally:
+        # A later object can fail after earlier create-only writes succeeded.
+        # Re-arm those durable chunks even while the phone retains its WAL.
+        await run_blocking(db_executor, wake_partial, store, uid, cid, gap.time.time())
