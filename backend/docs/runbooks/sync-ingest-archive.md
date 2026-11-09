@@ -13,8 +13,7 @@ and `AUDIO_ARCHIVE_READ_ENABLED` default **on** as fleet kill switches: the
 original Opus capture is dual-written next to the decoded PCM everywhere, and
 readers prefer it, without a percent cohort. Setting either to `false` is the
 rollback. The remaining phases stay default-off staged rollouts behind their
-enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0),
-`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty)) — except STOP_PCM and REGIONAL_CACHE,
+enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0) and injected `audio-archive` Firestore membership) — except STOP_PCM and REGIONAL_CACHE,
 which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
 `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT`) because COALESCE pins the shared
 `AUDIO_ARCHIVE_PERCENT` at 100 fleet-wide:

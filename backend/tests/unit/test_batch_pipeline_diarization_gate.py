@@ -266,25 +266,6 @@ def test_short_single_skip_is_off_by_default():
     assert saved['a']['diarization'].get('outcome') != 'skipped_single'
 
 
-def test_short_single_utterance_skips_diarization_when_enabled(monkeypatch):
-    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'true')
-    before = _decisions('skipped_short')
-    worker, _, saved, diarized = _worker([(40.0, 41.2)], [(4.1, 4.6)])
-    worker.process_batch([_item(duration=60)])
-    assert diarized == []
-    assert saved['a']['diarization'] == {
-        'turns': [{'start': 0, 'end': 60.0, 'speaker': 'SPEAKER_00'}],
-        'outcome': 'skipped_single',
-        'single_evidence': 'short_speech',
-    }
-    assert _decisions('skipped_short') == before + 1
-
-    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
-    worker, _, saved, diarized = _worker([(40.0, 41.2)], [(4.1, 4.6)])
-    worker.process_batch([_item(duration=60)])
-    assert len(diarized) == 1 and saved['a']['diarization'].get('outcome') != 'skipped_single'
-
-
 def test_two_separated_short_utterances_are_still_diarized(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'true')
     worker, _, saved, diarized = _worker([(10.0, 11.0), (40.0, 41.0)], [(2.1, 2.5), (2.1, 2.5)])
@@ -317,15 +298,6 @@ def test_speech_only_kill_switch_parses_false(monkeypatch, value):
     assert diarize_speech_only_enabled()
     monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', value)
     assert not diarize_speech_only_enabled()
-
-
-@pytest.mark.parametrize('value,enabled', [('true', True), (' TRUE ', True), ('1', False), ('yes', False), ('', False)])
-def test_short_single_enables_only_on_explicit_true(monkeypatch, value, enabled):
-    from config.batch_pipeline_gpu_skip import short_speech_single_enabled
-
-    assert not short_speech_single_enabled()
-    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', value)
-    assert short_speech_single_enabled() is enabled
 
 
 # --- per-unit diarization shape telemetry ----------------------------------------

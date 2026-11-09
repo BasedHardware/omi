@@ -185,8 +185,6 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
@@ -241,8 +239,6 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -387,8 +383,6 @@ env:
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: SPEAKER_GROUPING_MODE
-    value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
@@ -611,8 +605,6 @@ env:
     value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_RESILIENT_RECONNECT
@@ -629,8 +621,6 @@ env:
     value: "true"
   - name: MOBILE_STANDARD_BATCH_PERCENT
     value: "0"
-  - name: MOBILE_STANDARD_BATCH_UIDS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: STT_ROUTING_MODE
@@ -646,8 +636,6 @@ env:
   - name: STT_NO_TEXT_SECONDS
     value: "30"
   - name: STT_NO_TEXT_RESCUE_ENABLED
-    value: "true"
-  - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
@@ -667,8 +655,6 @@ env:
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
-  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
     value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
@@ -781,10 +767,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION

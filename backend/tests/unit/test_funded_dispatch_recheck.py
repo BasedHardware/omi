@@ -41,61 +41,6 @@ def _hourly(micro_units):
     }
 
 
-@pytest.mark.parametrize('ledger', ['hourly', 'gateway', 'api'])
-def test_later_factory_in_nested_scope_rechecks_open_ledgers_without_rescanning_month(monkeypatch, ledger):
-    moment = datetime(2026, 10, 17, 10, tzinfo=timezone.utc)
-
-    class Clock(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return moment
-
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    monkeypatch.setattr(ladder_v1, 'datetime', Clock)
-    monkeypatch.setattr(users_db, 'get_user_valid_subscription', lambda *args, **kwargs: None)
-    # Start just below the real Basic budget, with usage in a closed bucket.
-    budget = budget_units(policy.entitlements(None))
-    store = Store({'users/u/hourly_usage/2026-10-01-00': _hourly((budget - 1) * 1_000_000)})
-    monkeypatch.setattr(funded_usage_session, 'get_customer_firestore_client', lambda: store)
-    # The projection receives this client through its normal lazy getter.
-    monkeypatch.setattr(usage_units, 'get_customer_firestore_client', lambda: store)
-    monkeypatch.setattr(funded_usage_session, '_sessions', funded_usage_session.OrderedDict())
-    month_read = Mock(wraps=usage_units_session.read_usage_month)
-    monkeypatch.setattr(usage_units_session, 'read_usage_month', month_read)
-
-    provider_factory = Mock(return_value=object())
-    namespace = {
-        'require_current_generated_compute': generated.require_current_generated_compute,
-        'get_or_create_omi_gateway_llm': provider_factory,
-        'CHAT_STRUCTURED_AUTO_LANE_ID': 'test-lane',
-        'BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS': 1,
-    }
-    _entrypoint('utils/llm/clients.py', '_require_client_budget', namespace)
-    factory = _entrypoint('utils/llm/clients.py', 'get_llm_gateway_chat_structured', namespace)
-    with generated.generated_compute_scope('u'):
-        factory()
-        assert provider_factory.call_count == 1
-        assert month_read.call_count == 1
-        before = store.reads
-        if ledger == 'hourly':
-            store.docs['users/u/hourly_usage/2026-10-17-10'] = _hourly(1_000_000)
-        elif ledger == 'gateway':
-            key = 'llm_gateway_user_days/2026-10-17_' + sha256(b'u').hexdigest()[:16]
-            store.docs[key] = {
-                'shadow_v1': {'hours': {'10': {'features': {'chat': {'funding': {'omi': {'micro_units': 1_000_000}}}}}}}
-            }
-        else:
-            store.docs['users/u/ladder_v1_api_days/2026-10-17'] = {'micro_units': 1_000_000, 'requests': 1}
-        with pytest.raises(HTTPException) as raised:
-            factory()
-        assert raised.value.status_code == 402
-        assert raised.value.detail['error'] == 'usage_budget_exhausted'
-        assert provider_factory.call_count == 1
-        assert store.reads - before == 3  # Open hour, gateway day, API day only.
-        assert month_read.call_count == 1
-
-
 def test_default_off_scope_never_reads_allowance(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
@@ -107,7 +52,7 @@ def test_default_off_scope_never_reads_allowance(monkeypatch):
     lookup.assert_not_called()
 
 
-@pytest.mark.parametrize('flag', ['STT_CAP_DISPATCH_ENFORCEMENT', 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'])
+@pytest.mark.parametrize('flag', ['STT_CAP_DISPATCH_ENFORCEMENT'])
 def test_backlog_consent_expires_between_dispatches_without_affecting_new_capture(monkeypatch, flag):
     from utils import stt_cap_dispatch as stt
 

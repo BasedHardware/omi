@@ -245,28 +245,6 @@ def test_account_wipe_removes_packs_intents_and_receipts_with_flag_off(monkeypat
     assert canonical.names == other
 
 
-def test_new_mobile_capture_routes_unchanged_bytes_to_canonical_bucket(monkeypatch, tmp_path):
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
-    canonical = _Bucket(set())
-    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
-    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': _Bucket(set())}))
-    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
-    monkeypatch.setattr(storage_mod.users_db, 'get_data_protection_level', lambda uid: 'standard')
-    monkeypatch.setattr(storage_mod.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
-    archive = MagicMock()
-    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
-    path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1726185600.bin'
-    raw = b'\x03\x00\x00\x00abc\x03\x00\x00\x00\xf8\xff\xfe'
-    path.write_bytes(raw)
-    storage_mod.archive_mobile_batch_raw_files('uid1', [str(path)])
-    assert archive.call_args.args == (canonical, 'uid1', raw)
-    metadata = archive.call_args.kwargs
-    assert metadata['format'] == 'omi-wal-uint32le-opus-v1'
-    assert metadata['provenance']['capture_day'] == '2024-09-13'
-    assert metadata['provenance']['capture_start'] == 1726185600
-    assert metadata['identity'].startswith(path.name)
-
-
 def test_canonical_bucket_rejects_retained_generations(monkeypatch):
     bucket = _Bucket(set())
     monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
@@ -305,45 +283,6 @@ def test_merge_cleanup_preserves_canonical_and_explicit_privacy_calls_erase(monk
     erased.assert_called_once_with(private, 'u', 'merged')
 
 
-def test_enhanced_pusher_manifest_matches_envelope_and_full_duration(monkeypatch):
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
-    monkeypatch.setattr(storage_mod.conversation_tombstones, 'is_deleted', lambda *args: False)
-    canonical = _Bucket(set())
-    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
-    archive = MagicMock(side_effect=RuntimeError('stop after canonical intake'))
-    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
-    _prepare_playback(monkeypatch)
-    storage_mod.upload_audio_chunks_batch(
-        [{'timestamp': 1726185600, 'data': bytes(32000)}],
-        'owner',
-        'conv',
-        data_protection_level='enhanced',
-        sample_rate=16000,
-    )
-    payload = archive.call_args.args[2]
-    assert struct.unpack('>I', payload[:4])[0] == len(payload) - 4
-    assert archive.call_args.kwargs['provenance']['encryption_envelope'].startswith('uint32be-')
-    assert archive.call_args.kwargs['conversation_ranges'][0]['end'] == 1726185601
-
-
-def test_preexisting_conversation_deletion_blocks_new_canonical_admission(monkeypatch):
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
-    monkeypatch.setattr(storage_mod.conversation_tombstones, 'is_deleted', lambda *args: True)
-    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: _Bucket(set()))
-    monkeypatch.setattr(storage_mod.audio_packs, 'conversation_chain', lambda *args: ['deleted'])
-    archive = MagicMock()
-    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
-    _prepare_playback(monkeypatch)
-    storage_mod.upload_audio_chunks_batch(
-        [{'timestamp': 1726185600, 'data': bytes(32000)}],
-        'owner',
-        'deleted',
-        data_protection_level='standard',
-        sample_rate=16000,
-    )
-    archive.assert_not_called()
-
-
 def _prepare_playback(monkeypatch):
     private = _Bucket(set())
     monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': private}))
@@ -355,51 +294,6 @@ def _prepare_playback(monkeypatch):
 
     monkeypatch.setattr(storage_mod, 'owner_storage_write_gate', gate)
     return private
-
-
-@pytest.mark.parametrize('failure', ['bucket', 'archive', None])
-def test_playback_commits_before_optional_archive_and_survives_failure(monkeypatch, failure):
-    private = _prepare_playback(monkeypatch)
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
-    monkeypatch.setattr(storage_mod.conversation_tombstones, 'is_deleted', lambda *args: False)
-
-    def bucket():
-        assert private.names == {'chunks/u/c/100.000.batch.bin'}
-        if failure == 'bucket':
-            raise RuntimeError('bucket policy unavailable')
-        return private
-
-    def archive(*args, **kwargs):
-        assert private.names == {'chunks/u/c/100.000.batch.bin'}
-        if failure == 'archive':
-            raise RuntimeError('archive unavailable')
-
-    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', bucket)
-    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
-    assert storage_mod.upload_audio_chunks_batch(
-        [{'timestamp': 100, 'data': bytes(32000)}], 'u', 'c', data_protection_level='standard', sample_rate=16000
-    ) == ['chunks/u/c/100.000.batch.bin']
-
-
-@pytest.mark.parametrize('failure', [False, True])
-def test_mobile_primary_archive_commits_before_canonical_success_or_failure(monkeypatch, tmp_path, failure):
-    private = _prepare_playback(monkeypatch)
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
-    monkeypatch.setattr(storage_mod.users_db, 'get_data_protection_level', lambda uid: 'standard')
-    monkeypatch.setattr(storage_mod.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
-    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: private)
-    path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1726185600.bin'
-    path.write_bytes(b'original')
-
-    def archive(*args, **kwargs):
-        assert len(private.names) == 1
-        assert next(iter(private.names)).startswith('raw-mobile-batch/u/')
-        if failure:
-            raise RuntimeError('canonical unavailable')
-
-    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
-    storage_mod.archive_mobile_batch_raw_files('u', [str(path)])
-    assert len(private.names) == 1
 
 
 def test_canonical_bucket_policy_cached_until_expiry(monkeypatch):

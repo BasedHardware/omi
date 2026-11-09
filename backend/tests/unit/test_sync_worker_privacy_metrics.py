@@ -164,3 +164,57 @@ def test_memo_ineligible_counter_survives_isolated_job_exits():
     from utils.sync.worker_privacy_metrics import COUNTERS
 
     assert 'privacy_memo_ineligible' in COUNTERS
+
+
+@pytest.mark.parametrize('killed', [False, True])
+async def test_live_child_rollout_values_are_scraped_and_disappear_on_exit(killed):
+    metrics = WorkerPrivacyMetrics()
+    env = metrics.begin_job()
+    env['ROLLOUT_POD_TEMPLATE_HASH'] = 'synthetic-pod-hash'
+    env.pop('K_REVISION', None)
+    child = """
+from database import rollout_cohorts as store
+from utils.rollout import runtime_percent as rp
+import sys
+rp._background_submitter = lambda fn: fn()
+rp._cache = rp._RampCache(lambda: store.normalize_ramp_document({
+    'schema_version': 1, 'revision': 5, 'envs': {'prod': {
+        'percents': {'batch-pipeline': 23, 'new-owner-cell1': 17},
+        'legacy_sync': 'on', 'locked_by': None}}}))
+rp.configure_runtime_percent()
+assert rp.runtime_percent('batch-pipeline', env_default=0) == 23
+print('ready', flush=True)
+sys.stdin.read()
+"""
+    env['OMI_ENV_STAGE'] = 'prod'
+    env.pop('OMI_DEPLOYMENT', None)
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        '-c',
+        child,
+        env=env,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        start_new_session=True,
+        cwd=Path(__file__).resolve().parents[2],
+    )
+    try:
+        assert await asyncio.wait_for(process.stdout.readline(), 30) == b'ready\n'
+        rows = [s for f in text_string_to_metric_families(metrics.render().decode()) for s in f.samples]
+        values = {s.labels['name']: s.value for s in rows if s.name == 'omi_runtime_percent'}
+        assert len(values) == 6
+        assert values['batch-pipeline'] == 23 and values['new-owner-cell1'] == 17
+        for row in rows:
+            assert row.labels['revision'] == 'synthetic-pod-hash'
+            assert row.labels['pid'] == str(process.pid)
+        if killed:
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.stdin.close()
+        await asyncio.wait_for(process.wait(), 15)
+    finally:
+        if process.returncode is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            await asyncio.wait_for(process.wait(), 15)
+        metrics.finish_job()
+    assert not metrics.render().strip()  # dead consumers never leave adoption evidence

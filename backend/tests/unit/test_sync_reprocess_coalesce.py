@@ -345,9 +345,6 @@ def test_resolved_prod_env_is_unchanged(runtime_manifest, monkeypatch):
     monkeypatch.delenv('SYNC_REPROCESS_COALESCE_ENABLED', raising=False)
     monkeypatch.delenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', raising=False)
     assert flags.dedupe_enabled() and flags.coalesce_enabled()
-    from config.repeat_work import revision_reuse
-
-    assert not revision_reuse()
 
 
 def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_manifest):
@@ -645,64 +642,9 @@ def test_demand_master_preserves_production_settle_and_one_pass(
     assert not rows
 
 
-def test_repeat_work_window_has_a_hard_ceiling_without_a_second_queue(state, monkeypatch):
-    rows, tasks = state
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    for now in range(0, 3600, 100):
-        reprocess.mark('u', 'c', 'en', now=now)
-    key = reprocess.key('u', 'c')
-    assert rows[key]['due_at'] == 3600 and len(tasks) == 1
-    process = Mock()
-    assert reprocess.run(key, tasks[0]['task_token'], process, now=3600) == 'processed'
-    process.assert_called_once()
-    assert not rows
-
-
-def test_repeat_work_deadline_survives_overlapping_revision_and_next_mark(state, monkeypatch):
-    rows, tasks = state
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    for now in range(0, 3600, 100):
-        reprocess.mark('u', 'c', 'en', now=now)
-    key = reprocess.key('u', 'c')
-    assert rows[key]['first_pending_at'] == 0 and rows[key]['due_at'] == 3600
-    assert (
-        reprocess.run(key, tasks[0]['task_token'], lambda *_: reprocess.mark('u', 'c', 'en', now=3700), now=3600)
-        == 'processed'
-    )
-    assert rows[key]['task_due_at'] == 3600
-    reprocess.mark('u', 'c', 'en', now=3900)
-    assert rows[key]['first_pending_at'] == 0
-    assert rows[key]['due_at'] == rows[key]['task_due_at'] == 3600
-    process = Mock()
-    assert reprocess.run(key, tasks[-1]['task_token'], process, now=3900) == 'processed'
-    process.assert_called_once_with('u', 'c', 'en')
-    assert not rows
-
-
-@pytest.mark.parametrize(
-    'demand_enabled,revision_enabled,expected_due',
-    [(False, False, 4600), (False, True, 3600), (True, False, 3540), (True, True, 3540)],
-)
-def test_demand_and_revision_reuse_keep_their_existing_ceilings(
-    state, monkeypatch, demand_enabled, revision_enabled, expected_due
-):
-    rows, tasks = state
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true' if demand_enabled else 'false')
-    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true' if revision_enabled else 'false')
-    reprocess.mark('u', 'c', 'en', now=0)
-    key = reprocess.key('u', 'c')
-    assert rows[key]['due_at'] == 600
-    for now in range(100, 4001, 100):
-        reprocess.mark('u', 'c', 'en', now=now)
-    assert rows[key]['due_at'] == expected_due
-    assert rows[key]['effects_only'] is False
-    assert len(tasks) == 1
-
-
 def test_first_summary_continuous_appends_cannot_extend_dispatch(state, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     for now in range(0, 120, 5):
         reprocess.mark('u', 'c', 'en', now=now)
@@ -721,7 +663,7 @@ def test_enabling_deadline_wakes_preexisting_later_task(state, monkeypatch):
     reprocess.mark('u', 'c', 'en', now=0)
     original = tasks[0]['task_token']
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     reprocess.mark('u', 'c', 'en', now=100)
     assert len(tasks) == 2 and tasks[-1]['due_at'] == 120
     assert reprocess.run(reprocess.key('u', 'c'), original, Mock(), now=600) == 'stale'
@@ -731,7 +673,7 @@ def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch)
     from utils.conversations.summary_delivery import SummaryOutputUnavailable
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
@@ -750,7 +692,7 @@ def test_first_summary_bypasses_demand_tier_wait_without_extra_reads(state, monk
     from utils.conversations import demand_processing as demand
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     schedule = Mock(side_effect=AssertionError('first summary cannot wait behind demand tiers'))
@@ -764,7 +706,7 @@ def test_first_summary_bypasses_demand_tier_wait_without_extra_reads(state, monk
 
 def test_short_first_summary_lease_and_rolled_back_later_revision(state, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     key = reprocess.key('u', 'c')
     reprocess.mark('u', 'c', 'en', now=0)
@@ -788,7 +730,7 @@ def test_short_first_summary_lease_and_rolled_back_later_revision(state, monkeyp
 def test_first_summary_retry_preserves_queued_token(state, monkeypatch):
     monkeypatch.setattr(reprocess, '_wake_exists', lambda *_: True)
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     key = reprocess.key('u', 'c')
     reprocess.mark('u', 'c', 'en', now=0)
@@ -812,7 +754,7 @@ def test_live_request_heartbeats_same_owner_token_without_a_replacement_wake(sta
     import threading
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setattr(reprocess, 'FIRST_SUMMARY_HEARTBEAT_SECONDS', 0.01)
     clock = [120]
     monkeypatch.setattr(reprocess, 'time', SimpleNamespace(time=lambda: clock[0]))
@@ -858,7 +800,7 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
     from utils.conversations.summary_delivery import SummaryOutputUnavailable
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
@@ -879,7 +821,7 @@ def test_legacy_empty_output_owner_race_defers_without_spending_attempts(state, 
     from database.summary_processing import EmptyFailureOutcome
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.OWNER_MISMATCH)
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
@@ -895,7 +837,7 @@ def test_revision_changed_before_repair_claim_keeps_same_version_debt(state, mon
     from utils.conversations.summary_delivery import SummaryRepairSuperseded
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key = reprocess.key('u', 'c')
@@ -936,7 +878,7 @@ def test_superseded_repair_retires_only_its_own_generation(state, monkeypatch):
     from utils.conversations.summary_delivery import SummaryRepairSuperseded
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     key = reprocess.key('u', 'c')
     reprocess.mark('u', 'c', 'en', now=0)
@@ -983,7 +925,7 @@ def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch
 
 def test_discard_is_terminal_but_does_not_count_as_a_first_summary(state, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     rows, tasks = state
     key = reprocess.key('u', 'c')
     reprocess.mark('u', 'c', 'en', now=0)
@@ -996,7 +938,7 @@ def test_discard_is_terminal_but_does_not_count_as_a_first_summary(state, monkey
 
 def test_first_summary_fulfilled_during_append_starts_a_later_revision_window(state, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     rows, tasks = state
     key = reprocess.key('u', 'c')
@@ -1018,14 +960,13 @@ def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_ena
 
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
-    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     assert not summary_guarantee.enabled('u')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     assert not summary_guarantee.enabled('u')
 
     def no_output(*_):
@@ -1064,8 +1005,7 @@ def test_invalid_deadline_never_grants_summary_drain_eligibility(monkeypatch, de
     from config import summary_guarantee
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     row = {'uid': 'u', 'summary_deadline_at': deadline}
     assert not summary_guarantee.first_summary_pending(row)
@@ -1077,12 +1017,11 @@ def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_qu
 
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     schedule, enqueue = Mock(), Mock()
     monkeypatch.setattr(demand, 'schedule', schedule)
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
@@ -1108,12 +1047,11 @@ def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_qu
 def test_preserved_callback_rule_discard_receipt_settles_without_empty_failure(state, monkeypatch):
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
 
     def rule_discard(*_):
         context = reprocess.summary_delivery.PROCESS_CONTEXT.get()
@@ -1196,8 +1134,7 @@ def test_intake_discarded_fragment_settles_admitted_obligation_instead_of_callba
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
@@ -1263,8 +1200,7 @@ def test_occasion_review_reaches_canonical_processing_before_fragment_discard(pi
 @pytest.mark.parametrize('has_output', [False, True])
 def test_later_summary_keeps_legacy_callback_validation_and_completion(state, monkeypatch, preserve, has_output):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)

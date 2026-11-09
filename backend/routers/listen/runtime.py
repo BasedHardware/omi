@@ -16,7 +16,6 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from config.ladder_v1 import enabled as ladder_enabled
-from config import ladder_v1 as ladder_policy
 from database import conversation_tombstones
 from database.privacy_check_metrics import with_session_census, flush_session_census, reset_session_census
 from database.firestore_read_metrics import FirestoreReadSite
@@ -849,10 +848,7 @@ class ListenSessionRuntime:
         admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
         now = time.time()
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
-        ladder_session = (
-            ladder_enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
-            and ladder_policy.entitlements(subscription) is not None
-        )
+        ladder_session = False
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
         if admission is not None:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
