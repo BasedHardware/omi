@@ -430,18 +430,22 @@ void turnoff_all()
      * its level holds; armed before the sleep above (3.0.23), a press in that
      * window re-ran the runtime callback continuously, starving this thread so
      * System OFF never came and the unstoppable watchdog reset the pendant.
-     * The runtime callback is removed first; sys_poweroff() locks interrupts. */
+     * The runtime callback is removed, then the level is sampled and the wake
+     * armed with interrupts masked; sys_poweroff() keeps them masked. */
     bool still_held = gpio_pin_get_dt(&usr_btn) > 0;
     if (still_held) {
         LOG_WRN("usr_btn still held at power-off: waking on release instead");
     }
+    LOG_INF("Entering system off; press usr_btn to restart");
     (void) gpio_remove_callback(usr_btn.port, &button_cb_data);
+    unsigned int key = irq_lock();
+    still_held = gpio_pin_get_dt(&usr_btn) > 0;
     rc = gpio_pin_interrupt_configure_dt(&usr_btn, still_held ? GPIO_INT_LEVEL_HIGH : GPIO_INT_LEVEL_LOW);
     if (rc < 0) {
+        irq_unlock(key);
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
         return;
     }
-    LOG_INF("Entering system off; press usr_btn to restart");
 
     // Power off the system using sys_poweroff
     sys_poweroff();
