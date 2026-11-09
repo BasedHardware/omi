@@ -29,12 +29,16 @@ def test_served_metrics_registry_exports_both_firestore_probe_collectors():
     caller = FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'lookup', 'tests:seal_export')
     billed.inc(5)
     caller.inc(5)
+    metrics.sample(2, 900, 123)
     server, thread = start_http_server(0, addr='127.0.0.1', registry=metrics.registry)
     try:
         with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
             body = response.read().decode()
         assert 'omi_firestore_billed_reads_total{collection="other",kind="lookup",tier="unattributed"}' in body
         assert 'omi_firestore_billed_reads_by_caller_total{caller="tests:seal_export"' in body
+        assert (
+            'omi_record_seal_oldest_age_seconds{namespace="test-namespace",worker_release="test-release"} 900.0' in body
+        )
     finally:
         server.shutdown()
         server.server_close()
