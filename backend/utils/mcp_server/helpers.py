@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from utils.conversations import transcribing_hold
 from utils.conversations.render import redact_conversation_for_list
 from utils.speakers.display import display_participants
 from utils.mcp_data import parse_date_only_utc
@@ -75,6 +76,10 @@ def conversation_participants(conversation: Dict[str, Any], *, include_display: 
 def conversation_card(
     conversation: Dict[str, Any], *, include_display: bool = True, include_participants: bool = True
 ) -> Dict[str, Any]:
+    if 'processing_status' in conversation:
+        processing_status, failure_reason = conversation['processing_status'], conversation.get('failure_reason')
+    else:
+        processing_status, failure_reason = transcribing_hold.presentation_state(conversation)
     redact_conversation_for_list(conversation)
     structured_raw = conversation.get("structured")
     structured = structured_raw if isinstance(structured_raw, dict) else {}
@@ -90,6 +95,8 @@ def conversation_card(
         "finished_at": conversation.get("finished_at"),
         "language": conversation.get("language"),
         "discarded": bool(conversation.get("discarded", False)),
+        "processing_status": processing_status,
+        "failure_reason": failure_reason,
         **conversation_call_fields(conversation),
         "structured": {
             key: structured.get(key) for key in ("title", "overview", "category", "emoji") if key in structured

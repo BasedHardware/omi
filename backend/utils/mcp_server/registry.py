@@ -70,7 +70,7 @@ _TIMEZONE_INPUT = {
 }
 _FIELDS_INPUT = {
     'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}],
-    'description': 'Return selected card fields; id is retained. Supports structured.title/overview/category/emoji and short aliases, plus discarded. Array or comma-separated names.',
+    'description': 'Return selected card fields; id is retained. Supports structured.title/overview/category/emoji and short aliases, plus discarded, processing_status and failure_reason. Array or comma-separated names.',
 }
 _SUMMARY_ONLY_INPUT = {
     'type': 'boolean',
@@ -81,6 +81,16 @@ _SUMMARY_ONLY_INPUT = {
 _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
     'source': {'type': ['string', 'null']},
     'discarded': {'type': 'boolean'},
+    'processing_status': {
+        'type': 'string',
+        'enum': ['pending', 'transcribing', 'failed', 'done'],
+        'description': 'User-facing processing state. Stored processing rows are pending; the list tool includes completed rows only.',
+    },
+    'failure_reason': {
+        'type': ['string', 'null'],
+        'enum': ['record_upload_failed', 'dead_letter', 'transcription_deadline_exceeded', None],
+        'description': 'Failure cause: record_upload_failed, dead_letter or transcription_deadline_exceeded; null unless processing_status is failed.',
+    },
     'is_call': {'type': ['boolean', 'null']},
     'call_platform': {'type': ['string', 'null']},
     'calendar_event_id': {'type': ['string', 'null']},
@@ -552,6 +562,10 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             _object_schema(
                 ["conversations"],
                 conversations=_object_array_with(**_CONVERSATION_CARD_FIELDS),
+                pending_count={
+                    'type': 'integer',
+                    'description': 'Number of pending or transcribing cards on this returned page, independent of fields selection; not a window total.',
+                },
                 has_more={"type": "boolean"},
                 effective_limit={"type": "integer"},
                 next_cursor=_NEXT_CURSOR_OUTPUT,

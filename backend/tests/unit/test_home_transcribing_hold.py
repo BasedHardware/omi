@@ -73,6 +73,54 @@ def test_deadline_decay_and_raw_state(elapsed, title, status):
 
 
 @pytest.mark.parametrize(
+    'changes,expected',
+    [
+        ({}, ('transcribing', None)),
+        ({'record_upload_failed': True}, ('failed', 'record_upload_failed')),
+        ({'finalization_status': 'dead_letter'}, ('failed', 'dead_letter')),
+        ({'home_transcription_deadline_at': NOW}, ('failed', 'transcription_deadline_exceeded')),
+        (
+            {'record_upload_failed': True, 'finalization_status': 'dead_letter', 'home_transcription_deadline_at': NOW},
+            ('failed', 'record_upload_failed'),
+        ),
+        (
+            {'finalization_status': 'dead_letter', 'home_transcription_deadline_at': NOW},
+            ('failed', 'dead_letter'),
+        ),
+        ({'status': 'processing'}, ('pending', None)),
+        ({'record_projection_revision': 1}, ('done', None)),
+        ({'structured': {'title': 'Finished'}}, ('done', None)),
+        ({'transcript_segments': [{'text': 'landed'}]}, ('done', None)),
+    ],
+)
+def test_presentation_state_matches_title_without_mutating_storage(monkeypatch, changes, expected):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'true')
+    row = capture(**changes)
+    before = deepcopy(row)
+    assert transcribing_hold.presentation_state(row, now=NOW) == expected
+    wire = transcribing_hold.project(row, now=NOW)
+    assert (wire['structured']['title'] == "Couldn't transcribe") == (expected[0] == 'failed')
+    assert (wire['structured']['title'] == 'Transcribing…') == (expected[0] == 'transcribing')
+    if expected[0] in ('failed', 'transcribing'):
+        assert (wire['processing_status'], wire['failure_reason']) == expected
+    assert row == before
+
+
+@pytest.mark.parametrize('status,expected', [('completed', 'done'), ('processing', 'pending')])
+def test_presentation_state_gate_off_uses_stored_status(monkeypatch, status, expected):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
+    row = capture(status=status, record_upload_failed=True, home_transcription_deadline_at=NOW)
+    assert transcribing_hold.presentation_state(row, now=NOW) == (expected, None)
+    assert transcribing_hold.project(row, now=NOW) is row
+
+
+def test_stored_failed_rows_remain_hidden():
+    row = capture(status='failed')
+    assert not conversations.is_visible_conversation(row)
+    assert not conversations.is_visible_conversation(row, presentation=True)
+
+
+@pytest.mark.parametrize(
     'changes',
     [
         {'transcript_segments': [{'text': 'landed speech'}]},

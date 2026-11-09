@@ -19,6 +19,7 @@ from utils.mcp_server.helpers import bounded_transcript_segments, conversation_c
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.mcp_server.constants import MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
+from utils.mcp_server.registry import TOOLS_BY_NAME
 from utils.other.list_budget import ListReadBudgetExhausted
 
 NOW = datetime(2026, 10, 22, tzinfo=timezone.utc)
@@ -34,6 +35,84 @@ def card(cid, text='x'):
         'structured': {'title': 'Synthetic', 'overview': text},
         'transcript_segments': [{'text': text, 'start': 0, 'end': 60}],
     }
+
+
+def held_card(**changes):
+    return {
+        **card('held'),
+        'status': 'completed',
+        'structured': {'title': ''},
+        'transcript_segments': [],
+        'record_lane_owner': 'batch_live_v1',
+        'home_transcription_deadline_at': datetime.now(timezone.utc) + timedelta(hours=2),
+        **changes,
+    }
+
+
+@pytest.mark.parametrize('fields', [None, 'id,processing_status,failure_reason', 'id'])
+def test_list_processing_status_and_page_scoped_pending_count(monkeypatch, fields):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'true')
+    rows = [card('done'), held_card(), held_card(id='failed', record_upload_failed=True)]
+    monkeypatch.setattr(
+        conversations.mcp_conversation_pages, 'get_mcp_conversation_cards_page', lambda *a, **k: (rows, None)
+    )
+    result = conversations.get_conversations(OWNER, {'fields': fields})
+    assert result['pending_count'] == 1
+    assert len(result['conversations']) == 3
+    if fields == 'id':
+        assert result['conversations'] == [{'id': row['id']} for row in rows]
+    else:
+        assert [(c['processing_status'], c['failure_reason']) for c in result['conversations']] == [
+            ('done', None),
+            ('transcribing', None),
+            ('failed', 'record_upload_failed'),
+        ]
+
+
+@pytest.mark.parametrize('tool', ['get_conversation_by_id', 'get_conversations_by_ids', 'search_conversations'])
+@pytest.mark.parametrize('fields', [None, 'id,processing_status,failure_reason'])
+@pytest.mark.parametrize(
+    'changes,expected',
+    [
+        ({}, ('transcribing', None)),
+        ({'record_upload_failed': True}, ('failed', 'record_upload_failed')),
+        ({'finalization_status': 'dead_letter'}, ('failed', 'dead_letter')),
+        (
+            {'home_transcription_deadline_at': NOW},
+            ('failed', 'transcription_deadline_exceeded'),
+        ),
+        ({'status': 'processing'}, ('pending', None)),
+        ({'record_projection_revision': 1}, ('done', None)),
+    ],
+)
+def test_processing_status_survives_tool_presentation(monkeypatch, tool, fields, changes, expected):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'true')
+    row = held_card(**changes)
+    monkeypatch.setattr(conversations.conversations_db, 'get_mcp_conversations_by_id', lambda *a, **k: [row])
+    monkeypatch.setattr(conversations, 'search_conversations_core', lambda *a, **k: [row])
+    result = TOOLS_BY_NAME[tool].handler(
+        OWNER, {'conversation_id': 'held', 'conversation_ids': ['held'], 'query': 'synthetic', 'fields': fields}, None
+    )
+    if tool == 'get_conversation_by_id':
+        wire = result['conversation']
+    elif tool == 'get_conversations_by_ids':
+        wire = result['conversations'][0]['conversation']
+    else:
+        wire = result['conversations'][0]
+    assert (wire['processing_status'], wire['failure_reason']) == expected
+    if fields is not None:
+        assert set(wire) == {'id', 'processing_status', 'failure_reason'}
+    elif expected[0] in ('transcribing', 'failed'):
+        assert wire['structured']['title'] == (
+            'Transcribing…' if expected[0] == 'transcribing' else "Couldn't transcribe"
+        )
+
+
+def test_list_pending_count_is_zero_for_empty_page(monkeypatch):
+    monkeypatch.setattr(
+        conversations.mcp_conversation_pages, 'get_mcp_conversation_cards_page', lambda *a, **k: ([], None)
+    )
+    assert conversations.get_conversations(OWNER, {})['pending_count'] == 0
 
 
 @pytest.mark.parametrize(

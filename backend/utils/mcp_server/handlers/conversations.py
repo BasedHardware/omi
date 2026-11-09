@@ -217,10 +217,11 @@ def get_conversations(
         cursor_kind="get_conversations",
     )
 
+    cards = [conversation_card(conversation) for conversation in page]
     result: Dict[str, Any] = {
-        "conversations": [
-            select_card_fields(conversation_card(conversation), arguments.get("fields")) for conversation in page
-        ],
+        "conversations": [select_card_fields(card, arguments.get("fields")) for card in cards],
+        # Count the full page even when fields selection omits processing_status.
+        "pending_count": sum(card['processing_status'] in ('pending', 'transcribing') for card in cards),
         "has_more": next_cursor is not None,
         "effective_limit": limit,
     }

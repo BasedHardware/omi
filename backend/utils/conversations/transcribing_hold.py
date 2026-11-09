@@ -60,18 +60,32 @@ def deadline(row: Mapping[str, Any]) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
+def presentation_state(row: Mapping[str, Any], *, now: datetime | None = None) -> tuple[str, str | None]:
+    """User-facing card state; stored failed rows remain subject to visibility."""
+    if applies(row):
+        if row.get('record_upload_failed'):
+            return 'failed', 'record_upload_failed'
+        if row.get('finalization_status') == 'dead_letter':
+            return 'failed', 'dead_letter'
+        if (now or datetime.now(timezone.utc)) >= deadline(row):
+            return 'failed', 'transcription_deadline_exceeded'
+        return 'transcribing', None
+    if getattr(row.get('status'), 'value', row.get('status')) == 'processing':
+        return 'pending', None
+    return 'done', None
+
+
 def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     """Return a wire copy; expired/error captures stay visible as completed rows."""
     if not applies(row):
         return row
-    deadline_at = deadline(row)
-    title, status = transcription_presentation(
-        deadline_at,
-        failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
-        now=now,
-    )
+    processing_status, failure_reason = presentation_state(row, now=now)
+    failed = processing_status == 'failed'
     return {
         **row,
-        'status': 'completed' if status == 'failed' else status,
-        'structured': {**(row.get('structured') or {}), 'title': title},
+        'status': 'completed' if failed else 'processing',
+        'structured': {**(row.get('structured') or {}), 'title': "Couldn't transcribe" if failed else 'Transcribing…'},
+        # Preserve the decision before the projected title/status make applies false.
+        'processing_status': processing_status,
+        'failure_reason': failure_reason,
     }
