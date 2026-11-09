@@ -123,18 +123,20 @@ class CellFolders(Repo):
         digest, prior = self.receipt(mutation_id, 'folders.delete', [folder_id, move_to_folder_id])
         if prior is not None:
             return prior
+        # Lock in flush order: conversations before folders.
+        moved = [conv for conv in self.store.state['conversations'].values() if conv.get('folder_id') == folder_id]
+        target = move_to_folder_id
+        if not target:
+            default = next((f for f in self.list().items if f.is_default and f.id != folder_id), None)
+            target = default.id if default else None
+        self._lock_in_order('folders', [folder_id, target])
         row = self.store.state['folders'].get(folder_id)
         if expected_revision is not None:
             if row is None:
                 return False
             self.check('folders', folder_id, row, expected_revision)
-        target = move_to_folder_id
-        if not target:
-            default = next((f for f in self.list().items if f.is_default and f.id != folder_id), None)
-            target = default.id if default else None
-        for conv in self.store.state['conversations'].values():
-            if conv.get('folder_id') == folder_id:
-                conv.update(folder_id=target)
+        for conv in moved:
+            conv.update(folder_id=target)
         if target:
             self.refresh_conversation_count(target)
         self.store.state['folders'].pop(folder_id, None)
@@ -225,6 +227,7 @@ class CellFolders(Repo):
             return 0
         affected = {folder_id} if folder_id else set()
         count = 0
+        self._lock_in_order('conversations', ids)
         for cid in dict.fromkeys(ids):
             row = self.store.state['conversations'].get(cid)
             if row is not None:
@@ -232,7 +235,7 @@ class CellFolders(Repo):
                     affected.add(row['folder_id'])
                 row.update(folder_id=folder_id, folder_user_set=True)
                 count += 1
-        for fid in affected:
+        for fid in sorted(affected):
             self.refresh_conversation_count(fid)
         self.save(mutation_id, digest, count)
         return count

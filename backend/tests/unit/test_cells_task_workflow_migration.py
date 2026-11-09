@@ -701,3 +701,49 @@ def test_person_create_replay_survives_deleted_person(pg, backend):
     finally:
         if harness is not pg:
             harness.close()
+
+
+def test_cross_domain_bodies_lock_in_flush_order(pg, monkeypatch):
+    # Goal detach, folder delete and folder moves touch several collections;
+    # each must take first locks in flush's sorted (entity, id) order.
+    sid = pg.space('cross-lock')
+    now = datetime.now(timezone.utc)
+    pg.seed(sid, 'action_items', 't1', {'description': 't1', 'goal_id': 'g1', 'created_at': now, 'updated_at': now})
+    pg.seed(sid, 'workstreams', 'w1', {'title': 'w1', 'objective': 'w1', 'goal_id': 'g1', 'updated_at': now})
+    for cid in ('c1', 'c2'):
+        pg.seed(sid, 'conversations', cid, {'folder_id': 'f1', 'discarded': False})
+    for fid in ('f1', 'f2'):
+        pg.seed(sid, 'folders', fid, {'name': fid, 'order': 0, 'conversation_count': 0})
+    store = pg.store(sid)
+    generation = store.run(lambda tx: tx.goals._generation())
+    store.run(lambda tx: tx.goals.create(GoalCreate(data={'goal_id': 'g1', 'title': 'g1'})))
+    seen = []
+    original = CellTransaction.get
+
+    def record(self, entity, entity_id, *args, **kwargs):
+        seen.append((entity, entity_id))
+        return original(self, entity, entity_id, *args, **kwargs)
+
+    def first_locks():
+        first = list(
+            dict.fromkeys(
+                a for a in seen if a[0] in ('action_items', 'goals', 'workstreams', 'conversations', 'folders')
+            )
+        )
+        seen.clear()
+        return first
+
+    monkeypatch.setattr(CellTransaction, 'get', record)
+    store.run(
+        lambda tx: tx.goals.transition_lifecycle(
+            'g1', status='paused', relationship_disposition='detach', idempotency_key='k', account_generation=generation
+        )
+    )
+    order = first_locks()
+    assert order == sorted(order) and ('action_items', 't1') in order
+    store.run(lambda tx: tx.folders.bulk_move_conversations(['c2', 'c1'], 'f2'))
+    order = first_locks()
+    assert order == sorted(order) and ('conversations', 'c1') in order
+    store.run(lambda tx: tx.folders.delete('f2', move_to_folder_id='f1'))
+    order = first_locks()
+    assert order == sorted(order) and ('conversations', 'c1') in order

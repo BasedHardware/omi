@@ -200,15 +200,19 @@ class CellGoals(WorkflowRepo):
             raise ValueError('invalid goal relationship disposition')
 
         def build():
+            detach = relationship_disposition == 'detach'
+            # Lock in flush order: action_items, then goals, then workstreams.
+            tasks = (
+                [t for t in self.store.state['action_items'].values() if t.get('goal_id') == goal_id] if detach else []
+            )
             row = self._read(goal_id)
             if row is None:
                 raise GoalNotFoundError(goal_id)
             now = datetime.now(timezone.utc)
-            if relationship_disposition == 'detach':
-                for task in self.store.state['action_items'].values():
-                    if task.get('goal_id') == goal_id:
-                        self._write_task()
-                        task.update(goal_id=None, updated_at=now)
+            if detach:
+                for task in tasks:
+                    self._write_task()
+                    task.update(goal_id=None, updated_at=now)
                 for workstream in self.store.state['workstreams'].values():
                     if workstream.get('goal_id') == goal_id:
                         workstream.update(goal_id=None, updated_at=now)

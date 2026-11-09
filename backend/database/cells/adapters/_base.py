@@ -127,6 +127,16 @@ class Repo:
                 'domain': self.domain,
             }
 
+    def _lock_in_order(self, collection, ids):
+        """Read (and so row-lock) ids in flush's sorted address order.
+
+        Multi-row bodies otherwise lock in caller order while buffered raw
+        writes lock sorted, and two such transactions can deadlock.
+        """
+        rows = self.store.state[collection]
+        for entity_id in sorted({i for i in ids if isinstance(i, str) and i}):
+            rows.get(entity_id)
+
     def check(self, entity, entity_id, data, expected_revision):
         revision = data.get('revision', 1)
         if expected_revision is not None and revision != expected_revision:
@@ -152,16 +162,6 @@ class WorkflowRepo(Repo):
 
     def _read(self, entity_id):
         return self._rows().get(entity_id)
-
-    def _lock_in_order(self, collection, ids):
-        """Read (and so row-lock) ids in flush's sorted address order.
-
-        Multi-row bodies otherwise lock in caller order while buffered raw
-        writes lock sorted, and two such transactions can deadlock.
-        """
-        rows = self.store.state[collection]
-        for entity_id in sorted({i for i in ids if isinstance(i, str) and i}):
-            rows.get(entity_id)
 
     def _write_task(self):
         self.store._task_write()
