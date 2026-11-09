@@ -79,6 +79,8 @@ class OwnerDrains:
         # entirely (no task, queue entry, delay or continuation). Shard pumps
         # settle or cool their wakes here.
         self.on_idle: Callable[[str, str], None] | None = None
+        # Optional shard admission policy; legacy productive turns keep their FIFO.
+        self.yield_continuation: Callable[[str], bool] | None = None
 
     @property
     def limit(self) -> int:
@@ -215,7 +217,11 @@ class OwnerDrains:
         if stop != 'head_awaiting_live_target':
             self.live_target_attempts.pop(owner, None)
         more = task.exception() is None and task.result() is True
-        if more:
+        if more and self.yield_continuation is not None and self.yield_continuation(owner):
+            # Return the durable wake to shard admission before another turn.
+            # Even a concurrent local request must not bypass this yield.
+            stop = 'yielded'
+        elif more:
             self.continuations.add(owner)
             self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
         elif stop == 'privacy_unchanged':

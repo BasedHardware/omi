@@ -121,7 +121,7 @@ class ShardPump:
         """Push one wake to the owner's shard holder. True when a holder will drain it.
 
         Audio captured within ``FRESH_CAPTURE_SECONDS`` takes the fresh lane,
-        scored by capture time capped at now; anything else is backlog, scored by commit.
+        scored by capture time; future or older captures use backlog, scored by commit.
         False (not engaged, shard unheld, push failed) means drain it locally.
         """
         if not self.engaged:
@@ -130,8 +130,8 @@ class ShardPump:
         if not self.shards.covered(key):
             return False
         now = self.shards.clock()
-        if capture_at is not None and now - capture_at <= FRESH_CAPTURE_SECONDS:
-            lane, score = FRESH, min(float(capture_at), now)
+        if capture_at is not None and 0 <= now - capture_at <= FRESH_CAPTURE_SECONDS:
+            lane, score = FRESH, float(capture_at)
         else:
             lane, score = BACKLOG, float(committed_at)
         pushed = self.shards.push(owner_id, key, lane, score)
@@ -148,7 +148,7 @@ class ShardPump:
             for e in entries
             if isinstance(e.get('capture_at'), (int, float)) and not isinstance(e.get('capture_at'), bool)
         ]
-        fresh = [c for c in captures if now - c <= FRESH_CAPTURE_SECONDS]
+        fresh = [c for c in captures if 0 <= now - c <= FRESH_CAPTURE_SECONDS]
         commits = [float(e['committed_at']) for e in entries if isinstance(e.get('committed_at'), (int, float))]
         capture_at = max(fresh) if fresh else None
         if not self.wake(owner_id, capture_at, min(commits) if commits else now):
@@ -188,7 +188,12 @@ class ShardPump:
     def attach(self) -> None:
         drains = self.projector.ensure_drains()
         drains.on_idle = self.idle
+        drains.yield_continuation = self.yield_continuation
         self.attached = True
+
+    def yield_continuation(self, owner: str) -> bool:
+        """Shard-owned admissions get one turn before competing with due wakes again."""
+        return self.engaged and owner in self.inflight
 
     def idle(self, owner: str, stop: str) -> None:
         """OwnerDrains hook: ``owner`` left the drain after a turn ending ``stop``."""
@@ -198,7 +203,13 @@ class ShardPump:
         if stop == 'end':
             self.settling.extend(wakes)
             return
-        delay = (CLAIM_RETRY_SECONDS if stop in CLAIM_STOPS else STUCK_RETRY_SECONDS) * random.uniform(0.8, 1.2)
+        # Productive owners yield for one pump tick, not the stuck-head backoff.
+        # Their backlog retry score leaves already-due work ahead of them.
+        delay = (
+            TICK_SECONDS
+            if stop == 'yielded'
+            else (CLAIM_RETRY_SECONDS if stop in CLAIM_STOPS else STUCK_RETRY_SECONDS) * random.uniform(0.8, 1.2)
+        )
         if len(self.cooldown) < MAX_COOLDOWN:
             self.cooldown[owner] = self.monotonic() + delay
         if stop not in CLAIM_STOPS:

@@ -554,15 +554,16 @@ def test_dual_lane_defer_preserves_a_push_during_the_drain(server, blocking_inli
 
 
 @pytest.mark.parametrize('source', ['direct', 'committed'])
-def test_future_capture_wake_score_never_exceeds_now(server, source):
+def test_future_capture_wakes_use_backlog(server, source):
     pump, shards, _ = pump_for(server)
     shards.refresh()
     if source == 'direct':
         assert pump.wake('future', 1000.0 + 3600, 999.0)
     else:
         pump.committed('future', [{'capture_at': 1000.0 + 3600, 'committed_at': 999.0}])
-    (wake,) = shards.take(FRESH, 10)
-    assert wake.owner_id == 'future' and wake.score == 1000.0
+    assert shards.take(FRESH, 10) == []
+    (wake,) = shards.take(BACKLOG, 10)
+    assert wake.owner_id == 'future' and wake.score == 999.0
 
 
 def test_commit_wakes_pick_the_lane_from_capture_age(server, monkeypatch):
@@ -991,3 +992,18 @@ def test_a_kill_switched_member_hands_its_shards_to_engaged_members(server, bloc
     monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
     asyncio.run(pumps[0].tick())
     assert pumps[0].shards.active  # switched back on: rejoins on the next lease pass
+
+
+def test_future_capture_does_not_hide_a_valid_fresh_commit(server):
+    pump, shards, _ = pump_for(server)
+    shards.refresh()
+    pump.committed(
+        'mixed',
+        [
+            {'capture_at': 4600.0, 'committed_at': 999.0},
+            {'capture_at': 990.0, 'committed_at': 998.0},
+        ],
+    )
+    (wake,) = shards.take(FRESH, 10)
+    assert wake.owner_id == 'mixed' and wake.score == 990.0
+    assert shards.take(BACKLOG, 10) == []

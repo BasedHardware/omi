@@ -24,8 +24,11 @@ parts.
    backlog while backlog waits. A stuck owner moves behind due owners,
    including when it has wakes in both lanes: defer its taken backlog wake
    before moving fresh into backlog, preserving both sequence checks. A push
-   arriving during the drain keeps its lane position. Future capture scores
-   are capped at now. Tail discovery routes each owner using its freshest
+   arriving during the drain keeps its lane position. Productive shard owners
+   yield after one drain turn and re-enter backlog admission one pump tick later,
+   behind already-due work; the two-slot backlog reserve applies again on every
+   admission. Legacy local continuations keep their FIFO behavior. Future
+   captures use backlog, with no clock-skew allowance. Tail discovery routes each owner using its freshest
    capture across the bounded pages, retaining its oldest commit for backlog.
 4. **Every non-terminal head has an exit.**
    - Failing heads already took the held disposition after 24 h. That bound
