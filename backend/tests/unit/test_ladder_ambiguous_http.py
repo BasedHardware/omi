@@ -38,5 +38,5 @@ def test_standalone_shadow_usage_preserves_recorded_units(monkeypatch, retired_e
     monkeypatch.setattr(usage_units, 'get_customer_firestore_client', lambda: store)
     snapshot = ladder.usage_snapshot('u', firestore_client=store)
     assert snapshot['used_units'] == 123456 / 1_000_000
-    assert snapshot['completeness']['ambiguous_priced_transcription_seconds'] == 600
+    assert 'ambiguous_priced_transcription_seconds' not in snapshot['completeness']
     assert ladder.budget_snapshot('u', firestore_client=store) is None
