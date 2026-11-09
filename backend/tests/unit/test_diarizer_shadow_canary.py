@@ -178,10 +178,12 @@ def test_replay_drives_fixed_shadow_and_stops_after_error_or_soak(monkeypatch, t
         return next(snapshots)
 
     calls = []
+    instant = [0.0]
+    monkeypatch.setattr(replay, 'time', SimpleNamespace(monotonic=lambda: instant[0]))
 
     async def wave(pcm, concurrency, timeout):
         calls.append(concurrency)
-        await asyncio.sleep(0.02)  # finish beyond this test's shortened soak
+        instant[0] += 1  # finish beyond this test's shortened soak
         return dict(
             app_peak_gib_sampled=1.62,
             requests=[
