@@ -29,7 +29,6 @@ _BATCH_PIPELINE_INDEXES = tuple(
         ('recovery', (_asc('owner_id'), _asc('recovery_state'))),
         ('lease', (_asc('state'), _asc('lease_until'))),
         ('retry', (_asc('state'), _asc('available_at'))),
-        ('result_ready', (_asc('state'), _asc('enqueued_at'))),
         ('predecessor', (_asc('next'), _asc('state'))),
         ('ready_age', (_asc('priority'), _asc('state'), _asc('enqueued_at'))),
         ('retry_age', (_asc('priority'), _asc('retry_started_at'))),

@@ -7,6 +7,7 @@ The transaction callback must be pure; it may be retried by Firestore.
 from copy import deepcopy
 import hashlib
 import logging
+import math
 import os
 import re
 import time
@@ -829,6 +830,23 @@ def timeliness_sample(
         docs = list(query.order_by(field).limit(1).stream())
         return docs[0].to_dict()[field] if docs else None
 
+    def first_valid_clock(query, field):
+        # Metrics-only: a malformed clock must not mask a later dated held row.
+        # Keep limit(1) on each RPC: valid stock still costs one document read.
+        query = query.order_by(field).limit(1)
+        while docs := list(query.stream()):
+            doc = docs[0]
+            started = doc.to_dict().get(field)
+            if (
+                isinstance(started, (int, float))
+                and not isinstance(started, bool)
+                and math.isfinite(started)
+                and started > 0
+            ):
+                return started
+            query = query.start_after(doc)
+        return None
+
     def count(query):
         return int(query.count().get()[0][0].value)
 
@@ -929,13 +947,13 @@ def timeliness_sample(
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
     sample: dict[str, Any] = {
         # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
-        # limit(1) reads stay exact even when the stock is larger than a scan page.
+        # reads stay exact even when the stock is larger than a scan page; held legs skip invalid clocks.
         'drain_oldest': first(projection, 'committed_at'),
         'held_oldest': {
-            'quarantine_held': first(legs['quarantine_held_rows'][0], 'committed_at'),
-            'held_expired': first(legs['held_expired_rows'][0], 'committed_at'),
-            'assignment_held': first(legs['assignment_held'][0], 'enqueued_at'),
-            'record_pending': first(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
+            'quarantine_held': first_valid_clock(legs['quarantine_held_rows'][0], 'committed_at'),
+            'held_expired': first_valid_clock(legs['held_expired_rows'][0], 'committed_at'),
+            'assignment_held': first_valid_clock(legs['assignment_held'][0], 'enqueued_at'),
+            'record_pending': first_valid_clock(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
         },
         'new_oldest': {
             'uncommitted': min((started for started, _ in walks if started is not None), default=None),

@@ -68,10 +68,6 @@ TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 VERIFY_ALLOWANCE_FACTOR = 2
 logger = logging.getLogger(__name__)
 
-# Lever B3 (no-progress stop): this many consecutive tool batches without a new
-# staged proposal, after the pass spent this share of its token budget.
-NO_PROGRESS_BATCHES_DEFAULT = 8
-NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT = 0.25
 # Lever B4 (history compaction): once the main prompt reaches this size, older
 # large tool results are replaced by a stub. Only tool results are elided; the
 # system prompt, seed, assistant tool calls and the latest results stay intact.
@@ -453,10 +449,7 @@ async def run_session(
     except Exception:
         pass
 
-    stop_arm = arms.get('no_progress_stop', 'off')
-    stop_batches = int(_tunable('DREAM_NO_PROGRESS_BATCHES', NO_PROGRESS_BATCHES_DEFAULT))
-    stop_share = _tunable('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT)
-    progress: dict[str, Any] = {'batches': 0, 'idle': 0, 'staged': 0, 'fired': None, 'capped': None}
+    progress: dict[str, Any] = {'capped': None}
 
     async def after_execute(current):
         try:
@@ -466,32 +459,9 @@ async def run_session(
                 progress['capped'] = set(current.staged)
         except Exception as error:
             logger.warning('event=dream_lever_error lever=material_budget exc=%s', type(error).__name__)
-        if stop_arm == 'off':
-            return False
-        try:
-            progress['batches'] += 1
-            staged_now = len(current.staged)
-            if staged_now > progress['staged']:
-                progress['staged'] = staged_now
-                progress['idle'] = 0
-            else:
-                progress['idle'] += 1
-            if (
-                progress['fired'] is None
-                and progress['idle'] >= stop_batches
-                and report['price_weighted_tokens'] >= limits.tokens * stop_share
-            ):
-                progress['fired'] = {
-                    'batch': progress['batches'],
-                    'keys': set(current.staged),
-                    'tokens': report['price_weighted_tokens'],
-                }
-                return stop_arm == 'serve'
-        except Exception as error:
-            logger.warning('event=dream_lever_error lever=no_progress_stop exc=%s', type(error).__name__)
         return False
 
-    if stop_arm != 'off' or budget_probe:
+    if budget_probe:
         session.after_execute = after_execute
 
     async def usage(result):
@@ -1171,19 +1141,6 @@ async def run_session(
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
     try:
-        if stop_arm != 'off':
-            fired = progress['fired']
-            levers['no_progress_stop'] = {'arm': stop_arm, 'fired': fired is not None}
-            if fired is not None:
-                late = {key for key in session.staged if key not in fired['keys']}
-                levers['no_progress_stop'].update(
-                    batch=fired['batch'],
-                    staged_after=len(late),
-                    applied_after=sum(
-                        1 for row in report['outcomes'] if row.get('key') in late and row.get('status') == 'applied'
-                    ),
-                    tokens_after=max(0, report['price_weighted_tokens'] - fired['tokens']),
-                )
         if budget_probe:
             levers['material_budget'] = cap_tail(session.staged, progress['capped'], report['outcomes'])
         if compact_arm != 'off':

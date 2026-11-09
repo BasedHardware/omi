@@ -37,6 +37,7 @@ sys.path.insert(0, str(ROOT / 'backend'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 
 from database import omi_flags as store  # noqa: E402
+from scripts.rollout import live_preflight  # noqa: E402
 from posthog_flag_sync import list_feature_flags  # noqa: E402
 
 REGISTRY_PATH = ROOT / 'config' / 'feature-flags.yaml'
@@ -174,8 +175,11 @@ def _actor() -> str:
     return os.getenv('OMI_FLAGS_ACTOR') or f'{getpass.getuser()}@{socket.gethostname()}'
 
 
-def _write(client: Any, key: str, rule: dict[str, Any] | None, reason: str) -> None:
-    version = store.write_rule(client, key, rule, actor=_actor(), reason=reason)
+def _write(client: Any, key: str, rule: dict[str, Any] | None, reason: str, *, expected: dict[str, Any] | None) -> None:
+    try:
+        version = store.write_rule(client, key, rule, actor=_actor(), reason=reason, expected=expected)
+    except store.StaleRuleError:
+        raise FlagCliError(f'{key}: rule changed since it was read; nothing written, rerun to re-check it') from None
     published = store.publish_redis_version(version)
     print(f'{key}: version {version}' + ('' if published else ' (Redis not updated; pods pick it up within 60 s)'))
 
@@ -204,6 +208,10 @@ def cmd_set(args: argparse.Namespace) -> None:
         rule['payload'] = None
     rule['allow_uids'] = sorted((set(rule['allow_uids']) | set(args.allow or ())) - set(args.unallow or ()))
     rule['deny_uids'] = sorted((set(rule['deny_uids']) | set(args.deny or ())) - set(args.undeny or ()))
+    widening = live_preflight.widens_exposure(current, rule)
+    reason = live_preflight.override_reason(args.reason, args.accept_not_live)
+    if widening:
+        live_preflight.require(args.key, rule['rollout_percentage'], args.accept_not_live)
     _print({'before': current, 'after': rule})
     mirror = None
     if args.mirror_posthog:
@@ -215,7 +223,7 @@ def cmd_set(args: argparse.Namespace) -> None:
     if not args.yes and input('write? [y/N] ').strip().lower() != 'y':
         print('aborted')
         return
-    _write(client, args.key, rule, args.reason)
+    _write(client, args.key, rule, reason, expected=current)
     if mirror is not None:
         _posthog_request('PATCH', f'feature_flags/{mirror[0]}/', mirror[1])
         print(f'{args.key}: PostHog row mirrored')
@@ -226,11 +234,13 @@ def cmd_delete(args: argparse.Namespace) -> None:
     _, docs = store.read_all(client)
     if args.key not in docs:
         raise FlagCliError(f'{args.key}: no rule in the Omi store')
+    if live_preflight.widens_exposure(docs[args.key], None):
+        live_preflight.require(args.key, 100)
     _print({'before': docs[args.key], 'after': None})
     if not args.yes and input('delete (key returns to PostHog)? [y/N] ').strip().lower() != 'y':
         print('aborted')
         return
-    _write(client, args.key, None, args.reason)
+    _write(client, args.key, None, args.reason, expected=docs[args.key])
 
 
 def cmd_import(args: argparse.Namespace) -> None:
@@ -256,8 +266,13 @@ def cmd_import(args: argparse.Namespace) -> None:
     if not args.apply:
         print(f'dry run: {len(planned)} rule(s); pass --apply to write')
         return
+    reason = live_preflight.override_reason(args.reason or 'import from PostHog', args.accept_not_live)
+    # Classify every planned rule before any imported raise reads live evidence.
+    raises = [(key, rule) for key, rule in planned if live_preflight.widens_exposure(None, rule)]
+    for key, rule in raises:
+        live_preflight.require(key, rule['rollout_percentage'], args.accept_not_live)
     for key, rule in planned:
-        _write(client, key, rule, args.reason or 'import from PostHog')
+        _write(client, key, rule, reason, expected=None)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -283,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in ('allow', 'unallow', 'deny', 'undeny'):
         p_set.add_argument(f'--{name}', nargs='+', metavar='UID')
     p_set.add_argument('--mirror-posthog', action='store_true')
+    p_set.add_argument('--accept-not-live')
     p_set.add_argument('--reason', required=True)
     p_set.add_argument('--yes', action='store_true')
     p_del = sub.add_parser('delete')
@@ -293,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     p_imp.add_argument('--keys')
     p_imp.add_argument('--apply', action='store_true')
     p_imp.add_argument('--reason')
+    p_imp.add_argument('--accept-not-live')
     args = parser.parse_args(argv)
     try:
         if args.command == 'list':
@@ -307,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
             cmd_delete(args)
         else:
             cmd_import(args)
-    except FlagCliError as exc:
+    except (FlagCliError, ValueError) as exc:
         print(f'error: {exc}', file=sys.stderr)
         return 2
     return 0
