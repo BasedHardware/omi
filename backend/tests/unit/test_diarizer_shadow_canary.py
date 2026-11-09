@@ -32,7 +32,9 @@ def render(shadow, *overrides, release=None):
         args += ['-f', str(CHART / 'prod_omi_diarizer_batch_canary_values.yaml')]
     args += ['--set-string', 'image.digest=' + DIGEST]
     for override in overrides:
-        args += ['--set', override]
+        # Helm merges --set-string AFTER --set, regardless of argv ordering.
+        # Digest mutations must replace the string pin rather than be masked by it.
+        args += ['--set-string' if override.startswith('image.') else '--set', override]
     return subprocess.run(args, capture_output=True, text=True)
 
 
