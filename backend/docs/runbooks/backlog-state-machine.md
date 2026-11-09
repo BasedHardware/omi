@@ -43,7 +43,10 @@ Every held re-drive (nightly re-drive, operator requeue, operator
 helper:
 the counter increments `held_redrives`, and class 3 resets `attempt` to 0 and keeps
 the prior value in `held_redrive_last_attempt`. Class 3 takes effect only with
-the counter on and only for a unit's first 3 re-drives; after that the unit
+the counter on, only for a unit's first 3 re-drives, and only where the batch
+retry cap enforces for the owner (class 1 on, or the owner in the served
+`CAPTURE_COVERAGE_MODE` cohort): elsewhere lease expiries only defer, so a fresh
+budget would keep the unit runnable without bound and unalerted; after that the unit
 keeps main's retained held loop (attempt at the cap) and the spent-budget
 signal, so a fresh budget never sustains an unbounded loop. The nightly scan and committed
 poll and `/redrive-dead` re-drives record `held_redrive_budget_spent` at or over 3 re-drives.

@@ -1074,12 +1074,29 @@ def account_held_redrive(job: dict) -> None:
     if counted:
         job['held_redrives'] = prior + 1
     # Class 3 takes effect only while it is bounded and alerted: with the class 6
-    # counter on, and only while the unit's re-drive budget is unspent. The
+    # counter on, only while the unit's re-drive budget is unspent, and only where
+    # the batch retry cap enforces for this owner (class 1 on, or the owner in the
+    # served CAPTURE_COVERAGE_MODE cohort). Without enforcement a lease expiry
+    # only defers, so a fresh budget would keep the unit runnable without bound
+    # and unalerted; there the reset is a no-op and main's behavior is kept. The
     # terminal stop is not in core, so an uncounted or spent unit keeps main's
     # retained held loop (attempt at the cap) and the spent-budget signal.
-    if held_redrive_budget_enabled() and counted and prior < MAX_HELD_REDRIVES:
+    if (
+        held_redrive_budget_enabled()
+        and counted
+        and prior < MAX_HELD_REDRIVES
+        and retry_cap_enforced_for(job.get('owner_id', ''))
+    ):
         job['held_redrive_last_attempt'] = job.get('attempt', 0)
         job['attempt'] = 0
+
+
+def retry_cap_enforced_for(owner_id: str) -> bool:
+    """Whether the batch lease-expiry retry cap quarantines at the cap for this owner."""
+    from utils.capture.retry_cap import retry_cap
+
+    decision = retry_cap(owner_id, 0, 1, enforce=True)
+    return decision is not None and decision.serving
 
 
 def held_redrive_budget_spent(job: dict) -> bool:

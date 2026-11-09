@@ -242,6 +242,8 @@ def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
 
 @pytest.mark.parametrize('switch', ['true', None, 'false'])
 def test_requeue_grants_a_fresh_attempt_budget(setup, monkeypatch, switch):
+    # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
     if switch is not None:
         monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, switch)
     client, store, _, _, _, _ = setup
@@ -287,6 +289,8 @@ def test_requeued_unit_survives_one_lease_expiry_with_a_fresh_budget(monkeypatch
 @pytest.mark.parametrize('budget', ['true', 'false'])
 def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, budget):
     """Review wave 3 (finding 2): a poll re-drive is counted and reset like the nightly one."""
+    # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
     from tests.unit.test_batch_pipeline_intake import proposal, submit
     from utils.batch_pipeline.intake import durable_status
 
@@ -340,6 +344,8 @@ def test_operator_redrive_dead_route_keeps_the_switched_accounting(setup, monkey
     (class 3) and report a spent budget after commit, like the nightly and
     poll re-drives. Each switch off keeps main's behavior for its field.
     """
+    # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
     from fastapi.testclient import TestClient
 
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
@@ -553,6 +559,8 @@ def test_held_budget_reset_is_bounded_and_alerted(setup, monkeypatch, budget, co
     unit's re-drive budget is unspent; after that the unit keeps main's
     retained held loop and the spent-budget signal (unit-looping alert).
     """
+    # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
     from utils.batch_pipeline.scheduler import held_redrive_budget_spent
 
     if budget is not None:
@@ -580,3 +588,70 @@ def test_backlog_switches_enable_only_on_exact_true(monkeypatch, name, raw):
     assert READERS[name]() is True
     monkeypatch.delenv(name)
     assert READERS[name]() is EXPECTED_DEFAULTS[name]
+
+
+# Custody review on da4132e093f2 -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'class1,coverage,reset',
+    [
+        (None, None, False),  # class 1 off (default), owner outside any served cohort: main's behavior
+        ('false', 'shadow', False),  # explicit off, shadow cohort: still not enforced for this owner
+        ('true', None, True),  # control: class 1 enforces for every owner
+        (None, 'serve', True),  # control: the owner is in the served CAPTURE_COVERAGE_MODE cohort
+    ],
+)
+def test_class_3_reset_only_where_the_retry_cap_enforces_for_the_owner(monkeypatch, class1, coverage, reset):
+    """luna-core-5-1: class 3 and the counter on; repeated lease expiries after a re-drive.
+
+    Where the cap does not enforce for the owner, lease expiries only defer, so
+    a fresh budget would keep the unit runnable without bound and no alert
+    would see it. The reset is then a no-op (main's behavior); the counter
+    still counts. Where the cap enforces, the reset grants one real attempt.
+    """
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    if class1 is not None:
+        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, class1)
+    if coverage is not None:
+        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', coverage)
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('looping', owner=uuid4().hex), 0)
+    queue.pull(0)
+    job = store.rows['jobs', 'looping']
+    # A held unit at its cap (as a worker failure leaves it), then re-driven.
+    job.update(
+        state='quarantined',
+        quarantine_reason='worker_failed',
+        recovery_state='held',
+        attempt=2,
+        token='',
+        lease_until=0,
+        merge_pending=False,
+    )
+    assert store.run(lambda tx: Scheduler.requeue_quarantined_in_transaction(tx, tx.get('jobs', 'looping'), 5000))
+    job = store.rows['jobs', 'looping']
+    assert job['held_redrives'] == 1  # the class 6 counter is unchanged either way
+    if reset:
+        assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 2
+    else:
+        assert job['attempt'] == 2 and 'held_redrive_last_attempt' not in job
+    # Repeated lease expiries: with the cap enforced the unit is held again at
+    # the cap; without it, main's behavior (defer, stay runnable) continues
+    # from the cap, never from a fresh budget.
+    attempts = []
+    for n in range(3):
+        now = 6000 + n * 1000
+        queue.recover(now)
+        leases = queue.pull(now)
+        if not leases:
+            break
+        attempts.append(leases[0].attempt)
+        queue.recover(now + 121)
+    if reset:
+        assert attempts[0] == 1
+    else:
+        assert attempts and attempts[0] == 3  # continues from the cap: no fresh budget

@@ -18,7 +18,10 @@ semantics. Turning a switch off restores the exact pre-change transition.
   held rows back into processing with a fresh budget is a custody change. It
   takes effect only with the class 6 counter on and only while the unit has
   fewer than MAX_HELD_REDRIVES re-drives, so fresh budgets are bounded and a
-  spent unit is alerted; the terminal stop is not in core.
+  spent unit is alerted; the terminal stop is not in core. It also takes effect
+  only where the batch retry cap enforces for the owner (class 1 on, or the
+  owner in the served CAPTURE_COVERAGE_MODE cohort): elsewhere a lease expiry
+  only defers, so a fresh budget would loop unalerted, and main's behavior is kept.
 
 None of these transitions deletes audio, results, custody tokens or privacy
 fences. See backend/docs/runbooks/backlog-state-machine.md.
