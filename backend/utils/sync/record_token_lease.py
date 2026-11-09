@@ -46,7 +46,7 @@ def custody_upload(fn):
                         state['session'],
                         accepted=accepted,
                     )
-                    if accepted_response(response) and not state.get('durable'):
+                    if accepted_response(response) and not state.get('durable') and not state.get('no_append'):
                         raise HTTPException(
                             status_code=503, detail='Retain local audio until durable custody is available'
                         )
@@ -56,7 +56,10 @@ def custody_upload(fn):
                 logger.warning(
                     'event=record_token_lease_completion outcome=unavailable exception_type=%s', type(error).__name__
                 )
-                raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
+                if not state.get('no_append'):
+                    raise HTTPException(
+                        status_code=503, detail='Retain local audio and retry custody admission'
+                    ) from error
             finally:
                 _upload.reset(token)
 
@@ -83,6 +86,8 @@ async def begin_upload(uid, cid, job_id):
 
 def stored(paths, archives):
     state = _upload.get()
+    if state is not None and paths and not archives:
+        state['no_append'] = True
     if state is not None and paths and len(paths) == len(archives):
         state['durable'] = True
 
@@ -98,12 +103,14 @@ async def archive(fn, uid, paths, metadata):
         return archived
     archived = []
     for path in paths:
-        archived.extend(await run_blocking(sync_executor, fn, uid, [path], metadata))
+        committed = await run_blocking(sync_executor, fn, uid, [path], metadata)
+        archived.extend(committed)
         # Only a completed durable file append is a signal. The transactional
         # heartbeat helper coalesces all open producers to lease/2; no timer.
-        await run_blocking(
-            db_executor, record_audio.renew_record_token_lease, uid, state['cid'], source='custody_append'
-        )
+        if committed:
+            await run_blocking(
+                db_executor, record_audio.renew_record_token_lease, uid, state['cid'], source='custody_append'
+            )
     return archived
 
 

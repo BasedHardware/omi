@@ -54,11 +54,12 @@ def token_lease_clocks(token, *, row=None, job=None):
     if (
         not isinstance(token, dict)
         or not isinstance(token.get('pod'), str)
-        or not token['pod']
         or not lease_timestamp(token.get('process_started_at'))
     ):
         return None
     if 'lease_expires_at' in token or 'last_signal_at' in token:
+        if not token['pod'] and token.get('signal_source') != 'custody_append':
+            return None
         signal = lease_timestamp(token.get('last_signal_at'))
         expiry = lease_timestamp(token.get('lease_expires_at'))
         return (signal, expiry) if signal and expiry and expiry >= signal else None

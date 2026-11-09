@@ -32,7 +32,7 @@ from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
-from utils.observability.firestore_probe_export import collect_child_probe, launch_with_probe
+from utils.observability.firestore_probe_export import collect_child_probe, launch_with_probe, REPAIR_OLDEST
 from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
@@ -786,6 +786,9 @@ def run(*, progress=lambda _: None):
                     jobs_frontier.write(jobs_cursor, budget)
             rows = job_rows + [(path, age) for path, age in rows if path not in job_cursors]
             saturated = saturated or jobs_saturated
+    # Reuse discovery's bounded, content-free age sample. No additional query
+    # and no activation of the idle seal worker's scanner are needed.
+    REPAIR_OLDEST.set(max((age for _, age in rows), default=0))
     last_attempted, last_job_attempted = None, None
 
     def attempted(path):

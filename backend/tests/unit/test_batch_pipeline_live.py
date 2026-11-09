@@ -650,7 +650,7 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 
 @pytest.mark.parametrize('server_only', [False, True])
-@pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
+@pytest.mark.parametrize('barrier_change', [None, 'before_read', 'pending', 'failed', 'resealed', 'protocol_closed'])
 @pytest.mark.parametrize('language', ['en', 'multi', 'ca'])
 async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch, server_only, barrier_change, language
@@ -708,6 +708,12 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     content, segment = record_identity('synthetic', 'record')
     pending = store.rows['jobs', segment]
     store.rows['conversations', 'synthetic/record'] = current
+    if barrier_change == 'before_read':
+        # The reservation predates the append. No input was captured yet, so
+        # admission must capture the newer revision, never its old snapshot.
+        current['record_upload_revision'] = 9
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        barrier_change = None
 
     class Reference:
         def collection(self, *args):
@@ -787,6 +793,10 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     job = store.rows['jobs', segment]
+    if current.get('record_upload_revision') == 9:
+        assert job['record_input_upload_revision'] == 9
+    else:
+        assert 'record_input_upload_revision' not in job
     assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')
     if language == 'ca':
         assert job['stt_route']['provider_service'] == 'modulate'

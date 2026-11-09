@@ -125,7 +125,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(max(deriv(omi_record_seal_oldest_age_seconds[30m])) >= bool 0) and on() (max(omi_record_seal_oldest_age_seconds) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
+          "expr": "(deriv((max(omi_record_seal_oldest_age_seconds))[30m:]) >= bool 0) and on() (max(omi_record_seal_oldest_age_seconds) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

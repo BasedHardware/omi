@@ -99,6 +99,12 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, ro
             or not 0 < started
         ):
             return False
+        # Only serve can mint the podless custody fence. Its own observed
+        # lease remains its exit after rollback; frame pod proof is unchanged.
+        if pod == '' and value.get('signal_source') == 'custody_append':
+            if not lease.token_lease_lapsed(value, now, row=row, job=job):
+                return False
+            continue
         if use_lease:
             clocks = lease.token_lease_clocks(value, row=row, job=job)
             if clocks:

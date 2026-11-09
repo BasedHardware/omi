@@ -1048,7 +1048,10 @@ async def test_custody_fence_old_partial_pass_then_bytes_land_is_rerun(source, a
 
 
 @pytest.mark.parametrize('writer', ['renew', 'begin'])
-async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_work(source, audio, monkeypatch, writer):
+@pytest.mark.parametrize('status', ['completed', 'processing', 'recording'])
+async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_work(
+    source, audio, monkeypatch, writer, status
+):
     from database.batch_pipeline_record_lease_recovery import recovery_segment
 
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
@@ -1059,7 +1062,9 @@ async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_wo
     original = pending(source)
     original.update(state='committed', partial_coordinator=False)
     source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
-    source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    source[1].rows[ROW].update(
+        record_audio_closed=True, record_audio_partial=None, record_upload_sessions={}, status=status
+    )
     revision = source[1].rows[ROW].get('record_upload_revision', 0)
     barrier = None
     if writer == 'begin':
@@ -1083,6 +1088,11 @@ async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_wo
             firestore_client=source[1],
         )
     audio.add(105)  # Interior audio, not a missing tail.
+    # The obligation exists before any older job changes the conversation's
+    # status. Normal continuation can wait for finalization/publication.
+    recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    assert recovery['partial_coordinator']
+    source[1].rows[ROW]['status'] = 'completed'
     interior_pcm = audio.pcm[audio.chunks[-1]['path']]
     audio.chunks.sort(key=lambda chunk: chunk['timestamp'])
     assert source[1].rows[ROW]['record_upload_revision'] == revision + 1
@@ -1168,7 +1178,7 @@ def test_post_seal_recovery_preserves_old_work_and_waits_for_full_publication(so
     )
     if old_state == 'record_pending':
         assert pending(source)['policy'] == original['policy']
-        assert pending(source)['partial_coordinator']
+        assert not pending(source)['partial_coordinator']
         assert not source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
         return
     recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))

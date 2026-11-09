@@ -248,15 +248,28 @@ re-activates its producer fence before bytes. Custody uploads acquire a separate
 exact token before archive/staging; only durable acceptance bumps
 `record_upload_revision` and clears that token. Refusals/failures clear without a
 bump or late-append count; a crashed uploader remains fenced for its own lease.
+Only serve creates these podless custody tokens; their own lease remains an
+exit in off/shadow after rollback. Existing frame-token pod proof is unchanged
+in off. A custody upload accepted after rollback still revises and schedules
+recovery; the flag cannot revoke an already acquired custody obligation.
 Memoized waits do no token IO. Custody heartbeats renew at most once per lease/2
 per conversation, only on observed manifests or completed archive file appends.
-Serve-only post-seal frames reopen the row and schedule the existing partial
-continuation under a separate coordinator, preserving original immutable work.
+Serve-only frames revise and reopen the row. If original input has already been
+captured, both frames and accepted custody schedule the existing partial
+continuation, regardless of conversation status, preserving original immutable
+work. Uncaptured admission reads the current revision and validates it again
+after staging; a stale staged plan must retry. Late-append telemetry is emitted
+only after the durable frame window/object or accepted custody append commits.
+Intentionally disabled archives are not custody appends and preserve the route's
+original response, without a fence, revision bump or recovery job.
 Late WAL holes are retained create-only against actual sample coverage, so
 partial rows and interior gaps are processed without the tail-only gap-fill
 ramp. Partial results retain their partial marker; no completeness is invented.
 Off keeps old writes/decisions, and post-seal shadow frames only count.
-Raw audio is never deleted. Off/shadow immediately restore original seal authority.
+Raw audio is never deleted. Off/shadow restore original frame-token seal authority
+and retain the lease exit and accepted-byte recovery of existing custody tokens.
+The active repair CronJob exports its bounded age sample and folded child probe
+counters on its scraped metrics port; the idle worker scanner remains disabled.
 
 | Machine:state | Entry writer | Exit writer | Deadline field | Dwell metric | Alert | Flag / kill switch | Rollback behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |

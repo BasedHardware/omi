@@ -55,7 +55,14 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
 
 
 def set_record_upload_pending(
-    uid: str, conversation_id: str, session: str, pending: bool, *, producer=None, firestore_client=None
+    uid: str,
+    conversation_id: str,
+    session: str,
+    pending: bool,
+    *,
+    producer=None,
+    firestore_client=None,
+    late_observation=None,
 ):
     """Track a session's buffered/in-flight audio before accepting its first frame.
 
@@ -96,17 +103,19 @@ def set_record_upload_pending(
                 'record_audio_closed': False,
                 'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
             }
-            if row.get('record_audio_closed'):
-                observed['late'] = record_seal_rules.token_lease_mode() != 'off'
-                if record_seal_rules.token_lease_serving(uid):
-                    from database.batch_pipeline_record_lease_recovery import prepare_recovery
+            observed['late'] = record_seal_rules.token_lease_mode() != 'off' and bool(
+                row.get('record_audio_closed') or row.get('record_audio_partial')
+            )
+            if record_seal_rules.token_lease_serving(uid):
+                from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
-                    recovered, recovery = prepare_recovery(
-                        client, tx, uid, conversation_id, row, patch['record_upload_revision'], time.time()
-                    )
-                    patch.update(recovered)
-                    if recovery:
-                        tx.set(*recovery)
+                recovered, recovery = prepare_recovery(
+                    client, tx, uid, conversation_id, row, patch['record_upload_revision'], time.time()
+                )
+                patch.update(recovered)
+                observed['late'] |= bool(recovery)
+                if recovery:
+                    tx.set(*recovery)
             tx.update(ref, patch)
         elif session in sessions:
             if isinstance(sessions[session], dict) and 'abandoned_at' in sessions[session]:
@@ -116,8 +125,8 @@ def set_record_upload_pending(
         return True
 
     result = run_transactional(client, commit, transient=True)
-    if result and observed.get('late'):
-        lease_metrics.LATE_APPEND.inc()
+    if result and late_observation is not None:
+        late_observation['late'] = observed.get('late', False)
     return result
 
 
@@ -175,7 +184,9 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
     return run_transactional(client, commit, transient=True)
 
 
-def renew_record_token_lease(uid, conversation_id, *, source, session=None, producer=None, firestore_client=None):
+def renew_record_token_lease(
+    uid, conversation_id, *, source, session=None, producer=None, firestore_client=None, late_observation=None
+):
     """Renew observed signals; upload custody uses a separate exact-token fence.
 
     Manifest heartbeats never invalidate revisions or count accepted appends.
@@ -262,7 +273,7 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
             if reactivated:
                 revision = int(row.get('record_upload_revision') or 0) + 1
                 patch['record_upload_revision'] = revision
-                if closed_frame and serving and changed:
+                if source == 'frames' and serving and changed:
                     from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
                     recovered, recovery = prepare_recovery(client, tx, uid, conversation_id, row, revision, now)
@@ -277,6 +288,6 @@ def renew_record_token_lease(uid, conversation_id, *, source, session=None, prod
         lease_metrics.RENEWALS.labels(source=source).inc()
         for gap in gaps:
             lease_metrics.SIGNAL_GAP.observe(gap)
-    if late and source == 'frames':
-        lease_metrics.LATE_APPEND.inc()
+    if late_observation is not None:
+        late_observation['late'] = late and source == 'frames'
     return changed

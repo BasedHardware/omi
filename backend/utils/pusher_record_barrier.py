@@ -216,6 +216,7 @@ class PusherRecordBarrier:
         self.record_upload_failed = False
         self.failed_recordings: set[str] = set()
         self.upload_sessions: dict[str, str] = {}
+        self.late_appends: set[str] = set()
         self.checked_conversations: set[str] = set()
         self.pending_clears: set[tuple[str, str]] = set()
         self.close_failures: dict[str, int] = {}
@@ -311,6 +312,7 @@ class PusherRecordBarrier:
             self.upload_sessions[conversation_id] = token
             registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
             began_at = time.monotonic()
+            observed = {}
             if await run_blocking(
                 record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
@@ -319,7 +321,10 @@ class PusherRecordBarrier:
                 token,
                 True,
                 producer=producer_identity(),
+                **({'late_observation': observed} if lease.token_lease_mode() != 'off' else {}),
             ):
+                if observed.get('late'):
+                    self.late_appends.add(conversation_id)
                 if lease.token_lease_mode() != 'off':
                     # A delayed commit response must not make an old lease
                     # look newly renewed to the receive/projection cache.
@@ -352,6 +357,7 @@ class PusherRecordBarrier:
             now = time.monotonic()
             if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
                 return
+            observed = {}
             await run_blocking(
                 record_barrier_executor,
                 record_audio_db.renew_record_token_lease,
@@ -360,12 +366,22 @@ class PusherRecordBarrier:
                 source='frames',
                 session=self.upload_sessions[conversation_id],
                 producer=producer_identity(),
+                late_observation=observed,
             )
+            if observed.get('late'):
+                self.late_appends.add(conversation_id)
             if conversation_id not in self.lease_renewed_at:
                 lease_metrics.ACTIVE.inc()
             self.lease_renewed_at[conversation_id] = now
 
+    def append_committed(self, conversation_id, *, observed=True):
+        """A successful durable window/object owns the late-append event."""
+        if observed and conversation_id in self.late_appends:
+            self.late_appends.remove(conversation_id)
+            lease_metrics.LATE_APPEND.inc()
+
     def _forget_lease(self, conversation_id):
+        self.late_appends.discard(conversation_id)
         self.lease_locks.pop(conversation_id, None)
         if self.lease_renewed_at.pop(conversation_id, None) is not None:
             lease_metrics.ACTIVE.dec()

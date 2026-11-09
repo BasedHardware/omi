@@ -7,6 +7,8 @@ import math
 import os
 import tempfile
 
+from prometheus_client import CollectorRegistry, Gauge, start_http_server
+
 from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER, bound_caller
 
 from database import record_token_lease_metrics as lease_metrics
@@ -40,6 +42,12 @@ COUNTER_SAMPLES = {
 }
 CHILD_FD_ENV = 'OMI_FIRESTORE_PROBE_TERMINAL_FD'
 MAX_TERMINAL_BYTES = 4 * 1024 * 1024
+REPAIR_OLDEST = Gauge(
+    'omi_record_seal_oldest_age_seconds',
+    'Oldest unsealed finish age in the repair discovery sample',
+    registry=None,
+)
+REPAIR_OLDEST.set(float('nan'))
 
 
 def _emit(payload, level=logging.INFO):
@@ -53,9 +61,25 @@ def _unavailable():
     _emit({'event': 'firestore_probe_terminal', 'outcome': 'unavailable'}, logging.WARNING)
 
 
-def register_probe_collectors(registry):
+def register_probe_collectors(registry, *, repair_age=False):
     for collector in COLLECTORS:
         registry.register(collector)
+    if repair_age:
+        registry.register(REPAIR_OLDEST)
+
+
+@contextmanager
+def repair_probe_server(*, port=9090, addr='0.0.0.0'):
+    """Scrape the active CronJob's aggregate sample and folded child counters."""
+    registry = CollectorRegistry()
+    register_probe_collectors(registry, repair_age=True)
+    server, thread = start_http_server(port, addr=addr, registry=registry)
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1)
 
 
 def terminal_totals():

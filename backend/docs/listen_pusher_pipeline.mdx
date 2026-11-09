@@ -195,8 +195,17 @@ the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200)
 Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` serve-enable epoch. Stock lapses by enable + lease; retry wakes and refusal
 stamps cannot extend it. Only explicit server-observed activity renews it. Lease lapse never substitutes for retained-tail
 proof. Custody uploads first acquire an exact fence and bump revision only after
-durable acceptance; failed/refused uploads clear only that fence. Memoized waits
-do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames
+durable acceptance; failed/refused uploads clear only that fence. Intentionally
+disabled archives do no custody writes. A serve-created
+podless custody fence retains its own lease exit in off/shadow; accepted bytes
+still schedule recovery after a mode rollback. Captured native input pins
+`record_input_upload_revision` on its jobs while lease observation is enabled.
+A newer append schedules partial continuation regardless of conversation status;
+uncaptured admission reads the current revision and CAS-validates it after staging.
+Frame late-append counting follows successful durable window/object commit.
+The active repair CronJob exports the sampled oldest-unsealed age and child
+probe counters on `/metrics`, scraped every 15s, without enabling the idle worker.
+Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames
 after complete seal re-open the row and use the existing partial continuation
 for interior gaps. Late WAL holes are retained create-only for that same worker;
 raw audio stays retained. See the [review fixes](listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md).

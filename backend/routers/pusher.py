@@ -971,6 +971,7 @@ async def _run_websocket_util_trigger(
             retries = batch.get('retries', 0)
             try:
                 await record_barrier.renew_recording(conv_id)
+                late_append = conv_id in record_barrier.late_appends
                 upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
                 if batch.get('span'):
                     upload_chunk['span'] = {**batch['span'], 'start': timestamp}
@@ -997,6 +998,8 @@ async def _run_websocket_util_trigger(
                     sample_rate=sample_rate,
                     reconcile_prefix=reconcile_prefix,
                 )
+                if uploaded_paths:
+                    record_barrier.append_committed(conv_id, observed=late_append)
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if batch.get('span') is not None else 'without_spans'
                 ).inc()
@@ -1327,16 +1330,19 @@ async def _run_websocket_util_trigger(
             nonlocal durable_tail_has_receipt
             nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
+            late_append = False
 
             def committed():
                 nonlocal durable_tail_has_receipt
                 durable_tail_has_receipt = True
+                record_barrier.append_committed(window.conversation_id, observed=late_append)
                 refused_windows.popleft()
                 window.payload.clear()
                 window.frames.clear()
 
             if window.conversation_id and window.payload:
                 await record_barrier.renew_recording(window.conversation_id)
+                late_append = window.conversation_id in record_barrier.late_appends
             try:
                 return await _commit_durable_audio_window(
                     uid=uid,

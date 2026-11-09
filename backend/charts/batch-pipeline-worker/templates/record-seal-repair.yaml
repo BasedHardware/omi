@@ -53,6 +53,8 @@ spec:
             - name: repair
               image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
               command: [python, scripts/record_seal_repair_job.py]
+              ports:
+                - {name: metrics, containerPort: 9090}
               env:
                 - {name: PUSHER_PROJECTION_DEBT_DURABLE_ENABLED, value: {{ .Values.recordSealRepair.projectionDebtDurableEnabled | quote }}}
                 - {name: RECORD_SEAL_REPAIR_JOBS, value: {{ .Values.recordSealRepair.jobsDiscovery | quote }}}
@@ -93,4 +95,14 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: record-seal-repair
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: record-seal-repair}
+  endpoints:
+    - {port: metrics, interval: 15s, path: /metrics}
 {{- end }}

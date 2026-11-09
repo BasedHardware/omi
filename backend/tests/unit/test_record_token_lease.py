@@ -371,8 +371,15 @@ def test_complete_frame_reopen_is_serve_only_and_shadow_only_counts(enabled, mon
     enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions=deepcopy(sessions), raw_audio='retained')
     before = deepcopy(enabled.rows)
     counter = record_audio.lease_metrics.LATE_APPEND._value.get()
+    observed = {}
     record_audio.renew_record_token_lease(
-        'synthetic', 'record', source='frames', session='s', producer=POD, firestore_client=enabled
+        'synthetic',
+        'record',
+        source='frames',
+        session='s',
+        producer=POD,
+        firestore_client=enabled,
+        late_observation=observed,
     )
     if mode == 'serve':
         assert not enabled.rows[PATH]['record_audio_closed']
@@ -381,7 +388,25 @@ def test_complete_frame_reopen_is_serve_only_and_shadow_only_counts(enabled, mon
         assert any(row.get('partial_coordinator') for row in enabled.rows.values())
     else:
         assert enabled.rows == before
-    assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter + (mode != 'off')
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter
+    assert bool(observed.get('late')) is (mode != 'off')
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_crashed_custody_token_keeps_own_lease_exit_after_rollback(enabled, monkeypatch, mode):
+    enabled.rows[PATH]['record_upload_sessions'] = {}
+    assert record_custody_append.begin('synthetic', 'record', 'custody:crashed', firestore_client=enabled)
+    row = enabled.rows[PATH]
+    token = row['record_upload_sessions']['custody:crashed']
+    assert token['pod'] == ''
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    for elapsed in (0, 3599, 3600):
+        monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + elapsed)
+        assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
+    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + 3601)
+    assert producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
+    if mode == 'off':
+        assert not producer_tokens_dead({'frame': TOKEN}, None, uid='synthetic', row=row)
 
 
 def test_off_custody_begin_has_no_io(enabled, monkeypatch):

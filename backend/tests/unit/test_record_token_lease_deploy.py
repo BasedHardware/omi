@@ -2,11 +2,13 @@
 
 import json
 from pathlib import Path
+import urllib.request
 
 import pytest
 
 from tests.unit.test_record_seal_cluster_repair_deploy import documents
 from tests.unit.test_record_seal_sweeper_deploy import render
+from utils.observability import firestore_probe_export as probe
 
 
 def containers(docs):
@@ -65,3 +67,38 @@ def test_late_append_page_keeps_fleet_notification_timing():
     assert rule['notification_settings']['group_interval'] == '5m'
     assert rule['notification_settings']['repeat_interval'] == '4h'
     assert rule['notification_settings']['mute_time_intervals'] == []
+
+
+def test_prod_active_repair_scrapes_age_and_release_counters_without_enabling_idle_worker():
+    # documents() renders the checked-in production values, not chart defaults.
+    docs = documents()
+    cron = docs['CronJob', 'record-seal-repair']['spec']
+    assert cron['suspend'] is False
+    container = cron['jobTemplate']['spec']['template']['spec']['containers'][0]
+    env = {e['name']: e.get('value') for e in container['env']}
+    assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+    assert container['command'] == ['python', 'scripts/record_seal_repair_job.py']
+    assert {'name': 'metrics', 'containerPort': 9090} in container['ports']
+    monitor = docs['PodMonitoring', 'record-seal-repair']['spec']
+    assert monitor['selector']['matchLabels'] == {'app.kubernetes.io/name': 'record-seal-repair'}
+    assert monitor['endpoints'] == [{'port': 'metrics', 'interval': '15s', 'path': '/metrics'}]
+    worker = docs['Deployment', 'record-seal-worker']['spec']['template']['spec']['containers'][0]
+    worker_env = {e['name']: e.get('value') for e in worker['env']}
+    assert worker_env['RECORD_SEAL_REPAIR_ENABLED'] == 'false'
+    previous = probe.REPAIR_OLDEST._value.get()
+    try:
+        probe.REPAIR_OLDEST.set(86400)
+        with probe.repair_probe_server(port=0, addr='127.0.0.1') as server:
+            with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+                body = response.read().decode()
+        assert 'omi_record_seal_oldest_age_seconds 86400.0' in body
+        assert 'omi_record_token_lease_expired_sealed_total ' in body
+    finally:
+        probe.REPAIR_OLDEST.set(previous)
+    root = Path(__file__).resolve().parents[2]
+    entry = (root / 'scripts/record_seal_repair_job.py').read_text()
+    assert 'repair_probe_server()' in entry
+    rules = json.loads((root / 'charts/monitoring/alerts/record-token-lease.json').read_text())
+    # Aggregate before deriving so CronJob pod replacement does not invent a
+    # permanently flat per-pod slope while the global age is actually falling.
+    assert 'deriv((max(omi_record_seal_oldest_age_seconds))[30m:])' in rules[1]['data'][0]['model']['expr']

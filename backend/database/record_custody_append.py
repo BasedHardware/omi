@@ -22,6 +22,9 @@ def begin(uid, cid, session, *, firestore_client=None):
 
     @firestore.transactional
     def commit(tx):
+        owner = client.collection('users').document(uid).get(transaction=tx).to_dict() or {}
+        if owner.get('private_cloud_sync_enabled', True) is False:
+            return False
         row = ref.get(transaction=tx).to_dict() or {}
         if (
             not row
@@ -43,8 +46,8 @@ def begin(uid, cid, session, *, firestore_client=None):
         late = bool(row.get('record_audio_partial') or row.get('record_audio_closed')) or any(
             lease.token_lease_lapsed(token, now, row=row) for token in sessions.values()
         )
-        # An uploader is not a GKE pusher pod. Empty pod deliberately has no
-        # pod-gone proof after rollback; serve uses its own observed lease.
+        # An uploader is not a GKE pusher pod. Its own lease remains the exit
+        # even after rollback; it never acquires a pusher pod-gone proof.
         sessions[session] = {
             'pod': '',
             'process_started_at': now,
@@ -82,15 +85,13 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
         if accepted and eligible:
             revision = int(row.get('record_upload_revision') or 0) + 1
             patch['record_upload_revision'] = revision
-            if (
-                late
-                and lease.token_lease_serving(uid)
-                and (row.get('record_audio_closed') or row.get('record_audio_partial'))
-            ):
-                from database.batch_pipeline_record_lease_recovery import prepare_recovery
+            # Begin already acquired serve custody. A rollback cannot cancel
+            # recovery of bytes accepted under that durable obligation.
+            from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
-                recovered, recovery = prepare_recovery(client, tx, uid, cid, row, revision, time.time())
-                patch.update(recovered)
+            recovered, recovery = prepare_recovery(client, tx, uid, cid, row, revision, time.time())
+            patch.update(recovered)
+            late |= bool(recovery)
         if recovery:
             tx.set(*recovery)
         tx.update(ref, patch)

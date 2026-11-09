@@ -23,17 +23,31 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
     spans, including interior gaps, and preserves existing annotated text.
     """
     finish = row.get('finished_at')
-    if row.get('status') != 'completed' or not isinstance(finish, datetime):
+    if not isinstance(finish, datetime):
         return {}, None
     namespace = 'batch_pipeline_' + current_stage()
     content, original = record_identity(uid, cid)
     jobs = client.collection(namespace + '_jobs')
     original_ref = jobs.document(original)
     original_job = original_ref.get(transaction=tx).to_dict() or {}
+    if not original_job.get('partial_coordinator') and not row.get('record_audio_partial'):
+        captured = original_job.get('record_input_upload_revision')
+        if captured is not None and revision <= captured:
+            return {}, None
+        if (not original_job and not row.get('record_audio_closed')) or (
+            original_job.get('state') == 'record_pending'
+            and captured is None
+            and not original_job.get('projection_binding')
+        ):
+            # Input has not been admitted. Admission reads the current barrier
+            # and CAS-validates it after staging, so an older plan must retry.
+            return {'record_audio_closed': False}, None
+        # A closed legacy row without the native reservation may have already
+        # published through another intake. Preserve a conservative obligation.
     # Existing partial captures retain their coordinator and sample coverage.
     ref = (
         original_ref
-        if original_job.get('partial_coordinator') or original_job.get('state') in {'record_pending', 'partial_retired'}
+        if original_job.get('partial_coordinator') or original_job.get('state') == 'partial_retired'
         else jobs.document(recovery_segment(uid, cid))
     )
     job = original_job if ref == original_ref else ref.get(transaction=tx).to_dict() or {}

@@ -713,6 +713,7 @@ def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, mo
     attempted = []
 
     def time_limited(rows, **kwargs):
+        assert cluster.REPAIR_OLDEST._value.get() == max(age for _, age in rows)
         attempted.extend(path for path, _ in rows[:2])
         for path, _ in rows[:2]:
             kwargs['attempted'](path)
