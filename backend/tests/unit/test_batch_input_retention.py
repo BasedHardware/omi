@@ -21,7 +21,7 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from scripts import redrive_staging_inputs as cli
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup, row, ledger_row
 from tests.unit.test_batch_pipeline_timeliness import _sample, NOW, EPOCH  # pyright: ignore[reportPrivateUsage]
-from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS, WARNING_SECONDS
+from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS, WARNING_SECONDS, staged_enqueue
 from utils.batch_pipeline.intake import durable_status, get_durable_job_status
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -204,7 +204,36 @@ def test_expiring_gpu_reuses_exact_bundle_client_reupload(setup, monkeypatch):
     good = deepcopy(row(client, 'results', 'good'))
     repair.restore_reupload(binding.owner_id, binding.content_id, {'bad': snapshot}, {'bad': uri}, NOW29 + 1)
     assert row(client)['audio_uri'] == uri and row(client)['state'] == 'ready'
+    assert row(client)['audio_staged_at'] == NOW29 + 1
+    assert row(client)['enqueued_at'] == ENQUEUED
+    row(client).update(state='quarantined', recovery_state='failed_held')
+    assert RecoveryStore(store).expire_held('bad', NOW29 + 2) == 'held'
     assert row(client, 'results', 'good') == good
+
+
+@pytest.mark.parametrize('leg', ['gpu', 'assignment'])
+def test_fresh_current_object_does_not_expire_on_old_enqueue(setup, leg):
+    client, store, _ = seed(setup, leg)
+    row(client)['audio_staged_at'] = NOW29
+    assert staged_enqueue(row(client)) == NOW29
+    assert RecoveryStore(store).expire_held('bad', NOW29) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW29 + TERMINAL_SECONDS) == 'expired'
+
+
+@pytest.mark.parametrize('stamp', [None, False, float('nan'), 0])
+def test_bad_restage_clock_does_not_fall_back_to_expired_object(stamp):
+    assert staged_enqueue({'audio_uri': URI, 'enqueued_at': ENQUEUED, 'audio_staged_at': stamp}) is None
+
+
+def test_metric_uses_current_object_and_does_not_mask_older_legacy_input():
+    base = {'state': 'quarantined', 'recovery_state': 'held', 'quarantine_reason': 'worker_failed', 'audio_uri': URI}
+    assert _sample(jobs=[{**base, 'enqueued_at': 1, 'audio_staged_at': NOW}])['held_oldest']['staged_input'] == NOW
+    assert (
+        _sample(jobs=[{**base, 'enqueued_at': 1, 'audio_staged_at': NOW}, {**base, 'enqueued_at': 2}])['held_oldest'][
+            'staged_input'
+        ]
+        == 2
+    )
 
 
 def test_terminal_assignment_is_not_automatically_released_but_operator_uses_existing_target_gate(monkeypatch):

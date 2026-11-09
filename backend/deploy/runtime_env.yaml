@@ -51,6 +51,9 @@ environments:
           BATCH_HELD_DEAD_LETTER_ENABLED:
             value: 'true'
             category: ops_kill
+          BATCH_INPUT_EXPIRING_ENABLED:
+            value: 'true'
+            category: ops_kill
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
             value: g1
             category: config
@@ -855,6 +858,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
@@ -1150,6 +1156,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
@@ -1467,6 +1476,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
@@ -1751,6 +1763,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
@@ -2291,6 +2306,9 @@ environments:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED:
+            value: 'true'
+            category: ops_kill
+          BATCH_INPUT_EXPIRING_ENABLED:
             value: 'true'
             category: ops_kill
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
@@ -3229,6 +3247,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
@@ -3655,6 +3676,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
@@ -4105,6 +4129,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
@@ -4502,6 +4529,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:

@@ -9512,8 +9512,10 @@ records scope and verification limits.
 
 `BATCH_INPUT_EXPIRING_ENABLED` defaults on via `config/refactor_modes.py`;
 `false` is the kill for new day-29 transitions in the existing held sweep.
-Eligible GPU-quarantined and assignment-held staging inputs use `enqueued_at`
-as the admission/staging creation proxy. At 29 days the job retains its audio,
+Eligible GPU-quarantined and assignment-held staging inputs use `audio_staged_at`
+for replacement objects, else `enqueued_at` as the admission/staging proxy.
+Exact-bundle repair stamps the new object time without changing original enqueue.
+The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
 results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
 with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
 No record-pending or sweep cadence change is involved. The existing

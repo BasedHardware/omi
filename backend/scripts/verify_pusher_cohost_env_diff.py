@@ -103,6 +103,7 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_INPUT_EXPIRING_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
@@ -664,7 +665,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or '').partition('\n')[0])
     parser.add_argument(
         "--root",
         type=Path,

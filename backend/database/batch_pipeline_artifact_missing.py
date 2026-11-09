@@ -150,6 +150,7 @@ class ArtifactMissingStore:
                 reservation.pop('write_pending_until', None)
                 tx.put('artifacts', artifact_id(sid, uri), reservation)
                 job['audio_uri'] = uri
+                job['audio_staged_at'] = now
                 job['artifact_disposition'] = {
                     **(job.get('artifact_disposition') or {}),
                     'state': 'restored',

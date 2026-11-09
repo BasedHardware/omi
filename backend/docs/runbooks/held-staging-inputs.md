@@ -5,16 +5,19 @@ This change does not alter or apply a bucket lifecycle. Audio is never deleted
 by dead-lettering. A terminal row does **not** preserve an object past its
 existing lifecycle; recover it or obtain the original client bundle before then.
 
-`enqueued_at` is the staged-input creation **proxy**, because staging occurs at
-admission. It is not a GCS metadata measurement. It excludes time before admission
-and does not restart on quarantine, assignment, expiry or requeue. The scope is
+`audio_staged_at` anchors the CURRENT staged object after exact-bundle repair
+replaces `audio_uri`. Legacy objects fall back to `enqueued_at`, the creation
+**proxy** because staging occurs at admission. Neither is a GCS metadata read.
+Quarantine, assignment, expiry and operator requeue do not reset object age. The scope is
 `audio_uri` under `gs://based-hardware-batch-pipeline-staging/`, not other buckets.
 
 ## Warning and retained terminal
 
 The existing timeliness exporter emits
 `omi_batch_held_oldest_age_seconds{leg="staged_input"}` for GPU worker quarantine
-and committed assignment holds across all epochs, using `enqueued_at`. The new
+and committed assignment holds across all epochs, using the current object
+anchor above. A fresh restage cannot mask an older legacy input; an incomplete
+bounded age scan fails the sample rather than publishing a healthy age. The new
 warning `omi-batch-staged-input-age` fires above 21 days for 10 minutes. A sample
 must be younger than 900 seconds; absent/stale data is unknown, covered by the
 existing sampler-stale alert. No GCS reads or additional timer are introduced.
@@ -31,6 +34,8 @@ deadline guarantee.
 `BATCH_INPUT_EXPIRING_ENABLED` is a default-on kill switch in
 `config/refactor_modes.py`; `false`, `off`, `0` or `no` restores the previous held
 behavior. The existing `BATCH_HELD_DEAD_LETTER_ENABLED` sweep kill still applies.
+The new kill is explicitly bound true in runtime base/prod and the listen/worker
+charts; set that binding false and redeploy the sweep hosts to roll it back.
 Neither kill resurrects terminals or changes the bucket's deletion policy.
 
 Upload status uses the existing `failed/batch_artifact_missing` needs-attention

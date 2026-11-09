@@ -1,4 +1,4 @@
-"""Staging-input age policy; enqueue time proxies staging at admission, not GCS metadata."""
+"""Current staging-input age; legacy admission uses enqueue time, never GCS metadata."""
 
 import math
 
@@ -14,7 +14,7 @@ def input_expiring(job: dict) -> bool:
 
 def staged_enqueue(job: dict) -> float | None:
     uri = job.get('audio_uri')
-    stamp = job.get('enqueued_at')
+    stamp = job.get('audio_staged_at', job.get('enqueued_at'))
     if (
         not isinstance(uri, str)
         or not uri.startswith(f'gs://{STAGING_BUCKET}/')

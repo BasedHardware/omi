@@ -830,11 +830,12 @@ def timeliness_sample(
         docs = list(query.order_by(field).limit(1).stream())
         return docs[0].to_dict()[field] if docs else None
 
-    def first_valid_clock(query, field, predicate=None):
+    def first_valid_clock(query, field, predicate=None, clock=None):
         # Metrics-only: a malformed clock must not mask a later dated held row.
         # Keep limit(1) on each RPC: valid stock still costs one document read.
         query = query.order_by(field).limit(1)
         examined = 0
+        oldest = None
         while docs := list(query.stream()):
             # Do not publish a false healthy zero or run an unbounded fleet scan.
             # The existing sample-error/staleness path reports incomplete ages.
@@ -843,6 +844,8 @@ def timeliness_sample(
                 raise RuntimeError('staged input age scan incomplete')
             doc = docs[0]
             started = doc.to_dict().get(field)
+            if clock is not None and oldest is not None and isinstance(started, (int, float)) and started >= oldest:
+                return oldest  # A restage cannot predate its admission; later admissions cannot win.
             if (
                 isinstance(started, (int, float))
                 and not isinstance(started, bool)
@@ -850,9 +853,15 @@ def timeliness_sample(
                 and started > 0
                 and (predicate is None or predicate(doc.to_dict()))
             ):
-                return started
+                if clock is None:
+                    return started
+                stamp = clock(doc.to_dict())
+                if stamp is not None and stamp >= started:
+                    oldest = min(oldest, stamp) if oldest is not None else stamp
+                    if oldest == started:
+                        return oldest
             query = query.start_after(doc)
-        return None
+        return oldest
 
     def count(query):
         return int(query.count().get()[0][0].value)
@@ -959,6 +968,7 @@ def timeliness_sample(
             jobs.where('state', '==', state).where('recovery_state', 'in', ['held', 'failed_held']),
             'enqueued_at',
             lambda job: held_input_leg(job) is not None and staged_enqueue(job) is not None,
+            clock=staged_enqueue,
         )
         for state in ('quarantined', 'committed')
     ]
@@ -967,7 +977,7 @@ def timeliness_sample(
         # reads stay exact even when the stock is larger than a scan page; held legs skip invalid clocks.
         'drain_oldest': first(projection, 'committed_at'),
         'held_oldest': {
-            # Staging happens at admission. This is an enqueue-time proxy, never an object metadata read.
+            # Current restage time when stamped; admission proxy for legacy objects. Never GCS metadata.
             'staged_input': min((stamp for stamp in staged if stamp is not None), default=None),
             'quarantine_held': first_valid_clock(legs['quarantine_held_rows'][0], 'committed_at'),
             'held_expired': first_valid_clock(legs['held_expired_rows'][0], 'committed_at'),
