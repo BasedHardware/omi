@@ -93,6 +93,32 @@ def test_real_transaction_rolls_back_job_if_seal_write_never_reached(source, mon
     assert not client.document(interrupted_path).get().to_dict().get('record_audio_closed')
 
 
+def _delete_owned_jobs(refs, owner_id):
+    for ref in refs:
+        if (ref.get().to_dict() or {}).get('owner_id') == owner_id:
+            ref.delete()
+
+
+def test_cleanup_only_deletes_owned_job_references():
+    client = firestore.Client(project='demo-seal-age-cleanup', credentials=AnonymousCredentials())
+    jobs = client.collection('batch_pipeline_prod_jobs')
+    own = jobs.document('synthetic-cleanup-owned')
+    other_owner = jobs.document('synthetic-cleanup-other-owner')
+    unlisted = jobs.document('synthetic-cleanup-unlisted')
+    try:
+        own.set({'owner_id': 'synthetic-cleanup-owner'})
+        other_owner.set({'owner_id': 'synthetic-other-owner'})
+        unlisted.set({'owner_id': 'synthetic-cleanup-owner'})
+        _delete_owned_jobs([own, other_owner], 'synthetic-cleanup-owner')
+        assert not own.get().exists
+        assert other_owner.get().exists
+        assert unlisted.get().exists
+    finally:
+        _delete_owned_jobs([own, unlisted], 'synthetic-cleanup-owner')
+        _delete_owned_jobs([other_owner], 'synthetic-other-owner')
+        client.close()
+
+
 def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypatch):
     """Emulator proves query/cursor semantics; registry guards prove index coverage."""
     from config import record_seal_repair as config
@@ -104,25 +130,26 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
     monkeypatch.delenv('RECORD_SEAL_REPAIR_AGE_ORDER', raising=False)
     client = firestore.Client(project='demo-seal-age-order', credentials=AnonymousCredentials())
     jobs = client.collection('batch_pipeline_prod_jobs')
-    for doc in jobs.stream():
-        doc.reference.delete()
-    refs, selected = [], {}
+    owner_id = 'synthetic-age-owner'
+    selected = {}
     clocks = [200.123456789, 100.123456789, 100.123456789, None, 'old', True, float('nan'), -float('inf'), 'missing']
+    refs = [jobs.document(record_identity(owner_id, f'synthetic-{index}')[1]) for index in range(len(clocks))]
+    late = jobs.document(record_identity(owner_id, 'late')[1])
     try:
+        _delete_owned_jobs([*refs, late], owner_id)
         for index, clock in enumerate(clocks):
             cid = f'synthetic-{index}'
-            content, segment = record_identity('synthetic-age-owner', cid)
+            content, _ = record_identity(owner_id, cid)
             data = {
                 'state': 'record_pending',
-                'owner_id': 'synthetic-age-owner',
+                'owner_id': owner_id,
                 'conversation_id': cid,
                 'record_content_id': content,
             }
             if clock != 'missing':
                 data['enqueued_at'] = clock
-            ref = jobs.document(segment)
+            ref = refs[index]
             ref.set(data)
-            refs.append(ref)
         frontier = RepairCursor(client, b'synthetic-local-key' * 2, jobs=True)
         expected = [
             f'users/synthetic-age-owner/conversations/synthetic-{i}'
@@ -143,18 +170,16 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
         assert observed == expected and cursor is None
         assert all(age >= config.JOBS_MIN_AGE_SECONDS for age in ages)
         first, _, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
-        content, segment = record_identity('synthetic-age-owner', 'late')
-        late = jobs.document(segment)
+        content, _ = record_identity(owner_id, 'late')
         late.set(
             {
                 'state': 'record_pending',
-                'owner_id': 'synthetic-age-owner',
+                'owner_id': owner_id,
                 'conversation_id': 'late',
                 'record_content_id': content,
                 'enqueued_at': cursor['horizon'].timestamp() + 1,
             }
         )
-        refs.append(late)
         rest, _, end = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor)
         assert [path for path, _ in first + rest] == expected and end is None
         assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
@@ -170,6 +195,5 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
         ]
         assert [path for path, _ in old + rest] == expected_hash
     finally:
-        for ref in refs:
-            ref.delete()
+        _delete_owned_jobs([*refs, late], owner_id)
         client.close()

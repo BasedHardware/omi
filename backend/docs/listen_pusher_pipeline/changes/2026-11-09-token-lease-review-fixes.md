@@ -217,3 +217,36 @@ Rebased commits before the final receipt-only commit:
 - `backend/utils/batch_pipeline/record_lease_append.py`
 - `backend/utils/batch_pipeline/record_seal_cluster_repair.py`
 - `backend/utils/sync/record_token_lease.py`
+
+## Follow-up: scope #24953 emulator cleanup
+
+Rebased cleanly onto freshly fetched `origin/main`
+`b00957395ff21b5f6758dd0c57680729b6128d9d`, which contains #24953
+(`42448d34a441c3f7d64591190b466ab94ce260eb`). The review-fix SHAs above
+describe the earlier validation snapshot; the rebase rewrote those commits.
+
+`test_record_seal_nojob_emulator.py` no longer streams/deletes the jobs collection.
+Setup and teardown inspect only the nine deterministic synthetic job references
+and the late-arrival reference, deleting a reference only when its stored owner
+is `synthetic-age-owner`. A real-emulator regression proves cleanup preserves
+both a listed document with another owner and an unlisted document with the
+synthetic owner. No production code changed in this follow-up.
+
+Validation ran through:
+
+```sh
+/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 -- python3 /Volumes/Ephemeral/scratch/tokenlease-nojob-cleanup-validation.py
+# From backend, in a private loopback Firestore emulator:
+.venv/bin/python -m pytest -q --tb=short tests/unit/test_record_seal_nojob_emulator.py
+# From backend:
+.venv/bin/python -m pytest -q --tb=short tests/unit/test_record_seal_nojob.py
+# From repository root:
+make preflight
+```
+
+Exact results: **4 emulator tests passed, 44 companion unit tests passed,
+56/56 preflight checks passed** (696.46 seconds, exit 0). The launcher removed
+GOOGLE_APPLICATION_CREDENTIALS, every CLOUDSDK_* variable and service-account
+bindings, and used private HOME/config/cache with anonymous emulator credentials.
+The emulator stopped after its suite. GCP tier: none. No push or PR.
+Local log: `/Volumes/Ephemeral/scratch/tokenlease-nojob-cleanup-results.log`.
