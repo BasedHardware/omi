@@ -310,7 +310,7 @@ def _candidate_may_feed(uid: str, conversation_id: str, row: Optional[Mapping[st
 
 
 def _user_consent_allows(uid: str, c: Any) -> bool:
-    """The user's current private cloud sync consent, read at the last step before Jev.
+    """The user's current private cloud sync consent, checked just before Jev.
 
     The conversation row carries a snapshot of the consent, so a toggle after the row was written is seen here.
     A missing user document or field is not permission (fail closed).
@@ -403,7 +403,7 @@ def settle(
         metrics.record_boundary('f_later_member')
         return keep
     try:
-        # Predecessor and name reads come first. The candidate's stored privacy is the last read before Jev,
+        # Predecessor and name reads come first. The candidate's stored privacy is checked just before Jev,
         # so a lock, deletion, discard or consent change during those reads still keeps today's join.
         previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
     except Exception as error:
@@ -412,7 +412,7 @@ def settle(
         _fallback('other')
         return keep
     try:
-        # The candidate's stored privacy, then the user's current consent: the last reads before the question.
+        # The candidate's stored privacy, then the user's current consent, before the ownership recheck.
         allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c) and _user_consent_allows(uid, c)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
@@ -427,8 +427,20 @@ def settle(
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
         return keep
-    # No read between the candidate gate above and this Jev question.
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
+    if not member:
+        # Sync/late candidates must still be unplaced after predecessor, name and privacy reads.
+        # This narrows the race window; another request can still attach after this snapshot.
+        try:
+            owner = episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+        except Exception as error:
+            logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
+            metrics.record_boundary('f_no_answer')
+            _fallback('other')
+            return keep
+        if owner is not None:
+            metrics.record_boundary('f_no_answer')
+            return keep
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
     if p_same is None:
         metrics.record_boundary('f_no_answer')

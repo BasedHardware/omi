@@ -1530,19 +1530,24 @@ def _synced_f_verdict(
     marker = f_join.uncertain(uid, owner, conversation_id, source, started, firestore_client=c.firestore_client)
     if marker is None:
         return None
+    if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
+        # A control attach may have committed after the selected owner snapshot, before uncertain.
+        return None
     pending = {
         'gap_seconds': marker.gap_seconds or 0.0,
         'source_changed': marker.source_changed,
         'variant': F_JOIN_VARIANT,
         'previous': f_join.latest_member(owner, conversation_id),
     }
-    # Sync/late F adds <=24 document reads and <=1 Jev call per decision, including close:
+    # Sync/late F adds <=26 document reads and <=1 Jev call per decision, including close:
     # 1 admitted owner candidate + 1 fresh candidate + 1 owner + 1 boundary authority
-    # + 2 ownership docs + 1 predecessor
+    # + 1 early unplaced link + 2 post-uncertain/pre-Jev unplaced link reads + 1 predecessor + 1 user consent
     # + 2 names per transcript (4 total) + 1 final candidate re-read before Jev + 1 post-Jev recheck + 1 pre-close refresh
-    # + 4 close control docs + <=3 close members + 4 close candidates
+    # + 4 close control docs + <=3 close members + <=2 close candidates + 1 optimization-off owner re-read
     # (includes optimization-off re-reads). The 2-document initial query fails closed
     # when full, so only a window with <=1 result can reach the remaining reads.
+    # Close queries share one transaction snapshot: a complete first window has <=1 result,
+    # and the optimization-off requery uses the same or a narrower window.
     # Full windows/large or recovered owners keep control placement. The close is single-attempt; sync retries reuse its placement without repeating F or close reads.
     named = _named_segments(uid, f_join.candidate_head(segments), c, person_limit=2)
     return owner, f_join.settle(
@@ -1554,7 +1559,7 @@ def _synced_f_verdict(
         c,
         started_at=started,
         member=False,
-        # No candidate_row: settle re-reads the candidate's stored privacy as its last read before Jev.
+        # No candidate_row: settle re-reads stored privacy and consent, then ownership before Jev.
         people_read_limit=2,
     )
 
