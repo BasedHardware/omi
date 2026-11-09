@@ -156,7 +156,7 @@ static void print_state(void)
              "\"boot_count\":%u,\"bootstate\":%u,\"muted\":%u,\"should_capture\":%s,\"sd_paused\":%s,"
              "\"is_off\":%s,\"feeds\":%u,\"button_pressed\":%s,\"button_held_at_poweroff\":%s,"
              "\"charging\":%s,\"battery_mv\":%d,\"settings_writes\":%u,\"sd_mount_attempts\":%u,"
-             "\"sd_ready\":%s}",
+             "\"sd_ready\":%s,\"sd_written\":%u,\"sd_dropped\":%u,\"sd_gated\":%u,\"sd_io_errors\":%u}",
              exit_class,
              (long long) (poweroff_ms >= 0 ? poweroff_ms : k_uptime_get()),
              snap.active ? "true" : "false",
@@ -175,7 +175,11 @@ static void print_state(void)
              omi_sim_battery_mv(),
              settings_writes,
              omi_sim_sd_mount_attempts(),
-             omi_sim_sd_ready() ? "true" : "false");
+             omi_sim_sd_ready() ? "true" : "false",
+             omi_sim_sd_written(),
+             omi_sim_sd_dropped(),
+             omi_sim_sd_gated(),
+             omi_sim_sd_io_errors());
     omi_sim_host_print(line);
 }
 

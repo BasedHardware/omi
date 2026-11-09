@@ -14,6 +14,10 @@ int omi_sim_sd_ready_ms(void);
 bool omi_sim_sd_paused(void);
 unsigned int omi_sim_sd_mount_attempts(void);
 bool omi_sim_sd_ready(void);
+unsigned int omi_sim_sd_written(void);
+unsigned int omi_sim_sd_dropped(void);
+unsigned int omi_sim_sd_gated(void);
+unsigned int omi_sim_sd_io_errors(void);
 /* True once main() started the (stub) BLE transport. */
 bool omi_sim_transport_up(void);
 #endif

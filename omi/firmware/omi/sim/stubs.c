@@ -2,12 +2,17 @@
  * Every synthetic milestone is labelled SIM. No device IO or BLE stack.
  * Watchdog, power-off, reset register and pins live in sim_power.c.
  */
+#include <string.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/pm/device.h>
 
 #include "imu.h"
+#include "lib/core/battery_guard.h"
+#include "lib/core/button.h"
+#include "lib/core/capture_mute.h"
 #include "lib/core/codec.h"
 #include "lib/core/haptic.h"
 #include "lib/core/led.h"
@@ -86,8 +91,28 @@ static void charger_changed(const struct device *dev, struct gpio_callback *cb, 
     is_charging = gpio_pin_get_dt(&bat_chg) == 0;
 }
 
+/* SIM stand-in for transport.c's broadcast_battery_level(): same cadence
+ * (5 s connected, 10 s otherwise), the same -16 mV charging correction as
+ * battery_get_millivolt(), and the real shutdown policy and turnoff_all(). */
+static struct battery_critical_guard battery_critical;
+static void battery_sample(struct k_work *work)
+{
+    uint16_t mv = (uint16_t) omi_sim_battery_mv();
+    if (is_charging && mv > 16) {
+        mv -= 16;
+    }
+    printk("SIM: battery sample %u mV charging=%d\n", mv, is_charging);
+    if (battery_critical_should_shutdown(&battery_critical, mv, is_charging)) {
+        LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", mv);
+        turnoff_all();
+    }
+    k_work_reschedule(k_work_delayable_from_work(work), K_MSEC(omi_sim_connected() ? 5000 : 10000));
+}
+K_WORK_DELAYABLE_DEFINE(battery_work, battery_sample);
+
 int battery_init(void)
 {
+    k_work_schedule(&battery_work, K_MSEC(10000));
     (void) gpio_pin_configure_dt(&bat_chg, GPIO_INPUT);
     (void) gpio_pin_interrupt_configure_dt(&bat_chg, GPIO_INT_EDGE_BOTH);
     gpio_init_callback(&bat_chg_cb, charger_changed, BIT(bat_chg.pin));
@@ -102,19 +127,19 @@ int battery_charge_start(void)
 }
 
 /* ---- SD / storage ----------------------------------------------------- */
+/* The real raw-ring driver (sd_card.c) runs over the simulated card in
+ * sim_sd.c. Only the storage service (BLE sync) and diagnostics are stubbed. */
 
+unsigned int omi_sim_sd_init_calls(void);
 static bool sd_paused;
-static bool sd_on = true;
-int app_sd_init(void)
-{
-    sd_paused = false; /* production app_sd_init() clears the pause bit too */
-    LOG_INF("SIM: SD init stub (no card or filesystem)");
-    return 0;
-}
-void sd_write_pause(bool pause)
+
+/* --wrap: observe the pause bit capture_mute.c drives, then apply it. */
+void __real_sd_write_pause(bool pause);
+void __wrap_sd_write_pause(bool pause)
 {
     sd_paused = pause;
     printk("SIM: sd_write_pause(%d)\n", pause);
+    __real_sd_write_pause(pause);
 }
 bool omi_sim_sd_paused(void)
 {
@@ -122,31 +147,77 @@ bool omi_sim_sd_paused(void)
 }
 unsigned int omi_sim_sd_mount_attempts(void)
 {
-    return 0;
+    return omi_sim_sd_init_calls();
 }
 bool omi_sim_sd_ready(void)
 {
-    return false;
-}
-bool is_sd_on(void)
-{
-    return sd_on;
-}
-int app_sd_off(void)
-{
-    sd_on = false;
-    printk("SIM: app_sd_off\n");
-    return 0;
-}
-void sd_notify_time_synced(uint32_t utc_time)
-{
-    ARG_UNUSED(utc_time);
+    return sd_is_ready();
 }
 int storage_init(void)
 {
     LOG_INF("SIM: storage init stub (no storage worker)");
     return 0;
 }
+void storage_queue_live_mark(uint64_t ring_id, uint64_t ring_seq, uint16_t live_index, uint32_t session)
+{
+    ARG_UNUSED(ring_id);
+    ARG_UNUSED(ring_seq);
+    ARG_UNUSED(live_index);
+    ARG_UNUSED(session);
+}
+void omi_diagnostics_inc_storage_error(void) {}
+
+/* CONFIG_PM_DEVICE is off here; the SD slot has no power states to model. */
+int pm_device_action_run(const struct device *dev, enum pm_device_action action)
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(action);
+    return -ENOSYS;
+}
+
+/* SIM audio pusher: one 440-byte packet every 100 ms while offline, through
+ * the same capture gate transport.c's pusher uses before storing audio. */
+static unsigned int sd_written, sd_dropped, sd_gated;
+unsigned int omi_sim_sd_written(void)
+{
+    return sd_written;
+}
+unsigned int omi_sim_sd_dropped(void)
+{
+    return sd_dropped;
+}
+unsigned int omi_sim_sd_gated(void)
+{
+    return sd_gated;
+}
+extern bool is_off;
+static void pusher(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a);
+    ARG_UNUSED(b);
+    ARG_UNUSED(c);
+    static uint8_t packet[MAX_WRITE_SIZE];
+    while (!omi_sim_transport_up()) {
+        k_msleep(100);
+    }
+    for (uint32_t n = 0;; ++n) {
+        k_msleep(100);
+        if (is_off || omi_sim_connected()) {
+            continue;
+        }
+        if (!capture_mute_should_capture()) {
+            sd_gated++;
+            continue;
+        }
+        memset(packet, (int) (n & 0xff), sizeof(packet));
+        if (write_to_file(packet, sizeof(packet)) == sizeof(packet)) {
+            sd_written++;
+        } else {
+            sd_dropped++;
+        }
+    }
+}
+K_THREAD_DEFINE(sim_pusher, 2048, pusher, NULL, NULL, NULL, 8, 0, 0);
 
 /* ---- transport / BLE -------------------------------------------------- */
 

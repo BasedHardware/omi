@@ -35,7 +35,7 @@ import run as spike  # noqa: E402  (pinned image/SDK helpers)
 SCENARIOS = SIM / "scenarios"
 BUILDS = SIM / "builds"
 REPORT_SCHEMA = 1
-BOOT_WALL_TIMEOUT = 120
+BOOT_WALL_TIMEOUT = 300  # emulated amd64 on Apple Silicon runs ~1x real time
 
 
 def build_names(scenarios):
@@ -191,7 +191,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=3600, help="whole container deadline, seconds")
     parser.add_argument("--report", type=Path, help="copy sim-report.json here when done")
     parser.add_argument("--source-sha", help=argparse.SUPPRESS)
-    parser.add_argument("--firmware-version", help=argparse.SUPPRESS)
+    parser.add_argument("--firmware-version", help="version to record (default: omi.conf)")
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     cache = args.cache.expanduser().resolve()
@@ -206,12 +206,15 @@ def main():
     cache.mkdir(parents=True, exist_ok=True)
     (cache / "sim-report.json").unlink(missing_ok=True)
     sha = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    dirty = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", "omi/firmware"],
-                           capture_output=True, text=True).stdout.strip()
+    # omi.conf is excluded: the release workflow's prepare step stamps the build
+    # version there, and the simulator app never reads it (sim/prj.conf only).
+    dirty = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", "omi/firmware",
+                            ":!omi/firmware/omi/omi.conf"], capture_output=True, text=True).stdout.strip()
     source = (sha or "unknown") + ("-dirty" if dirty else "")
+    version = args.firmware_version or firmware_version(repo) or "unknown"
     name = "omi-cv1-scen-" + uuid.uuid4().hex[:12]
     forward = ["--jobs", str(args.jobs), "--fuzz-seeds", str(args.fuzz_seeds), "--fuzz-start", str(args.fuzz_start),
-               "--source-sha", source, "--firmware-version", firmware_version(repo) or "unknown"]
+               "--source-sha", source, "--firmware-version", version]
     for pattern in args.only or []:
         forward += ["--only", pattern]
     if args.baseline:

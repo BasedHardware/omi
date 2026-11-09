@@ -403,6 +403,18 @@ def inv_no_watchdog_in_healthy_boot(boots, outcome):
     return [f"boot {b['index']}: watchdog reset" for b in boots if b["exit"] == "watchdog"]
 
 
+def inv_sd_mount_attempts_bounded(boots, outcome):
+    """A failing card is retried with backoff: at most one five-try mount per
+    second of the first minute, and no more than ~one per minute after."""
+    out = []
+    for boot in boots:
+        attempts = boot["state"].get("sd_mount_attempts", 0)
+        minutes = max(1.0, int(boot["uptime_ms"]) / 60000.0)
+        if attempts > 5 * (10 + 2 * minutes):
+            out.append(f"boot {boot['index']}: {attempts} card inits in {minutes:.1f} min (hot loop)")
+    return out
+
+
 INVARIANTS = {
     "no-stuck-safe": inv_no_stuck_safe,
     "manual-entry-needs-charger": inv_manual_entry_needs_charger,
@@ -412,4 +424,5 @@ INVARIANTS = {
     "manual-entry-needs-10s-hold": inv_manual_entry_needs_10s_hold,
     "mute-follows-app": inv_mute_follows_app,
     "critical-battery-respects-charger": inv_critical_battery_respects_charger,
+    "sd-mount-attempts-bounded": inv_sd_mount_attempts_bounded,
 }

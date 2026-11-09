@@ -15,7 +15,9 @@ expect:
   every: {safe: false}
   boots:
     - {exit: fatal, log: ["Safe mode self-test passed", "omi/bootstate=GOOD"]}
-    - {exit: fatal, boot_count: 1, log: ["Safe mode self-test passed"], not_log: ["omi/bootstate=GOOD"]}
-    - {exit: fatal, boot_count: 1}
-    - {exit: fatal, boot_count: 1}
-    - {exit: stop, boot_count: 1}
+    # Each boot starts at attempt 1 (the previous one passed its trial) and
+    # leaves with the count cleared by its own 60 s self-test.
+    - {exit: fatal, boot_count: 0, log: ["BOOTSTATE: active=0 count=1", "Safe mode self-test passed"], not_log: ["omi/bootstate=GOOD"]}
+    - {exit: fatal, boot_count: 0, log: ["BOOTSTATE: active=0 count=1"]}
+    - {exit: fatal, boot_count: 0, log: ["BOOTSTATE: active=0 count=1"]}
+    - {exit: stop, boot_count: 0, log: ["BOOTSTATE: active=0 count=1"]}
