@@ -384,7 +384,7 @@ Future<bool> deleteMemoryServer(String memoryId) async {
   );
   if (response == null) return false;
   Logger.debug('deleteMemory response: ${response.body}');
-  return response.statusCode == 200;
+  return response.statusCode == 200 || response.statusCode == 204 || response.statusCode == 404;
 }
 
 Future<bool> deleteAllMemoriesServer() async {

@@ -30,6 +30,8 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/conversation_cache_decode.dart';
 import 'package:omi/env/physical_qualification.dart';
 
+part 'preferences_memory_deletes.dart';
+
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
 class SharedPreferencesUtil {
@@ -1371,28 +1373,6 @@ class SharedPreferencesUtil {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
     saveInt('cachedMessagesSchema', 1);
-  }
-
-  /// Last owner-scoped memory projection used for offline/restart rendering.
-  /// Memory.toJson deliberately includes optional temporal fields so a cached
-  /// assessment is never mistaken for a newly computed one after restart.
-  List<Memory> get cachedMemories {
-    final ownerUid = uid;
-    if (ownerUid.isEmpty) return [];
-    _scopeLegacyUserData(ownerUid);
-    return _decodeCachedList(
-      _userScopedKey('cachedMemories', ownerUid),
-      (json) => Memory.fromJson(json),
-    ).where((memory) => memory.uid == ownerUid).toList();
-  }
-
-  set cachedMemories(List<Memory> value) {
-    final ownerUid = uid;
-    if (ownerUid.isEmpty) return;
-    saveStringList(
-      _userScopedKey('cachedMemories', ownerUid),
-      value.map((memory) => jsonEncode(memory.toJson())).toList(),
-    );
   }
 
   // Pending memories - memories created offline that need to be synced

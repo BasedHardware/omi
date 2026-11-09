@@ -138,6 +138,16 @@ class JourneyFixtureBackend {
       return;
     }
     // Dynamic id routes before the exact-match switch.
+    if (method == 'DELETE' && path.startsWith('/v3/memories/')) {
+      final id = path.substring('/v3/memories/'.length);
+      final exists = memories.any((row) => row['id'] == id);
+      memories.removeWhere((row) => row['id'] == id);
+      req.response.statusCode = exists ? 200 : 404;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({'status': exists ? 'ok' : 'not found'}));
+      await req.response.close();
+      return;
+    }
     if (method == 'PATCH' && path.startsWith('/v3/memories/') && !path.contains('/baseline')) {
       await _handleMemoryEdit(req);
       return;
