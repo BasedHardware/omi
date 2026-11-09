@@ -1290,6 +1290,12 @@ class ConversationDetailProvider extends ChangeNotifier
         if (!_syncConversationId.hasMatch(openedId)) return false;
         _adoptBridgedConversation(openedId, updatedConversation);
       } else {
+        if (updatedConversation.homeStep == null &&
+            conversation.homeStep == 'failed' &&
+            (updatedConversation.status == ConversationStatus.processing ||
+                updatedConversation.status == ConversationStatus.merging)) {
+          updatedConversation = updatedConversation.withHomeStep('failed');
+        }
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
         resetRecordingTranscript();

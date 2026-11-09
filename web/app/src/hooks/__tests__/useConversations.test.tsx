@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe('useConversations', () => {
-  it('pages past an entirely failed cached page', async () => {
+  it('keeps a failed cached page openable without unsolicited pagination', async () => {
     setCache(
       cacheKeys.conversations(),
       {
@@ -83,13 +83,13 @@ describe('useConversations', () => {
       CACHE_TTL.MEDIUM,
     );
     const { result } = renderHook(() => useConversations({ limit: 50 }));
-    await waitFor(() => expect(result.current.conversations).toHaveLength(50));
-    expect(getConversations).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(getConversations).mock.calls[0][0]?.offset).toBe(50);
-    expect(ids(result.current.conversations)).toContain('c50');
+    expect(result.current.conversations).toHaveLength(50);
+    expect(ids(result.current.conversations)).toContain('c0');
+    await act(async () => {});
+    expect(getConversations).not.toHaveBeenCalled();
   });
 
-  it('does not page a new cached filter using a hidden previous list', async () => {
+  it('does not page a new cached filter using a failed previous list', async () => {
     setCache(
       cacheKeys.conversations(),
       {
@@ -123,26 +123,26 @@ describe('useConversations', () => {
     expect(getConversations).not.toHaveBeenCalled();
   });
 
-  it('hides failed projections from the feed and date groups, including cached pages', async () => {
+  it('keeps failed projections in the feed and date groups, including cached pages', async () => {
     vi.mocked(getConversations).mockResolvedValueOnce([
       { ...page(0, 1)[0], status: 'processing', home_step: 'failed' },
       ...page(1, 1),
     ] as never);
     const first = renderHook(() => useConversations());
     await waitFor(() => expect(first.result.current.loading).toBe(false));
-    expect(ids(first.result.current.conversations)).toEqual(['c1']);
+    expect(ids(first.result.current.conversations)).toEqual(['c0', 'c1']);
     expect(
       Object.values(first.result.current.groupedConversations)
         .flat()
         .map((c) => c.id),
-    ).toEqual(['c1']);
+    ).toEqual(['c0', 'c1']);
     first.unmount();
     const cached = renderHook(() => useConversations());
-    expect(ids(cached.result.current.conversations)).toEqual(['c1']);
+    expect(ids(cached.result.current.conversations)).toEqual(['c0', 'c1']);
     expect(getConversations).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps raw page offsets when an entire page is hidden', async () => {
+  it('pages normally after a failed page without changing offsets', async () => {
     vi.mocked(getConversations).mockResolvedValueOnce(
       page(0, 50).map((c) => ({
         ...c,
@@ -152,30 +152,14 @@ describe('useConversations', () => {
     );
     const { result } = renderHook(() => useConversations({ limit: 50 }));
     await waitFor(() => expect(result.current.conversations).toHaveLength(50));
-    expect(vi.mocked(getConversations).mock.calls.at(-1)![0]?.offset).toBe(50);
-    expect(ids(result.current.conversations)).toContain('c50');
-    expect(result.current.hasMore).toBe(true);
+    expect(getConversations).toHaveBeenCalledTimes(1);
     await act(async () => {
       await result.current.loadMore();
     });
-    expect(vi.mocked(getConversations).mock.calls.at(-1)![0]?.offset).toBe(100);
-    expect(ids(result.current.conversations)).toContain('c100');
-  });
-
-  it('stops paging a fully hidden feed at the server page boundary', async () => {
-    vi.mocked(getConversations)
-      .mockResolvedValueOnce(
-        page(0, 50).map((c) => ({
-          ...c,
-          status: 'processing',
-          home_step: 'failed',
-        })) as never,
-      )
-      .mockResolvedValueOnce([]);
-    const { result } = renderHook(() => useConversations({ limit: 50 }));
-    await waitFor(() => expect(result.current.hasMore).toBe(false));
-    expect(result.current.conversations).toEqual([]);
-    expect(getConversations).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getConversations).mock.calls.at(-1)![0]?.offset).toBe(50);
+    expect(result.current.conversations).toHaveLength(100);
+    expect(ids(result.current.conversations)).toContain('c0');
+    expect(ids(result.current.conversations)).toContain('c50');
   });
 
   it.each([undefined, null, 'processing'])(
@@ -206,7 +190,7 @@ describe('useConversations', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-    expect(result.current.conversations).toEqual([]);
+    expect(ids(result.current.conversations)).toEqual(['c0']);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(120000);
     });
@@ -223,7 +207,7 @@ describe('useConversations', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(120000);
     });
-    expect(result.current.conversations).toEqual([]);
+    expect(ids(result.current.conversations)).toEqual(['c0']);
     expect(getConversations).toHaveBeenCalledTimes(1);
   });
 

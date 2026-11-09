@@ -77,6 +77,7 @@ void main() {
 
       await provider.fetchConversations();
       expect(provider.processingConversations, isEmpty);
+      expect(provider.conversations.single.homeStep, 'failed');
       provider.addProcessingConversation(_conversation('c1', status: status));
       expect(provider.processingConversations, isEmpty);
 
@@ -84,7 +85,11 @@ void main() {
       provider.upsertConversation(_conversation('c1', status: status, title: 'Fresh detail'));
       expect(provider.conversations.single.structured.title, 'Fresh detail');
       expect(homeStepOf(provider.conversations.single), HomeStep.failed);
-      expect(buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true), isEmpty);
+      expect(
+          buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true)
+              .single
+              .isProcessing,
+          isFalse);
     });
 
     test('${status.name} failed page wins over missing or inconclusive detail projection', () async {
@@ -104,12 +109,50 @@ void main() {
 
         expect(provider.processingConversations, isEmpty);
         expect(homeStepOf(provider.conversations.single), HomeStep.failed);
-        expect(buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true), isEmpty);
+        expect(
+            buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true)
+                .single
+                .isProcessing,
+            isFalse);
         provider.updateConversationInSortedList(_conversation('c1', status: status));
         expect(homeStepOf(provider.conversations.single), HomeStep.failed);
       }
     });
   }
+
+  for (final ok in [true, false]) {
+    test('cache restore keeps known failure when initial fetch ok=$ok', () async {
+      final cached = _conversation('c1', status: ConversationStatus.processing);
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: ok),
+        conversationCacheLoader: () async => [cached],
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      provider
+          .addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
+      provider.conversations.clear(); // Simulate a cold cache fallback after the projection was learned.
+      await provider.fetchConversations();
+      expect(provider.conversations.single.homeStep, 'failed');
+      expect(provider.processingConversations, isEmpty);
+      expect(
+          buildHomeRows(provider.conversations, [], enabled: false, groupAwaitingTranscript: true).single.isProcessing,
+          isFalse);
+    });
+  }
+
+  test('cache restore respects its own failed projection without a remembered id', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationCacheLoader: () async =>
+          [_conversation('cached', status: ConversationStatus.processing, homeStep: 'failed')],
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.fetchConversations();
+    expect(homeStepOf(provider.conversations.single), HomeStep.failed);
+    expect(provider.processingConversations, isEmpty);
+  });
 
   test('failed target removes an optimistic placeholder', () async {
     final provider = ConversationProvider(

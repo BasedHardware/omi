@@ -119,6 +119,29 @@ void main() {
     expect(emitted, isEmpty);
   });
 
+  testWidgets('an age-failed processing row is terminal and its existing Retry starts a new attempt', (tester) async {
+    final calls = <String>[];
+    final provider = await _pumpRow(
+      tester,
+      conversation: _conversation(title: 'Processing', status: ConversationStatus.processing, summaryRetryable: false)
+          .withHomeStep('failed'),
+      reprocess: (id) async {
+        calls.add(id);
+        return _conversation(status: ConversationStatus.processing, summaryRetryable: false);
+      },
+    );
+    expect(find.text("Omi couldn't finish"), findsOneWidget);
+    expect(find.text('Processing'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(_retryButton, findsOneWidget);
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(calls, ['c1']);
+    expect(provider.processingConversations, hasLength(1));
+    provider.removeProcessingConversation('c1');
+    await tester.pump();
+  });
+
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {
     await _pumpRow(tester, conversation: _conversation(summaryRetryable: false));
 

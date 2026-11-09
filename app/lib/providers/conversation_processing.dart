@@ -7,6 +7,9 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     if (conversation.homeStep == 'failed') _failedHomeProcessingIds.add(conversation.id);
     if (_hasFailedHomeProcessing(conversation)) {
       removeProcessingConversation(conversation.id);
+      if (conversation.homeStep == 'failed' && _matchesActiveConversationFilters(conversation)) {
+        upsertConversation(conversation);
+      }
       return;
     }
     if (conversation.id == OptimisticProcessingPlaceholder.id) {
@@ -53,6 +56,9 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
   bool _hasFailedHomeProcessing(ServerConversation row) =>
       row.homeStep == 'failed' || _failedHomeProcessingIds.contains(_processingTargetId(row));
 
+  bool _isHomeListRow(ServerConversation row) =>
+      row.status == ConversationStatus.completed || _hasFailedHomeProcessing(row);
+
   bool _isActiveProcessingRow(ServerConversation row) =>
       _isActiveProcessingStatus(row.status) && !_hasFailedHomeProcessing(row);
 
@@ -60,6 +66,11 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       _isActiveProcessingStatus(row.status) && row.homeStep != 'failed' && _failedHomeProcessingIds.contains(row.id)
           ? row.withHomeStep('failed')
           : row;
+
+  ServerConversation _restoreHomeProcessingProjection(ServerConversation row) {
+    if (row.homeStep == 'failed') _failedHomeProcessingIds.add(row.id);
+    return _withHomeProcessingProjection(row);
+  }
 
   void _cancelProcessingPlaceholderTimers() {
     _processingPlaceholderTimeout?.cancel();

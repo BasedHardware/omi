@@ -574,7 +574,8 @@ class ConversationProvider extends ChangeNotifier {
   /// completed list and join the processing skeleton; a titled (or otherwise
   /// settled) result upserts in place.
   void applyConversationReprocessResult(ServerConversation updated) {
-    if (_isActiveProcessingStatus(updated.status)) {
+    if (updated.homeStep != 'failed') _failedHomeProcessingIds.remove(updated.id);
+    if (_isActiveProcessingRow(updated)) {
       conversations.removeWhere((conversation) => conversation.id == updated.id);
       searchedConversations.removeWhere((conversation) => conversation.id == updated.id);
       if (hasActiveSearch) {
@@ -830,14 +831,14 @@ class ConversationProvider extends ChangeNotifier {
     // path as page completions.
     final completedById = <String, ServerConversation>{
       for (final conversation in newConversations)
-        if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
+        if (_isHomeListRow(conversation) && !currentlyProcessingIds.contains(conversation.id))
           conversation.id: conversation,
     };
     for (final lifecycleResult in lifecycleResults.values) {
       final conversation = lifecycleResult.item;
       if (!lifecycleResult.ok ||
           conversation == null ||
-          conversation.status != ConversationStatus.completed ||
+          !_isHomeListRow(conversation) ||
           currentlyProcessingIds.contains(conversation.id) ||
           _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
@@ -980,14 +981,15 @@ class ConversationProvider extends ChangeNotifier {
       for (final conversation in _cachedRowsBeforePage(fetchedConversations, conversations))
         if (!currentlyProcessingIds.contains(conversation.id)) conversation.id: conversation,
       for (final conversation in fetchedConversations)
-        if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
-          conversation.id: conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]),
+        if (_isHomeListRow(conversation) && !currentlyProcessingIds.contains(conversation.id))
+          conversation.id:
+              _withHomeProcessingProjection(conversation).keepingTranscriptOf(conversationsAtStart[conversation.id]),
     };
     for (final lifecycleResult in lifecycleResults.values) {
       final conversation = lifecycleResult.item;
       if (!lifecycleResult.ok ||
           conversation == null ||
-          conversation.status != ConversationStatus.completed ||
+          !_isHomeListRow(conversation) ||
           currentlyProcessingIds.contains(conversation.id) ||
           _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
@@ -995,10 +997,11 @@ class ConversationProvider extends ChangeNotifier {
       }
       // A successful lifecycle probe is authoritative when the page still
       // reports this row as processing, so publish its completed detail.
-      completedById[conversation.id] = conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]);
+      completedById[conversation.id] =
+          _withHomeProcessingProjection(conversation).keepingTranscriptOf(conversationsAtStart[conversation.id]);
     }
     for (final conversation in conversations) {
-      if (conversation.status != ConversationStatus.completed) continue;
+      if (!_isHomeListRow(conversation)) continue;
       if (_isHiddenByDelete(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -1070,38 +1073,6 @@ class ConversationProvider extends ChangeNotifier {
     // this loading state as its serialization guard.
     setLoadingConversations(false);
     notifyListeners();
-    return true;
-  }
-
-  Future<bool> _restoreCacheForFetch(int generation, int fetchRevision) async {
-    final ownerUid = SharedPreferencesUtil().uid;
-    final cached = await _conversationCacheLoader();
-    if (generation != _sessionGeneration ||
-        fetchRevision != _conversationFetchRevision ||
-        !_isSignedIn() ||
-        SharedPreferencesUtil().uid != ownerUid) {
-      return false;
-    }
-    final activeProcessingIds = processingConversations
-        .where((conversation) => _isActiveProcessingStatus(conversation.status))
-        .map((conversation) => conversation.id)
-        .toSet();
-    bool visible(ServerConversation conversation) =>
-        !activeProcessingIds.contains(conversation.id) &&
-        !_isHiddenByDelete(conversation.id) &&
-        _matchesActiveConversationFilters(conversation);
-    // The fallback starts with an empty list. Rows delivered during decode
-    // (including local phone rows) win over older cached objects with that ID.
-    final restored = <String, ServerConversation>{
-      for (final conversation in cached)
-        if (visible(conversation)) conversation.id: conversation,
-      for (final conversation in conversations)
-        if (visible(conversation)) conversation.id: conversation,
-      for (final conversation in _phoneOnlyConversations.values)
-        if (visible(conversation)) conversation.id: conversation,
-    };
-    conversations = restored.values.toList()
-      ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     return true;
   }
 

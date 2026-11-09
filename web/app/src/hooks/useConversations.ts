@@ -4,10 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getConversations, GetConversationsParams } from '@/lib/api';
 import type { Conversation, GroupedConversations } from '@/types/conversation';
 import { formatRelativeDate } from '@/lib/utils';
-import {
-  isConversationProcessing,
-  isHomeConversationVisible,
-} from '@/lib/conversationHome';
+import { isConversationProcessing } from '@/lib/conversationHome';
 import {
   getCache,
   setCache,
@@ -109,15 +106,9 @@ export function useConversations(
   // filters changed was for another list, so its response is dropped.
   const activeKeyRef = useRef(cacheKey);
 
-  // Retain raw pages for cache/offset accounting, even when every row is hidden.
-  const homeConversations = useMemo(
-    () => conversations.filter(isHomeConversationVisible),
-    [conversations],
-  );
-
   // Group conversations by date - memoized for performance
   const groupedConversations = useMemo<GroupedConversations>(() => {
-    return homeConversations.reduce((groups, conversation) => {
+    return conversations.reduce((groups, conversation) => {
       const date = new Date(conversation.started_at || conversation.created_at);
       const dateKey = formatRelativeDate(date);
 
@@ -128,7 +119,7 @@ export function useConversations(
 
       return groups;
     }, {} as GroupedConversations);
-  }, [homeConversations]);
+  }, [conversations]);
 
   // Fetch conversations
   const fetchConversations = useCallback(
@@ -334,40 +325,6 @@ export function useConversations(
     await fetchConversations(offset + limit, true);
   }, [loading, hasMore, offset, limit, fetchConversations]);
 
-  // An entirely hidden page cannot mount the gallery's scroll trigger. Keep
-  // paging until a visible row or the end, including when starting from cache.
-  useEffect(() => {
-    if (
-      !enabled ||
-      loading ||
-      error ||
-      !hasMore ||
-      conversations.length === 0 ||
-      homeConversations.length > 0
-    )
-      return;
-    // Filter-switch effects may have just installed another cached list. Do
-    // not page using the previous render's rows or offset in that new list.
-    const current = getFromCache(cacheKey);
-    if (
-      !current ||
-      current.offset !== offset ||
-      current.conversations.some(isHomeConversationVisible)
-    )
-      return;
-    void loadMore();
-  }, [
-    enabled,
-    loading,
-    error,
-    hasMore,
-    conversations.length,
-    homeConversations.length,
-    cacheKey,
-    offset,
-    loadMore,
-  ]);
-
   // Refresh conversations (reset and reload)
   const refresh = useCallback(async () => {
     setOffset(0);
@@ -376,7 +333,7 @@ export function useConversations(
   }, [fetchConversations]);
 
   return {
-    conversations: homeConversations,
+    conversations,
     groupedConversations,
     loading,
     error,

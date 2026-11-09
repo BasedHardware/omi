@@ -4,9 +4,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 
 /// What a Home row that is not finished yet is waiting on, least advanced first.
-/// A run of such rows shows its least advanced step. [failed] never renders: like
-/// noise, a failed row is hidden on Home, and Activity's Needs attention section
-/// owns the retry.
+/// A run of such rows shows its least advanced step. Explicit server failures
+/// remain separate, terminal rows: the age projection does not populate Activity.
 enum HomeStep { transcribing, writingNotes, failed }
 
 /// A display row only: neither episodes nor conversations are mutated or persisted.
@@ -97,11 +96,19 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   final hidden = {...liveConversationIds};
   final rows = <HomeRow>[];
   final singleIds = <String>{};
+  final failures = <String, ServerConversation>{
+    for (final c in conversations)
+      if (c.homeStep == 'failed') c.id: c,
+  };
   for (final episode in enabled ? episodes : <Episode>[]) {
     final metadata = {for (final c in episode.members) c.id: c};
     // Full membership includes discarded members for Delete. Only retained
     // members may keep the episode's display row in processing.
     final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys.toSet();
+    for (final id in retainedIds) {
+      final member = byId[id] ?? metadata[id];
+      if (member?.homeStep == 'failed') failures[id] = member!;
+    }
     final pending = processingConversations
         .where((c) => retainedIds.contains(c.id) && !c.discarded && !c.deleted && !deletedIds.contains(c.id))
         .where((c) => !_serverFinished(c))
@@ -144,10 +151,16 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     // include discarded members for Delete and must not resurrect stale local rows.
     for (final id in retainedIds) {
       final member = byId[id] ?? metadata[id];
-      if (member != null && !member.discarded && !member.deleted && !deletedIds.contains(id)) members.add(member);
+      if (member != null &&
+          !member.discarded &&
+          !member.deleted &&
+          !deletedIds.contains(id) &&
+          member.homeStep != 'failed') {
+        members.add(member);
+      }
     }
     if (members.isEmpty) continue;
-    // Noise and failed recordings never show on Home, so an episode made only of them has no row.
+    // Noise and legacy failures have no episode row; projected failures stay standalone.
     if (groupAwaitingTranscript && members.every((m) => isHomeNoise(m) || homeStepOf(m) == HomeStep.failed)) {
       continue;
     }
@@ -199,21 +212,25 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   }
   rows.addAll([
     for (final c in conversations)
-      if (!hidden.contains(c.id) && !deletedIds.contains(c.id)) HomeRow(c)
+      if (!hidden.contains(c.id) && !failures.containsKey(c.id) && !deletedIds.contains(c.id)) HomeRow(c),
+    for (final c in failures.values)
+      if (!c.deleted && !c.discarded && !deletedIds.contains(c.id)) HomeRow(c)
   ]);
   rows.sort((a, b) => b.startedAt.compareTo(a.startedAt));
   if (!groupAwaitingTranscript) return rows;
   // Noise (no speech worth a row) never shows on Home; search and direct links still reach it.
-  // Failed rows duplicate Activity's Needs attention section, so Home hides them too.
+  // Legacy summary failures belong to Activity; age-projected failures have no ledger item.
   rows.removeWhere((row) =>
-      row.episode == null && (isHomeNoise(row.conversation) || homeStepOf(row.conversation) == HomeStep.failed));
+      row.episode == null &&
+      (isHomeNoise(row.conversation) ||
+          (homeStepOf(row.conversation) == HomeStep.failed && row.conversation.homeStep != 'failed')));
   return foldProcessingRuns(rows, processingTitle: processingTitle ?? '');
 }
 
 /// Home shows finished conversations, and every unbroken run of unfinished ones as a
 /// single Processing row (one per day). A run's step is its least advanced member's.
-/// Failed rows are hidden before folding (Activity's Needs attention section owns
-/// them), so a run never carries a failed step. Every visible member stays reachable
+/// Explicit failures break a run and remain openable terminal rows.
+/// Every visible member stays reachable
 /// from the run's page; nothing shown is dropped.
 List<HomeRow> foldProcessingRuns(List<HomeRow> rows, {required String processingTitle}) {
   final folded = <HomeRow>[];
@@ -244,7 +261,7 @@ List<HomeRow> foldProcessingRuns(List<HomeRow> rows, {required String processing
 
   for (final row in rows) {
     final step = row.step ?? (row.isProcessing ? HomeStep.writingNotes : homeStepOf(row.conversation));
-    if (step == null) {
+    if (step == null || step == HomeStep.failed) {
       flush();
       folded.add(row);
       continue;
@@ -263,8 +280,9 @@ HomeStep _leastAdvanced(Iterable<HomeStep> steps) =>
 /// The step a conversation row is waiting on, or null when it is finished and may show
 /// as its own Home row. The server's `home_step` wins; older servers fall back to the
 /// row's status, an empty capture, or a stand-in title. A [HomeStep.failed] result is
-/// hidden on the default Home, never painted on a row.
+/// terminal and must never be folded into a processing run.
 HomeStep? homeStepOf(ServerConversation c) {
+  if (c.homeStep == 'failed') return HomeStep.failed;
   if (c.isLocked || c.discarded || c.deleted || c.clientProcessing != null || c.processingDeferred) return null;
   switch (c.homeStep) {
     case 'transcribing':
@@ -294,13 +312,14 @@ HomeStep? homeStepOf(ServerConversation c) {
 /// Server-classified noise: a finished row with nothing worth showing on Home.
 bool isHomeNoise(ServerConversation c) => c.homeStep == 'noise' && !c.isLocked;
 
-/// The member's own record says it is finished (ready, noise, or locked). A local processing entry
+/// The member's own record says it is terminal (ready, noise, failed, or locked). A local processing entry
 /// for such a member cannot hold its episode in "Finishing up…", so a stale entry cannot keep the
 /// episode on a processing row after its summary has landed.
-bool _serverFinished(ServerConversation c) => c.homeStep == 'ready' || c.homeStep == 'noise' || c.isLocked;
+bool _serverFinished(ServerConversation c) =>
+    c.homeStep == 'ready' || c.homeStep == 'noise' || c.homeStep == 'failed' || c.isLocked;
 
 /// The step an episode row may paint for a pending member: a member's failure never
-/// becomes the episode's failed row (Home hides failed rows); the episode keeps
+/// becomes the episode's failed row (projected failures stay standalone); the episode keeps
 /// waiting for its remaining members.
 HomeStep _episodeStepOf(ServerConversation c) {
   final step = homeStepOf(c);

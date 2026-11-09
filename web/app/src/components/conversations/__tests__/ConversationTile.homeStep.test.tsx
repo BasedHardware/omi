@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationTile } from '@/components/conversations/ConversationTile';
 import type { Conversation } from '@/types/conversation';
@@ -17,7 +17,10 @@ function conversation(home_step?: string | null): Conversation {
 
 describe('ConversationTile Home projection', () => {
   it('does not badge a failed projection as Processing', () => {
-    render(<ConversationTile conversation={conversation('failed')} />);
+    const open = vi.fn();
+    render(<ConversationTile conversation={conversation('failed')} onClick={open} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation: Planning' }));
+    expect(open).toHaveBeenCalledOnce();
     expect(screen.getByText('Planning')).toBeInTheDocument();
     expect(screen.queryByText('Processing')).not.toBeInTheDocument();
   });
