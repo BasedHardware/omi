@@ -257,3 +257,45 @@ def test_discard_receipt_does_not_hide_a_later_first_summary(enabled):
     output = {'status': 'completed', 'summary_output_present': True}
     receipt = delivery.merge_result(restored, output, 'u', now=250)
     assert receipt['present'] and receipt['latency'] == 50
+
+
+def test_expired_seen_gauge_is_declared_for_production_scraping():
+    import json
+    from pathlib import Path
+
+    metric = next(iter(delivery.EXPIRED_SEEN.collect()))
+    assert metric.type == 'gauge'
+    assert metric.samples[0].labels == {}
+    inventory = json.loads(
+        (Path(__file__).resolve().parents[3] / 'backend/charts/monitoring/metric-inventory.prod.json').read_text()
+    )
+    assert metric.name in inventory['declared_metrics']
+
+
+@pytest.mark.parametrize('hours', ['72', '1', '0'])
+@pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'current'])
+def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, cursor_kind):
+    from database.summary_debt_queries import due_conversations
+    from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+    from utils.enrichment.age_gate import max_age_seconds
+
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', hours)
+    now = 1_800_000_000.0
+    after = {'due': now - 1, 'path': 'users/synthetic/conversations/c'}
+    if cursor_kind != 'legacy':
+        after['pending'] = now - 1 if cursor_kind == 'current' else now - 73 * 3600
+    client = RecordingFirestore()
+    with install_recorder(client), client.recording_context('database.summary_debt_queries.due_conversations', {}):
+        due_conversations(now=now, limit=1000, after=after, firestore_client=client)
+    shape = client.shapes[0]
+    assert shape.limit == 100
+    filters = {(f.field, f.operator, f.value) for f in shape.filters}
+    assert ('summary_due_at', '<=', now) in filters
+    if hours != '0':
+        assert ('summary_first_pending_at', '>=', now - max_age_seconds()) in filters
+        assert shape.orders[0] == ('summary_first_pending_at', 'ASCENDING')
+        assert shape.uses_cursors is (cursor_kind == 'current')
+    else:
+        assert len(filters) == 1
+        assert shape.orders[0] == ('summary_due_at', 'ASCENDING')
+        assert shape.uses_cursors is (cursor_kind == 'legacy')

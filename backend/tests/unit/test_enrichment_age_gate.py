@@ -135,6 +135,13 @@ def test_historical_debt_cannot_hide_fresh_work_behind_the_admission_cap(monkeyp
     monkeypatch.setattr(repair, 'due_conversations', lambda *_args, **_kwargs: page)
     redrive = Mock(return_value=True)
     monkeypatch.setattr(repair, 'redrive', redrive)
-    assert repair.tick(now=now, client=StrictFirestore()) == {'scanned': 100, 'admitted': 1, 'errors': 0}
+    assert repair.tick(now=now, client=StrictFirestore()) == {
+        'scanned': 100,
+        'admitted': 1,
+        'errors': 0,
+        'expired_seen': 99,
+    }
     assert redrive.call_args.args[1:] == ('u', 'fresh')
     redrive.assert_called_once()
+
+    assert repair.delivery.EXPIRED_SEEN._value.get() == 99

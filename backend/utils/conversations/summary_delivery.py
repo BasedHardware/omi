@@ -44,6 +44,7 @@ CLOSED_LATENCY = Histogram(
 DEBT = Gauge('omi_summary_debt_overdue', 'Overdue summary debt in the bounded repair window')
 OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary debt observed by repair')
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
+EXPIRED_SEEN = Gauge('omi_summary_debt_expired_seen', 'Rows skipped as expired in the last claimed repair tick')
 
 
 PROCESS_CONTEXT: ContextVar[Row | None] = ContextVar('summary_process', default=None)
