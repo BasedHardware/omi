@@ -760,7 +760,8 @@ def _imported(family, prefixes):
 
 
 @pytest.mark.parametrize('env', ['prod', 'dev'])
-def test_backlog_alert_metric_families_are_imported_by_the_cloud_run_exporters(env):
+@pytest.mark.parametrize('profile', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_backlog_alert_metric_families_are_imported_by_the_cloud_run_exporters(env, profile):
     """Alert-to-importer wiring: a family no exporter imports reads as vector(0), so its alert never fires.
 
     Batch transitions are emitted by backend (serving maintenance, intake polls,
@@ -788,3 +789,14 @@ def test_backlog_alert_metric_families_are_imported_by_the_cloud_run_exporters(e
         prefixes = yaml.safe_load(path.read_text(encoding='utf-8'))['stackdriver']['metrics']['prefixes']
         missing = sorted(family for family in families if not _imported(family, prefixes))
         assert not missing, f'{path.name} does not import {missing}'
+    relabels = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())['spec']['endpoints'][0][
+        'metricRelabeling'
+    ]
+    for family in families:
+        for relabel in relabels:
+            value = ';'.join(family if key == '__name__' else '' for key in relabel['sourceLabels'])
+            matched = re.fullmatch(relabel['regex'], value)
+            if relabel['action'] == 'keep':
+                assert matched, (profile, family)
+            elif relabel['action'] == 'drop':
+                assert not matched, (profile, family)

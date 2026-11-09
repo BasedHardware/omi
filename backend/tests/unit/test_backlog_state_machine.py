@@ -178,20 +178,24 @@ def test_redrive_counter_counts_requeues_only_with_its_switch(setup, monkeypatch
 
 
 @pytest.mark.parametrize('switch', ['true', None, 'false'])
-def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(monkeypatch, switch):
+def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(setup, monkeypatch, switch):
     from utils.batch_pipeline import held_dead_letter as sweep
 
     if switch is not None:
         monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, switch)
-    store = Mock()
-    store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), expired_at=1)
+    bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
     runner = sweep.HeldDeadLetter(store)
-    spent = {'held_expired_at': 1, 'held_redrives': sm.MAX_HELD_REDRIVES}
+    spent = deepcopy(bad(client))
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
-    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('a', spent)])
-    monkeypatch.setattr(runner.recovery, 'requeue_quarantined', lambda *a, **k: False)
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('bad', spent)])
     before = transitions('held_redrive_budget_spent')
-    runner.tick(86400)
+    assert runner.tick(86400)['requeued'] == 1
+    assert transitions('held_redrive_budget_spent') == before + (0 if switch == 'false' else 1)
+    # Replaying the stale page cannot requeue the now-ready row or emit again.
+    assert runner.tick(172800)['requeued'] == 0
     assert transitions('held_redrive_budget_spent') == before + (0 if switch == 'false' else 1)
 
 
@@ -415,31 +419,31 @@ def alert_backtest():
     return module
 
 
-def nightly_counter_samples(monkeypatch, nights, prior):
+def nightly_counter_samples(setup, monkeypatch, nights, prior):
     """Run the real nightly pass over one held recording; return (time, counter) after each pass.
 
     The recording is re-driven on each listed night and starts with ``prior``
-    held re-drives. A spent budget is observed by the pass's scan.
+    held re-drives. A spent budget is reported after the recovery transaction.
     """
     from utils.batch_pipeline import held_dead_letter as sweep
 
-    store = Mock()
-    store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    rows = deepcopy(client.rows)
     runner = sweep.HeldDeadLetter(store)
-    job = {'held_expired_at': 1, 'held_redrives': prior}
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
-    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('one-recording', dict(job))])
-
-    def requeue(*_, **__):
-        job['held_redrives'] += 1  # the counter's own increment on a committed requeue
-        return True
-
-    monkeypatch.setattr(runner.recovery, 'requeue_quarantined', requeue)
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('bad', deepcopy(bad(client)))])
     base = transitions('held_redrive_budget_spent')
     samples = []
     for night in nights:
         now = night * 86400 + 60
-        runner.tick(now)
+        # Model the next held cycle with no leftover runnable queue entries.
+        client.rows.clear()
+        client.rows.update(deepcopy(rows))
+        held_dead(bad(client), expired_at=(night - 1) * 86400)
+        bad(client)['held_redrives'] = prior
+        assert runner.tick(now)['requeued'] == 1
+        prior = bad(client)['held_redrives']
         samples.append((now, transitions('held_redrive_budget_spent') - base))
     return samples
 
@@ -475,10 +479,10 @@ def alert_episodes(rule, samples, end_day):
         (0, [1, 2, 3], False),
     ],
 )
-def test_one_looping_held_recording_fires_the_unit_alert(monkeypatch, prior, nights, fires):
+def test_one_looping_held_recording_fires_the_unit_alert(setup, monkeypatch, prior, nights, fires):
     """Custody review: one spent-budget unit must alert; the 64/h volume rule never sees it."""
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
-    samples = nightly_counter_samples(monkeypatch, nights, prior)
+    samples = nightly_counter_samples(setup, monkeypatch, nights, prior)
     looping = alert_episodes(backlog_alert('omi-backlog-held-redrive-unit-looping'), samples, 20)
     assert (looping['episodes'] > 0) is fires
     if fires:
@@ -575,7 +579,7 @@ def test_held_budget_reset_is_bounded_and_alerted(setup, monkeypatch, budget, co
     assert job['audio_uri'] == 'gs://synthetic/audio'  # retained
     if counter != 'false':
         assert job['held_redrives'] == 10
-        assert held_redrive_budget_spent(job)  # the nightly scan reports it: alerted
+        assert held_redrive_budget_spent(job)  # committed re-drives report it: alerted
 
 
 @pytest.mark.parametrize('name', sorted(EXPECTED_DEFAULTS))

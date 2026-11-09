@@ -42,7 +42,7 @@ def retry_cap_enforced() -> bool:
 
 
 def held_redrive_counter_enabled() -> bool:
-    return kill_switch(HELD_REDRIVE_COUNTER_SWITCH)
+    return kill_switch(HELD_REDRIVE_COUNTER_SWITCH, log=False)
 
 
 def held_redrive_budget_enabled() -> bool:

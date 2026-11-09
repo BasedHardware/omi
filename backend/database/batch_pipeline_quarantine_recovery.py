@@ -15,6 +15,7 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked, norma
 from database.sync_ledger import batch_projection_ledger_owner_matches
 from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
+from utils.backlog_metrics import record_transition
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, held_redrive_budget_spent, owner_key
@@ -130,10 +131,10 @@ class RecoveryStore:
     def requeue_quarantined(self, segment_id, now, *, dead_before=None):
         """Operator and nightly entry: retain the content/privacy ownership CAS.
 
-        An operator requeue (dead_before=None) that starts at or over the held
-        re-drive budget reports held_redrive_budget_spent after commit, like
-        /redrive-dead and the status poll. The nightly pass (dead_before set)
-        already observes every candidate in its scan.
+        Every committed requeue that starts at or over the held re-drive
+        budget reports held_redrive_budget_spent after commit, like
+        /redrive-dead and the status poll. Skipped or failed nightly candidates
+        and replayed pages do not count as re-drives.
         """
         spent = [False]
 
@@ -157,9 +158,7 @@ class RecoveryStore:
             return requeued
 
         requeued = self.store.run(commit)
-        if requeued and spent[0] and dead_before is None:
-            from utils.backlog_metrics import record_transition
-
+        if requeued and spent[0]:
             record_transition('held_redrive_budget_spent')
         return requeued
 

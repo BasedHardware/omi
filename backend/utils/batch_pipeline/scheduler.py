@@ -25,6 +25,8 @@ from config.batch_pipeline import (
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
+from utils.backlog_metrics import record_transition
+from utils.capture.retry_cap import retry_cap
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
@@ -1022,8 +1024,6 @@ class Scheduler:
         """Authenticated recovery of historical dead records; never skips a gap."""
         outcome = self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
         if outcome == 'spent':
-            from utils.backlog_metrics import record_transition
-
             record_transition('held_redrive_budget_spent')
         return bool(outcome)
 
@@ -1096,8 +1096,6 @@ def account_held_redrive(job: dict) -> None:
 
 def retry_cap_enforced_for(owner_id: str) -> bool:
     """Whether the batch lease-expiry retry cap quarantines at the cap for this owner."""
-    from utils.capture.retry_cap import retry_cap
-
     decision = retry_cap(owner_id, 0, 1, enforce=True)
     return decision is not None and decision.serving
 

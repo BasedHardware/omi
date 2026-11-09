@@ -35,6 +35,7 @@ from database.sync_ledger import (
     is_valid_partial_sync_content_result,
 )
 from utils.batch_pipeline.artifact_policy import artifacts_for
+from utils.backlog_metrics import record_transition
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
@@ -375,8 +376,6 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
     status = store.run(read)
     if spent_redrives:
         # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
-        from utils.backlog_metrics import record_transition
-
         record_transition('held_redrive_budget_spent', len(spent_redrives))
     return status
 
