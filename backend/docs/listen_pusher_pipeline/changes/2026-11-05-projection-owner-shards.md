@@ -17,6 +17,13 @@ parts.
      follows the newly committed tail each tick.
    - The leader alone runs a discovery-only backstop over the durable log,
      and followers no longer sweep.
+   - Tail/backstop discovery atomically creates a wake only if the owner has
+     none in either lane. Replays leave existing scores and sequences untouched,
+     including taken wakes and future retries in the opposite lane. Real commit
+     notifications still bump the sequence even if their score stays unchanged,
+     so settlement or deferral cannot erase new work arriving during a turn.
+     GPU-only rows racing with settlement remain in the durable log and are
+     revisited by the resuming whole-log backstop if their replay preceded removal.
    - Firestore reads drop from N instances paging the full keyset every 20 s
      to one leader paging at most 30 pages per tick, with no per-row pre-read.
 3. **Fresh first.** Commits of audio captured under 6 h ago take the `fresh`

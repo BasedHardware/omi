@@ -209,3 +209,77 @@ async def test_legacy_productive_continuations_do_not_yield(claims, monkeypatch,
         assert pump.deferring == [] and pump.cooldown == {}
     finally:
         drains.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('commit_at', ['before_defer', 'after_defer'])
+@pytest.mark.parametrize('capture_at', [990.0, None])
+async def test_real_commit_survives_discovery_and_deferral(claims, monkeypatch, commit_at, capture_at):
+    monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: 1.0)
+    now = [1000.0]
+    client = fakeredis.FakeRedis()
+    shards = ProjectionShards('ns', count=1, client=lambda: client, clock=lambda: now[0])
+    log = ResultLog()
+    log.clock = 994.0
+    first = chain(log, 'owner', 'old', 1)
+
+    def pages(**kwargs):
+        rows = [
+            (sid, log.bindings[sid].owner_id, row['committed_at'], 990.0)
+            for sid, row in log.results.items()
+            if row['projection_state'] == 'pending'
+        ]
+        return rows, None
+
+    monkeypatch.setattr(log, 'projection_page_owners', pages, raising=False)
+    projector = projector_for(log)
+    projector.clock = lambda: now[0]
+    pump = ShardPump(projector, shards, monotonic=lambda: now[0])
+    real_step = projector.drain_step
+    stopped = False
+
+    def step(*args, **kwargs):
+        nonlocal stopped
+        if not stopped:
+            stopped = True
+            pump.backstop()  # Both real passes replay the owner while its wake is taken.
+            return projection.Walk([], [], stop='blocked_other')
+        return real_step(*args, **kwargs)
+
+    monkeypatch.setattr(projector, 'drain_step', step)
+    shards.refresh()
+    pump.committed('owner', [{'capture_at': capture_at, 'committed_at': 995.0}])
+    try:
+        assert await pump.tick() == 1
+        await quiesce([projector])
+        assert pump.deferring and log.persist_order == []
+        if commit_at == 'after_defer':
+            assert await pump.tick() == 0
+            assert client.zscore(shards._lane_key(BACKLOG, 0), 'owner') == 1120.0
+        new = chain(log, 'owner', 'new', 1)
+        # Equal capture/unchanged backlog ordering still represents genuinely new work.
+        pump.committed('owner', [{'capture_at': capture_at, 'committed_at': 996.0}])
+        pump.backstop()
+        if commit_at == 'before_defer':
+            assert await pump.tick() == 0
+        assert shards.take(FRESH, 10) or shards.take(BACKLOG, 10)
+    finally:
+        projector.ensure_drains().close()
+    shards.release()
+
+    # Lose every local cooldown. The durable new commit must still be walked and settled.
+    replacement = ProjectionShards('ns', count=1, client=lambda: client, clock=lambda: now[0])
+    replacement.refresh()
+    next_projector = projector_for(log)
+    next_projector.clock = lambda: now[0]
+    next_pump = ShardPump(next_projector, replacement, monotonic=lambda: now[0])
+    try:
+        next_pump.backstop()
+        assert await next_pump.tick() == 1
+        await quiesce([next_projector])
+        await next_pump.tick()
+        assert log.persist_order == first + new
+        assert replacement.take(FRESH, 10) == replacement.take(BACKLOG, 10) == []
+        assert claims['overlaps'] == 0
+    finally:
+        next_projector.ensure_drains().close()

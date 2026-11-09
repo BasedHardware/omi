@@ -1072,3 +1072,66 @@ def test_pick_excludes_future_scores_before_calculating_backlog_reserve(server):
     fresh = [Wake('future-fresh', FRESH, 0, 1100.0)] + [Wake(f'fresh{i}', FRESH, 0, 999.0 - i) for i in range(3)]
     backlog = [Wake('future-backlog', BACKLOG, 0, 1100.0)]
     assert list(pump.pick(fresh, backlog, 3, drains)) == [f'fresh{i}' for i in range(3)]
+
+
+@pytest.mark.parametrize('lanes', [(FRESH,), (BACKLOG,), (FRESH, BACKLOG)])
+@pytest.mark.parametrize('stop', ['blocked_other', 'yielded'])
+def test_discovery_replays_preserve_taken_retry_across_restart(server, blocking_inline, monkeypatch, lanes, stop):
+    monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: 1.0)
+    now = [1000.0]
+    pump, shards, drains = pump_for(server, limit=1)
+    shards.clock = pump.monotonic = lambda: now[0]
+    for lane in lanes:
+        shards.push('retry', owner_key('retry'), lane, 990.0 if lane == FRESH else 1.0)
+    assert asyncio.run(pump.tick()) == 1
+
+    def discover(pump):
+        # Run both real discovery passes over the same pending row, as the leader does.
+        real = projection.Projector(Mock(), Mock(), clock=lambda: now[0])
+        real.store = SimpleNamespace(
+            store=SimpleNamespace(projection_page_owners=lambda **kwargs: ([('row', 'retry', 995.0, 990.0)], None))
+        )
+        pump.projector.discover_tail = real.discover_tail
+        pump.projector.discover_owners = real.discover_owners
+        counts = pump.backstop()
+        assert counts['tail_owners'] == counts['owners'] == 1
+
+    def stored():
+        return [
+            (
+                shards._client().zscore(shards._lane_key(lane, 0), 'retry'),
+                shards._client().hget(shards._seq_key(lane, 0), 'retry'),
+            )
+            for lane in (FRESH, BACKLOG)
+        ]
+
+    before = stored()
+    discover(pump)  # Replay while the turn is still active.
+    assert stored() == before
+    drains.finish('retry', stop)
+    discover(pump)  # Replay between the idle callback and Redis deferral.
+    assert asyncio.run(pump.tick()) == 0
+    retry_at = now[0] + (1.0 if stop == 'yielded' else 120.0)
+    assert shards._client().zscore(shards._lane_key(FRESH, 0), 'retry') is None
+    assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'retry') == retry_at
+    deferred = stored()
+
+    shards.release()
+    replacement = make(server, count=1, clock=lambda: now[0])
+    replacement.refresh()
+    next_drains = FakeDrains(1)
+    next_pump = ShardPump(FakeProjector(next_drains), replacement, monotonic=lambda: now[0])
+    assert next_pump.cooldown == {}
+    discover(next_pump)  # Must neither pull backlog earlier nor recreate a fresh wake.
+    assert stored() == deferred
+    replacement.push('due-backlog', owner_key('due-backlog'), BACKLOG, 500.0)
+    assert asyncio.run(next_pump.tick()) == 1
+    assert next_drains.requested == ['due-backlog']
+    next_drains.finish('due-backlog', 'end')
+    now[0] = retry_at - 0.01
+    discover(next_pump)
+    assert asyncio.run(next_pump.tick()) == 0
+    assert stored() == deferred
+    now[0] = retry_at
+    assert asyncio.run(next_pump.tick()) == 1
+    assert next_drains.requested == ['due-backlog', 'retry']

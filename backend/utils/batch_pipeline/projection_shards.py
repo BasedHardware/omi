@@ -43,7 +43,7 @@ PROJECTION_SHARD_COUNT = 64
 LEASE_SECONDS = 30.0
 # Lease passes run this often; a holder that misses two passes keeps its lease.
 LEASE_REFRESH_SECONDS = LEASE_SECONDS / 3
-# Idle wake keys expire; every push refreshes the TTL.
+# Idle wake keys expire; creating pushes and real notifications refresh the TTL.
 WAKE_TTL_SECONDS = 7 * 24 * 3600
 FRESH = 'fresh'
 BACKLOG = 'backlog'
@@ -72,12 +72,17 @@ for _, key in ipairs(KEYS) do
 end
 return n
 """
-# KEYS[1]: lane zset, KEYS[2]: its push-sequence hash. ARGV: member, score,
-# mode ('gt' keeps the newest score, 'lt' the oldest), ttl seconds. Every push
-# bumps the member's sequence, so a drain that took an older sequence cannot
-# settle away a wake pushed after it looked. Plain ZADD GT/LT needs Redis 6.2.
+# KEYS[1]: lane zset, KEYS[2]: its push-sequence hash, KEYS[3]: opposite lane.
+# ARGV: member, score, mode ('gt' newest, 'lt' oldest), ttl seconds, discovery.
+# Discovery only creates a missing owner wake; replaying either existing lane
+# must not invalidate a taken sequence or pull a persisted retry forward.
+# Real notifications always bump the sequence, even if the score is unchanged,
+# so an older take cannot erase new work. Plain ZADD GT/LT needs Redis 6.2.
 _PUSH_LUA = """
 local current = redis.call('zscore', KEYS[1], ARGV[1])
+if ARGV[5] == '1' and (current or redis.call('zscore', KEYS[3], ARGV[1])) then
+  return 0
+end
 local score = tonumber(ARGV[2])
 if not current
   or (ARGV[3] == 'gt' and score > tonumber(current))
@@ -333,21 +338,27 @@ class ProjectionShards:
     def _seq_key(self, lane: str, shard: int) -> str:
         return f'batch_projection_wake_seq:{self.namespace}:{self.count}:{lane}:{shard}'
 
-    def push(self, owner_id: str, owner_key: str, lane: str, score: float) -> bool:
-        """Record that ``owner_id`` has projection work. Fails open (False)."""
+    def push(self, owner_id: str, owner_key: str, lane: str, score: float, *, discovery: bool = False) -> bool:
+        """Record work, or discover an owner absent from both lanes. Fails open (False).
+
+        True includes a discovery replay of an existing wake: its holder still
+        owns the work, without changing that wake's ordering or sequence.
+        """
         if lane not in LANES:
             raise ValueError('unknown projection wake lane')
         shard = self.shard(owner_key)
         try:
             self._client().eval(
                 _PUSH_LUA,
-                2,
+                3,
                 self._lane_key(lane, shard),
                 self._seq_key(lane, shard),
+                self._lane_key(BACKLOG if lane == FRESH else FRESH, shard),
                 owner_id,
                 float(score),
                 'gt' if lane == FRESH else 'lt',
                 WAKE_TTL_SECONDS,
+                int(discovery),
             )
             return True
         except Exception as error:

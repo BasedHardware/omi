@@ -117,11 +117,12 @@ class ShardPump:
         """
         return not self.wake(owner_id, None, self.shards.clock() if score is None else score)
 
-    def wake(self, owner_id: str, capture_at: float | None, committed_at: float) -> bool:
+    def wake(self, owner_id: str, capture_at: float | None, committed_at: float, *, discovery: bool = False) -> bool:
         """Push one wake to the owner's shard holder. True when a holder will drain it.
 
         Audio captured within ``FRESH_CAPTURE_SECONDS`` takes the fresh lane,
         scored by capture time; future or older captures use backlog, scored by commit.
+        Discovery creates only a missing wake; existing lanes and retry scores stay put.
         False (not engaged, shard unheld, push failed) means drain it locally.
         """
         if not self.engaged:
@@ -134,7 +135,7 @@ class ShardPump:
             lane, score = FRESH, float(capture_at)
         else:
             lane, score = BACKLOG, float(committed_at)
-        pushed = self.shards.push(owner_id, key, lane, score)
+        pushed = self.shards.push(owner_id, key, lane, score, discovery=discovery)
         PROJECTION_SHARD_WAKES.labels(lane=lane, outcome='pushed' if pushed else 'push_failed').inc()
         return pushed
 
@@ -164,7 +165,7 @@ class ShardPump:
         """
 
         def route(owner_id: str, committed_at: float, capture_at: float | None) -> None:
-            if not self.wake(owner_id, capture_at, committed_at):
+            if not self.wake(owner_id, capture_at, committed_at, discovery=True):
                 self.projector.request_local_drain(owner_id)
 
         tail = self.projector.discover_tail(
