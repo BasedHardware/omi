@@ -489,7 +489,7 @@ def test_head_epoch_and_migrations(harness, space):
         path = Path(store_module.__file__).parent / 'migrations'
         assert migrate(conn, directory=path) == []
         assert migrate(conn, directory=path) == []
-        assert current_version(conn) == 3
+        assert current_version(conn) == 4  # B2 fence, B3 revision timestamps, A2b typed query promotion
 
 
 def test_validation_and_adapter_registration(harness, space, monkeypatch):

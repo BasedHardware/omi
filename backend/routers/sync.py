@@ -235,7 +235,6 @@ from utils.sync.backfill import (
     release_backfill_slot,
     reserve_backfill_speech,
     retry_after_next_utc_day,
-    try_acquire_backfill_slot,
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
 from utils.sync.content_id import compute_sync_content_id

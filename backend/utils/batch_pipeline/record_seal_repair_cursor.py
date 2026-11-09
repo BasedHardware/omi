@@ -42,10 +42,18 @@ class RepairCursor:
         )
         if not valid or not all(parts):
             raise ValueError('invalid maintenance frontier')
-        if type(value['seconds']) is not int or type(value['nanos']) is not int or not 0 <= value['nanos'] < 10**9:
-            raise ValueError('invalid maintenance frontier')
-        stamp = Timestamp(seconds=value['seconds'], nanos=value['nanos'])
-        cursor = {'path': path, 'finished_at': DatetimeWithNanoseconds.from_timestamp_pb(stamp)}
+        if self.jobs and 'enqueued_at' in value:
+            # Preserve the exact numeric Firestore cursor, without rounding
+            # epoch floats through datetime. Even skipped NaN/-inf clocks may
+            # be the last scanned row and must not prevent forward progress.
+            if type(value['enqueued_at']) not in (int, float) or 'horizon' not in value:
+                raise ValueError('invalid maintenance frontier')
+            cursor = {'path': path, 'enqueued_at': value['enqueued_at']}
+        else:
+            if type(value['seconds']) is not int or type(value['nanos']) is not int or not 0 <= value['nanos'] < 10**9:
+                raise ValueError('invalid maintenance frontier')
+            stamp = Timestamp(seconds=value['seconds'], nanos=value['nanos'])
+            cursor = {'path': path, 'finished_at': DatetimeWithNanoseconds.from_timestamp_pb(stamp)}
         if 'horizon' in value:
             horizon = datetime.fromisoformat(value['horizon'])
             if horizon.tzinfo is None:
@@ -56,7 +64,10 @@ class RepairCursor:
     def write(self, cursor, budget):
         value = None
         if cursor is not None:
-            finished = cursor['finished_at']
+            age_order = self.jobs and 'enqueued_at' in cursor
+            # Keep the legacy timestamp envelope too: an older binary can
+            # still read this frontier as a hash cursor after a code rollback.
+            finished = cursor['horizon'] if age_order else cursor['finished_at']
             # datetime.isoformat/fromisoformat truncates Firestore nanoseconds,
             # which can otherwise make a full equal-finish page repeat forever.
             if isinstance(finished, DatetimeWithNanoseconds):
@@ -65,6 +76,8 @@ class RepairCursor:
                 stamp = Timestamp()
                 stamp.FromDatetime(finished)
             value = {'path': cursor['path'], 'seconds': stamp.seconds, 'nanos': stamp.nanos}
+            if age_order:
+                value['enqueued_at'] = cursor['enqueued_at']
             if 'horizon' in cursor:
                 # This boundary originates from datetime.now, not Firestore.
                 value['horizon'] = cursor['horizon'].isoformat()

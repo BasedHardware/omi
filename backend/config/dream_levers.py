@@ -22,9 +22,6 @@ IDLE_SKIP_SERVE_PERCENT_ENV = 'DREAM_IDLE_SKIP_MODE_SERVE_PERCENT'
 # Size the pass token budget by new material instead of total history.
 MATERIAL_BUDGET_MODE_ENV = 'DREAM_MATERIAL_BUDGET_MODE'
 MATERIAL_BUDGET_SERVE_PERCENT_ENV = 'DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT'
-# End a pass that stops staging anything for several turns.
-NO_PROGRESS_STOP_MODE_ENV = 'DREAM_NO_PROGRESS_STOP_MODE'
-NO_PROGRESS_STOP_SERVE_PERCENT_ENV = 'DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT'
 # Elide old tool results from the re-sent conversation once a pass's prompt grows large.
 HISTORY_COMPACT_MODE_ENV = 'DREAM_HISTORY_COMPACT_MODE'
 HISTORY_COMPACT_SERVE_PERCENT_ENV = 'DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT'
@@ -49,12 +46,11 @@ LIBERAL_VERIFIER_KINDS = frozenset({'dismiss_person', 'spelling', 'title', 'over
 LIBERAL_VERIFIER_REASONS = frozenset({'call_failed', 'single_vote', 'budget_tokens', 'budget_deadline'})
 
 # Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
-# applied edits and the no-progress stop 31%, so both are retired (off); payoff ordering
+# applied edits; idle skip stays off. The no-progress lever is retired. Payoff ordering
 # serves (David 2026-10-30: payoff first). The verify hold serves: it only moves budget
 # from searching to verifying what was found. Every other lever measures in shadow.
 DEFAULT_MODES: dict[str, Arm] = {
     IDLE_SKIP_MODE_ENV: 'off',
-    NO_PROGRESS_STOP_MODE_ENV: 'off',
     PAYOFF_ORDER_MODE_ENV: 'serve',
     VERIFY_HOLD_MODE_ENV: 'serve',
 }
@@ -62,7 +58,6 @@ DEFAULT_MODES: dict[str, Arm] = {
 PER_OWNER = (
     IDLE_SKIP_MODE_ENV,
     MATERIAL_BUDGET_MODE_ENV,
-    NO_PROGRESS_STOP_MODE_ENV,
     HISTORY_COMPACT_MODE_ENV,
     HUNT_BACKOFF_MODE_ENV,
     PRESCAN_MODE_ENV,
@@ -72,7 +67,6 @@ PER_OWNER = (
 SHORT_NAMES = {
     IDLE_SKIP_MODE_ENV: 'idle_skip',
     MATERIAL_BUDGET_MODE_ENV: 'material_budget',
-    NO_PROGRESS_STOP_MODE_ENV: 'no_progress_stop',
     HISTORY_COMPACT_MODE_ENV: 'history_compact',
     PAYOFF_ORDER_MODE_ENV: 'payoff_order',
     HUNT_BACKOFF_MODE_ENV: 'hunt_backoff',

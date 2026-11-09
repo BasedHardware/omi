@@ -19,6 +19,12 @@ from utils.batch_pipeline import record_seal_cluster_repair as cluster
 from utils.batch_pipeline.record_seal_budget import SweepBudget, BudgetExhausted
 
 
+@pytest.fixture(autouse=True)
+def legacy_jobs_order(monkeypatch):
+    """Keep the original name-scan regressions; age ordering is covered in the cluster suite."""
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'off')
+
+
 @pytest.mark.parametrize(
     'setting,enabled', [(None, True), ('off', False), ('OFF', False), ('false', True), ('on', True)]
 )

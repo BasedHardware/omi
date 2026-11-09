@@ -67,15 +67,16 @@ not logged elapsed_ms. A fresh positive all-epoch runnable projection age enable
 remain quiet. Existing timeliness sample stale alerts own unavailable debt measurements. A roll has the full
 15-minute pending period to recover; this adds no post-train gate.
 
-Held stock uses `omi_batch_held_oldest_age_seconds{leg}` from three indexed oldest-first `limit(1)` queries:
+Held stock uses `omi_batch_held_oldest_age_seconds{leg}` from three indexed oldest-first queries
+that skip invalid leg clocks:
 
 - quarantine_held: result projection_state, clocked from committed_at;
 - assignment_held: committed job with recovery_state held, clocked from enqueued_at;
 - record_pending: job state, clocked from enqueued_at.
 
 There is no epoch or rolling 24h predicate. Even a stock larger than a scan page yields its exact oldest row;
-empty stocks reset to zero. This adds at most four document reads per existing timeliness sample, using
-existing query/index shapes. Sample errors preserve the last values and freshness. Freshness is checked on the
+empty stocks reset to zero. Valid held stock stops at its first row; invalid clocks require
+additional reads, using existing query/index shapes. Sample errors preserve the last values and freshness. Freshness is checked on the
 same producer series before max-by-leg aggregation; missing/stale samples are owned by the existing
 `omi-batch-timeliness-sample-stale` warning. The 24h-capped `omi_batch_record_pending_new_oldest_age_seconds` is
 not a source. Existing new-cohort 2h delivery semantics remain unchanged. The fourth indexed oldest-row read exports
@@ -100,3 +101,96 @@ datasource, live filter counts and receiver delivery. These warnings are intenti
 `live-alert-gate.json` allowlist. No workflow change is needed for the existing standalone alert provisioner.
 Rollback: pause the four UIDs or revert their split definitions and regenerate the combined export; no drain,
 scheduler, capacity or custody state is changed. The read-only held gauge may remain deployed.
+
+## Oldest-age sampler flat for one hour
+
+`omi-oldest-age-gauge-flat-1h` is an agent-tier warning, muted by `omi-tier-silent`.
+It counts each positive series whose one-hour maximum equals its minimum for
+projection obligations, vendor-held work, summary debt and demand processing.
+Each series must also have an observation at least 3300 seconds (55 minutes) old
+in that one-hour window: `time() - min_over_time(timestamp(age)[1h:1m]) >= 3300`.
+The timestamp subquery uses the same labels as the age series, so a new replica
+cannot borrow another replica's history. It tolerates five minutes of scrape/grid
+alignment without assuming that these independently scheduled producers share a
+sample cadence. This establishes an observed span, not uninterrupted scrapes;
+freshness companions still own collection gaps. A single new positive sample or
+ten minutes of constant samples cannot qualify. The condition must then persist
+for ten minutes (`noDataState: OK`), earliest about 65 minutes after first observation.
+Zero is a healthy empty queue. Missing age emitters contribute zero.
+This detects frozen sampling: live ages increase while a head is stuck and fall
+when it drains. Drain-stall and age-threshold rules still own stalled processing.
+
+Check the emitting pod's supervised tick logs; restart the pod; confirm the gauge
+resumes changing. This alert authorizes no runtime changes beyond a pod restart.
+Check projection-obligation `omi_batch_projection_obligation_observed_at_seconds`
+and the existing `omi-batch-queue-safety-blind` companion on
+`omi_batch_pipeline_metrics_refreshed_at_seconds` for queue sampling blindness.
+Fresh-gated timeliness/queue ages vanish instead of going flat; their existing
+sample-stale/blind rules own that absence. Summary ages additionally require the
+matching replica's `omi_summary_debt_sample_timestamp_seconds` to be younger than
+300 seconds, per `backend/docs/runbooks/summary-guarantee.md`. A former lease
+holder's retained positive gauge must not count after its sample expires. Compare
+series with their original labels rather than aggregating ages across replicas.
+
+**Separate debt: summary-debt producer blindness.** This rule does not alert on a
+missing, zero or stale summary timestamp. Repair is optional and can be disabled;
+there is no exported enablement/expected-producer signal to distinguish that
+intentional state from collection failure. Add a separate enablement-aware
+freshness rule once that signal exists, then verify its disabled/rollback path.
+Until then, excluded or absent summary samples are unknown coverage, not evidence
+of healthy repair. The flat rule never fabricates a failure with `or vector(1)`.
+
+The held-age sampler skips nonnumeric, nonfinite and nonpositive leg clocks,
+continuing oldest-first with a snapshot cursor until a usable clock is found.
+Each RPC retains `limit(1)`, so healthy stock still reads just its first row. Empty or entirely undated
+stock emits zero age; it is not evidence that no held rows exist. This only changes
+metric sampling, never stored rows or lifecycle decisions. Valid stock still stops
+at its first row; a corrupt prefix requires additional reads, with no cohort or
+scan-page cutoff. The projection-drain clock and new-cohort metrics are unchanged.
+
+Deploy the guard through the normal backend train. After merge, an authorized
+operator dispatches `grafana_dashboard_provisioning.yml` with `environment=prod`
+for alert definitions; a main push provisions dev only. Run the provisioner's
+read-only drift check against production, then verify both new UIDs, tier, mute,
+query and no-data state in Grafana. The flat rule is expected quiet given the N5
+2026-11-08T14:03–14:10Z baseline; recheck current signals at deployment.
+Rollback: pause the new UID or revert its split definition and regenerate/reapply.
+Revert the sampler commit through the backend train if needed; no data repair is
+required. The existing held-row-age rule's tier and 21600-second threshold are
+unchanged; it lands paused under the import ruling below.
+
+## Production import disposition (lead2 ruling 699300, 2026-11-08T15:13Z)
+
+The dry-run of the 66 unprovisioned/changed rules measured production aggregates
+at 2026-11-08T14:05–14:59Z. Known backlog pages land paused, with their existing
+thresholds intact. Pausing suppresses notification coverage; the drain owners
+track the known debt until an explicit unpause change. This is alert preparation,
+not permission to deploy, drain, alter row state or unpause automatically.
+
+| Paused UID | Written unpause criteria |
+| --- | --- |
+| `omi-pipeline-held-row-age` | After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy. |
+| `omi-batch-unit-unpublished-2h` | After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+| `omi-enrichment-fresh-dwell` | After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+| `omi-record-pending-dwell` | After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+| `omi-pipeline-projection-drain-stall` | After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy. |
+
+`omi-batch-queue-safety-blind` remains an active page: its freshness arm now
+requires at least 900s staleness plus 5m pending. The worker-plane cadence was
+approximately 514s in the dry-run; 120s falsely breached between healthy samples.
+Other query arms and all backlog thresholds are unchanged. This adjusts alert
+freshness only; worker sampling, custody and admission are unchanged.
+
+`omi-finalization-byok-dwell-page` keeps its UID, strict 259200s threshold and 1h
+pending window, but lands active as severity warning, tier/audience agent, with
+`omi-tier-silent` and sibling warning notification timings. It reaches no human
+page receiver while muted. The measured 219900s BYOK stock could cross in about
+11h if it keeps aging; that prediction is conditional, not fresh acceptance.
+
+After an authorized prod provisioning dispatch, read back all five paused flags,
+900s freshness, BYOK routing, exact unchanged backlog thresholds and the agent
+mute. Record the running backend release identity and fresh clock-guard sample
+before importing. Undo an incorrect import using the provisioner's backup; do
+not restore the known 120s false-page arm as a rollout shortcut. Reverting these
+definitions requires another authorized provisioning apply; source edits alone
+do not change production Grafana.

@@ -85,7 +85,12 @@ def test_cohort_registry_and_live_switch_contract():
     rows = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=loader)['flags']
     by_key = {row['key']: row for row in rows}
     for key in KILL_SWITCHES:
-        assert by_key[key]['lifecycle'] == 'ops_kill'
+        # Live default-off controls may be cohort ramps or permanent opt-in knobs;
+        # default-on controls remain incident kill switches in the registry.
+        if KILL_SWITCHES[key]:
+            assert by_key[key]['lifecycle'] == 'ops_kill'
+        else:
+            assert by_key[key]['lifecycle'] in {'ops_kill', 'config_switch', 'rollout'}
         assert kill_switch(key, flags={}) is KILL_SWITCHES[key]
         disabled = (
             'off'
@@ -95,6 +100,7 @@ def test_cohort_registry_and_live_switch_contract():
                 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
                 'PROJECTION_DRAIN_CLAIM_AWARE',
                 'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+                'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
                 'PROJECTION_PRIVACY_REFUSAL_RESUME',
             }
             else 'false'
