@@ -234,3 +234,16 @@ def test_malformed_reference_fails_before_any_provider_write(value):
 
 def test_legacy_event_id_is_escaped_and_stays_on_primary():
     assert selection.event_path('event/#?') == selection.BASE + '/calendars/primary/events/event%2F%23%3F'
+
+
+def test_disconnected_grant_status_keeps_explicit_scope_and_owner_isolation(provider, monkeypatch):
+    from routers import integrations
+
+    store, owner, _, _ = provider
+    monkeypatch.setattr(integrations.users_db, 'get_integration', lambda *_: {'connected': False})
+    status = integrations.get_integration('google_calendar', uid='omi-A')
+    assert status.connected is False and status.read_selection_configured is False
+    store['omi-A'] = {prefs.account_key(owner['primary']): ['team/#?@group.test']}
+    status = integrations.get_integration('google_calendar', uid='omi-A')
+    assert status.connected is False and status.read_selection_configured is True
+    assert integrations.get_integration('google_calendar', uid='omi-B').read_selection_configured is False

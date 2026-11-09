@@ -43,8 +43,11 @@ creation destination and does not remove previously imported memories.
 | macOS | Apps → Calendar import panel; shared owner-authorized API client and grant reader; settings/onboarding/import/chat reads consume the same backend selection |
 | Windows/Linux | Settings → Integrations → Google Calendar; same authenticated API and owner fence; server tools use the shared read authority |
 
-The macOS cookie reader remains available only when the Omi account has no Google
-grant. Failure of an existing grant/status read must not silently import another
+The macOS cookie reader remains available only when the backend confirms that
+the Omi account has no Google grant and no saved read selection. The integration
+status exposes `read_selection_configured` even after disconnection; a saved or
+unverifiable scope requires reconnect/error, never browser fallback.
+Failure of an existing grant/status read must not silently import another
 browser account's unselected calendar. The presently unreferenced
 `GoogleCalendarReadAdapter` is not a serving path; future adoption must consume
 this same authority rather than reintroducing a primary-only source.
@@ -55,12 +58,13 @@ this same authority rather than reintroducing a primary-only source.
 - [x] Selected-calendar fan-out, pagination, identity and mutation routing
 - [x] All active backend caller migration
 - [x] Flutter, macOS and Windows/Linux selection controls
-- [x] Backend calendar/linking/context regressions: 160 tests across 21 isolated files
+- [x] Backend calendar/linking/context regressions: 161 tests across 21 isolated files
 - [x] Firestore emulator persistence/reconnect/account isolation integration: 2 tests
-- [x] Flutter UI/transport: 8 tests; iPhone 16 Pro simulator loopback journey:
+- [x] Flutter UI/transport: 10 tests; iPhone 16 Pro simulator loopback journey:
       primary default → multiple calendars → persisted reopen → secondary-only reads
-- [x] macOS compile and 13 production transport/auth/reader tests
-- [ ] macOS named QA app picker journey
+- [x] macOS compile and 30 production transport/auth/reader/parser tests
+- [x] macOS named QA app with local Auth/Firestore emulators: cancel, save,
+      reload, secondary-only reads and removable inaccessible calendar
 - [x] Windows/Linux typecheck, 30 UI/transport/owner-fence tests and changed-file ESLint
 - [ ] Generated API/schema consumers and repository preflight
 - [ ] Final diff review and exact-head CI; remain draft until required gates pass
@@ -82,6 +86,6 @@ deleted by this change.
 Before readiness, record live Personal and Workspace test-account results for
 calendar discovery, selected secondary reads, reconnect and access revocation.
 This verifies Google's grant/admin policy boundary; synthetic contract fixtures
-do not replace it. Native UI qualification and exact-head CI must also pass.
+do not replace it. Exact-head CI must also pass.
 Customer confirmation and store/backend releases are later states, separate from
 technical merge readiness.

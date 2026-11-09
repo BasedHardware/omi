@@ -43,6 +43,7 @@ struct CalendarFetchParameters: Equatable {
 enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
   case notSignedIn
+  case savedSelectionNeedsGrant
   case sessionExpired
   case cookieDecryptionFailed(String)
   case networkError(String)
@@ -56,6 +57,8 @@ enum CalendarReaderError: LocalizedError, Equatable {
     case .notSignedIn:
       return
         "Not signed into Google in any browser. Open calendar.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+    case .savedSelectionNeedsGrant:
+      return "Reconnect Google Calendar to restore access to your selected calendars."
     case .sessionExpired:
       return "Your Google session expired. Reload calendar.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
@@ -220,11 +223,14 @@ enum CalendarOutcomeParser {
 // MARK: - CalendarReaderService
 
 actor CalendarReaderService {
+  typealias LegacyRead = @Sendable (CalendarFetchParameters, Bool) async throws -> [CalendarEvent]
   static let shared = CalendarReaderService()
   private let calendarAPI: APIClient
+  private let legacyRead: LegacyRead?
 
-  init(calendarAPI: APIClient = .shared) {
+  init(calendarAPI: APIClient = .shared, legacyRead: LegacyRead? = nil) {
     self.calendarAPI = calendarAPI
+    self.legacyRead = legacyRead
   }
 
   /// Read calendar events, preferring the account's server-held Google OAuth
@@ -248,26 +254,38 @@ actor CalendarReaderService {
   ) async throws
     -> [CalendarEvent]
   {
+    guard let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { throw APIError.unauthorized }
     // Only an absent grant falls through to the legacy browser reader. A failed
     // grant read must not silently switch to an unselected calendar/account.
     if let granted = try await readEventsViaGrant(
       daysBack: daysBack,
       daysForward: daysForward,
-      maxResults: maxResults
+      maxResults: maxResults,
+      authorizationSnapshot: owner
     ) {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
       return granted
     }
 
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
+    if let legacyRead {
+      let result = try await legacyRead(
+        .normalized(daysBack: daysBack, daysForward: daysForward, maxResults: maxResults), userInitiated)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
+      return result.sorted { $0.startTime > $1.startTime }
+    }
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     await APIKeyService.shared.waitForKeys()
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack,
       daysForward: daysForward,
       maxResults: maxResults,
       userInitiated: userInitiated
     )
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
     return events.sorted { $0.startTime > $1.startTime }
   }
 
@@ -276,10 +294,18 @@ actor CalendarReaderService {
   func readEventsViaGrant(
     daysBack: Int,
     daysForward: Int,
-    maxResults: Int
+    maxResults: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [CalendarEvent]? {
-    guard let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { throw APIError.unauthorized }
-    guard try await calendarAPI.googleCalendarGrantConnected(authorizationSnapshot: owner) else { return nil }
+    guard let owner = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(owner)
+    else { throw APIError.unauthorized }
+    let status = try await calendarAPI.googleCalendarGrantStatus(authorizationSnapshot: owner)
+    if !status.connected {
+      guard let configured = status.readSelectionConfigured else { throw APIError.invalidResponse }
+      if configured { throw CalendarReaderError.savedSelectionNeedsGrant }
+      return nil
+    }
     let events = try await calendarAPI.googleCalendarGrantEvents(
       daysBack: daysBack,
       daysForward: daysForward,
@@ -308,7 +334,7 @@ actor CalendarReaderService {
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
-      case .notSignedIn, .noBrowserFound:
+      case .notSignedIn, .noBrowserFound, .savedSelectionNeedsGrant:
         return .needsSignIn(message: error.errorDescription ?? "Sign into Google to connect.")
       case .sessionExpired:
         return .needsSignIn(message: error.errorDescription ?? "Your Google session expired.")

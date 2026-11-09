@@ -57,16 +57,19 @@ class GeneratedImportJobResponse {
 class GeneratedIntegrationResponse {
   final String appKey;
   final bool connected;
+  final bool? readSelectionConfigured;
 
   const GeneratedIntegrationResponse({
     required this.appKey,
     required this.connected,
+    this.readSelectionConfigured,
   });
 
   factory GeneratedIntegrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedIntegrationResponse(
       appKey: _required(_readFieldValue<String>(_readField(json, const ["app_key"]), "app_key", _readString, requiredField: true, nullable: false), "app_key"),
       connected: _required(_readFieldValue<bool>(_readField(json, const ["connected"]), "connected", _readBool, requiredField: true, nullable: false), "connected"),
+      readSelectionConfigured: _readFieldValue<bool>(_readField(json, const ["read_selection_configured"]), "read_selection_configured", _readBool, requiredField: false, nullable: true),
     );
   }
 
@@ -74,6 +77,7 @@ class GeneratedIntegrationResponse {
     return {
       'app_key': appKey,
       'connected': connected,
+      'read_selection_configured': readSelectionConfigured,
     };
   }
 }

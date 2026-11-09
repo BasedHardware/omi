@@ -286,10 +286,63 @@ import XCTest
         XCTAssertEqual(AuthRetryURLStub.attempts, failStatus ? 1 : 2)
       }
       AuthRetryURLStub.reset()
-      AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false}")
+      AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false,\"read_selection_configured\":false}")
       let absent = try await reader.readEventsViaGrant(daysBack: 1, daysForward: 1, maxResults: 1)
       XCTAssertNil(absent)
       XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+
+      for configured in [true, nil] as [Bool?] {
+        AuthRetryURLStub.reset()
+        let field = configured == true ? ",\"read_selection_configured\":true" : ""
+        AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false\(field)}")
+        do {
+          _ = try await reader.readEvents(daysBack: 1, daysForward: 1, maxResults: 1)
+          XCTFail("A saved or unverifiable selection must never fall through to browser cookies")
+        } catch {
+          if configured == true {
+            XCTAssertEqual(error as? CalendarReaderError, .savedSelectionNeedsGrant)
+          } else {
+            XCTAssertTrue(error is APIError)
+          }
+        }
+        XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+      }
+    }
+
+    func testLegacyCalendarReadCannotPublishAfterSameUIDReauthentication() async throws {
+      try configureRefreshableSession()
+      await establishOwnerForAuthTest("user-1")
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
+      await client.setTestAuthHeader("Bearer synthetic-token")
+      AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false,\"read_selection_configured\":false}")
+      let started = expectation(description: "Legacy read admitted")
+      let release = AsyncStream<Void>.makeStream()
+      let reader = CalendarReaderService(
+        calendarAPI: client,
+        legacyRead: { _, _ in
+          started.fulfill()
+          var iterator = release.stream.makeAsyncIterator()
+          _ = await iterator.next()
+          return []
+        })
+      let operation = Task { try await reader.readEvents() }
+      let admitted = await XCTWaiter.fulfillment(of: [started], timeout: 2)
+      XCTAssertEqual(admitted, .completed)
+      await transitionOwnerForAuthTest(to: nil)
+      await transitionOwnerForAuthTest(to: "user-1")
+      release.continuation.yield(())
+      release.continuation.finish()
+      do {
+        _ = try await operation.value
+        XCTFail("A prior-session legacy read must not be published")
+      } catch {
+        guard case APIError.unauthorized = error else {
+          return XCTFail("Expected owner authorization failure")
+        }
+      }
     }
 
     func testFeatureVoidRoutesUseShared401Recovery() async throws {

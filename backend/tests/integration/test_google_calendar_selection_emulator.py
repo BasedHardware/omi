@@ -24,10 +24,20 @@ async def test_selection_persists_reconnects_and_never_crosses_google_or_omi_acc
             path = '/v1/calendar/google/calendars'
             initial = (await client.get(path)).json()
             assert initial['selected_ids'] == [state['google_account']]
+            status_path = '/v1/integrations/google_calendar'
+            assert (await client.get(status_path)).json()['read_selection_configured'] is False
             result = await client.put(
                 path, json={'account_id': state['google_account'], 'selected_ids': ['work@group.calendar.test']}
             )
             assert result.status_code == 200
+            assert (await client.get(status_path)).json()['read_selection_configured'] is True
+            assert (await client.post('/__qa/provider', json={'connected': False})).status_code == 200
+            status = (await client.get(status_path)).json()
+            assert status['connected'] is False and status['read_selection_configured'] is True
+            before = len(calls)
+            assert (await client.get('/v1/calendar/google/events')).status_code == 400
+            assert len(calls) == before
+            await client.post('/__qa/provider', json={'connected': True})
             events = (await client.get('/v1/calendar/google/events')).json()
             assert [row['title'] for row in events] == ['Team meeting']
             # New helper invocation reads the actual stored document, not fixture

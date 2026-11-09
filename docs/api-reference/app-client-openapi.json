@@ -20692,6 +20692,18 @@
             "description": "Whether the integration is connected",
             "title": "Connected",
             "type": "boolean"
+          },
+          "read_selection_configured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Google Calendar has an explicit saved read scope, even if its grant is disconnected",
+            "title": "Read Selection Configured"
           }
         },
         "required": [

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/google_calendars.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
@@ -20,6 +21,40 @@ class _Env implements EnvFields {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => Env.init(_Env()));
+
+  test('malformed catalogs and access denial are typed failures, never an empty selection', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'owner'});
+    await SharedPreferencesUtil.init();
+    PlatformManager.initializeForLocalHarness();
+    final previous = HttpOverrides.current;
+    HttpOverrides.global = null;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var status = 200;
+    server.listen((request) async {
+      await request.drain<void>();
+      request.response.statusCode = status;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(status == 200 ? '{"account_id":null}' : '{"detail":"access_denied"}');
+      await request.response.close();
+    });
+    Env.overrideApiBaseUrl('http://127.0.0.1:${server.port}/');
+    try {
+      final owner = GoogleCalendarService.meetingCacheOwner;
+      await expectLater(
+        googleCalendarSelection(owner),
+        throwsA(isA<GoogleCalendarSelectionFailure>().having((e) => e.problem.kind, 'kind', ApiProblemKind.decode)),
+      );
+      status = 403;
+      await expectLater(
+        googleCalendarSelection(owner),
+        throwsA(isA<GoogleCalendarSelectionFailure>().having((e) => e.problem.kind, 'kind', ApiProblemKind.forbidden)),
+      );
+    } finally {
+      Env.clearApiBaseUrlOverrideForTesting();
+      HttpOverrides.global = previous;
+      await server.close(force: true);
+    }
+  });
 
   test('real HTTP catalog/save round trip invalidates prior meeting reads and refuses a stale owner', () async {
     SharedPreferences.setMockInitialValues({'uid': 'owner'});

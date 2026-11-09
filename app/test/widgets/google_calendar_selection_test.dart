@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/google_calendars.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/google_calendar_selection_page.dart';
@@ -115,6 +116,20 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pump();
     expect(writes, 0);
+  });
+
+  testWidgets('lost calendar access hides protected rows instead of displaying stale choices', (tester) async {
+    await open(tester, (owner, {selection}) async {
+      if (selection != null) {
+        throw const GoogleCalendarSelectionFailure(ApiProblem(ApiProblemKind.forbidden));
+      }
+      return const GoogleCalendarSelection('primary-id', calendars, {'primary-id'});
+    });
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Personal'), findsNothing);
+    expect(find.text('Team'), findsNothing);
+    expect(find.text('Refresh'), findsOneWidget);
   });
 
   testWidgets('repeated Save during a pending request is single flight', (tester) async {

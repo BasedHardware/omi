@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 
@@ -47,29 +47,44 @@ class GoogleCalendarSelection {
       );
 }
 
+class GoogleCalendarSelectionFailure implements Exception {
+  const GoogleCalendarSelectionFailure(this.problem);
+  final ApiProblem problem;
+}
+
 Future<GoogleCalendarSelection> googleCalendarSelection(
   String owner, {
   GoogleCalendarSelection? selection,
 }) async {
   bool current() => owner.isNotEmpty && owner == GoogleCalendarService.meetingCacheOwner;
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/calendar/google/calendars',
-    headers: {},
-    method: selection == null ? 'GET' : 'PUT',
-    body: selection == null
-        ? ''
-        : jsonEncode({
-            'account_id': selection.accountId,
-            'selected_ids': selection.selectedIds.toList(),
-          }),
+  final result = await executeApi<GoogleCalendarSelection>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/calendar/google/calendars',
+      method: selection == null ? 'GET' : 'PUT',
+      body: selection == null
+          ? ''
+          : jsonEncode({
+              'account_id': selection.accountId,
+              'selected_ids': selection.selectedIds.toList(),
+            }),
+    ),
     canSend: current,
+    decode: (body) {
+      try {
+        return GoogleCalendarSelection.fromJson(jsonDecode(body) as Map<String, dynamic>);
+      } on TypeError {
+        throw const FormatException('Invalid calendar selection response');
+      }
+    },
   );
-  if (!current() || response?.statusCode != 200) {
+  if (!current()) {
     throw StateError('calendar_selection_unavailable');
   }
-  final result = GoogleCalendarSelection.fromJson(
-    jsonDecode(utf8.decode(response!.bodyBytes)) as Map<String, dynamic>,
-  );
-  if (selection != null) GoogleCalendarService.invalidateMeetings();
-  return result;
+  switch (result) {
+    case ApiSuccess<GoogleCalendarSelection>(:final data):
+      if (selection != null) GoogleCalendarService.invalidateMeetings();
+      return data;
+    case ApiFailure<GoogleCalendarSelection>(:final problem):
+      throw GoogleCalendarSelectionFailure(problem);
+  }
 }

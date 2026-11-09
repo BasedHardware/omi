@@ -11,7 +11,7 @@ from functools import partial
 from unittest.mock import patch
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
@@ -31,6 +31,7 @@ if __name__ == '__main__':
 
 from database import google_calendar_preferences as preferences
 from routers import google_calendar as routes
+from routers import integrations as integration_routes
 from utils.retrieval.tools import google_utils
 
 
@@ -41,7 +42,7 @@ async def calendar_fixture(uid: str = 'calendar-qa', project: str = 'demo-omi-ca
         raise RuntimeError('Calendar QA requires an explicit loopback Firestore emulator and demo project')
     db = firestore.Client(project=project, credentials=AnonymousCredentials())
     db.collection('users').document(uid).set({'qa_fixture': True})
-    state = {'uid': uid, 'google_account': 'personal@example.test', 'secondary_available': True}
+    state = {'uid': uid, 'google_account': 'personal@example.test', 'secondary_available': True, 'connected': True}
     calls = []
 
     def provider(request: httpx.Request) -> httpx.Response:
@@ -72,11 +73,50 @@ async def calendar_fixture(uid: str = 'calendar-qa', project: str = 'demo-omi-ca
 
     app = FastAPI()
     app.include_router(routes.router)
+
+    @app.get('/v1/account/cutover/control')
+    def local_account_admission():
+        # The native shell requires this bootstrap before allowing UI input.
+        # This explicit demo-only legacy account never enters a migration.
+        return {
+            'schema_version': 1,
+            'state': 'legacy',
+            'account_generation': 0,
+            'ui_generation': 0,
+            'api_generation': 0,
+            'client_action': 'none',
+            'offline_queue_instruction': 'none',
+            'stranded_new_data': False,
+            'legacy_writes_allowed': True,
+            'product_traffic_allowed': True,
+            'auth_bootstrap_reachable': True,
+        }
+
+    @app.get('/v1/integrations/google_calendar')
+    def google_status():
+        return integration_routes.get_integration('google_calendar', uid=state['uid'])
+
+    @app.post('/__qa/provider')
+    def set_provider_state(values: dict):
+        # Fixture-only external-provider faults; this app is never mounted by
+        # production and is bound to loopback with a demo Firestore project.
+        if any(
+            key not in {'connected', 'secondary_available'} or not isinstance(value, bool)
+            for key, value in values.items()
+        ):
+            raise HTTPException(400, 'Unknown fixture setting')
+        state.update(values)
+        return {'ok': True}
+
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: state['uid']
     get_preferences, save_preferences = preferences.get_selections, preferences.save_selection
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as google:
         with (
-            patch.object(routes, '_get_google_calendar_token', lambda _uid: ('synthetic-token', {'connected': True})),
+            patch.object(
+                integration_routes.users_db,
+                'get_integration',
+                lambda *_: {'connected': state['connected'], 'access_token': 'synthetic-token'},
+            ),
             patch.object(google_utils, 'get_auth_client', lambda: google),
             patch.object(preferences, 'get_selections', partial(get_preferences, firestore_client=db)),
             patch.object(preferences, 'save_selection', partial(save_preferences, firestore_client=db)),

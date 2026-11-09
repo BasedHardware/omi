@@ -7,6 +7,20 @@
       "description": "Production Calendar settings in an isolated iPhone simulator; persisted secondary-only selection with primary creation destination. Synthetic Google provider and local Firestore.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "002-desktop-macos-multiple-calendars.png",
+      "platform": "desktop-macos",
+      "description": "Named macOS QA app using production picker and HTTP transport against real Omi routes and local Firestore; both calendars saved.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-desktop-macos-inaccessible-calendar.png",
+      "platform": "desktop-macos",
+      "description": "Saved secondary calendar becomes inaccessible; its selected row remains removable without substituting primary. Synthetic provider fault.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }

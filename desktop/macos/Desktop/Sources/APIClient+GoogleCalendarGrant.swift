@@ -46,10 +46,15 @@ extension APIClient {
   func googleCalendarGrantConnected(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Bool {
-    let response: IntegrationConnectionResponse = try await get(
+    try await googleCalendarGrantStatus(authorizationSnapshot: authorizationSnapshot).connected
+  }
+
+  func googleCalendarGrantStatus(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> IntegrationConnectionResponse {
+    try await get(
       "v1/integrations/\(googleCalendarAppKey)",
       authorizationSnapshot: authorizationSnapshot)
-    return response.connected
   }
 
   /// Google's consent URL for the Calendar grant. The backend owns the redirect
@@ -119,10 +124,12 @@ struct ReadableGoogleCalendar: Decodable, Identifiable {
 struct IntegrationConnectionResponse: Decodable {
   let connected: Bool
   let appKey: String?
+  let readSelectionConfigured: Bool?
 
   enum CodingKeys: String, CodingKey {
     case connected
     case appKey = "app_key"
+    case readSelectionConfigured = "read_selection_configured"
   }
 }
 

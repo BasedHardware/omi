@@ -3301,6 +3301,7 @@ export interface IntegrationNotificationResponse {
 export interface IntegrationResponse {
   app_key: string;
   connected: boolean;
+  read_selection_configured?: boolean | null;
 }
 
 export interface InterventionCreate {

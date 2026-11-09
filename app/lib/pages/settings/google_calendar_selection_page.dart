@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/google_calendars.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -67,9 +68,16 @@ class _GoogleCalendarSelectionPageState extends State<GoogleCalendarSelectionPag
         ),
       );
       if (mounted) Navigator.of(context).pop();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _failed = true);
+        setState(() {
+          _failed = true;
+          if (error is GoogleCalendarSelectionFailure &&
+              {ApiProblemKind.authTerminal, ApiProblemKind.forbidden, ApiProblemKind.notFound}
+                  .contains(error.problem.kind)) {
+            _data = null;
+          }
+        });
         OmiFeedback.error(context, context.l10n.connectionErrorDesc);
       }
     } finally {
