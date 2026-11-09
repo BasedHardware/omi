@@ -21,7 +21,6 @@ def work(segment, start, seconds):
 
 def test_fifo_runner_records_separate_queries_owner_comparison_and_rollover_stop(monkeypatch, caplog):
     _clock(monkeypatch)
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
     owner = np.array([[1.0, 0.0]], dtype=np.float32)
     matcher, host, _ = live(monkeypatch, [owner, owner])
     caplog.set_level('INFO')

@@ -45,7 +45,6 @@ def _stored_card(card_id='ol-1', state='pending', **overrides):
 
 @pytest.fixture
 def harness(monkeypatch):
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('OPEN_LOOPS_ENABLED', 'on')
     # Hermetic: the zone lookup and read-scope cache would otherwise reach Firestore.
     monkeypatch.setattr(router.notification_db, 'get_user_time_zone', lambda uid: None)
@@ -225,10 +224,3 @@ def test_answer_already_answered_card_maps_to_409(client, monkeypatch):
     response = client.post(f'/v1/review/open-loops/{DATE_STR}/{CARD_ID}/answer', json={'action': 'remind'})
 
     assert response.status_code == 409 and response.json()['detail'] == 'open_loop_card_already_answered'
-
-
-def test_review_surface_off_hides_the_open_loop_routes(client, monkeypatch):
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
-
-    assert client.get('/v1/review/open-loops').status_code == 404
-    assert client.post(f'/v1/review/open-loops/{DATE_STR}/{CARD_ID}/answer', json={'action': 'done'}).status_code == 404

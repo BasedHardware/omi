@@ -150,7 +150,6 @@ def projection_fixture():
 
 def test_persisted_sibling_leaves_sweep_without_success_or_claim_release(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')  # Uses the unprefixed production ledger name, entirely in memory.
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     client, store, binding = projection_fixture()
     before = deepcopy(client.rows)
     assert store.hold_for_quarantine('good', binding, 100)

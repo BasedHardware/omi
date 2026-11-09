@@ -47,7 +47,6 @@ def _env(monkeypatch):
     monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'true')
     for name in (
         config.EPISODES_ENABLED_ENV,
-        config.EPISODES_PERCENT_ENV,
         config.EPISODE_F_JOIN_ENABLED_ENV,
         config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV,
     ):

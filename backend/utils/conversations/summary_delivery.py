@@ -17,7 +17,7 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
-from config.summary_guarantee import deadline_seconds, enabled
+from config.summary_guarantee import deadline_seconds
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
@@ -128,7 +128,7 @@ def rearm_on_revision_change(existing: Row, write: Row, *, now: float | None = N
 
 def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     """Called on plaintext inside the existing write codec: zero reads."""
-    if not enabled(uid) or 'structured' not in data:
+    if 'structured' not in data:
         return
     current = time.time() if now is None else now
     structured = data['structured']
@@ -189,7 +189,7 @@ def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
     another generation through the background repair path; the finalizer has
     already checked its job/revision/lease before calling this predicate.
     """
-    if not enabled(uid) or row.get('finalization_job_id') != job_id or present(row.get('structured')):
+    if (row.get('finalization_job_id') != job_id) or (present(row.get('structured'))):
         return False
     return refusal({**row, 'finalization_job_id': None}) is None
 
@@ -210,7 +210,7 @@ def creation_result(write: Row, uid: str) -> Row | None:
 
 def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     """Inside the existing revision-fenced transaction, before its write."""
-    if not enabled(uid) or 'summary_output_present' not in write:
+    if 'summary_output_present' not in write:
         return None
     current = time.time() if now is None else now
     for name in ('summary_first_pending_at', 'summary_title_provenance', 'summary_completed_at', 'summary_due_at'):

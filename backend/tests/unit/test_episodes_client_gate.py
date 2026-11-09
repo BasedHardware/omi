@@ -67,9 +67,6 @@ def fake_redis(monkeypatch):
 @pytest.fixture(autouse=True)
 def _admitted_by_default(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_CLIENT_CHANNELS_ENV, raising=False)
 
 
 def _sample(name, **labels):
@@ -164,10 +161,8 @@ def test_an_unadmitted_caller_leaves_no_marker(fake_redis, http, monkeypatch):
 # --------------------------------------------------------------------------- the client channel is the cohort
 
 
-@pytest.mark.parametrize(
-    'headers', [{'X-Omi-App-Channel': 'store'}, {'X-Omi-App-Channel': 'nightly'}, {'X-Omi-App-Channel': ''}, None]
-)
-def test_store_missing_or_unknown_channels_see_no_episodes_and_leave_no_marker(fake_redis, http, monkeypatch, headers):
+@pytest.mark.parametrize('headers', [{'X-Omi-App-Channel': 'nightly'}, {'X-Omi-App-Channel': ''}, None])
+def test_missing_or_unknown_channels_see_no_episodes_and_leave_no_marker(fake_redis, http, monkeypatch, headers):
     monkeypatch.setattr(router_module.service, 'live_episode', lambda uid: pytest.fail('must not read'))
     request = {'headers': headers} if headers is not None else {}
     if headers is None:
@@ -179,30 +174,20 @@ def test_store_missing_or_unknown_channels_see_no_episodes_and_leave_no_marker(f
     assert client_gate.client_seen('uid-1') is False
 
 
-def test_beta_channel_is_admitted_by_default_and_store_by_config(fake_redis, http, monkeypatch):
-    beta = _sample('omi_episode_client_requests_total', channel='beta', outcome='admitted')
-    store_closed = _sample('omi_episode_client_requests_total', channel='store', outcome='channel_closed')
-    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'BETA'}).json()['enabled'] is True
-    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'store'}).json()['enabled'] is False
-    assert _sample('omi_episode_client_requests_total', channel='beta', outcome='admitted') == beta + 1
-    assert _sample('omi_episode_client_requests_total', channel='store', outcome='channel_closed') == store_closed + 1
-    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'beta,store')
-    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'store'}).json()['enabled'] is True
+@pytest.mark.parametrize('channel', ['beta', 'store'])
+def test_both_app_channels_are_permanently_admitted(fake_redis, http, channel):
+    before = _sample('omi_episode_client_requests_total', channel=channel, outcome='admitted')
+    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': channel}).json()['enabled'] is True
+    assert _sample('omi_episode_client_requests_total', channel=channel, outcome='admitted') == before + 1
+    assert client_gate.client_seen('uid-1')
 
 
-def test_channel_config_parsing(monkeypatch):
-    monkeypatch.delenv(config.EPISODES_CLIENT_CHANNELS_ENV, raising=False)
-    assert config.episodes_client_channels() == {'beta'}
-    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, '  ')
-    assert config.episodes_client_channels() == {'beta'}
-    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, ' Beta , STORE, unknown ')
+def test_unknown_client_channels_remain_denied():
     assert config.episodes_client_channels() == {'beta', 'store'}
-    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'nonsense')
-    assert config.episodes_client_channels() == frozenset()
-    assert config.client_channel_admitted('beta') is False
-    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'beta')
-    assert config.client_channel_admitted(None) is False
-    assert config.client_channel_admitted('unknown') is False
+    assert config.client_channel_admitted('beta')
+    assert config.client_channel_admitted('store')
+    assert not config.client_channel_admitted(None)
+    assert not config.client_channel_admitted('unknown')
 
 
 # --------------------------------------------------------------------------- listen spends only with a marker
@@ -273,8 +258,6 @@ def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypa
 
 
 def test_the_allowlist_bypasses_the_percentage_but_not_the_marker(fake_redis, monkeypatch):
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '0')
-    monkeypatch.setenv(config.EPISODES_UID_ALLOWLIST_ENV, 'david')
     assert config.episodes_enabled_for('david') is True
     assert client_gate.episode_work_enabled('david') is False
     assert _run_moment(monkeypatch, 'david')[0] == []

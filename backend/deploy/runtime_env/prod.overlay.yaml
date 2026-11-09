@@ -53,8 +53,8 @@ overlay:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
-        # Fleet-off live residual goes to batch, not Soniox (David 11-03). The listen chart pins
-        # SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT at the serving 100. Rollback: UNSUPPORTED '' and HINTABLE 100.
+        # Fleet-off live residual goes to batch, not Soniox (David 11-03). Auto-language
+        # batch admission is permanent. Rollback: UNSUPPORTED '' and HINTABLE 100.
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh', category: ops_kill}
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -73,8 +73,6 @@ overlay:
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
@@ -111,10 +109,6 @@ overlay:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
-        STT_ROUTING_MODE:
-          value: 'on'
-        STT_ROUTING_ON_PERCENT:
-          value: '100'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
@@ -185,9 +179,6 @@ overlay:
           category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
-          category: rollout
-        SPEAKER_MATCH_SCORES_ENABLED:
-          value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
@@ -293,8 +284,6 @@ overlay:
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -399,9 +388,6 @@ overlay:
           category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
-          category: rollout
-        SPEAKER_MATCH_SCORES_ENABLED:
-          value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
@@ -591,8 +577,6 @@ overlay:
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -745,9 +729,6 @@ overlay:
           SPEAKER_GROUPING_MODE:
             value: incumbent
             category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
-            category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
@@ -892,9 +873,6 @@ overlay:
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
             category: rollout
-          SYNC_DURABLE_STATUS_RECONCILIATION:
-            value: 'true'
-            category: rollout
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
@@ -974,7 +952,6 @@ overlay:
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -1015,9 +992,6 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
-          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
-            value: 'true'
-            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
           HOSTED_DIARIZATION_API_URL:
@@ -1074,9 +1048,6 @@ overlay:
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
             category: rollout
-          REVIEW_SURFACE_MODE:
-            value: 'on'
-            category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
             category: rollout
@@ -1109,9 +1080,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
             category: rollout
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -1235,9 +1203,6 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          FIRST_SUMMARY_DEADLINE_ENABLED:
-            value: 'true'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -1288,9 +1253,6 @@ overlay:
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
-            category: rollout
-          SYNC_LEGACY_COMPLETION_CONVERGENCE:
-            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
@@ -1368,7 +1330,6 @@ overlay:
           # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -1402,9 +1363,6 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
-          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
-            value: 'true'
-            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
           HOSTED_DIARIZATION_API_URL:
@@ -1478,9 +1436,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -1593,9 +1548,6 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          FIRST_SUMMARY_DEADLINE_ENABLED:
-            value: 'true'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -1646,9 +1598,6 @@ overlay:
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
-            category: rollout
-          SYNC_LEGACY_COMPLETION_CONVERGENCE:
-            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
@@ -1734,7 +1683,6 @@ overlay:
           # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Activated at runtime 2026-10-27 02:07Z (lead 5da7dc/ebc45a) after the 5% unsupported-language held
           # loop; declared here so a train carries the serving value instead of resetting it to false.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'true', category: ops_kill}
@@ -1833,9 +1781,6 @@ overlay:
           SPEAKER_GROUPING_MODE:
             value: incumbent
             category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
-            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -1927,17 +1872,11 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          FIRST_SUMMARY_DEADLINE_ENABLED:
-            value: 'true'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
-            category: rollout
-          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
-            value: 'true'
             category: rollout
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED:
             value: 'true'

@@ -66,9 +66,6 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_NEGATIVE_CACHE_TTL',
     }
 )
-# The API domain and the Review routes run on backend-listen. Pusher's
-# pusher/main.py entrypoint does not mount routers/review.py.
-_REVIEW_SURFACE_LISTEN_ONLY = frozenset({'REVIEW_SURFACE_MODE'})
 # Demand policy owns /v4/listen provider handovers and client_state presence.
 # Pusher only receives the adopted transcript/audio; it never selects this lane.
 _DEMAND_LISTEN_ONLY = frozenset(
@@ -162,8 +159,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
-            "STT_ROUTING_MODE",
-            "STT_ROUTING_ON_PERCENT",
             "STT_ROUTING_TARGETS_JSON",
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
@@ -230,7 +225,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | _TRANSLATION_LISTEN_ONLY
-    | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
@@ -245,13 +239,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Only listen reads the mobile/web server-batch-only cohorts: server_batch.selected via
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
-            "SERVER_BATCH_ONLY_MOBILE_PERCENT",
-            # Same listen-only admission path for learned auto-language mobile/web captures.
-            "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
             "SERVER_BATCH_ONLY_WEB_PERCENT",
-            # Only listen opens visibility-gated Modulate previews; pusher
-            # retains raw custody/finalization and never evaluates this cohort.
-            "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -289,8 +277,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
-            "STT_ROUTING_MODE",
-            "STT_ROUTING_ON_PERCENT",
             "STT_ROUTING_TARGETS_JSON",
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
@@ -356,7 +342,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | _TRANSLATION_LISTEN_ONLY
-    | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY

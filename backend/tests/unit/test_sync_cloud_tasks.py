@@ -1266,6 +1266,7 @@ def _load_sync_router_for_fast_path():
         'utils.conversations',
         'utils.conversations.process_conversation',
         'utils.sync.bridge',
+        'utils.sync.completed_status',
         'utils.conversations.factory',
         'utils.conversations.location',
         'utils.other',
@@ -1539,11 +1540,12 @@ def _load_sync_router_for_fast_path():
     spec.loader.exec_module(module)
     module.sync_redrive = types.SimpleNamespace(
         enabled=lambda: os.getenv('SYNC_DURABLE_REDRIVE_GUARD') == 'true',
-        legacy_convergence_enabled=lambda: os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE') == 'true',
+        legacy_convergence_enabled=lambda: True,
         preserve_missing_job=MagicMock(return_value='redrive_required'),
         converge_legacy_completion=MagicMock(return_value=None),
     )
     module.redrive_policy = module.sync_redrive
+    sys.modules['utils.sync.completed_status'].get_completed_legacy_status = MagicMock(return_value=None)
     module.uid_sequencer.enabled = MagicMock(return_value=False)
     module.uid_sequencer.production_fence_mode = MagicMock(
         side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None
@@ -4366,7 +4368,6 @@ async def test_legacy_completion_convergence_before_provider_under_lock(monkeypa
         latest_job={'job_id': 'job-1', 'status': 'processing'},
     )
     try:
-        monkeypatch.setenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', 'true')
         module.sync_job_uses_ledger_fence = MagicMock(return_value=False)
         module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.LEGACY)
         module.sync_redrive.converge_legacy_completion = MagicMock(return_value={'status': 'completed'})

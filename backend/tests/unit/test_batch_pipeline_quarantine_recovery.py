@@ -30,7 +30,6 @@ def setup(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', 'synthetic-owner')
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
     item = WorkItem('bad', binding.owner_id, 1, 'gs://synthetic/audio', 5, Priority.FRESH, privacy_generation=0)
     result = {'segment_id': 'good', 'result_uri': 'gs://synthetic/good', 'outcome': 'success'}

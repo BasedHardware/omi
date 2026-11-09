@@ -204,7 +204,7 @@ def test_each_standalone_writer_fences_its_actual_commit(redis, monkeypatch, sur
             legal_holds, 'external_write_fence', lambda uid: fenced_action_item_commit('unrelated-authority')
         )
     if surface.startswith('review'):
-        monkeypatch.setattr(review_store, 'require_enabled', lambda uid: None)
+
         monkeypatch.setattr(review_store, 'user', lambda uid: client)
         monkeypatch.setattr(review_store, 'client', lambda: client)
         monkeypatch.setattr(review_changes.memory_ledger, 'append_commit_with_builder', commit)

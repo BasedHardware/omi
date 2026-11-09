@@ -140,8 +140,6 @@ env:
     value: "live"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
     value: "false"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "0"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -180,8 +178,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT

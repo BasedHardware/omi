@@ -78,7 +78,6 @@ def policy_env(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', '')
-    monkeypatch.delenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', raising=False)
     monkeypatch.delenv('SERVER_BATCH_ONLY_PLATFORMS', raising=False)
 
 
@@ -163,7 +162,6 @@ def test_unknown_or_unqualified_language_profile_preserves_live(profile):
 
 
 def test_admitted_socket_rollover_survives_mobile_cohort_rollback(monkeypatch):
-    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
     h = host()
     h.request.source = 'omi'
     h.client_device_context = SimpleNamespace(platform='ios')
@@ -183,21 +181,17 @@ def test_admitted_socket_rollover_survives_mobile_cohort_rollback(monkeypatch):
 
 
 @pytest.mark.parametrize('platform', ['ios', 'android'])
-def test_mobile_percent_is_nested_in_actual_batch_admission(monkeypatch, platform):
+def test_mobile_selection_is_nested_in_actual_batch_admission(monkeypatch, platform):
     row = capture()
     row.update(client_platform=platform, source='omi')
 
     def admitted(owner):
         return server_batch.eligible(row, owner, batch_admitted=resolve_batch_policy(owner).batch_enabled)
 
-    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
     assert not admitted('owner')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     assert admitted('owner')
-    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', 'bad')
-    assert not admitted('owner')
-    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '50')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '25')
     for index in range(100):
         owner = f'synthetic-{index}'

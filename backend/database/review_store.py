@@ -5,7 +5,6 @@ nothing. The offered source snapshot pins speaker metadata across cooldowns.
 Uncertain answers suppress an evidence fingerprint, never an entire identity.
 """
 
-import os
 import hashlib
 import json
 from contextlib import contextmanager
@@ -71,13 +70,6 @@ def is_user_request(uid):
     return _USER_REQUEST_OWNER.get() == uid
 
 
-def require_enabled(uid: str | None = None) -> None:
-    if uid is not None and _USER_REQUEST_OWNER.get() == uid:
-        return
-    if os.environ.get('REVIEW_SURFACE_MODE', 'off').strip().lower() != 'on':
-        raise ReviewConflict('review_surface_disabled')
-
-
 def enqueue_review_proposal(
     uid: str,
     item: ReviewItem | ReviewItemV2,
@@ -93,7 +85,6 @@ def enqueue_review_proposal(
     Identity, spelling and agent proposals share this queue. New evidence_version explicitly
     permits re-asking an uncertain answer. Resolved decisions remain terminal.
     """
-    require_enabled(uid)
     item = enrich_spelling(item, source or {}, overwrite=True)
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():

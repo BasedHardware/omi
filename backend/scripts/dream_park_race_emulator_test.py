@@ -37,7 +37,6 @@ os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_dream_park_race_emulator_key_32_bytes")
 os.environ.setdefault("DREAM_AGENT_ENABLED", "true")
 os.environ.setdefault("DREAM_AGENT_ELIGIBILITY", "all")
-os.environ.setdefault("REVIEW_SURFACE_MODE", "on")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:

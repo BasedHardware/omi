@@ -49,7 +49,6 @@ def harness(monkeypatch):
         pytest.fail('Loopback Firestore emulator is required')
     db = firestore.Client(project='demo-review', credentials=AnonymousCredentials())
     monkeypatch.setattr(_client, '_firestore_client', db)
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     uid = uuid4().hex
     user = db.collection('users').document(uid)
     user.set({'data_protection_level': 'standard'})
@@ -70,7 +69,6 @@ def enqueue(uid, item=None, version='v1'):
 
 def test_default_off_gate_blocks_every_route(harness, monkeypatch):
     client, uid, user, db = harness
-    monkeypatch.delenv('REVIEW_SURFACE_MODE')
     for method, path, body in [
         ('get', '/v1/review/items', None),
         ('get', '/v2/review/items', None),

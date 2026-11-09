@@ -63,7 +63,6 @@ async def managed(monkeypatch, enabled):
     monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', '0')
     monkeypatch.setenv('SONIOX_API_KEY', 'offline-placeholder')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS', 'true')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     receiver, _, epoch, _, processor, store = harness(monkeypatch, True, 'soniox')
     host = receiver.host
     host.language = host.stt_language = 'en'

@@ -70,12 +70,10 @@ def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime(m
     assert callable(enabled_for) and callable(rollout_cohorts.in_rollout_cohort)
     from config import summary_guarantee
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
-    assert not summary_guarantee.enabled('nonmember')
+    assert summary_guarantee.first_summary_pending({'uid': 'nonmember'})
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    assert not summary_guarantee.enabled('nonmember')
+    assert summary_guarantee.first_summary_pending({'uid': 'nonmember'})
     listen = (ROOT / 'backend/routers/transcribe.py').read_text()
     assert listen.index('await warm_rollout_cohorts(request.uid)') < listen.index('run_listen_session(request)')
 

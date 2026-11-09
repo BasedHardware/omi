@@ -18,7 +18,6 @@ OWNER = 'synthetic-admission-contention'
 @pytest.fixture
 def database(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(dream_store, 'mode', lambda: 'on')
     monkeypatch.setattr(dream_store._review_store(), 'encode_doc', lambda uid, value: value)
     return DreamFirestore()

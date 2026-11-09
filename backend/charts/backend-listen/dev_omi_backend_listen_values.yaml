@@ -148,8 +148,6 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: ""
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "0"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
@@ -222,8 +220,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -368,8 +364,6 @@ env:
     value: ""
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
-  - name: REVIEW_SURFACE_MODE
-    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
@@ -502,12 +496,8 @@ env:
     value: "15"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "false"
-  - name: STT_ROUTING_MODE
-    value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
-  - name: STT_ROUTING_ON_PERCENT
-    value: "0"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE

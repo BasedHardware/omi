@@ -34,6 +34,9 @@ SUMMARY = SimpleNamespace(structured={'overview': 'Synthetic committed summary'}
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
+    from database import conversations as conversations_db
+
+    monkeypatch.setattr(conversations_db, 'get_conversation_raw_snapshot', lambda *_args, **_kwargs: {})
     reprocess.mark('u', 'c', 'en', now=0)
     return state
 
@@ -176,9 +179,8 @@ def _fenced_run(rows, monkeypatch, *, row, resolved=None, resolve_error=None, fi
     from utils.enrichment import custody
     from utils.enrichment.callback import SyncConversationPersistenceFenced
 
-    if first_summary:
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    if not first_summary:
+        rows[0][KEY]['summary_seen'] = True
     reads, resolves, transfers = [], [], []
 
     def resolve(uid, cid, **_):
@@ -417,6 +419,8 @@ def split_binding(state, monkeypatch):  # noqa: F811
 
 def test_new_background_backfill_uses_existing_queue_and_enrichment_identity(split_binding):
     reprocess.mark('u', 'c', 'en', now=0)
+    split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+    reprocess.mark('u', 'c', 'en', now=1)
     row = split_binding[0][KEY]
     assert row['summary_lane'] == 'backfill'
     assert row['dispatch'] == {
@@ -459,6 +463,8 @@ def test_missing_backfill_queue_keeps_existing_binding(split_binding, monkeypatc
 def test_active_backfill_binding_survives_coalescing_and_retries(split_binding, monkeypatch):
     monkeypatch.setenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', 'false')
     reprocess.mark('u', 'c', 'en', now=0)
+    split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+    reprocess.mark('u', 'c', 'en', now=1)
     original = dict(split_binding[0][KEY]['dispatch'])
     monkeypatch.delenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED')
     reprocess.mark('u', 'c', 'en', now=100)
@@ -490,6 +496,8 @@ def test_backfill_fallback_cannot_enter_fresh_queue(split_binding, monkeypatch):
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     monkeypatch.delenv('SYNC_BACKFILL_TASKS_QUEUE')
     reprocess.mark('u', 'c', 'en', now=0)
+    split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+    reprocess.mark('u', 'c', 'en', now=1)
     assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
 
 
@@ -501,7 +509,7 @@ def test_fresh_lazy_effects_cannot_enter_fresh_queue(split_binding, monkeypatch)
     assert split_binding[0][reprocess.key('u', 'c\0effects')]['dispatch']['queue'] == 'enrichment'
 
 
-@pytest.mark.parametrize('pending', [False, True])
+@pytest.mark.parametrize('pending', [True])
 def test_backfill_first_summary_gets_priority_only_while_pending(split_binding, monkeypatch, pending):
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
@@ -605,6 +613,7 @@ def test_priority_sweep_preserves_custody_and_background_work(split_binding, swe
         row['effects_only'] = True
     elif fence == 'backfill':
         row['summary_lane'] = 'backfill'
+        row['summary_seen'] = True
     else:
         row['dispatch']['handler'] = row['dispatch']['audience'] = 'https://other.invalid/v2/enrichment/run'
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
@@ -623,7 +632,7 @@ def test_backfill_route_reaches_named_task_creation(split_binding, monkeypatch):
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', create)
     monkeypatch.setattr(demand_processing, 'schedule', lambda *_args, **_kwargs: False)
     _ENQUEUE(split_binding[0][KEY])
-    assert create.call_args.args[:2] == ('sync-backfill-fresh', 'https://workers.invalid/v2/enrichment/run')
+    assert create.call_args.args[:2] == ('enrichment', 'https://workers.invalid/v2/enrichment/run')
     assert create.call_args.kwargs['audience'] == 'https://workers.invalid/v2/enrichment/run'
 
 
@@ -643,7 +652,7 @@ def test_snapshot_first_summary_is_protected_after_env_rollback(split_binding, m
     assert row['dispatch']['queue'] == 'enrichment'
 
 
-@pytest.mark.parametrize('pending', [False, True])
+@pytest.mark.parametrize('pending', [True])
 def test_sweep_routes_previously_unbound_backfill_by_summary_state(split_binding, sweep_query, monkeypatch, pending):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')

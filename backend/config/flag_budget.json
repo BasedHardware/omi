@@ -1,6 +1,6 @@
 {
   "about": "CI flag budget for the transcription pipeline env surface plus explicitly registered helper-backed kill switches (ADR 0006, backend/docs/adr/0006-pipeline-flag-budget.md). tests/unit/test_flag_budget.py fails when a read name is missing here, a registry entry drifts, or budget drifts.",
-  "as_of": "2026-10-29",
+  "as_of": "2026-11-09",
   "scope": [
     "utils/batch_pipeline/**/*.py",
     "diarizer/batch_pipeline*.py",
@@ -23,8 +23,8 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 165,
-  "count": 268,
+  "budget": 161,
+  "count": 264,
   "names": {
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
@@ -255,8 +255,6 @@
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {"seeded": "2026-10-25"},
     "STT_RESILIENT_RECONNECT": {"seeded": "2026-10-25"},
     "STT_ROUTING_DISRUPTION_GATE": {"seeded": "2026-10-25"},
-    "STT_ROUTING_MODE": {"seeded": "2026-10-25"},
-    "STT_ROUTING_ON_PERCENT": {"seeded": "2026-10-25"},
     "STT_ROUTING_TARGETS_JSON": {"seeded": "2026-10-25"},
     "STT_SERVICE_MODELS": {"seeded": "2026-10-25"},
     "STT_SHED_CONNECT_FAILURES": {"seeded": "2026-10-25"},
@@ -273,13 +271,11 @@
     "SYNC_CLOCK_RUN_PARTITION_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_CONTENT_ID_SECRET": {"seeded": "2026-10-25"},
     "SYNC_DURABLE_REDRIVE_GUARD": {"seeded": "2026-10-25"},
-    "SYNC_DURABLE_STATUS_RECONCILIATION": {"seeded": "2026-10-25"},
     "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_EMPTY_SUCCESS_GUARD_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_FRESH_CONVERSATION_TURN": {"seeded": "2026-10-25"},
     "SYNC_FRESH_MAX_AGE_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {"seeded": "2026-10-25"},
     "SYNC_LIVE_OVERLAP_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_MAX_VAD_SEGMENT_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_MINIMAL_REDRIVE_ENABLED": {"seeded": "2026-10-25"},
@@ -297,6 +293,10 @@
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
+    "STT_ROUTING_MODE": {"on": "2026-11-09", "replaced_by": null},
+    "STT_ROUTING_ON_PERCENT": {"on": "2026-11-09", "replaced_by": null},
+    "SYNC_DURABLE_STATUS_RECONCILIATION": {"on": "2026-11-09", "replaced_by": null},
+    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {"on": "2026-11-09", "replaced_by": null},
     "DREAM_NO_PROGRESS_STOP_MODE": {"on": "2026-11-09", "replaced_by": null},
     "DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT": {"on": "2026-11-09", "replaced_by": null},
     "MENTOR_PIPELINE": {

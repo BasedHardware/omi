@@ -52,7 +52,6 @@ def store(monkeypatch):
     from database import vector_db
 
     monkeypatch.setattr(vector_db, 'index', None)
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(review_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(task_intelligence_control, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(memory_ledger, 'transactional', lambda fn: fn)

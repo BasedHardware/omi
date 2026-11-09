@@ -66,9 +66,8 @@ def test_legacy_lock_loss_fails_closed(monkeypatch):
         )
 
 
-def test_rollout_defaults_dark(monkeypatch):
+def test_redrive_stays_dark_and_legacy_convergence_is_permanent(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.delenv('SYNC_DURABLE_REDRIVE_GUARD', raising=False)
-    monkeypatch.delenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', raising=False)
     assert not sync_redrive.enabled()
-    assert not sync_redrive.legacy_convergence_enabled()
+    assert sync_redrive.legacy_convergence_enabled()

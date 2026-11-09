@@ -21,7 +21,6 @@ from config.policy.listen import (
     current_listen_policy,
     window_allocation,
     window_percent,
-    routing_mode,
     routing_timeout,
     disruption_gate,
     routing_enabled,
@@ -86,7 +85,7 @@ def test_resolver_equals_unpinned_getters(monkeypatch, mode, percent):
     assert policy.routing_on == routing_on(uid)
     assert policy.window_allocated == window_allocation(uid)
     assert policy.window_allocation_percent == window_percent(strict=True)
-    assert policy.routing_mode == routing_mode()
+    assert policy.routing_mode == 'on'
     assert policy.targets == registry()
     assert policy.routing_redis_timeout_seconds == routing_timeout()
     assert policy.routing_disruption_gate == disruption_gate()
@@ -223,7 +222,6 @@ async def test_restart_reconnect_loads_without_resolving(monkeypatch):
     resolver.reset_mock(side_effect=True)
     resolver.side_effect = AssertionError('restart must load, never resolve')
     current_listen_policy.set(None)  # fresh pod / process
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     second, source = await store.load_listen_policy('owner', 'conversation', resolver=resolver, redis_client=redis)
     assert source == 'redis' and second == first and second.routing_on
     resolver.assert_not_called()
@@ -407,7 +405,7 @@ async def test_ttl_refresh_failure_does_not_discard_loaded_arm():
 )
 def test_unused_malformed_knobs_do_not_block_admission(key):
     policy = resolve_listen_policy('owner', flags={key: 'bad'})
-    assert not policy.routing_on and policy.invalid_fields
+    assert policy.routing_on and policy.invalid_fields
     current_listen_policy.set(policy)
     if key == 'STT_ROUTING_DISRUPTION_GATE':
         with pytest.raises(ValueError):
@@ -421,7 +419,9 @@ def test_invalid_demand_defaults_keep_restart_content_hash(flags):
 
 
 def test_default_policy_is_exactly_the_current_defaults():
-    assert resolve_listen_policy('owner', flags={}) == ListenSessionPolicy()
+    assert resolve_listen_policy('owner', flags={}) == replace(
+        ListenSessionPolicy(), routing_mode_raw='on', routing_on_percent=100.0, routing_on=True
+    )
 
 
 @pytest.mark.parametrize('raw', ['bad', '-1', '0.02', '5', 'nan'])

@@ -157,4 +157,3 @@ prod:
   # revert it. Not an ops constant, so it is not in the ops file.
   review:
     RATE_LIMIT_BOOST: [backend]  # event multiplier, default 1.0; prod serves 100
-    REVIEW_SURFACE_MODE: [backend-sync-backfill]  # rollout flag on one service only

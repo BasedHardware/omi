@@ -199,7 +199,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "STT_CAP_DISPATCH_COHORT": "",
         "STT_CAP_DISPATCH_LANES": "live",
         "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
-        "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
         "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": "false",
         "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": "false",
         "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT": "g1",
@@ -219,7 +218,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
         "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
         "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
-        "AUDIO_ARCHIVE_COALESCE_ENABLED": "true",
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
         "AUDIO_ARCHIVE_STOP_PCM_PERCENT": "0",
@@ -334,7 +332,7 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
 
     # Deepgram retired 2026-08-27: the cloud credential binding is gone too.
     assert "DEEPGRAM_API_KEY" not in bindings
-    assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
+    assert "SPEAKER_MATCH_SCORES_ENABLED" not in literals
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     for retired in (
         "CONVERSATION_RELEVANCE_JEV_ENABLED",

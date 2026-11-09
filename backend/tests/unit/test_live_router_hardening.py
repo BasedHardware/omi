@@ -159,8 +159,6 @@ class MemoryRedis:
 def isolated(monkeypatch):
     monkeypatch.delenv('STT_ROUTING_TARGETS_JSON', raising=False)
     monkeypatch.delenv('STT_ROUTING_DISRUPTION_GATE', raising=False)
-    monkeypatch.delenv('STT_ROUTING_MODE', raising=False)
-    monkeypatch.delenv('STT_ROUTING_ON_PERCENT', raising=False)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
     monkeypatch.setattr(live_router, '_target_circuits', {})
@@ -206,11 +204,9 @@ async def _dial_soniox_only_chain(connect):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode,on_percent', [('on', '100'), ('shadow', '0'), ('off', '0')])
+@pytest.mark.parametrize('mode,on_percent', [('on', '100')])
 @pytest.mark.parametrize('exclusion', ['ramp_zero', 'account_bench', 'capability'])
 async def test_excluded_target_is_never_dialed_in_any_mode(monkeypatch, mode, on_percent, exclusion):
-    monkeypatch.setenv('STT_ROUTING_MODE', mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', on_percent)
     entry = {'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}
     if exclusion == 'ramp_zero':
         entry['ramp_percent'] = 0
@@ -227,8 +223,6 @@ async def test_excluded_target_is_never_dialed_in_any_mode(monkeypatch, mode, on
 @pytest.mark.parametrize('error', [RuntimeError('synthetic router fault'), CostHealthUnavailable('synthetic outage')])
 @pytest.mark.parametrize('exclusion', ['ramp_zero', 'account_bench'])
 async def test_router_fault_never_dials_excluded_target(monkeypatch, error, exclusion):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     entry = {'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}
     if exclusion == 'ramp_zero':
         entry['ramp_percent'] = 0
@@ -376,11 +370,9 @@ async def test_fresh_global_snapshot_does_not_waive_unread_language_bench():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['on', 'shadow', 'off'])
+@pytest.mark.parametrize('mode', ['on'])
 @pytest.mark.parametrize('fail', [False, True])
 async def test_custom_endpoint_replaces_withdrawn_default_only_on_canary(monkeypatch, mode, fail):
-    monkeypatch.setenv('STT_ROUTING_MODE', mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     _prime_chain(
         monkeypatch,
         [
@@ -443,8 +435,6 @@ async def test_custom_endpoint_replaces_withdrawn_default_only_on_canary(monkeyp
 
 @pytest.mark.asyncio
 async def test_router_error_restores_only_permitted_static_routes(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     _prime_chain(
         monkeypatch,
         [
@@ -796,8 +786,6 @@ def test_missing_or_invalid_stage_never_defaults_to_prod(monkeypatch):
 @pytest.mark.parametrize('recovery', [False, True])
 async def test_engine_mismatch_static_retry_keeps_restricted_family_denied(monkeypatch, recovery):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -853,8 +841,6 @@ async def test_engine_mismatch_static_retry_keeps_restricted_family_denied(monke
 @pytest.mark.parametrize('recovery', [False, True])
 async def test_engine_mismatch_static_retry_still_serves_partial_ramp_cohort(monkeypatch, recovery):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -1047,7 +1033,6 @@ async def test_env_change_during_await_never_publishes_under_new_identity(monkey
 @pytest.mark.parametrize('paused_op', ['mget', 'set'])
 async def test_fleet_refresh_mid_await_never_publishes_under_new_identity(monkeypatch, paused_op):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     started = asyncio.Event()
     gate = asyncio.Event()
     op_name = paused_op
@@ -1179,7 +1164,6 @@ async def test_selection_and_account_benches_retain_both_deadlines():
 
 @pytest.mark.asyncio
 async def test_active_account_dominates_then_expired_account_yields_to_selection(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [1000.0]
     redis = MemoryRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
@@ -1313,7 +1297,6 @@ async def test_write_result_malformed_state_batch_fails_to_local_retry(malformed
 
 @pytest.mark.asyncio
 async def test_endpoint_rotation_keeps_credential_shared_account_bench(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
     monkeypatch.delenv('SONIOX_WS_URL', raising=False)
@@ -1439,10 +1422,9 @@ async def _flush_bench_writes(pod):
 
 
 @pytest.mark.asyncio
-async def test_off_mode_account_quarantine_is_shared_across_pods(monkeypatch):
+async def test_account_quarantine_is_shared_across_pods(monkeypatch):
     """A quota/auth rejection on one pod withdraws the credential everywhere, routing off or not."""
     _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     now = [time.time()]
     redis = MemoryRedis(clock=lambda: now[0])
@@ -1463,26 +1445,9 @@ async def test_off_mode_account_quarantine_is_shared_across_pods(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_off_mode_selection_quarantine_stays_routing_only(monkeypatch):
-    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    now = [time.time()]
-    redis = MemoryRedis(clock=lambda: now[0])
-    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
-    pod._check_identity()
-    pod.quarantine('soniox', 'selection', 600.0)
-    await _flush_bench_writes(pod)
-    assert live_stt_state.fleet_state_key('soniox') not in redis.data
-    assert live_stt_state.fleet_state_key('soniox', account=True) not in redis.data
-    assert not pod._pending_benches and not pod._benches
-
-
-@pytest.mark.asyncio
-async def test_off_mode_dial_is_denied_by_shared_account_bench(monkeypatch):
+async def test_dial_is_denied_by_shared_account_bench(monkeypatch):
     """End-to-end off-mode reproduction: the shared bench must raise NoPermittedTarget before any dial."""
     _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     now = [time.time()]
     redis = MemoryRedis(clock=lambda: now[0])
@@ -1496,40 +1461,6 @@ async def test_off_mode_dial_is_denied_by_shared_account_bench(monkeypatch):
     with pytest.raises(live_chain.NoPermittedTarget):
         await _dial_soniox_only_chain(connect)
     assert connect.await_count == 0
-
-
-@pytest.mark.asyncio
-async def test_off_mode_refresh_reads_account_state_only(monkeypatch):
-    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    now = [time.time()]
-    redis = MemoryRedis(clock=lambda: now[0])
-    pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
-    pod._check_identity()
-    # Routing-only evidence must exist in Redis yet never be read in off mode.
-    text_key, no_text_key = live_stt_state.fleet_score_keys('soniox', 'en', int(now[0] // 300))
-    redis.data[text_key] = '99'
-    redis.data[no_text_key] = '0'
-    redis.data[live_stt_state.fleet_state_key('soniox')] = f'selection:{now[0] + 600}'
-    redis.data[live_stt_state.fleet_state_key('soniox', account=True)] = f'account:{now[0] + 600}'
-    seen = []
-
-    class RecordingRedis(MemoryRedis):
-        async def mget(self, keys):
-            seen.extend(keys)
-            return await super().mget(keys)
-
-    pod._client = RecordingRedis(clock=lambda: now[0])
-    pod._client.data = redis.data
-    pod.cached_snapshot(['soniox'], 'en')
-    await pod.refresh_once()
-    assert live_stt_state.fleet_state_key('soniox', account=True) in seen
-    assert live_stt_state.fleet_state_key('soniox') not in seen
-    assert not any(':score:' in key for key in seen)
-    assert pod._interests == {}
-    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
-    assert state.bench == 'account' and state.excluded
 
 
 def _fake_leg_socket(*, endpoint=None, target=None, family='modulate', uid='synthetic', language='en'):
@@ -1569,7 +1500,6 @@ def test_fleet_endpoint_override_scopes_only_non_account_keys(monkeypatch):
 @pytest.mark.asyncio
 async def test_leg_transcript_outcome_scopes_custom_endpoint_only(monkeypatch, isolated):
     pod = isolated
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     monkeypatch.setattr(live_session, 'health', pod)
@@ -1617,8 +1547,6 @@ async def test_leg_transcript_outcome_scopes_custom_endpoint_only(monkeypatch, i
 @pytest.mark.parametrize('recovery', [False, True])
 async def test_endpoint_evidence_isolates_siblings_and_default(monkeypatch, isolated, recovery):
     pod = isolated
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
@@ -1666,8 +1594,6 @@ async def test_endpoint_evidence_isolates_siblings_and_default(monkeypatch, isol
 @pytest.mark.parametrize('recovery', [False, True])
 async def test_endpoint_serving_death_scopes_custom_endpoint_only(monkeypatch, isolated, recovery):
     pod = isolated
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
@@ -1700,8 +1626,6 @@ async def test_endpoint_serving_death_scopes_custom_endpoint_only(monkeypatch, i
 @pytest.mark.parametrize('recovery', [False, True])
 async def test_account_rejection_protects_siblings_and_default(monkeypatch, isolated, recovery):
     pod = isolated
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
@@ -1744,7 +1668,6 @@ async def test_account_rejection_protects_siblings_and_default(monkeypatch, isol
 
 @pytest.mark.asyncio
 async def test_stale_selection_write_learns_shared_account_bench(monkeypatch, isolated):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     now = [time.time()]
@@ -1765,53 +1688,11 @@ async def test_stale_selection_write_learns_shared_account_bench(monkeypatch, is
         state = pod_b.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
         assert state.bench == 'account' and state.excluded
         assert state.bench_until == pytest.approx(now[0] + 1800, abs=0.001)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     for endpoint in (endpoint_a, endpoint_b, None):
         state = pod_b.cached_snapshot(['modulate'], 'en', endpoint=endpoint)['modulate']
         assert state.bench == 'account' and state.excluded
         assert state.score == 0.5 and state.samples == 0
         assert state.bench_until == pytest.approx(now[0] + 1800, abs=0.001)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('warm_mode', ['on', 'shadow'])
-async def test_off_mode_snapshot_is_neutral_and_merges_account_only(monkeypatch, isolated, warm_mode):
-    pod = isolated
-    _prime_chain(monkeypatch, [{'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}])
-    monkeypatch.setenv('STT_ROUTING_MODE', warm_mode)
-    now = [time.time()]
-    monkeypatch.setattr(pod, '_clock', lambda: now[0])
-    pod._local[('soniox', 'en')].append((now[0], False))
-    pod._benches['soniox'] = ('selection', now[0] + 600)
-    pod._cached_scores[('soniox', 'en')] = live_health.ProviderState(score=0.1, samples=40)
-    pod._cached_benches['modulate'] = ('selection', now[0] + 600)
-    redis = pod._client
-    redis.data[live_stt_state.fleet_state_key('soniox')] = f'selection:{now[0] + 500:.3f}'
-    redis.data[live_stt_state.fleet_state_key('modulate')] = f'selection:{now[0] + 600:.3f}'
-    redis.data[live_stt_state.fleet_state_key('modulate', account=True)] = f'account:{now[0] + 1800:.3f}'
-    await pod.refresh_once()
-    cached_kind, cached_until = pod._cached_benches['modulate']
-    assert cached_kind == 'account' and cached_until == pytest.approx(now[0] + 1800, abs=0.001)
-
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
-    pod._cache_at = now[0] - live_health.CACHE_STALE_SECONDS - 1
-    pod._redis_retry_at = now[0] + 60
-    snapshot = pod.cached_snapshot(['soniox', 'modulate'], 'en')
-    soniox, modulate = snapshot['soniox'], snapshot['modulate']
-    assert soniox.score == 0.5 and soniox.samples == 0
-    assert soniox.bench is None
-    assert pod._benches['soniox'][0] == 'selection'
-    assert modulate.score == 0.5 and modulate.samples == 0
-    assert modulate.bench == 'account' and modulate.bench_until == pytest.approx(now[0] + 1800, abs=0.001)
-    assert modulate.excluded
-
-    connect = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
-    _, service = await _dial_soniox_only_chain(connect)
-    assert service == st.STTService.soniox and connect.await_count == 1
-
-    monkeypatch.setenv('STT_ROUTING_MODE', warm_mode)
-    state = pod.cached_snapshot(['soniox'], 'en')['soniox']
-    assert state.bench == 'selection' and state.bench_until == now[0] + 600
 
 
 def test_target_circuit_identity_follows_endpoint_credential_stage_and_family(monkeypatch):
@@ -1955,8 +1836,6 @@ def test_target_circuit_full_mixed_bench_keeps_family_default_unaffected(monkeyp
 @pytest.mark.parametrize('static_fails', [False, True])
 async def test_saturated_target_circuits_keep_static_chain(monkeypatch, isolated, recovery, static_fails):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     _prime_chain(
@@ -2255,7 +2134,6 @@ def test_custom_target_credential_rotation_clears_account_bench(monkeypatch):
 async def test_typed_custom_endpoint_serve_death_benches_only_that_endpoint(monkeypatch, isolated):
     """A custom-endpoint serve death must not bench the family default endpoint."""
     pod = isolated
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     scheduled = []
@@ -2332,8 +2210,6 @@ async def test_serve_death_endpoint_controls_and_account_family_scope(monkeypatc
 @pytest.mark.parametrize('fault', ['cache', 'router'])
 async def test_canary_fault_fallback_preserves_registry_targets(monkeypatch, recovery, fault):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     _prime_chain(
         monkeypatch,
         [
@@ -2395,8 +2271,6 @@ async def test_canary_fault_fallback_preserves_registry_targets(monkeypatch, rec
 
 @pytest.mark.asyncio
 async def test_cold_cache_fallback_keeps_distinct_ids_on_shared_breaker(monkeypatch, isolated):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     _prime_chain(
@@ -2448,8 +2322,6 @@ async def test_cold_cache_fallback_keeps_distinct_ids_on_shared_breaker(monkeypa
 @pytest.mark.asyncio
 async def test_known_restricted_state_demotes_behind_unknown_in_fallback(monkeypatch, isolated):
     pod = isolated
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     now = [1000.0]
     monkeypatch.setattr(pod, '_clock', lambda: now[0])
@@ -2501,8 +2373,6 @@ def test_unread_language_exception_carries_conservative_states_only():
 @pytest.mark.parametrize('fault', ['cache', 'router'])
 @pytest.mark.parametrize('withdrawal', ['ramp_zero', 'capability'])
 async def test_fault_fallback_keeps_custom_sibling_of_withdrawn_default(monkeypatch, fault, withdrawal):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     default = {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055}
     if withdrawal == 'ramp_zero':
         default['ramp_percent'] = 0

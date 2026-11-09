@@ -27,7 +27,6 @@ def db(monkeypatch):
         'failed_passes': 2,
     }
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)

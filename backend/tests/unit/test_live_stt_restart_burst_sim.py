@@ -163,8 +163,6 @@ def test_escape_still_serves_a_benched_target_when_it_is_the_only_one(monkeypatc
 
 @pytest.mark.asyncio
 async def test_escape_configured_tail_does_not_reappend_benched_family(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(
         live_chain.health,
         'cost_snapshot',

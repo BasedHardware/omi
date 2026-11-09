@@ -132,7 +132,6 @@ def main():
         )
         check('chat_restore', lambda: chat_edits.restore(uid, 'person', 'p', after, before, firestore_client=client))
         review_store.client = lambda: client
-        os.environ['REVIEW_SURFACE_MODE'] = 'on'
         change = ReviewChange(change_id='wq20-review', kind='update_person', title='Synthetic rename', created_at=now)
         check(
             'review_apply',

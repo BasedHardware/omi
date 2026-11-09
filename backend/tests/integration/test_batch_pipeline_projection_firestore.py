@@ -43,7 +43,6 @@ def lane(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     client = firestore.Client(project=f'demo-pr1-c-{uuid4().hex[:12]}', credentials=AnonymousCredentials())
     store = FirestoreStore(f'batch_pipeline_test_{uuid4().hex}', firestore_client=client)
     uid = f'synthetic-projection-{uuid4().hex}'
@@ -1409,7 +1408,6 @@ def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatc
     from database import batch_pipeline_projection_claim as claims
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     batch = lane.seed()
@@ -1484,7 +1482,6 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
     from google.api_core.exceptions import Aborted, InvalidArgument
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     # The emulator does not deterministically emit read-time contention. Inject
     # its explicit envelope at the real BatchGet transport boundary, as in the
     # shared contention qualification script; begin/rollback/retry/commit and

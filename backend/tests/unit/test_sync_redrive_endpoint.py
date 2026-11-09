@@ -17,7 +17,6 @@ def worker(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'legacy')
     monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
-    monkeypatch.setenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', 'true')
     redis = fakeredis.FakeRedis()
     database = StrictFirestore()
     monkeypatch.setattr(sync_jobs, 'r', redis)

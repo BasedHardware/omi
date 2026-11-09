@@ -29,7 +29,6 @@ def queue(monkeypatch):
     db.rows[('users', UID)] = {}
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)

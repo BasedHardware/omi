@@ -13,6 +13,7 @@ import pytest
 
 from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.batch_pipeline import projection
 from utils.sync import bridge
 from database.sync_ledger import sync_content_ledger_ref
@@ -45,7 +46,6 @@ def test_invalid_projection_binding_refused(binding, field, value):
 
 
 def test_read_contention_retry_uses_fresh_transactions_when_enabled(monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     from database import firestore_transaction_retry
 
     actual = firestore_transaction_retry.run_with_transaction_contention_retry
@@ -62,15 +62,13 @@ def test_read_contention_retry_uses_fresh_transactions_when_enabled(monkeypatch)
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
-def test_read_contention_default_off_and_non_contention_never_replayed(monkeypatch):
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+def test_read_contention_retries_and_non_contention_never_replayed(monkeypatch):
     client = Mock()
     operation = Mock(side_effect=Aborted('synthetic'))
     store = ProjectionStore(Mock(client=client))
-    with pytest.raises(Aborted):
+    with pytest.raises(FirestoreContentionExhausted):
         store.run(operation)
-    assert operation.call_count == 1
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    assert operation.call_count == 5
     operation = Mock(side_effect=InvalidArgument('not contention'))
     with pytest.raises(InvalidArgument):
         store.run(operation)
@@ -290,7 +288,6 @@ def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, m
 def test_batch_contention_control_retries_projection_transactions(monkeypatch, flag):
     from database import firestore_transaction_retry
 
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
     monkeypatch.setenv(flag, 'true')
     actual = firestore_transaction_retry.run_with_transaction_contention_retry
@@ -369,7 +366,6 @@ def test_late_writer_after_claim_takeover_replays_receipt_and_keeps_replacement_
     from utils.batch_pipeline.scheduler import owner_key
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')  # unprefixed production ledger name, entirely in memory
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
     monkeypatch.setattr('database.batch_pipeline_projection.writing', lambda *a, **k: contextlib.nullcontext())
     uid, sid, namespace = 'synthetic-owner', 'segment', 'batch_pipeline_dev'
@@ -504,8 +500,6 @@ def test_claim_lease_runs_the_first_chain_and_bounds_the_storm(monkeypatch, clai
         def sleep(self, seconds):
             self.now += seconds
 
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     clock = Clock()
     actual = firestore_transaction_retry.run_with_transaction_contention_retry
     # Production retry configuration: no estimate override and no clock
@@ -606,7 +600,6 @@ def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding
     'flag', ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED']
 )
 def test_contention_control_retains_existing_expired_transaction_restart(monkeypatch, flag):
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
     monkeypatch.setenv(flag, 'true')
     client = Mock()

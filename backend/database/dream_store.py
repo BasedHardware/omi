@@ -271,7 +271,6 @@ def acquire(
             return None, {'park': True}
         if (
             mode() == 'off'
-            or (not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
             or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
             or (not has_dirty and not hunt_due and trigger != 'manual')
@@ -287,9 +286,7 @@ def acquire(
                 'disabled'
                 if mode() == 'off'
                 else (
-                    'review_surface_off'
-                    if not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on'
-                    else (
+                    (
                         'ineligible'
                         if not (canary_eligible(uid, user) if canary else eligible(uid, user))
                         else 'not_due' if not has_dirty and not hunt_due else 'budget'

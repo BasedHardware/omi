@@ -530,8 +530,6 @@ async def test_censored_connect_rejections_never_accumulate_provider_circuit_fai
 async def test_engine_mismatch_cannot_abandon_an_earlier_rejected_leg(monkeypatch):
     from config.live_stt_registry import DEFAULT_TARGETS
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain, 'propose', lambda *args: list(DEFAULT_TARGETS[1:]))
     monkeypatch.setattr(
         live_chain, 'fallback_socket_is_serving', AsyncMock(side_effect=lambda raw: not raw.is_connection_dead)

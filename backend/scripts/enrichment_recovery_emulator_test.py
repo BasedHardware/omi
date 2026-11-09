@@ -43,7 +43,6 @@ LEASE = 120.0
 @pytest.fixture
 def ob(outbox_backend, monkeypatch):  # noqa: F811
     outbox_backend.store_harness.seed_user('o')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     return outbox_backend
 
@@ -97,7 +96,8 @@ def fault(kind):
     ],
 )
 def test_pl397_transient_dependency_retries_before_the_original_lease_expires(ob, monkeypatch, kind):
-    queued = put(ob)
+    # A later revision isolates retry custody from first-summary admission.
+    queued = put(ob, summary_seen=True)
     calls = []
     error = fault(kind)
 
@@ -123,7 +123,8 @@ def test_pl397_transient_dependency_retries_before_the_original_lease_expires(ob
 
 @pytest.mark.parametrize('kind', ['400', '401', '403', 'text_only'])
 def test_pl397_unexpected_fault_keeps_custody_until_expiry(ob, monkeypatch, kind):
-    queued = put(ob)
+    # A later revision isolates retry custody from first-summary admission.
+    queued = put(ob, summary_seen=True)
     error = fault(kind)
     monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0, monotonic=lambda: T0))
 
@@ -141,7 +142,8 @@ def test_pl397_unexpected_fault_keeps_custody_until_expiry(ob, monkeypatch, kind
 
 
 def test_pl397_retry_settlement_cannot_release_a_replacement_owner(ob, monkeypatch):
-    queued = put(ob)
+    # A later revision isolates retry custody from first-summary admission.
+    queued = put(ob, summary_seen=True)
     replacement = []
     monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0, monotonic=lambda: T0))
 
@@ -159,8 +161,6 @@ def test_pl397_retry_settlement_cannot_release_a_replacement_owner(ob, monkeypat
 
 @pytest.mark.parametrize('prefix_kind', ['leased', 'healthy_wake'])
 def test_pl398_bounded_watchdog_reaches_expired_debt_beyond_a_healthy_prefix(ob, prefix_kind, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '120')
     # More than the legacy sweep's ten pages of two rows. A stateless rescan
     # never reaches the tail. Postgres/sim may select actionable rows directly.

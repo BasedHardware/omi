@@ -116,7 +116,6 @@ def main():
                 raise Aborted('synthetic read-time contention')
         return original(request, **kwargs)
 
-    os.environ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED'] = 'true'
     os.environ['SYNC_LIVE_OVERLAP_ENABLED'] = 'true'
     os.environ['SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'] = 'off'
     os.environ['SYNC_SAFETY_WAL_DEDUPE_ENABLED'] = 'off'

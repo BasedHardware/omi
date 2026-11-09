@@ -468,8 +468,6 @@ async def test_four_distinct_modulate_targets_reach_healthy_fourth(monkeypatch, 
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -544,8 +542,6 @@ async def test_episode_deadline_clamps_dials_then_exhausts(monkeypatch, virtual_
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     targets = [
         {'id': 'parakeet-window', 'family': 'parakeet', 'cost_per_audio_hour': 0.02},
         {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.05},
@@ -938,8 +934,6 @@ async def test_real_dials_each_get_the_full_per_dial_budget(monkeypatch, virtual
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -997,8 +991,6 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
     monkeypatch.setattr(recovery_state, 'RECOVERY_DIAL_SECONDS', 0.001)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -1063,8 +1055,6 @@ async def test_connect_reject_settles_every_constructed_leg_once(monkeypatch, vi
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
     observations = []
     monkeypatch.setattr(pod, 'record_session', lambda *args, **kwargs: observations.append(args) or True)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -1141,8 +1131,6 @@ async def test_selected_target_declared_limits_shape_prefix(monkeypatch, virtual
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -2007,8 +1995,6 @@ async def test_soniox_429_surge_rejected_sessions_walk_once_without_shared_bench
     This is a capacity-error recovery proof over fake providers — not a
     claim that the production Deepgram account is funded for the wave."""
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
@@ -2144,8 +2130,6 @@ async def test_sustained_soniox_429_storm_skips_then_probe_recovers(monkeypatch,
 
     backoff = ConnectRefusalBackoff(clock=lambda: virtual_clock.now)
     monkeypatch.setattr(live_chain, 'connect_backoff', lambda: backoff)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])

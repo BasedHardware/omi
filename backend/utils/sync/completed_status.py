@@ -16,7 +16,6 @@ deleted (or surviving) conversation ID is ever echoed.
 """
 
 import logging
-import os
 from typing import Any
 
 from google.cloud import firestore
@@ -42,9 +41,6 @@ logger = logging.getLogger(__name__)
 
 
 def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
-    # No Firestore client or lookup on the dark path, including TTL misses.
-    if os.getenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'false').strip().lower() != 'true':
-        return None
     if not job_id or len(job_id) > 128 or '/' in job_id or job_id.startswith('bp_'):
         return None
     if job is not None and (job.get('uid') != uid or job.get('job_id') != job_id):

@@ -21,8 +21,6 @@ def summary_database_dependency():
 
 @pytest.fixture
 def enabled(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
 
 
@@ -40,31 +38,11 @@ def debt():
     return row
 
 
-def test_dark_defaults_and_no_shape_change_when_merge_is_disabled(monkeypatch):
+def test_first_summary_provenance_covers_known_owners_when_merge_is_disabled(monkeypatch):
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
-    monkeypatch.delenv('FIRST_SUMMARY_DEADLINE_ENABLED', raising=False)
-    row = minimum()
-    before = deepcopy(row)
-    delivery.prepare(row, 'u', now=100)
-    assert row == before
-    assert not flags.enabled('u') and not flags.repair_enabled()
-    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]), uid='u')
-    assert 'title_provenance' not in result.model_dump()
-
-
-def test_first_summary_provenance_is_cohort_scoped_when_merge_is_disabled(monkeypatch):
-    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
-    """PFS-F1: the gate being on somewhere must not stamp every owner's minimum."""
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     row = SimpleNamespace(transcript_segments=[])
-    assert flags.enabled() and not flags.enabled('outside-owner')
-    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()
     assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid=None).model_dump()
     assert 'title_provenance' not in build_deterministic_minimum_structured(row).model_dump()
-
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     assert build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()['title_provenance'] == (
         'server_minimum'
     )
@@ -116,8 +94,6 @@ def test_current_finalizer_finishes_completed_minimum_but_background_repair_cann
         {'finalization_job_id': None},
     ):
         assert not delivery.finalization_pending({**row, **changes}, 'u', 'current-job')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
-    assert not delivery.finalization_pending(row, 'u', 'current-job')
 
 
 @pytest.mark.parametrize('finish,expected', [(50, 1900), (1800, 200), (2100, None), (None, None)])
@@ -221,11 +197,8 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
         delivery.REPAIR_CONTEXT.reset(token)
 
 
-def test_allowlist_and_invalid_deadline_fail_closed(enabled, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    assert not flags.enabled('canary') and not flags.enabled('other')
+def test_invalid_deadlines_remain_bounded(enabled, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary')
-    assert flags.enabled('canary') and not flags.enabled('other')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')
     assert flags.deadline_seconds() == 120
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '999')

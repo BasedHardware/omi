@@ -18,7 +18,6 @@ MARKER = 'server_batch_only'
 PREVIEW_CUSTODY_MARKER = 'listen_preview_batch_custody'
 AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
 SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
-AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
 WEB_COHORT_SALT = 'server_batch_web_v1'
 # Fixed policy vocabulary, independent of operator input; Japanese is measured
 # but can never enter the experiment.
@@ -62,13 +61,7 @@ def continuation_language(host, capture: Mapping | None = None):
 
 
 def auto_selected(owner_id: str, platform: str | None) -> bool:
-    percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0'))
-    return bool(
-        platform in {'ios', 'android', 'web'}
-        and owner_id
-        and percent > 0
-        and cohort_bucket(owner_id, AUTO_COHORT_SALT) < percent
-    )
+    return bool(owner_id and platform in {'ios', 'android', 'web'})
 
 
 def enabled() -> bool:
@@ -80,8 +73,7 @@ def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
         return False
     platform = platform or ('macos' if source == 'desktop' else None)
     if platform in {'ios', 'android'}:
-        percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0'))
-        return bool(owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent)
+        return bool(owner_id)
     if platform == 'web':
         percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_WEB_PERCENT', '0'))
         return bool(owner_id and percent > 0 and cohort_bucket(owner_id, WEB_COHORT_SALT) < percent)
@@ -120,25 +112,6 @@ def owned(capture: Mapping) -> bool:
     return bool(
         capture.get('record_lane_owner') == 'batch_live_v1'
         and (capture.get(MARKER) is True or (capture.get('external_data') or {}).get(MARKER) is True)
-    )
-
-
-def visible_restore_selected(host) -> bool:
-    """New paid preview cohort is nested in durable mobile batch custody."""
-    percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT', '0'))
-    return bool(
-        (
-            getattr(host, 'server_batch_only', False) is True
-            or getattr(host, '_local_preview_engine_rescinded', False) is True
-        )
-        and owned(getattr(host, 'batch_record_capture', None) or {})
-        and getattr(getattr(host, 'client_device_context', None), 'platform', None) in {'ios', 'android'}
-        and not getattr(host, 'local_preview_batch', False)
-        and not getattr(host, 'use_custom_stt', False)
-        and not getattr(host, 'is_multi_channel', False)
-        and host.request.uid
-        and percent > 0
-        and cohort_bucket(host.request.uid, '') < percent
     )
 
 

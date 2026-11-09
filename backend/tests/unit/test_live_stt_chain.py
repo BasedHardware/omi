@@ -152,7 +152,6 @@ async def test_failed_session_provider_is_never_revisited(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_three_failed_connects_shed_all_open_breakers_with_retry_after(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setattr(
         live_chain.health,
         'cached_snapshot',
@@ -171,11 +170,11 @@ async def test_three_failed_connects_shed_all_open_breakers_with_retry_after(mon
             failed=set(),
             models=['modulate-velma-2', 'soniox', 'parakeet'],
             routing_uid='test',
+            _routing_static=True,
         )
     assert len(live_chain._recent_connect_failures) == 3
     for callback in callbacks.values():
         callback.reset_mock()
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
 
     with pytest.raises(live_chain.ProviderChainUnavailable) as raised:
         await live_chain.connect_configured_chain(
@@ -185,6 +184,7 @@ async def test_three_failed_connects_shed_all_open_breakers_with_retry_after(mon
             failed=set(),
             models=['modulate-velma-2', 'soniox', 'parakeet'],
             routing_uid='test',
+            _routing_static=True,
         )
 
     assert raised.value.retry_after >= 5
@@ -194,7 +194,6 @@ async def test_three_failed_connects_shed_all_open_breakers_with_retry_after(mon
 
 @pytest.mark.asyncio
 async def test_all_local_benches_with_fleet_healthy_do_not_shed(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: True)
     monkeypatch.setattr(
         live_chain.health,
@@ -212,6 +211,7 @@ async def test_all_local_benches_with_fleet_healthy_do_not_shed(monkeypatch):
         failed=set(),
         models=['modulate-velma-2', 'soniox'],
         routing_uid='test',
+        _routing_static=True,
     )
     assert selected == st.STTService.soniox
     primary.assert_not_awaited()
@@ -221,7 +221,6 @@ async def test_all_local_benches_with_fleet_healthy_do_not_shed(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_all_local_benches_with_fresh_fleet_outage_shed_without_connect_evidence(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: True)
     monkeypatch.setattr(
         live_chain.health,
@@ -243,6 +242,7 @@ async def test_all_local_benches_with_fresh_fleet_outage_shed_without_connect_ev
             failed=set(),
             models=['modulate-velma-2', 'soniox'],
             routing_uid='test',
+            _routing_static=True,
         )
 
     assert raised.value.retry_after >= 120
@@ -253,7 +253,6 @@ async def test_all_local_benches_with_fresh_fleet_outage_shed_without_connect_ev
 
 @pytest.mark.asyncio
 async def test_unknown_fleet_requires_configured_number_of_real_connect_failures(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_SHED_CONNECT_FAILURES', '2')
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda _providers, _language: {})
     st._modulate_circuit.record_serve_failure()
@@ -266,6 +265,7 @@ async def test_unknown_fleet_requires_configured_number_of_real_connect_failures
         failed=set(),
         models=['modulate-velma-2', 'soniox'],
         routing_uid='test',
+        _routing_static=True,
     )
     with pytest.raises(RuntimeError, match='exhausted'):
         await live_chain.connect_configured_chain(**kwargs)
@@ -1032,7 +1032,6 @@ async def test_rescue_probe_auth_records_on_the_probed_circuit(connect_backoff, 
 @pytest.mark.parametrize('cheap_fails', [False, True])
 async def test_batch_preview_preference_keeps_managed_vendor_failover(monkeypatch, cheap_fails):
     """The retirement preference still dials through policy and the ordinary chain."""
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'parakeet-window'])
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
     primary, language, model = st.get_stt_service_for_language(

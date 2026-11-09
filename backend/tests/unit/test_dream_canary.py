@@ -32,7 +32,6 @@ def canary(monkeypatch):
     db = DreamFirestore()
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_CANARY_UID', UID)
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(storage, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(review_store, 'get_firestore_client', lambda: db)

@@ -22,8 +22,6 @@ from utils.stt.soniox import SafeSonioxSocket
 async def idle_receiver(monkeypatch, *, language='en', enabled=True, benched=False, modulate=False):
     monkeypatch.setenv('STT_IDLE_REOPEN_COST_RESELECT_ENABLED', str(enabled).lower())
     monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '0')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     states = {
         'parakeet-window': GateState(stage=0, until=1e20),
         'modulate-velma-2': GateState(stage=0, until=1e20),

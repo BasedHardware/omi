@@ -22,7 +22,6 @@ async def test_old_generation_zero_settlements_stay_fenced_after_reset_and_idle_
     monkeypatch, target, connect, expire
 ):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     async with fakeredis.aioredis.FakeRedis(decode_responses=True) as redis:
         pod = live_health.FleetHealth(redis_client=redis)
         pending = []
@@ -69,8 +68,6 @@ async def test_old_generation_zero_settlements_stay_fenced_after_reset_and_idle_
 @pytest.mark.parametrize('recovery', ['true', 'false'])
 async def test_raw_connect_failure_captures_epoch_before_a_reset_during_handshake(monkeypatch, recovery):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', recovery)
     monkeypatch.setenv('LISTEN_STT_SAME_TARGET_RETRY_ENABLED', 'false')
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))

@@ -344,11 +344,6 @@ class ProjectionStore:
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-        if (
-            not (policy and policy.projection_contention)
-            and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
-        ):
-            return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
             # attempts=1: the outer budget owns every attempt, so an expired

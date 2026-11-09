@@ -1,4 +1,4 @@
-"""Pure default-off rollout reads; safe on async worker request paths."""
+"""Production sync redrive policy; safe on async worker request paths."""
 
 import os
 
@@ -10,6 +10,4 @@ def enabled() -> bool:
 
 
 def legacy_convergence_enabled() -> bool:
-    return (
-        stage.production_stage() and os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', 'false').strip().lower() == 'true'
-    )
+    return stage.production_stage()

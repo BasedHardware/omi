@@ -14,7 +14,6 @@ def admission_env(monkeypatch):
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     monkeypatch.delenv('SERVER_BATCH_ONLY_ENABLED', raising=False)
     monkeypatch.delenv('SERVER_BATCH_ONLY_WEB_PERCENT', raising=False)
-    monkeypatch.delenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', raising=False)
 
 
 def web(language='en'):
@@ -33,10 +32,7 @@ def web(language='en'):
 def test_web_defaults_live_even_with_auto_at_100(monkeypatch, percent):
     if percent is not None:
         monkeypatch.setenv('SERVER_BATCH_ONLY_WEB_PERCENT', percent)
-    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     h, row = web('multi')
-    assert not server_batch.request_eligible(h)
-    assert not server_batch.eligible(row, 'owner')
     assert not server_batch.suppress_live(h)
 
 
@@ -52,12 +48,9 @@ def test_declared_web_requires_owned_capture_before_suppression(monkeypatch):
 
 
 @pytest.mark.parametrize('language', ['multi', 'auto', ''])
-def test_auto_web_needs_auto_cohort_and_learned_supported_profile(monkeypatch, language):
+def test_auto_web_needs_learned_supported_profile(monkeypatch, language):
     monkeypatch.setenv('SERVER_BATCH_ONLY_WEB_PERCENT', '100')
     h, row = web(language)
-    assert not server_batch.request_eligible(h)
-    assert not server_batch.eligible(row, 'owner')
-    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     assert server_batch.request_eligible(h)
     assert server_batch.eligible(row, 'owner')
     h.batch_record_capture = row
@@ -114,5 +107,3 @@ def test_owned_web_survives_rollbacks_but_new_admission_stays_live(monkeypatch):
     h.batch_record_capture = row
     monkeypatch.setenv('SERVER_BATCH_ONLY_ENABLED', 'false')
     assert server_batch.suppress_live(h)
-    assert not server_batch.request_eligible(h)
-    assert not server_batch.eligible(row, 'owner')

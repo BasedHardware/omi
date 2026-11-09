@@ -36,8 +36,6 @@ def test_defaults_keep_modulate_identity_but_exclude_every_live_candidate(monkey
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'on', 'router_fault'])
 async def test_real_live_chain_never_dials_default_modulate(monkeypatch, mode):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on' if mode == 'router_fault' else mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_, **__: {})
     monkeypatch.setattr(live_chain.health, 'schedule', lambda coroutine, **_: coroutine.close())
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))

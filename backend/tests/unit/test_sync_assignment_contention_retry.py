@@ -59,7 +59,6 @@ def sdk_assignment(monkeypatch):
         'run_with_transaction_contention_retry',
         partial(run_with_transaction_contention_retry, sleep=lambda _: None, random_value=lambda: 0),
     )
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
 
     def build(*, read_errors=(), commit_errors=(), read_advance=None):
         store = _FakeFirestoreClient(None, list(commit_errors))
@@ -97,19 +96,7 @@ def persist(store):
     return conversations_db.assign_sync_conversation('synthetic-unit', chunk('canonical', 1000), firestore_client=store)
 
 
-@pytest.mark.parametrize('flag', [None, 'false'])
-def test_default_off_retains_read_abort_without_replay(sdk_assignment, monkeypatch, flag):
-    if flag is not None:
-        monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', flag)
-    store, reads = sdk_assignment(read_errors=[Aborted('contention')])
-    with pytest.raises(Aborted):
-        persist(store)
-    assert len(store.transactions) == len(reads) == 1
-    assert store.commits == []
-
-
 def test_enabled_read_abort_uses_fresh_transaction_and_commits_once(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(read_errors=[Aborted('contention')])
     result, created, _ = persist(store)
     assert created and result['id'] == 'canonical'
@@ -121,7 +108,6 @@ def test_enabled_read_abort_uses_fresh_transaction_and_commits_once(sdk_assignme
 
 
 def test_enabled_read_abort_has_finite_outer_budget(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(read_errors=[Aborted('contention') for _ in range(5)])
     with pytest.raises(FirestoreContentionExhausted):
         persist(store)
@@ -130,7 +116,6 @@ def test_enabled_read_abort_has_finite_outer_budget(sdk_assignment, monkeypatch)
 
 
 def test_commit_abort_keeps_sdk_retry_and_single_durable_write(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(commit_errors=[Aborted('commit contention')])
     persist(store)
     assert len(store.transactions) == 1
@@ -139,7 +124,6 @@ def test_commit_abort_keeps_sdk_retry_and_single_durable_write(sdk_assignment, m
 
 
 def test_sdk_exhaustion_cause_is_bounded_by_outer_budget(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(commit_errors=[Aborted('commit contention') for _ in range(25)])
     with pytest.raises(FirestoreContentionExhausted):
         persist(store)
@@ -149,7 +133,6 @@ def test_sdk_exhaustion_cause_is_bounded_by_outer_budget(sdk_assignment, monkeyp
 
 
 def test_expiry_restarts_still_work_inside_outer_contention_retry(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(
         read_errors=[None, Aborted('contention')],
         commit_errors=[InvalidArgument('The referenced transaction has expired or is no longer valid.')],
@@ -166,7 +149,6 @@ def test_nested_expiry_keeps_one_chain_per_attempt_and_todays_three_chain_ceilin
     # chains), and with no deadline in scope the storm keeps today's ceiling
     # of three fresh chains — run_transactional's default — rather than the
     # five-chain Aborted policy.
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(commit_errors=[expired() for _ in range(8)])
     with pytest.raises(FirestoreContentionExhausted) as raised:
         persist(store)
@@ -176,7 +158,6 @@ def test_nested_expiry_keeps_one_chain_per_attempt_and_todays_three_chain_ceilin
 
 
 def test_nested_repeated_expiry_stops_before_the_deadline(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     clock = FakeClock()
     monkeypatch.setattr(
         firestore_transaction_retry,
@@ -210,7 +191,6 @@ def test_nested_repeated_expiry_stops_before_the_deadline(sdk_assignment, monkey
 
 
 def test_nested_expiry_recovers_within_budget_when_time_allows(sdk_assignment, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     clock = FakeClock()
     monkeypatch.setattr(
         firestore_transaction_retry,
@@ -360,7 +340,6 @@ def test_sdk_same_chain_replay_never_decodes_retained_extractions(monkeypatch, l
     conversation_path = ('users', 'synthetic-unit', 'conversations', 'existing')
     store.rows[conversation_path] = deepcopy(stored)
 
-    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     monkeypatch.setenv('SYNC_LIVE_OVERLAP_ENABLED', 'false')
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'off')
     monkeypatch.setattr(conversations_db, 'index_sync_assignment', lambda *args: None)
@@ -397,7 +376,6 @@ def test_sdk_same_chain_replay_never_decodes_retained_extractions(monkeypatch, l
 
 @pytest.mark.parametrize('error', [InvalidArgument('bad payload'), ServiceUnavailable('ambiguous transport failure')])
 def test_non_contention_errors_are_not_replayed(sdk_assignment, monkeypatch, error):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(read_errors=[error])
     with pytest.raises(type(error)):
         persist(store)

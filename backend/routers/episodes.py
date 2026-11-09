@@ -1,13 +1,12 @@
 """Episodes API: the live occasion overlay the mobile app lists and opens.
 
 ``enabled`` in every read is the server capability. With ``EPISODES_ENABLED``
-off (or outside the ramp cohort) it is false and the app keeps today's
+off it is false and the app keeps today's
 per-conversation UI; a server that predates this router answers 404, which
 the app treats the same way.
 
-A call is admitted when the uid is in the cohort *and* the request's
-``X-Omi-App-Channel`` is in ``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
-store, missing or unknown channel answers ``enabled: false`` (404 for writes),
+A call is admitted for every owner when the request's ``X-Omi-App-Channel``
+is beta or store. A missing or unknown channel answers ``enabled: false`` (404 for writes),
 so that client keeps today's UI. Every admitted call is also the
 client-capability signal: it leaves the sticky ``episodes:client_seen:{uid}``
 marker (``utils/episodes/client_gate.py``, rewritten at most hourly) that listen

@@ -33,7 +33,6 @@ from config import enrichment as enrichment_config
 from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
-    enabled as summary_enabled,
     first_summary_pending,
     preserves_admitted,
 )
@@ -534,7 +533,7 @@ def summary_policy_for(row: Row) -> bool:
     snapshot = row.get('first_summary_policy')
     if snapshot is not None:
         return FirstSummaryPolicy.from_dict(snapshot).first_summary_enabled
-    return summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
+    return True
 
 
 def stamp_claim_policy(row: Row, cache: dict[str, FirstSummaryPolicy], stamps: list[tuple[str, str]]) -> None:

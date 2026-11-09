@@ -137,30 +137,20 @@ env:
     value: "10"
   - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
     value: "af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh"
-  - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
-    value: "100"
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
-  - name: FIRST_SUMMARY_DEADLINE_ENABLED
-    value: "true"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "100"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
-  - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
-    value: "100"
   # Expand only after the new web bundle is live; cached bundles lack batch UI.
   - name: SERVER_BATCH_ONLY_WEB_PERCENT
     value: "0"
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
-  - name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT
-    value: "0"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED
@@ -229,8 +219,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -387,8 +375,6 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: SPEAKER_GROUPING_MODE
     value: "incumbent"
-  - name: SPEAKER_MATCH_SCORES_ENABLED
-    value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
   - name: DREAM_AGENT_ENABLED
@@ -399,8 +385,6 @@ env:
     value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'false'
-  - name: REVIEW_SURFACE_MODE
-    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   # Replay-only binding: keep live/stale-conversation admission in inline mode.
@@ -631,12 +615,8 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
-  - name: STT_ROUTING_MODE
-    value: "on"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
-  - name: STT_ROUTING_ON_PERCENT
-    value: "100"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE

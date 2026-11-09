@@ -2,7 +2,6 @@
 
 from contextlib import contextmanager
 from typing import Any
-import os
 import time
 from google.cloud import firestore
 import config.speaker_match_scores as match_scores
@@ -107,11 +106,6 @@ def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str], *, r
     from database.transcript_pointer import run_preloaded_transactional as run_transactional
     from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-    if (
-        not retry_contention
-        and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
-    ):
-        return run_transactional(client, assign, full_ids=full_ids)
     return run_with_transaction_contention_retry(
         client.transaction,
         # attempts=1: the outer budget owns every attempt, so an expired chain

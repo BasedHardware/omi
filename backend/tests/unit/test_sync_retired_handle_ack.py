@@ -16,7 +16,6 @@ from utils.sync import completed_status, retired_handle_ack
 @pytest.fixture
 def poll(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'true')
     monkeypatch.delenv('SYNC_RETIRED_HANDLE_ACK_ENABLED', raising=False)
     monkeypatch.setattr(router, 'admit_sync_job_poll', lambda uid: True)
     monkeypatch.setattr(sync_jobs, 'r', fakeredis.FakeRedis())

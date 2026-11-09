@@ -241,16 +241,6 @@ def test_translation_kill_switch_uses_shared_parser_only_in_serve(monkeypatch):
     assert resolve_ondemand_config(env).gate_enabled
 
 
-@pytest.mark.parametrize('stage,expected', [('dev', True), ('local', True), ('offline', True), ('prod', False)])
-def test_stage_specific_diagnostic_defaults_survive_migration(monkeypatch, stage, expected):
-    from config.speaker_match_scores import enabled
-
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    monkeypatch.setenv('OMI_ENV_STAGE', stage)
-    monkeypatch.delenv('SPEAKER_MATCH_SCORES_ENABLED', raising=False)
-    assert enabled() is expected
-
-
 @pytest.mark.parametrize('percent', ['inf', '-inf', 'nan', '-1', '101', 'invalid'])
 def test_invalid_serve_percent_does_not_admit(percent):
     assert not refactor_modes.serving_for(

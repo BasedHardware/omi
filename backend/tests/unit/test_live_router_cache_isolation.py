@@ -11,11 +11,10 @@ from utils.stt import live_health, streaming
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('case', ['account_expiry', 'off_on'])
+@pytest.mark.parametrize('case', ['account_expiry'])
 @pytest.mark.parametrize('endpoint', [None, 'wss://synthetic.invalid/stt'])
 async def test_known_selection_survives_masking_and_redis_outage(monkeypatch, case, endpoint):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [1000.0]
     redis = MemoryRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
@@ -26,10 +25,8 @@ async def test_known_selection_survives_masking_and_redis_outage(monkeypatch, ca
     await pod.refresh_once()
     if case == 'off_on':
         assert pod.cached_snapshot(['soniox'], 'en', endpoint=endpoint)['soniox'].bench == 'selection'
-        monkeypatch.setenv('STT_ROUTING_MODE', 'off')
         await pod.refresh_once()
         assert pod.cached_snapshot(['soniox'], 'en', endpoint=endpoint)['soniox'].bench is None
-        monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     else:
         assert pod.cached_snapshot(['soniox'], 'en', endpoint=endpoint)['soniox'].bench == 'account'
         now[0] = 1031.0

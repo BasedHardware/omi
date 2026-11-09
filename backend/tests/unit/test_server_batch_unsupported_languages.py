@@ -24,10 +24,8 @@ STARTER = 'ca,gl,eu,cy,af,sq,bs,sw'
 def admission_env(monkeypatch):
     monkeypatch.setenv('HOSTED_PUSHER_API_URL', 'http://pusher.invalid')
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
-    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
     monkeypatch.setenv('SERVER_BATCH_UNSUPPORTED_LANGUAGES', STARTER)
     monkeypatch.delenv('SERVER_BATCH_ONLY_ENABLED', raising=False)
-    monkeypatch.delenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', raising=False)
 
 
 def declared(language):
@@ -117,9 +115,6 @@ def test_resolved_language_must_still_match_declaration():
 def test_auto_multi_are_unchanged(monkeypatch, language):
     h, row = mobile(language)
     h.batch_record_capture = {}
-    assert server_batch.request_reason(h) == 'language_auto'
-    assert not server_batch.eligible(row, 'owner', batch_admitted=True)
-    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
     assert server_batch.request_reason(h) is None
     h.language_profile = SimpleNamespace(primary='', expected=('ca',), source='learned')
     assert server_batch.request_reason(h) == 'profile_mismatch'

@@ -74,7 +74,6 @@ environment_shared:
           value: 'false'
           category: rollout
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_SERVING_ENABLED:
@@ -113,9 +112,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
-          category: rollout
-        AUDIO_ARCHIVE_COALESCE_ENABLED:
-          value: 'true'
           category: rollout
         AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
           value: 'false'
@@ -276,12 +272,8 @@ environment_shared:
           category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           category: rollout
-        STT_ROUTING_MODE:
-          category: rollout
         STT_ROUTING_REDIS_TIMEOUT_SECONDS:
           value: '0.075'
-          category: rollout
-        STT_ROUTING_ON_PERCENT:
           category: rollout
         STT_ROUTING_TARGETS_JSON:
           value: ''
@@ -483,9 +475,6 @@ environment_shared:
           category: storage_retention
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           category: ops_kill
-        REVIEW_SURFACE_MODE:
-          value: 'on'
-          category: rollout
         BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
           value: 'false'
           category: rollout
@@ -550,7 +539,6 @@ environment_shared:
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -606,9 +594,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
-          category: rollout
-        AUDIO_ARCHIVE_COALESCE_ENABLED:
-          value: 'true'
           category: rollout
         AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
           value: 'false'
@@ -972,7 +957,6 @@ environment_shared:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -1013,9 +997,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
-            category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
@@ -1263,9 +1244,6 @@ environment_shared:
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
             category: rollout
-          REVIEW_SURFACE_MODE:
-            value: 'on'
-            category: rollout
           BUCKET_OBJECT_LAKE:
             category: storage_retention
           OBJECT_LAKE_KMS_KEY:
@@ -1286,9 +1264,6 @@ environment_shared:
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
-          CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -1369,7 +1344,6 @@ environment_shared:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -1409,9 +1383,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
-            category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
@@ -1595,8 +1566,6 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
-          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
-            category: rollout
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -1739,7 +1708,6 @@ environment_shared:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -1781,9 +1749,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
-            category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
@@ -1961,8 +1926,6 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
-          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
-            category: rollout
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -2084,7 +2047,6 @@ environment_shared:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -2125,9 +2087,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
-            category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'

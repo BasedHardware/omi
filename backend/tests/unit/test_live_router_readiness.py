@@ -20,8 +20,6 @@ from utils.stt.streaming import STTService
 @pytest.mark.parametrize('capacity', [False, True])
 async def test_all_breakers_protected_keeps_static_alias(monkeypatch, isolated, recovery, capacity):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', str(recovery).lower())
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('SYNTHETIC_FULL', str(capacity).lower())
     _prime_chain(
         monkeypatch,
@@ -147,14 +145,9 @@ async def test_invalid_budget_denies_before_redis_and_logs_once(monkeypatch, pro
         ('on', True, 'soniox', 100),
         ('on', False, 'modulate', 100),
         ('on', 'invalid', 'modulate', 100),
-        ('shadow', True, 'modulate', 100),
-        ('on', True, 'modulate', 0),
-        ('off', True, 'modulate', 100),
     ],
 )
 async def test_budget_denial_restores_configured_order(monkeypatch, isolated, mode, budget, expected, percent):
-    monkeypatch.setenv('STT_ROUTING_MODE', mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', str(percent))
     monkeypatch.setenv('STT_PAID_SPILLOVER_BUDGET_ENABLED', 'true')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_FULL', 'true')
@@ -261,10 +254,8 @@ def test_failback_does_not_bench_paid_or_reset_attempt_accounting(monkeypatch):
     assert recovery.deadline is not None  # no deadline reset
 
 
-def test_rebuild_cap_tracks_registry_without_changing_shadow(monkeypatch):
+def test_rebuild_cap_tracks_registry(monkeypatch):
     assert MAX_RECOVERY_TARGETS >= MAX_REGISTRY_TARGETS + 4
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     host = SimpleNamespace(
         request=SimpleNamespace(uid='synthetic'),
         stt_language='en',
@@ -287,8 +278,6 @@ def test_rebuild_cap_tracks_registry_without_changing_shadow(monkeypatch):
     monkeypatch.setattr(live_recovery, 'window_selection_kwargs', lambda *_: {})
     select = Mock(return_value=(STTService.modulate, 'en', 'velma-2'))
     assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True)[0] is not None
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)
 
 
 @pytest.mark.asyncio
@@ -297,8 +286,6 @@ async def test_budget_denial_skipped_attempt_spends_no_admission(monkeypatch, is
     admission is spent only after the backoff lease exists for a real dial."""
     from utils.stt import connect_backoff as connect_backoff_module
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('STT_PAID_SPILLOVER_BUDGET_ENABLED', 'true')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_FULL', 'true')
@@ -367,44 +354,10 @@ async def test_cheap_reentry_grant_consumed_by_new_identity_dial(monkeypatch, is
     assert not recovery.reserve('parakeet-window', 'parakeet')
 
 
-def test_malformed_routing_percent_keeps_legacy_failover_alive(monkeypatch):
-    """A malformed STT_ROUTING_ON_PERCENT must degrade the rebuild cap to the
-    router-off policy, not abort legacy failover selection with ValueError."""
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', 'not-a-number')
-    host = SimpleNamespace(
-        request=SimpleNamespace(uid='synthetic'),
-        stt_language='en',
-        language='en',
-        multi_lang_enabled=False,
-        language_profile=None,
-        stt_service=STTService.modulate,
-    )
-    receiver = SimpleNamespace(
-        host=host,
-        stt_socket=SimpleNamespace(routing_target='fourth', _routing_active=True),
-        _stt_failed_targets=set(),
-        _stt_failed_providers=set(),
-        _stt_failed_reasons={},
-        _stt_rebuild_attempts=3,
-        _settle_pending_live_failover_failure=Mock(),
-        _stt_rescue_retries=set(),
-    )
-    monkeypatch.setattr(live_recovery, 'note_typed_provider_death', lambda *_: None)
-    monkeypatch.setattr(live_recovery, 'window_selection_kwargs', lambda *_: {})
-    select = Mock(return_value=(STTService.modulate, 'en', 'velma-2'))
-    # Router-on cap (MAX_RECOVERY_TARGETS=20) would allow the rebuild; the
-    # malformed percent must fall back to the managed router-off cap of 3,
-    # which this receiver has already exhausted.
-    assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'on'])
+@pytest.mark.parametrize('mode', ['on'])
 @pytest.mark.parametrize('allocation', ['private-malformed-value', '-1', '101', 'nan', 'inf'])
 async def test_invalid_hard_permission_is_bounded_chain_unavailability(monkeypatch, isolated, mode, allocation):
-    monkeypatch.setenv('STT_ROUTING_MODE', mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', allocation)
     connect = AsyncMock()
     fallback = Mock()

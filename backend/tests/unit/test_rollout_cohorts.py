@@ -179,16 +179,14 @@ def test_absent_keys_preserve_each_legacy_contract(monkeypatch):
     from config import summary_guarantee, sync_lineage
 
     cache(monkeypatch, lambda _: {})
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
-    assert not summary_guarantee.enabled('owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert sync_lineage.sync_lineage_resolve_uid_allowed('owner')
-    # Main #22113 makes first-summary empty deny; lineage retains its legacy empty contract.
+    # First-summary admission is universal; lineage retains its legacy empty contract.
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
-    assert not summary_guarantee.enabled('owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert sync_lineage.sync_lineage_resolve_uid_allowed('owner')
 
 
@@ -279,11 +277,9 @@ def test_firestore_denial_beats_even_legacy_enable_all(monkeypatch, members):
         return members
 
     cache(monkeypatch, read)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
-    assert not summary_guarantee.enabled('owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert not sync_lineage.sync_lineage_resolve_uid_allowed('owner')
 
 

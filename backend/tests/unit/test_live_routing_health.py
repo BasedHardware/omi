@@ -42,7 +42,6 @@ class DownRedis:
 @pytest.mark.asyncio
 @pytest.mark.parametrize('redis_client', [SlowRedis(), DownRedis()])
 async def test_redis_slow_or_down_uses_local_score_without_blocking_session(monkeypatch, redis_client):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.01')
     health = live_health.FleetHealth(redis_client=redis_client)
     health._local[('soniox', 'en')] = deque([(time.time(), True)])
@@ -62,7 +61,6 @@ def test_account_bench_exclusion_is_binary():
 
 @pytest.mark.asyncio
 async def test_local_account_bench_applies_before_redis_write_finishes(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = time.time()
     clock = lambda: now
 
@@ -89,7 +87,6 @@ def test_language_key_has_closed_vocabulary():
 
 @pytest.mark.asyncio
 async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [time.time()]
     bench_until = now[0] + 600
 
@@ -128,7 +125,6 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fleet_cache_refreshes_off_path_and_stale_data_uses_local_score(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [time.time()]
 
     class ScoredRedis:
@@ -145,7 +141,6 @@ async def test_fleet_cache_refreshes_off_path_and_stale_data_uses_local_score(mo
 
 @pytest.mark.asyncio
 async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.1')
     dropped = _dropped_total('result')
     bench_dropped = _dropped_total('bench')
@@ -206,7 +201,6 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_full_bench_slots_flush_longer_pending_deadline(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     gate = asyncio.Event()
 
     class SlotRedis:
@@ -243,7 +237,6 @@ async def test_full_bench_slots_flush_longer_pending_deadline(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_bench_write_retries_after_redis_backoff(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setattr(live_health, 'CACHE_REFRESH_SECONDS', 0.01)
 
     class RecoveringRedis:
@@ -286,7 +279,6 @@ async def test_bench_write_retries_after_redis_backoff(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_expired_pending_bench_is_not_written(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [time.time()]
 
     class SpyRedis:
@@ -313,7 +305,6 @@ async def test_expired_pending_bench_is_not_written(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_redis_outage_uses_jittered_one_probe_per_provider_per_pod(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [time.time()]
     health = live_health.FleetHealth(clock=lambda: now[0], redis_client=DownRedis(), probe_jitter=lambda _provider: 2.0)
     health.cached_snapshot(['soniox'], 'en')
@@ -331,7 +322,6 @@ async def test_redis_outage_uses_jittered_one_probe_per_provider_per_pod(monkeyp
 
 @pytest.mark.asyncio
 async def test_background_fleet_probe_lease_is_consumed_once(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
 
     class LeaseRedis:
         def __init__(self):
@@ -410,9 +400,7 @@ async def test_hanging_redis_adds_under_five_ms_to_connection_decision(monkeypat
         )
         return (time.perf_counter() - started) * 1000
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     baseline = [await dial() for _ in range(40)]
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     health.cached_snapshot(['soniox'], 'en')
     refresh = asyncio.create_task(health.refresh_once())
     try:
@@ -490,9 +478,7 @@ async def test_hanging_recovery_lease_is_not_awaited_by_connection(monkeypatch):
         assert actual == st.STTService.modulate
         return (time.perf_counter() - started) * 1000
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     baseline = [await dial() for _ in range(30)]
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     health.cached_snapshot(['modulate', 'soniox'], 'en')
     refresh = asyncio.create_task(health.refresh_once())
     try:
@@ -527,9 +513,7 @@ async def test_on_reorders_only_eligible_legs_and_shadow_keeps_config_order(monk
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', snapshot)
     modulate = AsyncMock(return_value=RawSocket())
     soniox = AsyncMock(return_value=RawSocket())
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     for mode, expected in [('shadow', 'modulate'), ('on', 'modulate')]:
-        monkeypatch.setenv('STT_ROUTING_MODE', mode)
         _, actual = await st.connect_stt_socket_with_fallback(
             primary_service=st.STTService.modulate,
             connect_primary=modulate,
@@ -547,7 +531,6 @@ async def test_on_reorders_only_eligible_legs_and_shadow_keeps_config_order(monk
 async def test_on_account_bench_overrides_better_score(monkeypatch):
     from utils.stt import live_chain
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
 
     def snapshot(_providers, _language):
@@ -575,8 +558,6 @@ async def test_on_account_bench_overrides_better_score(monkeypatch):
 async def test_cost_order_does_not_claim_a_per_pod_recovery_permit(monkeypatch, local_allowed, claims, releases):
     from utils.stt import live_chain
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(
         live_chain.health,
         'cached_snapshot',
@@ -679,7 +660,6 @@ def _leg(gate=None):
 
 
 def test_no_text_and_text_are_classified_from_vad_speech(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     observed = []
     monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     monkeypatch.setattr(
@@ -704,7 +684,6 @@ def test_no_text_and_text_are_classified_from_vad_speech(monkeypatch):
 
 
 def test_speech_then_silence_past_deadline_yields_no_text_once(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_NO_TEXT_SECONDS', '3')
     observed = []
     monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
@@ -721,8 +700,6 @@ def test_speech_then_silence_past_deadline_yields_no_text_once(monkeypatch):
 
 
 def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
     monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     quarantines = []

@@ -40,8 +40,6 @@ def controls(monkeypatch):
     enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
     monkeypatch.delenv('STT_ROUTING_DISRUPTION_GATE', raising=False)
     # Scope every new test's process state; do not poison another module's circuits.
@@ -153,14 +151,7 @@ def test_sticky_ramp_cohort_and_router_gate(monkeypatch):
     assert 210 < sum(window_allocation(uid) for uid in uids) < 290
     cohorts = [{uid for uid in uids if assigned(uid, 'new-modulate', share)} for share in (5, 25, 50, 100)]
     assert cohorts[0] < cohorts[1] < cohorts[2] < cohorts[3]
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    assert not any(routing_on(uid) for uid in uids)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '25')
-    assert 210 < sum(routing_on(uid) for uid in uids) < 290
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     assert all(routing_on(uid) for uid in uids)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    assert not any(routing_on(uid) for uid in uids)
 
 
 class MemoryRedis:
@@ -414,12 +405,8 @@ async def test_redis_down_local_health_and_no_independent_trials(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'mode,percent,expected', [('shadow', '100', 'soniox'), ('on', '0', 'soniox'), ('on', '100', 'modulate')]
-)
-async def test_modes_static_shadow_and_on_percent(monkeypatch, mode, percent, expected):
-    monkeypatch.setenv('STT_ROUTING_MODE', mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', percent)
+@pytest.mark.parametrize('mode,percent,expected', [('on', '100', 'modulate')])
+async def test_permanent_router_uses_cost_order(monkeypatch, mode, percent, expected):
     monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda *_: {})
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
     monkeypatch.setattr(
@@ -493,8 +480,6 @@ def test_registry_override_second_modulate(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_router_exception_fails_open_and_no_network_on_connect(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', '{broken')
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
     monkeypatch.setattr(live_chain.health, '_redis', lambda: pytest.fail('network on connect'))
@@ -535,8 +520,6 @@ async def test_router_exception_fails_open_and_no_network_on_connect(monkeypatch
 
 @pytest.mark.asyncio
 async def test_all_fleet_benched_fails_open_to_configured_order(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
     monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda *_: {'soniox': GateState(stage=0, until=1e20)})
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
@@ -558,8 +541,6 @@ async def test_all_fleet_benched_fails_open_to_configured_order(monkeypatch):
 async def test_two_modulate_targets_failover_and_independent_identity(monkeypatch):
     from utils.stt import live_router
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -648,8 +629,6 @@ def test_capacity_skip_keeps_cost_order(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_capacity_escape_dials_when_other_candidate_circuit_is_open(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('TEST_CAPACITY_ESCAPE_A', 'true')
     candidate_a = replace(DEFAULT_TARGETS[1], capacity_env='TEST_CAPACITY_ESCAPE_A')
     candidate_b = DEFAULT_TARGETS[-1]
@@ -694,8 +673,6 @@ async def test_capacity_escape_dials_when_other_candidate_circuit_is_open(monkey
 
 @pytest.mark.asyncio
 async def test_admitted_non_capacity_candidate_dial_suppresses_capacity_escape(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('TEST_CAPACITY_ESCAPE_A', 'true')
     candidate_a = replace(DEFAULT_TARGETS[1], capacity_env='TEST_CAPACITY_ESCAPE_A')
     candidate_b = DEFAULT_TARGETS[-1]
@@ -745,8 +722,6 @@ def _seed_backoff_cooldowns(*identities: str) -> None:
 
 @pytest.mark.asyncio
 async def test_backoff_escape_dials_the_earliest_cooled_target_id_once(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     targets = _cooldown_targets()
     monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__ for target in targets]))
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
@@ -778,8 +753,6 @@ async def test_backoff_escape_dials_the_earliest_cooled_target_id_once(monkeypat
 @pytest.mark.asyncio
 @pytest.mark.parametrize('exclusion', ['account', 'failed_targets'])
 async def test_backoff_escape_never_bypasses_hard_exclusions(monkeypatch, exclusion):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     targets = _cooldown_targets()
     monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__ for target in targets]))
     if exclusion == 'account':
@@ -815,7 +788,6 @@ def test_process_singletons_start_fresh_each_test(monkeypatch, mode):
     backoff = connect_backoff_module.connect_backoff()
     assert backoff is live_chain.connect_backoff()
     if mode == 'dirty':
-        monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
         for _ in range(3):
             backoff.acquire('soniox', provider='soniox').finish(refused=True)
         live_chain._recent_connect_failures.append((time.monotonic(), 'soniox'))
@@ -925,8 +897,6 @@ async def test_unknown_health_redis_down_restores_static_order(monkeypatch):
     seed_cost_interest(pod, DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
     monkeypatch.setattr(live_chain, 'health', pod)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     sock = SimpleNamespace(is_connection_dead=False)
     _, service = await live_chain.connect_configured_chain(
@@ -992,8 +962,6 @@ def test_learned_language_capabilities_cannot_be_overridden_by_cost():
 
 @pytest.mark.asyncio
 async def test_expected_languages_flow_through_dispatcher_to_cost_selection(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox'])
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     sock = SimpleNamespace(is_connection_dead=False)
@@ -1015,8 +983,6 @@ def test_custom_endpoint_serve_failure_does_not_poison_default_endpoint(monkeypa
     from tests.unit.test_live_routing_health import _leg
     from utils.stt import live_failure, live_router
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     target = Target('modulate-next', 'modulate', 0.05, endpoint='wss://example.invalid/stream')
     monkeypatch.setattr(live_router, '_target_circuits', {})
     leg = _leg()
@@ -1029,12 +995,10 @@ def test_custom_endpoint_serve_failure_does_not_poison_default_endpoint(monkeypa
     assert live_router.target_circuit(target, st._modulate_circuit).state == 'open'
 
 
-@pytest.mark.parametrize('mode', ['shadow', 'on'])
+@pytest.mark.parametrize('mode', ['on'])
 def test_early_client_abort_cannot_poison_cost_health_or_serving_circuit(monkeypatch, mode):
     from tests.unit.test_live_routing_health import _leg
 
-    monkeypatch.setenv('STT_ROUTING_MODE', mode)
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     seen = []
     monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
     monkeypatch.setattr(live_session.health, 'record_session', lambda *args: seen.append(args))
@@ -1207,8 +1171,6 @@ def test_unregistered_targets_do_not_create_cost_health_state():
 
 @pytest.mark.asyncio
 async def test_withdrawn_registered_endpoint_cannot_return_as_configured_tail(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -1286,9 +1248,7 @@ async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, re
 
 
 @pytest.mark.asyncio
-async def test_same_provider_reconnect_retains_target_identity_and_kill_switch(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+async def test_same_provider_reconnect_retains_target_identity(monkeypatch):
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
@@ -1327,19 +1287,16 @@ async def test_same_provider_reconnect_retains_target_identity_and_kill_switch(m
     assert second.routing_target == 'soniox-canary'
     assert second._routing_active
     second.finish()
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     third = await session.connect(16000, same_provider=True)
-    assert not third._routing_active
+    assert third._routing_active
     third.finish()
-    assert seen == ['soniox-canary', 'soniox-canary', None]
+    assert seen == ['soniox-canary', 'soniox-canary', 'soniox-canary']
     assert connecting_target.get() is None
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('scenario', ['empty', 'deepgram-only', 'unknown-tail', 'benched-tail'])
 async def test_router_never_removes_configured_serviceability(monkeypatch, scenario):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
     primary = st.STTService.deepgram if scenario == 'deepgram-only' else st.STTService.soniox
@@ -1400,8 +1357,6 @@ async def test_router_never_removes_configured_serviceability(monkeypatch, scena
     ],
 )
 async def test_session_engine_choice_is_the_router_eligibility(monkeypatch, requested, resolved, model, endpoint):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', endpoint)
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'parakeet', 'soniox'])
@@ -1445,8 +1400,6 @@ async def test_session_engine_choice_is_the_router_eligibility(monkeypatch, requ
 async def test_connect_engine_mismatch_restores_configured_order_and_counts(monkeypatch):
     from utils.stt.live_metrics import COST_FAIL_OPEN
 
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     monkeypatch.setattr(live_chain.health, 'cost_snapshot', healthy_cost_snapshot)
     calls = []
@@ -1534,8 +1487,6 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
         pod.record_session('modulate-velma-2', 'en', 'failover', reason='connection_lost', uid=str(i))
         await pod._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
     mark_cost_read(pod)
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     connect = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
@@ -1570,8 +1521,6 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
 
 
 def test_default_target_id_equal_to_family_has_separate_failure_namespaces(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     socket = SimpleNamespace(_routing_active=True, routing_target='soniox', typed_death_reason='provider_5xx')
     recv = SimpleNamespace(
         host=SimpleNamespace(request=SimpleNamespace(uid='synthetic')), stt_socket=socket, _stt_failed_providers=set()
@@ -1636,8 +1585,6 @@ def test_legacy_broad_fixed_boundary_trial_rejection_spends_one_fleet_strike(mon
 async def test_terminal_capacity_is_filtered_and_rejections_have_local_cooldown(
     monkeypatch, family, target_id, signalled
 ):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('TEST_TERMINAL_CAPACITY', str(signalled).lower())
     terminal = replace(
         next(t for t in DEFAULT_TARGETS if t.family == family), id=target_id, capacity_env='TEST_TERMINAL_CAPACITY'
@@ -1703,8 +1650,6 @@ async def test_terminal_capacity_is_filtered_and_rejections_have_local_cooldown(
 
 @pytest.mark.asyncio
 async def test_empty_proposal_cannot_force_a_capacity_cooled_terminal(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain, 'propose', lambda *args: [])
     live_router.note_capacity_full('modulate-velma-2')
     circuit = st._modulate_circuit
@@ -1726,8 +1671,6 @@ async def test_empty_proposal_cannot_force_a_capacity_cooled_terminal(monkeypatc
 
 @pytest.mark.asyncio
 async def test_new_endpoint_only_registry_keeps_configured_endpoint_tail(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
         'STT_ROUTING_TARGETS_JSON',
         json.dumps(
@@ -1885,7 +1828,6 @@ def test_incident_aggregate_history_and_13_timeout_burst_still_benches(n, failur
 
 @pytest.mark.parametrize('reason', ['no_text', 'first_text_deadline', 'send_queue_full'])
 def test_censored_recovery_outcomes_never_count_towards_sample_or_failures(monkeypatch, reason):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
     pod._check_identity()
     for lang in ('all', 'en'):
@@ -1945,8 +1887,6 @@ def test_trial_user_state_roundtrip_and_bounded_validation():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('signalled', [False, True])
 async def test_last_candidate_is_served_when_capacity_clears_during_cooldown(monkeypatch, signalled):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv('TEST_ONLY_CAPACITY', str(signalled).lower())
     target = replace(DEFAULT_TARGETS[2], capacity_env='TEST_ONLY_CAPACITY')
     monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__]))
@@ -1968,8 +1908,6 @@ async def test_last_candidate_is_served_when_capacity_clears_during_cooldown(mon
 
 @pytest.mark.asyncio
 async def test_all_capacity_refusals_escape_once_per_session_in_least_recent_order(monkeypatch):
-    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     targets = [replace(t, capacity_env='TEST_ALL_CAPACITY') for t in DEFAULT_TARGETS[1:]]
     monkeypatch.setenv('TEST_ALL_CAPACITY', 'true')
     monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([t.__dict__ for t in targets]))
