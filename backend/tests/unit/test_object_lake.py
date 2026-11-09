@@ -876,3 +876,22 @@ def test_deletion_between_settlement_preread_and_transaction_fails_the_put(stora
         put()
     assert not list(bucket.list_blobs())
     assert [doc.to_dict() for doc in store.collection('lake_upload_candidates').stream()] == []
+
+
+def test_account_wipe_marker_before_settlement_fails_the_put(storage, monkeypatch):
+    # The account wipe marker lands after the put's authority check but before
+    # settlement; settlement must purge the object and refuse the reference.
+    bucket, store = storage
+    original = lake._settle_upload_candidate
+
+    def mark_then_settle(*args, **kwargs):
+        store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(lake, '_settle_upload_candidate', mark_then_settle)
+    with pytest.raises(lake.LakeWriteFenced, match='fenced the upload'):
+        put()
+    assert not list(bucket.list_blobs())
+    # The account wipe, not settlement, owns erasing discovery rows.
+    rows = [doc.to_dict() for doc in store.collection('lake_upload_candidates').stream()]
+    assert len(rows) == 1 and rows[0]['in_flight'] == {} and rows[0]['settled'] is True

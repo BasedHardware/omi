@@ -287,9 +287,9 @@ def _upload_candidate(bucket: str, key: str):
     attempt = _record_upload_candidate(bucket, key)
     yield attempt
     if _settle_upload_candidate(bucket, key, attempt, delete_if_fenced=True):
-        # Deletion won the race after the post-put check: never return a
-        # reference to the object settlement just removed.
-        raise LakeWriteFenced('Conversation deletion fenced the upload')
+        # A conversation or account deletion won the race after the post-put
+        # check: never return a reference to the object settlement removed.
+        raise LakeWriteFenced('Deletion fenced the upload')
     # Only a returned put settles. A raised storage error or process loss can
     # leave the remote outcome ambiguous, so the attempt stays in flight until
     # a re-purge after the 24-hour request assumption permits erasure.
@@ -362,9 +362,17 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_f
     if purged:
         _delete_candidate_object({'bucket': bucket, 'key': key})
 
+    marker = client.collection('account_deletions').document(space_id)
+
     @firestore.transactional
     def settle(transaction, purged):
-        fenced = tombstone.get(transaction=transaction).exists
+        conversation_fenced = tombstone.get(transaction=transaction).exists
+        marker_snapshot = marker.get(transaction=transaction)
+        # Either durable fence that won after the put's authority check owns
+        # the object: purge it before settling and refuse the reference.
+        fenced = conversation_fenced or account_deletion_marker_blocks_access(
+            marker_exists=marker_snapshot.exists, raw_status=(marker_snapshot.to_dict() or {}).get('wipe_status')
+        )
         snapshot = candidate.get(transaction=transaction)
         if not snapshot.exists:
             # Never recreate discovery after the wipe's final erasure, and never
@@ -374,7 +382,7 @@ def _settle_upload_candidate(bucket: str, key: str, attempt: str, *, delete_if_f
             return True
         pending = dict((snapshot.to_dict() or {}).get('in_flight', {}))
         pending.pop(attempt, None)
-        if purged and not pending and fenced:
+        if purged and not pending and conversation_fenced:
             transaction.delete(candidate)
         else:
             transaction.update(candidate, {'in_flight': pending, 'settled': not pending})
