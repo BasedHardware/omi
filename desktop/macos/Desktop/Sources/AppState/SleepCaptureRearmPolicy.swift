@@ -72,9 +72,9 @@ extension AppState {
     darkWakeRearmTask = nil
   }
 
-  /// Consumes the sleep handoff. A real wake always consumes it. The DarkWake
-  /// probe consumes it only when it is the path that restarts always-on capture,
-  /// so a later FullWake does not start a second session.
+  /// Keep the sleep handoff through the DarkWake attempt: startup or streaming
+  /// can still fail before FullWake. A real wake consumes it, and the current
+  /// recording state prevents a successful DarkWake start from being duplicated.
   @discardableResult
   func claimSleepRestart(signal: SleepCaptureRearmSignal) -> Bool {
     let action = SleepCaptureRearmPolicy.action(
@@ -83,7 +83,7 @@ extension AppState {
       isTranscribing: isTranscribing,
       signal: signal
     )
-    if signal == .didWake || action == .restart {
+    if signal == .didWake {
       wasTranscribingBeforeSleep = false
     }
     return action == .restart
