@@ -61,13 +61,14 @@ def admit(
 
     def commit(tx):
         row = {}
+        partial_parent = (intake or {}).get('record_partial_parent')
         if binding.record_origin:
             target = binding.target_conversation_id
             if not target:
                 raise ValueError('registered record target unavailable')
             key = f'{binding.owner_id}/{target}'
             row = tx.get('conversations', key)
-            if not row or row.get('deleted') or row.get('uses_custom_stt'):
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
                 raise ValueError('registered record target unavailable')
             if row.get('discarded'):
                 # Full archives, partial children and ledger replays can name
@@ -76,7 +77,6 @@ def admit(
                     binding.segment_ids[0],
                     record_identity(binding.owner_id, target)[1],
                 }
-                partial_parent = (intake or {}).get('record_partial_parent')
                 if partial_parent:
                     obligation_ids.add(partial_parent)
                 if restore_pending(row, *(tx.get('jobs', key) for key in obligation_ids)):
