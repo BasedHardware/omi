@@ -78,14 +78,11 @@ REVIEW_OVERDUE: dict[str, dict[str, str]] = {
     "MEETING_NOTES_EPISODE_TIER_MIN_WORDS": _AD1268_SWEEP,
     "MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS": _AD1268_SWEEP,
     "OMI_SHAPED_AGENT_MODE": _AD1268_SWEEP,
-    "SONIOX_ORDERED_FINALIZE": _AD1268_SWEEP,
     "STT_CAP_RECOVERY_COHORT": _AD1268_SWEEP,
     "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED": _AD1268_SWEEP,
     "SYNC_LINEAGE_RESOLVE_ENABLED": _AD1268_SWEEP,
     "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST": _AD1268_SWEEP,
     "onboarding-setup-rating-prompt": _AD1268_SWEEP,
-    "screen_activity_lossless_sync": _AD1268_SWEEP,
-    "screen_activity_lossless_sync_kill": _AD1268_SWEEP,
 }
 # Only new rollout rows are gated; existing rows still contribute to the count.
 MAX_UNRAMPED_PER_OWNER = 5
