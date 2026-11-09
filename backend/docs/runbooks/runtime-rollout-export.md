@@ -9,8 +9,10 @@ remain separate controls; this gauge is not a count of admitted owners.
 
 The exporter uses the serving cache (30 seconds, existing pending/LKG rules),
 not a second Firestore reader. A scrape refreshes that cache even on an idle
-consumer. Pending cold reads export zero; missing fields use the same env
-parsers as their config consumers. Removed fields replace the old gauge value.
+consumer without waiting for the refresh. A cold scrape exports no samples
+while its first read is pending; a warm scrape exports the current snapshot
+while refreshing asynchronously. Missing fields use the same env parsers as
+their config consumers. Removed fields replace the old gauge value.
 `omi_runtime_percent_source{source,revision,revision_name}` retains its four
 one-hot sources, and `omi_runtime_percent_read_error_seconds` retains its
 meaning. A non-Firestore source or invalid numeric value is not qualified ramp

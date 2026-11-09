@@ -1,11 +1,13 @@
 """Fleet adoption evidence is the consumer's TTL read, served by its real registry."""
 
 import ast
-import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
 import shutil
 import subprocess
+from threading import Event
+import time
 from urllib.request import urlopen
 
 import pytest
@@ -162,17 +164,44 @@ def test_scrape_refreshes_idle_consumer_after_ttl_and_removes_old_document_value
     assert values(registry)['batch-pipeline'] == 13  # never leave removed values behind
 
 
-def test_cold_pending_exports_zero_instead_of_env_default(runtime, monkeypatch):
+def test_cold_sync_scrape_returns_without_waiting_for_slow_refresh(runtime, monkeypatch):
+    started, release = Event(), Event()
+
+    def slow_read():
+        started.set()
+        assert release.wait(timeout=5)
+        return store.normalize_ramp_document(document(**{'batch-pipeline': 37}))
+
+    monkeypatch.setattr(rp, '_cache', rp._RampCache(slow_read))
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(rp, '_background_submitter', executor.submit)
+        try:
+            before = time.perf_counter()
+            assert not samples(runtime[3])
+            assert time.perf_counter() - before < 0.5
+            assert started.wait(timeout=1)
+            pending = rp._cache.inflight
+            assert pending is not None and not pending.done()
+            assert not samples(runtime[3])
+        finally:
+            release.set()
+    assert pending.done()
+    assert values(runtime[3])['batch-pipeline'] == 37
+
+
+def test_scrape_exports_cached_snapshot_while_refresh_is_pending(runtime, monkeypatch):
+    outcome, now, calls, registry = runtime
+    outcome[0] = document(**{'batch-pipeline': 37})
+    assert values(registry)['batch-pipeline'] == 37
     queued = []
     monkeypatch.setattr(rp, '_background_submitter', queued.append)
-
-    async def scrape():
-        return values(runtime[3])
-
-    assert set(asyncio.run(scrape()).values()) == {0.0}
-    assert len(queued) == 1
+    outcome[0] = document(**{'batch-pipeline': 12})
+    now[0] += rp.TTL_SECONDS + 1
+    assert values(registry)['batch-pipeline'] == 37
+    assert values(registry)['batch-pipeline'] == 37
+    assert len(queued) == 1 and len(calls) == 1
     queued[0]()
-    assert values(runtime[3])['batch-pipeline'] == 13
+    assert values(registry)['batch-pipeline'] == 12
 
 
 def test_telemetry_error_cannot_change_runtime_admission(runtime, monkeypatch):

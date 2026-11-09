@@ -332,7 +332,11 @@ class RuntimePercentCollector(Collector):
             yield from gauge.describe()
 
     def collect(self) -> Iterable[Metric]:
-        if not _export(ramp_snapshot()):
+        # Scrapes are synchronous: schedule IO, but never use the serving
+        # reader's bounded cold-start wait or publish a pending zero as adoption.
+        _cache.start_refresh()
+        snapshot = _cache.snapshot_now()
+        if snapshot.source == 'pending' or not _export(snapshot):
             return
         for gauge in (RUNTIME_PERCENT_VALUE, RUNTIME_PERCENT_SOURCE, RUNTIME_PERCENT_ERROR_SECONDS):
             yield from gauge.collect()
