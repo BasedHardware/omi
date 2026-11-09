@@ -252,7 +252,7 @@ def put_space_object(
         # session. An ambiguous finalize keeps the session discoverable.
         with _upload_candidate(config.bucket(), key, session, blob.bucket.client) as attempt:
             try:
-                _UploadSession.put_all(blob.bucket.client, session, payload, deadline)
+                _UploadSession.put_all(blob.bucket.client, session, payload, deadline, blob=blob)
             except PreconditionFailed:
                 ref = _replay_object(blob, stamp, digest, data_class, deadline)
                 _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline, attempt=attempt)
@@ -290,7 +290,14 @@ class _UploadSession:
 
     @staticmethod
     def _request(
-        client: Any, session: str, method: str, *, data=b'', headers=None, timeout: tuple[float, float] = (5, 5)
+        client: Any,
+        session: str,
+        method: str,
+        *,
+        data=b'',
+        headers=None,
+        timeout: tuple[float, float] = (5, 5),
+        blob: Any = None,
     ) -> int:
         try:
             response = client._http.request(
@@ -302,6 +309,13 @@ class _UploadSession:
                 allow_redirects=False,
             )
             try:
+                if blob is not None and response.status_code in (200, 201):
+                    # Match the SDK upload path: retain the generation returned
+                    # by finalize for the post-put conditional deletion.
+                    properties = response.json()
+                    if not properties.get('generation'):
+                        raise LakeFetchError('Lake upload generation unavailable')
+                    blob._set_properties(properties)
                 return response.status_code
             finally:
                 response.close()
@@ -309,7 +323,7 @@ class _UploadSession:
             raise LakeFetchError('Lake session transport unavailable') from None
 
     @classmethod
-    def put_all(cls, client, session, payload, deadline):
+    def put_all(cls, client: Any, session: str, payload: bytes, deadline: float, *, blob: Any = None) -> None:
         remaining = _remaining_put_seconds(deadline)
         status = cls._request(
             client,
@@ -318,6 +332,7 @@ class _UploadSession:
             data=payload,
             headers={'Content-Length': str(len(payload))},
             timeout=(remaining / 2, remaining / 2),
+            blob=blob,
         )
         if status == 412:
             raise PreconditionFailed('Lake create-only object exists')
@@ -325,11 +340,11 @@ class _UploadSession:
             raise LakeFetchError('Lake session upload unavailable')
 
     @classmethod
-    def cancel(cls, client, session):
+    def cancel(cls, client: Any, session: str) -> None:
         cls._request(client, session, 'DELETE')
 
     @classmethod
-    def status(cls, client, session):
+    def status(cls, client: Any, session: str) -> int:
         return cls._request(client, session, 'PUT', headers={'Content-Length': '0', 'Content-Range': 'bytes */*'})
 
 

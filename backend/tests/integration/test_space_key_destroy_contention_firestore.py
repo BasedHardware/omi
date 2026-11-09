@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import os
 from threading import Barrier, Event
-from unittest.mock import Mock
 import uuid
 
 from google.auth.credentials import AnonymousCredentials
@@ -116,38 +115,32 @@ def test_cached_unwrap_observes_other_thread_destroy_commit(state):
     assert_destroyed(client, uid)
 
 
-def test_inflight_put_self_deletes_during_purge_drain(state, monkeypatch):
+def test_inflight_put_cannot_finalize_after_account_wipe(state):
     client, uid, bucket = state
-    uploading, release, finished = Event(), Event(), Event()
-    original = LocalBlob.upload_from_string
+    uploading, release = Event(), Event()
 
-    def paused_upload(blob, *args, **kwargs):
-        uploading.set()
-        assert release.wait(timeout=30)
-        return original(blob, *args, **kwargs)
+    def paused_upload(method, uri, data, headers):
+        if method == 'PUT' and not headers.get('Content-Range'):
+            uploading.set()
+            assert release.wait(timeout=30)
 
-    monkeypatch.setattr(LocalBlob, 'upload_from_string', paused_upload)
+    bucket.client._http.before_request = paused_upload
 
     def put():
-        try:
-            with pytest.raises(lake.LakeWriteFenced):
-                lake.put_space_object(uid, 'transcript', 'c', b'[]')
-        finally:
-            finished.set()
+        with pytest.raises(lake.LakeFetchError):
+            lake.put_space_object(uid, 'transcript', 'c', b'[]')
 
-    def drain(_seconds):
-        release.set()
-        assert finished.wait(timeout=30)
-
-    monkeypatch.setattr(lake_wipe.time, 'sleep', drain)
     with ThreadPoolExecutor(max_workers=1) as pool:
         writer = pool.submit(put)
-        assert uploading.wait(timeout=30)
-        client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
-        assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
+        try:
+            assert uploading.wait(timeout=30)
+            client.collection('account_deletions').document(uid).set({'wipe_status': 'running'})
+            assert lake_wipe.purge_owner_lake_content(uid)['status'] == 'purged'
+            assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
+        finally:
+            release.set()
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
-    assert lake_wipe.destroy_owner_lake_keys(uid)['status'] == 'destroyed'
     assert lake.delete_space_upload_candidates(uid) == 0
 
 
@@ -303,7 +296,6 @@ def test_conversation_purge_fences_sessions_and_erases_with_real_ranges(state):
     candidate = client.collection('lake_upload_candidates').document(
         hashlib.sha256(f'old-bucket/{key}'.encode()).hexdigest()
     )
-    row = candidate.get().to_dict()
     assert lake_wipe.purge_conversation_lake_objects(uid, 'c') == 1
     assert not candidate.get().exists
     assert lake.delete_space_upload_candidates(uid) == 0

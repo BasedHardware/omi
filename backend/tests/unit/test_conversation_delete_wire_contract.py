@@ -293,7 +293,6 @@ def test_verified_absence_failure_is_http_503_and_retains_documents(monkeypatch,
 
 def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monkeypatch, tmp_path):
     from utils.other import object_lake
-    from utils.other.local_storage import LocalBlob
 
     with _delete_client(monkeypatch) as client:
         bucket, doc, deleted = _real_lake_delete(monkeypatch, tmp_path)

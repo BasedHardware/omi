@@ -832,10 +832,14 @@ def test_real_gcs_session_seam_uses_one_put_and_generation_zero(storage, monkeyp
     if precondition_stage == 'initiation':
         create.side_effect = PreconditionFailed(session)
     monkeypatch.setattr(Blob, 'create_resumable_upload_session', create)
-    response = Mock(status_code=412 if precondition_stage == 'finalize' else 200)
+    response = Mock(
+        status_code=412 if precondition_stage == 'finalize' else 200,
+        json=Mock(return_value={'generation': '17', 'size': '7'}),
+    )
     http = Mock(request=Mock(return_value=response))
     client._http_internal = http
     blob.metadata = {'space_id': 's', 'data_class': 'transcript', 'plaintext_sha256': 'digest'}
+    response.json.return_value['metadata'] = blob.metadata
     try:
         if precondition_stage == 'initiation':
             with pytest.raises(PreconditionFailed) as error:
@@ -849,10 +853,12 @@ def test_real_gcs_session_seam_uses_one_put_and_generation_zero(storage, monkeyp
             )
             if precondition_stage == 'finalize':
                 with pytest.raises(PreconditionFailed) as error:
-                    lake._UploadSession.put_all(client, session, b'payload', lake.time.monotonic() + 5)
+                    lake._UploadSession.put_all(client, session, b'payload', lake.time.monotonic() + 5, blob=blob)
                 assert session not in str(error.value)
             else:
-                lake._UploadSession.put_all(client, session, b'payload', lake.time.monotonic() + 5)
+                lake._UploadSession.put_all(client, session, b'payload', lake.time.monotonic() + 5, blob=blob)
+            if precondition_stage == 'none':
+                assert blob.generation == 17
             http.request.assert_called_once()
             args, kwargs = http.request.call_args
             assert args == ('PUT', session) and kwargs['data'] == b'payload'

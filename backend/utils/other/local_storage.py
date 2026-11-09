@@ -131,8 +131,13 @@ class LocalBlob:
             raise PreconditionFailed('local storage create-only object exists') from error
         self.patch()
 
+    def _set_properties(self, properties):
+        self.metadata = properties.get('metadata')
+        self.content_type = properties.get('contentType')
+
     def create_resumable_upload_session(self, *, content_type, size, if_generation_match, timeout, retry):
-        return self.bucket.client._http.create(self, size, content_type, if_generation_match)
+        client: Any = self.bucket.client
+        return client._http.create(self, size, content_type, if_generation_match)
 
     def download_as_bytes(self, *_args, **_kwargs) -> bytes:
         if not self.exists():
@@ -215,6 +220,10 @@ class LocalBucket:
 @dataclass
 class _LocalSessionResponse:
     status_code: int
+    properties: dict | None = None
+
+    def json(self):
+        return self.properties or {}
 
     def close(self):
         pass
@@ -263,6 +272,7 @@ class _LocalSessionHTTP:
             file = (self.client.root / '.sessions' / token).open('r+')
         except FileNotFoundError:
             return _LocalSessionResponse(404)
+        properties = None
         with file:
             fcntl.flock(file, fcntl.LOCK_EX)
             state = json.load(file)
@@ -285,6 +295,12 @@ class _LocalSessionHTTP:
                                 retry=None,
                                 **kwargs,
                             )
+                            properties = {
+                                'generation': str(blob.generation),
+                                'size': str(blob.size),
+                                'metadata': blob.metadata,
+                                'contentType': blob.content_type,
+                            }
                             state['status'] = status = 200
                         except PreconditionFailed:
                             state['status'] = status = 412
@@ -293,7 +309,7 @@ class _LocalSessionHTTP:
             file.seek(0)
             json.dump(state if state['status'] == 308 else {'status': state['status']}, file)
             file.truncate()
-        response = _LocalSessionResponse(status)
+        response = _LocalSessionResponse(status, properties)
         if self.after_request is not None:
             self.after_request(method, uri, data, headers, response)
         return response
