@@ -519,8 +519,8 @@ def test_operator_requeue_quarantined_route_reports_a_spent_budget(setup, monkey
     assert transitions('held_redrive_budget_spent') == before + (1 if spent else 0)
 
 
-def test_nightly_requeue_is_not_double_counted(setup, monkeypatch):
-    """The nightly pass observes in its scan; its requeue call must not signal again."""
+def test_nightly_requeue_reports_once_after_commit(setup, monkeypatch):
+    """Nightly recovery emits once after commit, and a replay never emits again."""
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
     client, store, _, _, _, _ = setup
     control_for(client)
@@ -528,7 +528,9 @@ def test_nightly_requeue_is_not_double_counted(setup, monkeypatch):
     bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
     before = transitions('held_redrive_budget_spent')
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
-    assert transitions('held_redrive_budget_spent') == before
+    assert transitions('held_redrive_budget_spent') == before + 1
+    assert RecoveryStore(store).requeue_quarantined('bad', 31, dead_before=86400) is False
+    assert transitions('held_redrive_budget_spent') == before + 1
 
 
 # Custody review on 53a692de1d1d -------------------------------------------------
