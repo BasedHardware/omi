@@ -1210,6 +1210,12 @@ static int sd_mount(void)
     uint32_t sector_size = 0;
 
     for (int attempt = 1; attempt <= 5; attempt++) {
+        /* An attempt already in flight when shutdown begins must not power the
+         * card again for its remaining tries. */
+        if (sd_shutdown_in_progress) {
+            ret = -ESHUTDOWN;
+            break;
+        }
         ret = sd_enable_power(true);
         if (ret < 0) {
             omi_boot_telemetry_sd_failure();
@@ -1343,11 +1349,18 @@ static int sd_mount_gated(bool restore_cs)
         ret = sd_mount();
         if (ret == 0) {
             sd_mount_backoff_ms = 0;
+        } else if (ret == -ESHUTDOWN) {
+            /* Shutdown began mid-attempt; not a card failure. */
         } else {
             sd_mount_failures++;
             sd_mount_backoff_ms =
                 sd_mount_backoff_ms ? MIN(sd_mount_backoff_ms * 2U, SD_MOUNT_RETRY_MAX_MS) : SD_MOUNT_RETRY_MIN_MS;
             sd_mount_retry_at_ms = k_uptime_get() + sd_mount_backoff_ms;
+        }
+        if (ret != 0 && restore_cs) {
+            /* The failed mount left the card unpowered: park CS low again, as
+             * the idle power-off does, so it does not drive an unpowered card. */
+            gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 0);
         }
     }
     k_mutex_unlock(&sd_mount_lock);

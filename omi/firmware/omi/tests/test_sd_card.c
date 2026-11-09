@@ -823,6 +823,9 @@ static void test_boot_mount_retries_with_backoff(void)
     CHECK(sd_mount_gated(false) == -ESHUTDOWN);
     CHECK(sd_boot_mount() == -ESHUTDOWN);
     CHECK(z_init_calls == before);
+    /* An attempt already inside sd_mount() stops before its next power-on. */
+    CHECK(sd_mount() == -ESHUTDOWN);
+    CHECK(z_init_calls == before);
     sd_shutdown_in_progress = false;
 
     /* Recovery resets the backoff. */

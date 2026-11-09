@@ -407,14 +407,20 @@ void turnoff_all()
 
     /* Arm the level wake only after release. Armed while the button is still
      * held, System OFF wakes at once, and that wake begins with a held button
-     * (committee item 5). A stuck button gives up after a bounded wait. */
+     * (committee item 5). A stuck button gives up after a bounded wait and then
+     * wakes on release instead, so a jammed button can never start a boot with
+     * the button held (on a charger that would be the manual SAFE gesture). */
     for (int waited = 0; gpio_pin_get_dt(&usr_btn) > 0 && waited < POWEROFF_RELEASE_WAIT_MS;
          waited += POWEROFF_RELEASE_POLL_MS) {
         watchdog_feed();
         k_msleep(POWEROFF_RELEASE_POLL_MS);
     }
+    bool still_held = gpio_pin_get_dt(&usr_btn) > 0;
+    if (still_held) {
+        LOG_WRN("usr_btn still held at power-off: waking on release instead");
+    }
 
-    rc = gpio_pin_interrupt_configure_dt(&usr_btn, GPIO_INT_LEVEL_LOW);
+    rc = gpio_pin_interrupt_configure_dt(&usr_btn, still_held ? GPIO_INT_LEVEL_HIGH : GPIO_INT_LEVEL_LOW);
     if (rc < 0) {
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
         return;
