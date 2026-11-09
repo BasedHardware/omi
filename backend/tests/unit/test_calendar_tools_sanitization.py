@@ -140,6 +140,7 @@ def _calendar_module():
     }
 
     with stub_modules(stubs):
+        load_module_fresh("utils.google_calendar_identity", str(BACKEND_DIR / "utils/google_calendar_identity.py"))
         load_module_fresh(
             "utils.retrieval.google_calendar_selection",
             str(BACKEND_DIR / "utils/retrieval/google_calendar_selection.py"),

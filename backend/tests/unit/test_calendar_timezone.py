@@ -77,6 +77,7 @@ def _calendar_module():
     stubs["database.google_calendar_preferences"].get_selections = lambda _uid: {}
     stubs["langchain_core.tools"].tool = lambda func=None, **kw: (func if func is not None else (lambda f: f))
     with stub_modules(stubs):
+        _load_module_from_file("utils.google_calendar_identity", BACKEND_DIR / "utils/google_calendar_identity.py")
         model_text = _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
         _load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
         _load_module_from_file(

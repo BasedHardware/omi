@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-secondary-selection.png",
+      "platform": "mobile-ios",
+      "description": "Production Calendar settings in an isolated iPhone simulator; persisted secondary-only selection with primary creation destination. Synthetic Google provider and local Firestore.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
