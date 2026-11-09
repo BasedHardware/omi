@@ -242,7 +242,7 @@ def put_space_object(
         except PreconditionFailed:
             # Initiation sent no bytes and issued no capability. Still record
             # settled discovery for the reused object under both owner fences.
-            attempt = _record_upload_candidate(config.bucket(), key, None)
+            attempt = _record_upload_candidate(config.bucket(), key, None, 0)
             ref = _replay_object(blob, stamp, digest, data_class, deadline)
             _check_put_authority(space_id, entity_id, blob, created=False, deadline=deadline, attempt=attempt)
             if _settle_upload_candidate(config.bucket(), key, attempt, delete_if_fenced=True):
@@ -250,7 +250,7 @@ def put_space_object(
             return ref
         # Discovery commits before any payload bytes; failure cancels the empty
         # session. An ambiguous finalize keeps the session discoverable.
-        with _upload_candidate(config.bucket(), key, session, blob.bucket.client) as attempt:
+        with _upload_candidate(config.bucket(), key, session, len(payload), blob.bucket.client) as attempt:
             try:
                 _UploadSession.put_all(blob.bucket.client, session, payload, deadline, blob=blob)
             except PreconditionFailed:
@@ -344,8 +344,9 @@ class _UploadSession:
         cls._request(client, session, 'DELETE')
 
     @classmethod
-    def status(cls, client: Any, session: str) -> int:
-        return cls._request(client, session, 'PUT', headers={'Content-Length': '0', 'Content-Range': 'bytes */*'})
+    def status(cls, client: Any, session: str, size: int) -> int:
+        # The documented status query names the session's declared total size.
+        return cls._request(client, session, 'PUT', headers={'Content-Length': '0', 'Content-Range': f'bytes */{size}'})
 
 
 def _replay_object(blob, stamp, digest, data_class, deadline):
@@ -366,9 +367,9 @@ def _replay_object(blob, stamp, digest, data_class, deadline):
 
 
 @contextmanager
-def _upload_candidate(bucket: str, key: str, session: str, client):
+def _upload_candidate(bucket: str, key: str, session: str, size: int, client):
     try:
-        attempt = _record_upload_candidate(bucket, key, session)
+        attempt = _record_upload_candidate(bucket, key, session, size)
     except BaseException:
         try:
             _UploadSession.cancel(client, session)
@@ -382,7 +383,7 @@ def _upload_candidate(bucket: str, key: str, session: str, client):
     # until deletion cancels it and proves terminal storage status.
 
 
-def _record_upload_candidate(bucket: str, key: str, session: str | None) -> str:
+def _record_upload_candidate(bucket: str, key: str, session: str | None, size: int) -> str:
     """Commit discovery before put, serialized against durable deletion fences.
 
     Intents survive successful commits and ambiguous uploads for C3's janitor.
@@ -409,7 +410,7 @@ def _record_upload_candidate(bucket: str, key: str, session: str | None) -> str:
             raise LakeObjectConflict('Existing lake upload candidate is invalid')
         pending = dict(_candidate_pending(existing)) if snapshot.exists else {}
         if session is not None:
-            pending[attempt] = {'admitted_at': firestore.SERVER_TIMESTAMP, 'session': session}
+            pending[attempt] = {'admitted_at': firestore.SERVER_TIMESTAMP, 'session': session, 'size': size}
         state = {'admitted_at': firestore.SERVER_TIMESTAMP, 'in_flight': pending, 'settled': not pending}
         if snapshot.exists:
             transaction.update(candidate, state)
@@ -518,26 +519,32 @@ def _candidate_pending(row: dict) -> dict:
         if (
             attempt == 'legacy'
             or not isinstance(value, dict)
-            or set(value) != {'admitted_at', 'session'}
+            or set(value) != {'admitted_at', 'session', 'size'}
             or not isinstance(value['admitted_at'], datetime)
             or value['admitted_at'].tzinfo is None
             or not isinstance(value['session'], str)
             or not value['session'].strip()
+            or type(value['size']) is not int
+            or not 0 < value['size'] <= _MAX_SINGLE_REQUEST_BYTES
         ):
             raise LakeFetchError('Lake upload candidate state invalid')
     return pending
 
 
-# Auth, proxy, timeout and throttling refusals say nothing about the session's
-# state; only a session-level 4xx (cancelled 499, expired 404/410, ...) is terminal.
-_NON_TERMINAL_4XX = frozenset({401, 403, 407, 408, 425, 429})
+# Allowlist, measured against GCS (dev bucket, 2026-11-09): finalize -> 200 on
+# status and on cancel; cancel -> 499 on every later status/cancel/upload. 404
+# and 410 mean the service no longer knows the session, so it cannot finalize.
+# Everything else (400 request errors, auth, throttling, 308 open, 5xx) is not
+# proof and fails closed.
+_FINALIZED_SESSION_STATUSES = frozenset({200, 201})
+_TERMINAL_SESSION_STATUSES = _FINALIZED_SESSION_STATUSES | {404, 410, 499}
 
 
 def _fence_upload_attempt(attempt: dict) -> None:
     client = create_storage_client()
     _UploadSession.cancel(client, attempt['session'])
-    status = _UploadSession.status(client, attempt['session'])
-    if status not in (200, 201) and not (400 <= status < 500 and status not in _NON_TERMINAL_4XX):
+    status = _UploadSession.status(client, attempt['session'], attempt['size'])
+    if status not in _TERMINAL_SESSION_STATUSES:
         raise LakeFetchError('Lake upload session is not terminal')
 
 

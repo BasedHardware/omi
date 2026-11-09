@@ -600,7 +600,7 @@ def record_candidate(bucket, key):
     session = blob.create_resumable_upload_session(
         content_type='application/octet-stream', size=9, if_generation_match=0, timeout=(1, 1), retry=None
     )
-    return lake._record_upload_candidate(bucket, key, session)
+    return lake._record_upload_candidate(bucket, key, session, 9)
 
 
 def pending_session(store):
@@ -665,7 +665,7 @@ def test_finalize_just_before_cancel_deleted_before_row_erasure(world, monkeypat
     else:
         lake_wipe.purge_conversation_lake_objects('owner', 'c')
     assert events == ['finalized', 'absent']
-    assert lake._UploadSession.status(bucket.client, session) == 200
+    assert lake._UploadSession.status(bucket.client, session, 9) == 200
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
 
 

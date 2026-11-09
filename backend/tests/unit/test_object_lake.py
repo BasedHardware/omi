@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import hashlib
+import time
 import zlib
 from unittest.mock import Mock, patch
 
@@ -77,7 +78,10 @@ def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
         row = store.rows[('lake_upload_candidates', candidate_id)]
         assert set(row) == {'bucket', 'key', 'created_at', 'admitted_at', 'in_flight', 'settled'}
         assert row['settled'] is False and len(row['in_flight']) == 1
-        assert all(value['admitted_at'].tzinfo is not None and value['session'] for value in row['in_flight'].values())
+        assert all(
+            value['admitted_at'].tzinfo is not None and value['session'] and value['size'] > 0
+            for value in row['in_flight'].values()
+        )
         assert row['bucket'] == bucket.name and row['key'] == blob.name
         assert row['created_at'].tzinfo is not None
         return upload(blob, *args, **kwargs)
@@ -631,11 +635,11 @@ def test_delayed_candidate_creation_refused_after_owner_purge(storage, monkeypat
     bucket, store = storage
     record = lake._record_upload_candidate
 
-    def record_after_purge(bucket_name, key, session):
+    def record_after_purge(bucket_name, key, session, size):
         store.collection('account_deletions').document('s').create({'wipe_status': 'running'})
         monkeypatch.setattr(lake_wipe.users_db, 'get_user_deletion_wipe_status', lambda uid: 'running')
         assert lake_wipe.purge_owner_lake_content('s')['status'] == 'purged'
-        record(bucket_name, key, session)
+        record(bucket_name, key, session, size)
 
     monkeypatch.setattr(lake, '_record_upload_candidate', record_after_purge)
     with pytest.raises(lake.LakeWriteFenced):
@@ -776,7 +780,7 @@ def record_candidate(bucket, key):
     session = blob.create_resumable_upload_session(
         content_type='application/octet-stream', size=9, if_generation_match=0, timeout=(1, 1), retry=None
     )
-    return lake._record_upload_candidate(bucket, key, session)
+    return lake._record_upload_candidate(bucket, key, session, 9)
 
 
 def test_record_fenced_after_session_creation_cancels_empty_session(storage, monkeypatch):
@@ -795,7 +799,7 @@ def test_record_fenced_after_session_creation_cancels_empty_session(storage, mon
         put()
     assert not list(bucket.list_blobs())
     assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
-    assert lake._UploadSession.status(bucket.client, sessions[0]) == 499
+    assert lake._UploadSession.status(bucket.client, sessions[0], 1) == 499
 
 
 @pytest.mark.parametrize('operation', ['create', 'put'])
@@ -908,17 +912,35 @@ def test_expired_creator_preserves_concurrently_published_pointer(storage, monke
     assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
 
 
-@pytest.mark.parametrize('status', [200, 201, 400, 404, 410, 499, 308, 503, 302, 202, 0, 401, 403, 407, 408, 425, 429])
+@pytest.mark.parametrize(
+    'status', [200, 201, 404, 410, 499, 400, 401, 403, 407, 408, 409, 412, 425, 429, 308, 503, 302, 202, 0]
+)
 def test_fence_requires_terminal_storage_status(storage, monkeypatch, status):
     bucket, store = storage
     session = 'local-session://' + 'a' * 32
     calls = []
     monkeypatch.setattr(lake._UploadSession, 'cancel', lambda client, uri: calls.append(('DELETE', uri)))
-    monkeypatch.setattr(lake._UploadSession, 'status', lambda client, uri: calls.append(('status', uri)) or status)
-    # Auth, timeout and throttling refusals do not prove the session is terminal.
-    if status in (200, 201) or 400 <= status < 500 and status not in (401, 403, 407, 408, 425, 429):
-        lake._fence_upload_attempt({'session': session})
+    monkeypatch.setattr(
+        lake._UploadSession, 'status', lambda client, uri, size: calls.append(('status', uri, size)) or status
+    )
+    # Allowlist only: finalized, cancelled (499) or unknown to the service (404/410).
+    # A 400 request error, auth, throttling or any other code is not proof.
+    if status in (200, 201, 404, 410, 499):
+        lake._fence_upload_attempt({'session': session, 'size': 7})
     else:
         with pytest.raises(lake.LakeFetchError):
-            lake._fence_upload_attempt({'session': session})
-    assert calls == [('DELETE', session), ('status', session)]
+            lake._fence_upload_attempt({'session': session, 'size': 7})
+    assert calls == [('DELETE', session), ('status', session, 7)]
+
+
+def test_status_query_names_the_declared_size(storage):
+    bucket, store = storage
+    seen = []
+    client = bucket.client
+    client._http.before_request = lambda method, uri, data, headers: seen.append((method, dict(headers or {})))
+    blob = bucket.blob('rel/spaces/u/transcript/c/' + 'd' * 64)
+    session = lake._UploadSession.create(blob, b'payload', 'application/octet-stream', time.monotonic() + 30)
+    assert lake._UploadSession.status(client, session, 7) == 308
+    lake._UploadSession.cancel(client, session)
+    assert lake._UploadSession.status(client, session, 7) == 499
+    assert seen[0] == ('PUT', {'Content-Length': '0', 'Content-Range': 'bytes */7'})

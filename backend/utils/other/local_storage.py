@@ -252,7 +252,7 @@ class _LocalSessionHTTP:
             'content_type': content_type,
             'match': match,
             'metadata': blob.metadata,
-            'status': 308,
+            'http_status': 308,
         }
         with (sessions / token).open('x') as file:
             json.dump(state, file)
@@ -276,10 +276,10 @@ class _LocalSessionHTTP:
         with file:
             fcntl.flock(file, fcntl.LOCK_EX)
             state = json.load(file)
-            status = state['status']
+            status = state['http_status']
             if method == 'DELETE':
                 if status == 308:
-                    state['status'] = status = 499
+                    state['http_status'] = status = 499
             elif method == 'PUT' and not (headers or {}).get('Content-Range'):
                 if status == 308:
                     if len(data) != state['size']:
@@ -301,13 +301,13 @@ class _LocalSessionHTTP:
                                 'metadata': blob.metadata,
                                 'contentType': blob.content_type,
                             }
-                            state['status'] = status = 200
+                            state['http_status'] = status = 200
                         except PreconditionFailed:
-                            state['status'] = status = 412
+                            state['http_status'] = status = 412
                 elif status == 200:
                     status = 400  # A finalized capability cannot create again.
             file.seek(0)
-            json.dump(state if state['status'] == 308 else {'status': state['status']}, file)
+            json.dump(state if state['http_status'] == 308 else {'http_status': state['http_status']}, file)
             file.truncate()
         response = _LocalSessionResponse(status, properties)
         if self.after_request is not None:

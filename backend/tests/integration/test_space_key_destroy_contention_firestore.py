@@ -321,4 +321,4 @@ def record_candidate(bucket, key):
     session = blob.create_resumable_upload_session(
         content_type='application/octet-stream', size=9, if_generation_match=0, timeout=(1, 1), retry=None
     )
-    return lake._record_upload_candidate(bucket, key, session)
+    return lake._record_upload_candidate(bucket, key, session, 9)
