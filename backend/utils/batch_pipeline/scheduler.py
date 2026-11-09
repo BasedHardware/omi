@@ -1082,8 +1082,10 @@ def account_held_redrive(job: dict) -> None:
     # terminal stop is not in core, so an uncounted or spent unit keeps main's
     # retained held loop (attempt at the cap) and the spent-budget signal.
     # Rollback: switching class 3 OFF stops new budget resets; existing grants
-    # persist until their unit runs or finishes; each grant is capped at
-    # MAX_ATTEMPTS.
+    # persist until their unit runs or finishes; no clawback. Each grant is
+    # capped at MAX_ATTEMPTS only while the retry cap enforces for the owner
+    # (class 1 on, or the owner in the served cohort). With class 1 off, lease
+    # expiries defer, as on main.
     if (
         held_redrive_budget_enabled()
         and counted
@@ -1096,6 +1098,11 @@ def account_held_redrive(job: dict) -> None:
 
 def retry_cap_enforced_for(owner_id: str) -> bool:
     """Whether the batch lease-expiry retry cap quarantines at the cap for this owner."""
+    # Rollback: switching class 1 OFF stops new cap enforcement; existing grants
+    # persist until they finish; no clawback. Each grant is capped at
+    # MAX_ATTEMPTS only while the retry cap enforces for the owner (class 1 on,
+    # or the owner in the served cohort). With class 1 off, lease expiries
+    # defer, as on main.
     from utils.capture.retry_cap import retry_cap
 
     decision = retry_cap(owner_id, 0, 1, enforce=True)

@@ -738,3 +738,55 @@ def test_single_unit_looping_alert_routes_unmuted_and_is_on_the_reviewed_import_
     assert not rule['isPaused']
     gate = json.loads((monitoring / 'live-alert-gate.json').read_text(encoding='utf-8'))['uids']
     assert uid in gate
+
+
+def test_class_1_on_to_off_keeps_grants_quarantines_only_while_on_then_defers(monkeypatch):
+    """Coordinator ruling 16:56Z: rollback semantics of class 1.
+
+    Switching class 1 OFF stops new cap enforcement. Existing grants persist
+    until they finish; no clawback. Each grant is capped at MAX_ATTEMPTS only
+    while the retry cap enforces for the owner (class 1 on, or the owner in the
+    served cohort). With class 1 off, lease expiries defer, as on main.
+    """
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
+    monkeypatch.delenv('CAPTURE_COVERAGE_MODE', raising=False)  # owner outside any served cohort
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('capped', owner=uuid4().hex), 0)
+
+    def expire_loop(start, rounds):
+        attempts = []
+        for n in range(rounds):
+            now = start + n * 1000
+            queue.recover(now)
+            leases = queue.pull(now)
+            if not leases:
+                break
+            attempts.append(leases[0].attempt)
+            queue.recover(now + 121)
+        return attempts
+
+    # (a) Class 1 ON: lease expiries quarantine at MAX_ATTEMPTS.
+    assert expire_loop(0, 4) == [1, 2]
+    job = store.rows['jobs', 'capped']
+    assert job['state'] == 'quarantined' and job['quarantine_reason'] == 'worker_failed' and job['attempt'] == 2
+    quarantined_at = job['quarantined_at']
+
+    # A re-drive while class 1 is ON issues a class 3 grant.
+    assert store.run(lambda tx: Scheduler.requeue_quarantined_in_transaction(tx, tx.get('jobs', 'capped'), 10000))
+    job = store.rows['jobs', 'capped']
+    assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 2
+
+    # (b) Class 1 switched OFF mid-grant: the grant's attempts are kept.
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'false')
+    job = store.rows['jobs', 'capped']
+    assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 2 and job['state'] != 'quarantined'
+
+    # (c) After OFF, lease expiries defer as on main: past the cap, no new quarantine.
+    attempts = expire_loop(20000, 4)
+    assert attempts == [1, 2, 3, 4]
+    job = store.rows['jobs', 'capped']
+    assert job['state'] != 'quarantined' and job['quarantined_at'] == quarantined_at
