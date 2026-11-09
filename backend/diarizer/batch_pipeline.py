@@ -28,6 +28,7 @@ from config.batch_pipeline import (
     long_speech_handoff_enabled,
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
+    persist_restrike_enabled,
     strict_vad_shadow_sampled,
     worker_io_concurrency,
     worker_silence_disposition_enabled,
@@ -63,8 +64,10 @@ from utils.batch_pipeline.errors import (
     EMPTY_LADDER_RECOVERY_STAGE,
     FatalGpuError,
     LANGUAGE_GUARD_REDRIVE_REASONS,
+    error_site_field,
     validation_disposition_failure,
 )
+from google.api_core.exceptions import GoogleAPIError
 from utils.batch_pipeline.word_validation import (
     BatchValidationError,
     ValidationReason,
@@ -162,6 +165,52 @@ class DecodedDurationMismatch(ValueError):
     retry ladder. Carries a type so the fetch_decode boundary never has to
     match an exception message.
     """
+
+
+# The worker persist boundary re-plays a transport-lost upload with the same
+# doubling schedule the pump's publication restrike uses (see
+# ``utils/batch_pipeline/pump.py``): 0.25s, 0.5s, 1.0s — bounded by 2.0s — for
+# at most three strikes. Each strike runs on the IO executor thread the serial
+# persist call already occupies, so a strike never blocks the event loop and
+# never holds a GPU chain slot; it only extends one IO worker's occupancy by
+# the backoff window.
+PERSIST_RESTRIKE_BASE_SECONDS = 0.25
+PERSIST_RESTRIKE_MAX_SECONDS = 2.0
+PERSIST_RESTRIKE_MAX_ATTEMPTS = 3
+
+
+def persist_restrike_delay(attempt: int) -> float:
+    """Doubling re-strike backoff: 0.25s, 0.5s, 1.0s, capped at 2.0s.
+
+    A zero or negative attempt schedules the base delay — a caller that
+    never entered the lane cannot ask for a longer wait than the first
+    strike's; attempts beyond the cap saturate at the maximum instead of
+    growing without bound.
+    """
+    if attempt <= 0:
+        return PERSIST_RESTRIKE_BASE_SECONDS
+    if attempt > PERSIST_RESTRIKE_MAX_ATTEMPTS:
+        return PERSIST_RESTRIKE_MAX_SECONDS
+    return min(PERSIST_RESTRIKE_MAX_SECONDS, PERSIST_RESTRIKE_BASE_SECONDS * (2 ** (attempt - 1)))
+
+
+def persist_loss_is_restrikeable(error: BaseException) -> bool:
+    """True for a Google API transport fault a fresh persist call can survive.
+
+    The storage upload and the artifact register are separate Google API
+    requests; an ``InvalidArgument``/5xx burst on one request says nothing
+    about the next one (production books these faults in tight bursts on
+    distinct units, and every burst unit later settles on its recovery
+    re-run). Every typed custody fault — staged/retained audio validity,
+    privacy fences, policy refusals, the bounded-payload and owner-binding
+    ValueErrors, the upload deadline — raises a non-Google class and stays
+    non-strikeable: replaying it would only reproduce the same refusal.
+    Firestore contention never reaches this boundary as ``Aborted`` — the
+    register's transaction wrapper replays it internally and raises
+    ``FirestoreContentionExhausted`` (a ``RuntimeError``), which lands here
+    as non-strikeable and keeps its own recovery lane.
+    """
+    return isinstance(error, GoogleAPIError)
 
 
 def transient_failure_evidence(stage: str, reason: str) -> dict | None:
@@ -454,6 +503,46 @@ class PipelineWorker:
                 read(item)
             except Exception:
                 pass
+
+    def _persist_with_restrike(self, item, payload):
+        """Persist once, then re-strike transport losses with bounded backoff.
+
+        The first call is the legacy persist byte-for-byte. A Google API
+        transport loss (``persist_loss_is_restrikeable``) under the
+        ``persist_restrike_enabled`` gate is re-struck up to
+        ``PERSIST_RESTRIKE_MAX_ATTEMPTS`` times on the documented doubling
+        schedule, each strike its own ``persist`` timing span, so a
+        burst-shaped storage fault rides out in-process and the completed
+        GPU result survives instead of feeding the recovery re-lease cycle.
+        Every non-strikeable fault, an exhausted strike budget, or the gate
+        off raises the first fault untouched — the legacy ``fail`` path and
+        its evidence run exactly as before.
+
+        Failure-Class: FC-persist-transport-loss-discards-completed-gpu-results
+        """
+        for attempt in range(1, PERSIST_RESTRIKE_MAX_ATTEMPTS + 1):
+            try:
+                uri = self.timings.call('persist', self.persist, item, payload)
+            except Exception as error:
+                if (
+                    not persist_restrike_enabled()
+                    or not persist_loss_is_restrikeable(error)
+                    or attempt >= PERSIST_RESTRIKE_MAX_ATTEMPTS
+                ):
+                    raise
+                delay = persist_restrike_delay(attempt)
+                logger.info(
+                    'event=batch_persist outcome=restrike_wait attempt=%d delay_ms=%d exception_type=%s',
+                    attempt,
+                    round(delay * 1000),
+                    type(error).__name__,
+                )
+                time.sleep(delay)
+            else:
+                if attempt > 1:
+                    logger.info('event=batch_persist outcome=restrike_committed attempt=%d', attempt)
+                return uri
+        raise AssertionError('unreachable persist restrike loop state')
 
     def prepare_first(self, items):
         # IO=1 is the existing serial rollback. No models or privacy shortcuts.
@@ -808,6 +897,7 @@ class PipelineWorker:
                         shape['windows'],
                         shape['asr_words'],
                         owned,
+                        error_site_field(exc),
                     )
                 )
                 if self.on_failure:
@@ -1358,14 +1448,14 @@ class PipelineWorker:
                             (
                                 len(results) - 1,
                                 item,
-                                self._io.submit(self.timings.call, 'persist', self.persist, item, payload),
+                                self._io.submit(self._persist_with_restrike, item, payload),
                                 state['silence'],
                                 silence is not None,
                                 language_receipt,
                             )
                         )
                         continue
-                    uri = self.timings.call('persist', self.persist, item, payload)
+                    uri = self._persist_with_restrike(item, payload)
                     results.append(
                         WorkResult(
                             item.segment_id,
@@ -1469,6 +1559,7 @@ class PipelineWorker:
                 clips,
                 asr_words,
                 owned,
+                site,
             ) in failure_records:
                 try:
                     if segment_id in shadow_ids:
@@ -1543,7 +1634,7 @@ class PipelineWorker:
                     else:
                         logger.error(
                             'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
-                            'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
+                            'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d%s',
                             error_class,
                             failure_stage,
                             segment_id,
@@ -1553,6 +1644,7 @@ class PipelineWorker:
                             clips,
                             asr_words,
                             owned,
+                            site,
                         )
                 except Exception:
                     pass  # Observability failure must never discard healthy results.

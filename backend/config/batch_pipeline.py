@@ -296,6 +296,38 @@ def contention_storm_damper_enabled() -> bool:
     )
 
 
+def persist_restrike_enabled() -> bool:
+    """Re-strike a transport-lost worker persist in-process by default; false is the kill switch.
+
+    The worker's persist stage encrypts and uploads the completed unit result
+    through the staging bucket and the durable artifact register. When that
+    transport faults (a Google API ``InvalidArgument``/5xx burst from the
+    storage or register hop), the worker today discards a fully produced GPU
+    result — decode, VAD, diarization and ASR all done — and books a transient
+    worker fault, so lease recovery re-leases the unit and re-runs the entire
+    GPU chain to reproduce a result the worker already held (the
+    ``event=batch_worker_failed error_class=InvalidArgument stage=persist``
+    sensor family). With this gate on, the persist boundary re-plays the same
+    persist call in-process with a documented doubling backoff (0.25s -> 2.0s,
+    at most three strikes) while the worker still holds the sealed payload:
+    the durable deletion outbox registers each attempt before its upload, so a
+    strike that never lands leaves the same registered-but-unwritten reference
+    the uncertain-upload path already tolerates, and a strike that lands
+    returns its own immutable URI. Only the Google API transport family
+    classifies as a re-strikeable loss; typed custody faults
+    (StagedAudioInvalid and siblings), privacy fences, policy refusals and
+    every non-Google exception abort the lane and the legacy fail path runs
+    byte-for-byte as before. false restores the immediate fault for every
+    loss.
+
+    Failure-Class: FC-persist-transport-loss-discards-completed-gpu-results
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_PERSIST_RESTRIKE_ENABLED',
+        os.getenv('BATCH_PIPELINE_PERSIST_RESTRIKE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def publication_restrike_enabled() -> bool:
     """Re-strike a contention-lost publication transition in-process by default; false is the kill switch.
 
