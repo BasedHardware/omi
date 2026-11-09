@@ -10,5 +10,6 @@
  "scope_hints": [
   "backend/models/transcript_segment.py"
  ],
- "status": "open"
+ "status": "dormant",
+ "dormant_since": "2026-11-09T09:17:22.931187Z"
 }
