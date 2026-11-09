@@ -468,10 +468,13 @@ class RegistryFixture(unittest.TestCase):
         self.assertNotIn("stale registry entry: delete it or restore the read: SPARSE_MOBILE_GATE", errors)
 
     def test_deploy_key_missing_from_registry(self) -> None:
-        self.write("backend/deploy/runtime_env/_base.yaml", "services:\n  MISSING_KILL_SWITCH:\n    value: false\n")
+        self.write(
+            "backend/deploy/runtime_env/_base.yaml",
+            "environment_shared:\n  cloud_run:\n    services:\n      backend:\n        env:\n          MISSING_KILL_SWITCH:\n            value: false\n",
+        )
         self.assertTrue(
             any(
-                "backend/deploy/runtime_env/_base.yaml:2: undeclared registry flag: MISSING_KILL_SWITCH" in e
+                "backend/deploy/runtime_env/_base.yaml:6: undeclared registry flag: MISSING_KILL_SWITCH" in e
                 for e in self.errors()
             )
         )
@@ -964,8 +967,244 @@ class RegistryFixture(unittest.TestCase):
             'run: gcloud run services update backend-listen --update-env-vars "EXAMPLE_PERCENT=10,EXAMPLE_UID_ALLOWLIST=uid"\n',
         )
         errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
-        self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_PERCENT", "\n".join(errors))
-        self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_UID_ALLOWLIST", "\n".join(errors))
+        self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/prod", "\n".join(errors))
+        self.assertIn("duplicate declaration: EXAMPLE_UID_ALLOWLIST for backend-listen/prod", "\n".join(errors))
+
+    def duplicate_fixture(self, key="EXAMPLE_PERCENT") -> None:
+        self.write_flags([flag(key)])
+
+    def manifest_flag(
+        self,
+        filename="_base.yaml",
+        *,
+        workload="backend-listen",
+        value="10",
+        runtime="gke",
+        key="EXAMPLE_PERCENT",
+        values_file=None,
+    ) -> None:
+        header = "environment_shared" if filename == "_base.yaml" else "overlay"
+        if runtime == "gke":
+            link = f"      values_file: {values_file}\n" if values_file else ""
+            body = f"  gke:\n    {workload}:\n{link}      env:\n        {key}: {{value: '{value}'}}\n"
+        else:
+            body = (
+                f"  cloud_run:\n    services:\n      {workload}:\n        env:\n          {key}: {{value: '{value}'}}\n"
+            )
+        self.write(f"backend/deploy/runtime_env/{filename}", f"{header}:\n{body}")
+
+    def chart_flag(
+        self, env="prod", *, filename=None, workload="backend-listen", key="EXAMPLE_PERCENT", value="10"
+    ) -> str:
+        path = f"backend/charts/{workload}/{filename or env + '_omi_' + workload.replace('-', '_') + '_values.yaml'}"
+        self.write(path, f"env:\n  - name: {key}\n    value: '{value}'\n")
+        return path
+
+    def test_base_and_overlay_compose_one_logical_source(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag()
+        self.manifest_flag("dev.overlay.yaml", value="0")
+        self.manifest_flag("prod.overlay.yaml", value="100")
+        self.assertEqual([], self.errors())
+
+    def test_unlinked_gke_and_chart_fail_without_allowlist(self) -> None:
+        # A formerly excepted key fails too: there is no key-specific escape hatch.
+        key = "AUDIO_ARCHIVE_PERCENT"
+        self.duplicate_fixture(key)
+        self.manifest_flag("prod.overlay.yaml", key=key)
+        chart = self.chart_flag(key=key)
+        self.assertEqual(
+            [
+                f"duplicate declaration: {key} for backend-listen/prod appears in "
+                f"{chart}, backend/deploy/runtime_env#backend-listen: keep one source, "
+                "or declare it in the manifest gke section that validates this chart"
+            ],
+            self.errors(),
+        )
+        import check_feature_flag_registry as checker
+
+        self.assertFalse(any(name.startswith("DUPLICATE_DECLARATION_ALLOWLIST") for name in vars(checker)))
+        self.assertNotIn("DUPLICATE_DECLARATION_ALLOWLIST", Path(checker.__file__).read_text())
+
+    def test_gke_and_its_values_file_chart_are_one_validated_source(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag(values_file="backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml")
+        self.manifest_flag("prod.overlay.yaml", value="100")
+        self.chart_flag("dev")
+        self.chart_flag("prod", value="100")
+        self.assertEqual([], self.errors())
+
+    def test_gke_pointing_to_different_chart_does_not_exempt_unlinked_chart(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag("prod.overlay.yaml", values_file="backend/charts/backend-listen/prod_other_values.yaml")
+        self.chart_flag()
+        self.chart_flag(filename="prod_other_values.yaml")
+        errors = self.errors()
+        self.assertEqual(1, len(errors))
+        self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/prod", errors[0])
+        self.assertIn("prod_omi_backend_listen_values.yaml", errors[0])
+
+    def test_values_file_override_is_environment_scoped(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag(values_file="backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml")
+        self.manifest_flag("prod.overlay.yaml", values_file="backend/charts/backend-listen/prod_override_values.yaml")
+        self.chart_flag("dev")
+        self.chart_flag("prod")
+        self.chart_flag(filename="prod_override_values.yaml")
+        errors = self.errors()
+        self.assertEqual(1, len(errors))
+        self.assertIn("for backend-listen/prod", errors[0])
+
+    def test_values_file_pairing_does_not_depend_on_chart_directory_or_service_list(self) -> None:
+        self.duplicate_fixture()
+        chart = "backend/charts/shared/prod_custom_values.yaml"
+        self.manifest_flag("prod.overlay.yaml", workload="custom-worker", values_file=chart)
+        self.write(chart, "env:\n  - name: EXAMPLE_PERCENT\n    value: '10'\n")
+        self.assertEqual([], self.errors())
+        self.write(
+            ".github/actions/deploy/action.yml",
+            "run: gcloud run services update custom-worker --project based-hardware --update-env-vars EXAMPLE_PERCENT=10\n",
+        )
+        self.assertEqual([], self.errors())
+
+    def test_values_file_without_env_prefix_is_paired_in_each_referenced_environment(self) -> None:
+        self.duplicate_fixture()
+        chart = "backend/charts/shared/values.yaml"
+        self.manifest_flag(workload="custom-worker", values_file=chart)
+        self.write(chart, "env:\n  - name: EXAMPLE_PERCENT\n    value: '10'\n")
+        self.assertEqual([], self.errors())
+        from feature_flag_registry import extract_deploy_declarations
+
+        declared = [item for item in extract_deploy_declarations(self.root) if item.path == chart]
+        self.assertEqual(
+            {("custom-worker", "dev"), ("custom-worker", "prod")},
+            {(item.workload, item.environment) for item in declared},
+        )
+
+    def test_duplicate_identity_includes_platform_even_when_workload_name_matches(self) -> None:
+        from feature_flag_registry import Declaration, duplicate_declaration_sources
+
+        declarations = [
+            Declaration("EXAMPLE_PERCENT", platform + ".yaml", 1, platform, "backend-listen", "dev", platform)
+            for platform in ("gke", "cloud_run_service", "cloud_run_job", "desktop", "action")
+        ]
+        self.assertEqual({}, duplicate_declaration_sources(declarations))
+        declarations.append(Declaration("EXAMPLE_PERCENT", "second.yaml", 1, "gke", "backend-listen", "dev", "second"))
+        self.assertEqual(
+            {("EXAMPLE_PERCENT", "gke", "backend-listen", "dev"): ["gke", "second"]},
+            duplicate_declaration_sources(declarations),
+        )
+
+    def test_cloud_run_and_chart_are_different_workloads(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag(workload="backend-listen", runtime="cloud_run")
+        self.chart_flag()
+        self.assertEqual([], self.errors())
+
+    def test_chart_dev_and_prod_are_different_environments(self) -> None:
+        self.duplicate_fixture()
+        self.chart_flag("dev")
+        self.chart_flag("prod")
+        self.assertEqual([], self.errors())
+
+    def test_two_charts_for_same_workload_and_environment_fail(self) -> None:
+        self.duplicate_fixture()
+        self.chart_flag()
+        self.chart_flag(filename="prod_second_values.yaml")
+        self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/prod", "\n".join(self.errors()))
+
+    def test_two_gke_charts_still_fail_alongside_same_named_cloud_run_action(self) -> None:
+        self.duplicate_fixture()
+        first = self.chart_flag("dev")
+        second = self.chart_flag("dev", filename="dev_second_values.yaml")
+        self.write(
+            ".github/actions/deploy/action.yml",
+            "run: gcloud run services update backend-listen --project based-hardware-dev --update-env-vars EXAMPLE_PERCENT=10\n",
+        )
+        errors = self.errors()
+        self.assertEqual(1, len(errors))
+        self.assertIn("for backend-listen/dev", errors[0])
+        self.assertIn(first, errors[0])
+        self.assertIn(second, errors[0])
+        self.assertNotIn(".github/actions/", errors[0])
+
+    def test_cloud_run_action_and_same_named_gke_chart_are_different_platforms(self) -> None:
+        self.duplicate_fixture()
+        self.chart_flag()
+        self.write(
+            ".github/actions/deploy/action.yml",
+            "run: gcloud run services update backend-listen --project based-hardware-dev --update-env-vars EXAMPLE_PERCENT=10\n",
+        )
+        self.assertEqual([], self.errors())
+        self.chart_flag("dev")
+        self.assertEqual([], self.errors())
+        from feature_flag_registry import extract_action_declarations, extract_deploy_declarations
+
+        self.assertEqual({"cloud_run_service"}, {item.platform for item in extract_action_declarations(self.root)})
+        self.assertEqual({"gke"}, {item.platform for item in extract_deploy_declarations(self.root)})
+
+    def test_action_uses_its_command_not_another_target_in_the_step(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag("dev.overlay.yaml", runtime="cloud_run")
+        self.write(
+            ".github/actions/deploy/action.yml",
+            "run: |\n  gcloud run services update other --update-env-vars OTHER=0\n"
+            "  gcloud run services update backend-listen --update-env-vars EXAMPLE_PERCENT=10 --project based-hardware-dev\n",
+        )
+        self.assertIn(
+            "duplicate declaration: EXAMPLE_PERCENT for cloud_run/services/backend-listen/dev", "\n".join(self.errors())
+        )
+
+    def test_inline_chart_entry_is_a_declaration(self) -> None:
+        self.duplicate_fixture()
+        self.manifest_flag("prod.overlay.yaml")
+        self.write(
+            "backend/charts/backend-listen/prod_omi_backend_listen_values.yaml",
+            "env:\n  - {name: EXAMPLE_PERCENT, value: '10'}\n",
+        )
+        self.assertIn("duplicate declaration: EXAMPLE_PERCENT for backend-listen/prod", "\n".join(self.errors()))
+
+    def test_quoted_compact_and_merged_unlinked_manifest_entries_are_declarations(self) -> None:
+        self.duplicate_fixture()
+        self.chart_flag()
+        for body in (
+            "overlay: {gke: {backend-listen: {env: {'EXAMPLE_PERCENT': {value: '10'}}}}}\n",
+            "shared: &flags {EXAMPLE_PERCENT: {value: '10'}}\noverlay:\n  gke:\n    backend-listen:\n      env:\n        <<: *flags\n",
+        ):
+            with self.subTest(body=body):
+                self.write("backend/deploy/runtime_env/prod.overlay.yaml", body)
+                self.assertIn(
+                    "duplicate declaration: EXAMPLE_PERCENT for backend-listen/prod", "\n".join(self.errors())
+                )
+
+    def test_action_files_remain_distinct_sources(self) -> None:
+        self.duplicate_fixture()
+        for name in ("first", "second"):
+            self.write(
+                f".github/actions/{name}/action.yml",
+                "run: gcloud run services update backend --project based-hardware --update-env-vars EXAMPLE_PERCENT=10\n",
+            )
+        errors = self.errors()
+        self.assertEqual(1, len(errors))
+        self.assertIn("for cloud_run/services/backend/prod", errors[0])
+
+    def test_cli_as_of_controls_expired_review_date(self) -> None:
+        import sys
+
+        self.write_flags([flag(review_by="2026-10-13")])
+        command = [
+            sys.executable,
+            str(Path(__file__).with_name("check_feature_flag_registry.py")),
+            "--root",
+            str(self.root),
+            "--skip-render",
+            "--as-of",
+        ]
+        early = subprocess.run(command + ["2026-10-20"], capture_output=True, text=True)
+        self.assertEqual(0, early.returncode, early.stdout + early.stderr)
+        late = subprocess.run(command + ["2026-11-21"], capture_output=True, text=True)
+        self.assertEqual(1, late.returncode)
+        self.assertIn("review overdue beyond the 7-day grace: EXAMPLE_ENABLED", late.stderr)
 
     def test_rendered_overdue_list_uses_explicit_as_of_date(self) -> None:
         registry = {"flags": [flag(review_by="2026-10-15")], "ignore": [], "retired": []}
