@@ -270,6 +270,37 @@ def test_segment_anchor_guards_keep_minting(row, candidate):
     assert counts['skipped_duplicate'] == 0
 
 
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize(
+    'original,refreshed',
+    [
+        ('Send 3 copies to Jamie by Friday', 'Send 4 copies to Jamie by Friday'),
+        ('Do not send copies to Jamie by Friday', 'Send copies to Jamie by Friday'),
+        ('Send copies to Jamie before Friday', 'Send copies to Jamie after Friday'),
+        ('Send access code to Jamie by Friday', 'Share access code with Jamie by Friday'),
+    ],
+    ids=['quantity', 'negation', 'time-qualifier', 'code'],
+)
+def test_segment_anchor_preserves_guarded_meaning(world, original, refreshed, reverse):
+    if reverse:
+        original, refreshed = refreshed, original
+    row = anchored_item(original)
+    world.store.rows[task_path('original')] = deepcopy(row)
+    candidate = anchored_item(refreshed)
+    result = db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
+    assert result['counts']['added_new'] == 1
+    assert result['counts']['skipped_duplicate'] == 0
+    new_id = result['pending'][0]
+    assert new_id != 'original'
+    assert world.store.rows[task_path('original')] == row
+    assert world.store.rows[task_path(new_id)]['description'] == refreshed
+    ledger = world.store.rows[conv_path('survivor')][RECEIPT]['keys']
+    assert ledger[key(refreshed)] == [new_id]
+    repeated = db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
+    assert repeated['counts']['added_new'] == 0
+    assert repeated['counts']['skipped_duplicate'] == 1
+
+
 def test_segment_anchor_consumes_target_only_once():
     row = anchored_item('Contact maintainer about repository license')
     items = [

@@ -13,7 +13,7 @@ from hashlib import sha256
 from typing import Any
 
 from config.action_item_identity_key import identity_key
-from config.action_item_similarity import near_duplicate_tokens, tokens
+from config.action_item_similarity import guarded_tokens_match, near_duplicate_tokens, tokens
 
 LIMIT = 200
 RECEIPT = 'action_item_refresh'
@@ -166,6 +166,7 @@ def plan(
                 if task_id not in matched
                 and candidate_segments & prior_segments
                 and len(candidate_tokens & existing_tokens[task_id]) >= 3
+                and guarded_tokens_match(candidate_tokens, existing_tokens[task_id])
             ]
             if len(anchors) == 1:
                 ledger[identity] = anchors  # Retain the original wording and remember this alias.
