@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import quote
 
 from database import google_calendar_preferences as preferences
+from utils.google_calendar_identity import account_key
 from utils.executors import db_executor, run_blocking
 
 BASE = 'https://www.googleapis.com/calendar/v3'
@@ -64,7 +65,7 @@ async def readable_calendars(access_token: str) -> tuple[str, list[dict[str, Any
 
 
 def selected_ids(selections: dict, primary: str) -> list[str]:
-    key = preferences.account_key(primary)
+    key = account_key(primary)
     if key not in selections:
         return ['primary']
     saved = selections[key]

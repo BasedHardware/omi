@@ -55,7 +55,7 @@ this same authority rather than reintroducing a primary-only source.
 - [x] Selected-calendar fan-out, pagination, identity and mutation routing
 - [x] All active backend caller migration
 - [x] Flutter, macOS and Windows/Linux selection controls
-- [x] Backend calendar/linking/context regressions: 156 tests across 21 isolated files
+- [x] Backend calendar/linking/context regressions: 160 tests across 21 isolated files
 - [x] Firestore emulator persistence/reconnect/account isolation integration: 2 tests
 - [x] Flutter UI/transport: 8 tests; iPhone 16 Pro simulator loopback journey:
       primary default → multiple calendars → persisted reopen → secondary-only reads

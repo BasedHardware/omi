@@ -149,6 +149,35 @@ async def test_stale_account_or_unreadable_calendar_cannot_change_preferences(pr
 
 
 @pytest.mark.asyncio
+async def test_saved_unavailable_calendar_can_be_retained_but_not_newly_added(provider):
+    store, owner, _, _ = provider
+    store['omi-A'] = {prefs.account_key(owner['primary']): ['removed-calendar']}
+    saved = await routes.save_google_calendar_selection(
+        routes.CalendarSelectionUpdate(
+            account_id=owner['primary'], selected_ids=['removed-calendar', 'team/#?@group.test']
+        ),
+        uid='omi-A',
+    )
+    assert saved['selected_ids'] == ['removed-calendar', 'team/#?@group.test']
+    with pytest.raises(routes.HTTPException) as error:
+        await routes.save_google_calendar_selection(
+            routes.CalendarSelectionUpdate(account_id=owner['primary'], selected_ids=['different-removed-calendar']),
+            uid='omi-A',
+        )
+    assert error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('corrupt', [None, [], ['']])
+async def test_corrupt_saved_scope_fails_closed_instead_of_reading_primary(provider, corrupt):
+    store, owner, _, calls = provider
+    store['omi-A'] = {prefs.account_key(owner['primary']): corrupt}
+    with pytest.raises(ValueError):
+        await tools.get_google_calendar_events('token', uid='omi-A')
+    assert not any('/events' in call[1] for call in calls)
+
+
+@pytest.mark.asyncio
 async def test_catalog_and_each_calendar_have_independent_pagination(provider, monkeypatch):
     store, owner, _, _ = provider
     store['omi-A'] = {prefs.account_key(owner['primary']): ['primary', 'secondary']}

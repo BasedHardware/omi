@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,7 +23,7 @@ class _CalendarEnv implements EnvFields {
 /// Firestore emulator. Google is synthetic; the page, transport, routes and
 /// persisted preference document are real. Never point this at a live API.
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('calendar picker persists multiple calendars and controls event reads', (tester) async {
     const base = String.fromEnvironment('OMI_CALENDAR_FIXTURE_BASE');
     expect(Uri.parse(base).host, '127.0.0.1');
@@ -82,5 +83,13 @@ void main() {
     await tester.tap(find.text('Save'));
     await settleUntil(find.text('Choose Calendars'));
     expect(await titles(), ['Team meeting']);
+    await tester.tap(find.text('Choose Calendars'));
+    await settleUntil(find.text('Project team'));
+    if (Platform.isAndroid) {
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pump();
+    }
+    final image = await binding.takeScreenshot('google-calendar-selection');
+    expect(image, isNotEmpty);
   });
 }

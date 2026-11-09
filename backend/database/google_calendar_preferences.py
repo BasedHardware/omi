@@ -4,14 +4,10 @@ Kept on the user document so disconnect/reconnect retains preferences, while
 account deletion removes them with the user. Tokens never live here.
 """
 
-from hashlib import sha256
 from typing import Any
+from utils.google_calendar_identity import account_key
 
 FIELD = 'google_calendar_read_selections'
-
-
-def account_key(primary_calendar_id: str) -> str:
-    return sha256(primary_calendar_id.encode()).hexdigest()
 
 
 def get_selections(uid: str, *, firestore_client: Any = None) -> dict:
