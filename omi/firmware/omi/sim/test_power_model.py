@@ -92,6 +92,22 @@ class PowerModelTests(unittest.TestCase):
         self.assertEqual(out["boots"][1]["start_ms"], 2000)
         self.assertFalse(device.calls[1]["warm"])
 
+    def test_jammed_button_wakes_on_release_when_armed_for_it(self):
+        device = FakeDevice([("poweroff", 65000, {"button_held_at_poweroff": True})])
+        s = scenario([{"t": 2000, "hold": 75000}], 120000)
+
+        def execute(index, cfg, stop_ms, warm):
+            out = device(index, cfg, stop_ms, warm)
+            if index == 0:
+                out["log"] = "usr_btn still held at power-off: " + pm.WAKE_ON_RELEASE
+            return out
+
+        out = pm.run_power_model(s, execute)
+        self.assertEqual(out["boots"][1]["reset"], "off-wake")
+        self.assertEqual(out["boots"][1]["start_ms"], 77000)
+        self.assertIn("button 0", device.calls[1]["cfg"])
+        self.assertEqual(pm.inv_poweroff_waits_release(out["boots"], out), [])
+
     def test_poweroff_waits_for_next_press(self):
         device = FakeDevice([("poweroff", 2000, {})])
         out = pm.run_power_model(scenario([{"t": 1000, "hold": 500}, {"t": 6000, "tap": [100]}], 9000), device)

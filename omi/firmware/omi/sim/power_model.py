@@ -239,8 +239,16 @@ def run_power_model(scenario, execute):
             t, reset, warm = t_exit, "software", True
         else:  # poweroff
             retains = bool(initial.get("off_retains_ram", False))
-            if result["state"].get("button_held_at_poweroff"):
+            release_wake = WAKE_ON_RELEASE in result.get("log", "")
+            if result["state"].get("button_held_at_poweroff") and not release_wake:
                 t, reset, warm = t_exit, "off-wake", retains
+            elif result["state"].get("button_held_at_poweroff"):
+                # Armed for release: System OFF wakes when the jam clears.
+                release = next((et for et, k, v in events if k == "button" and not v and et > t_exit), None)
+                if release is None or release >= end:
+                    final = "off"
+                    break
+                t, reset, warm = release, "off-wake", retains
             else:
                 press = next((et for et, k, v in events if k == "button" and v and et > t_exit), None)
                 cycle = next((pt for pt, pv in power if pt > t_exit and pv == "cycle"), None)
@@ -264,6 +272,9 @@ SIMSTATE = re.compile(r"^SIMSTATE: (\{.*\})\s*$", re.M)
 SIM_EXIT = re.compile(r"^SIM EXIT: (\w+)\s*$", re.M)
 
 
+# button.c logs this when it arms System OFF wake on release (button still
+# held after its bounded wait); otherwise wake is armed on press.
+WAKE_ON_RELEASE = "waking on release instead"
 BOOTSTATE = re.compile(r"^BOOTSTATE: active=1 count=\d+ reason=(\d+)", re.M)
 
 
@@ -289,7 +300,7 @@ def parse_boot_log(text):
 def _check_boot(prefix, expect, boot, failures):
     state = boot["state"]
     log = boot.get("log", "")
-    simple = {"exit": boot["exit"], "reset": boot["reset"], "warm": boot["warm"]}
+    simple = {"exit": boot["exit"], "reset": boot["reset"], "warm": boot["warm"], "start_ms": boot.get("start_ms")}
     for key, want in expect.items():
         if key in simple:
             if simple[key] != want:
@@ -415,7 +426,8 @@ def inv_mute_blocks_capture(boots, outcome):
 
 def inv_poweroff_waits_release(boots, outcome):
     return [f"boot {b['index']}: System OFF entered with the button held (instant re-wake)"
-            for b in boots if b["exit"] == "poweroff" and b["state"].get("button_held_at_poweroff")]
+            for b in boots if b["exit"] == "poweroff" and b["state"].get("button_held_at_poweroff")
+            and WAKE_ON_RELEASE not in b.get("log", "")]
 
 
 def inv_no_watchdog_in_healthy_boot(boots, outcome):
