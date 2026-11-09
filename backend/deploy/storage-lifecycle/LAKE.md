@@ -51,11 +51,13 @@ backfill, current-consent export filtering, registry and orphan janitor.
 C4 ships required, retry-safe account wipe steps in this order: cell/directory
 purge, **lake_prefix_purge**, Firestore user subtree, Typesense, memory registry,
 then **lake_key_destroy LAST**, before the completed marker. The prefix step
-requires a running wipe and rechecks the blocking deletion fence, drains writers
-for `OBJECT_LAKE_WIPE_DRAIN_SECONDS` (default 5, bounded 0..60; zero skips sleep), then deletes and
-verifies absence. A put that passed its initial fence before deletion rechecks
-authority after upload and self-deletes when fenced. Transport or verified-absence
-failures fail the wipe for retry; keys survive any earlier step failure.
+requires a running wipe and rechecks the blocking deletion fence, then deletes
+and verifies absence. Each pending upload has a resumable session; the final key
+step cancels and verifies terminal session status, purges the current prefix,
+then fences sessions again and deletes/verifies each recorded bucket before
+transactional candidate erasure. Keys survive any failure. Socket deadlines
+are pointer-success budgets; storage session status supplies deletion authority.
+Legacy timestamp-only attempts fail closed without age-based erasure.
 
 An unset `BUCKET_OBJECT_LAKE` skips prefix purge with zero marker/storage IO.
 A configured bucket is purged even after writer rollback (false/percent 0).
@@ -76,13 +78,11 @@ upload, alongside the account marker and space key. A newly created late
 candidate removes only its own generation and refuses to return a pointer;
 a create-only retry never removes an existing referenced object. Verified-absence
 failure is a retryable `LakePurgeIncomplete` (a `LakeFetchError`) with HTTP 503.
-After verified prefix absence, deletion removes settled upload candidates in
-each conversation's exact key range only after deleting and verifying every
-recorded bucket binding. Unsettled candidates retain discovery at any age and
-schedule a durable re-purge after the newest admission plus 24 hours. Their
-fenced writers may instead erase the row after recorded-bucket absence
-verification and final same-key settlement. The scheduled handler re-deletes
-late blobs before erasing expired discovery; it is not a general orphan janitor.
+After verified prefix absence, deletion cancels pending resumable sessions in
+each conversation's exact key range, queries terminal status, then deletes and
+verifies every recorded bucket binding before compare-and-delete. This is
+synchronous and has no delayed task, route or drain setting. Final same-key
+settlement may also erase a fenced candidate after verified object deletion.
 
 The developer delete endpoint calls the same orchestrator and therefore also
 purges lake content, adding a raw Firestore snapshot and a synchronous GCS purge
@@ -106,35 +106,19 @@ Rollback: set write enabled false and percent 0; keep read resolution, bucket
 bindings, version history and explicit deletion available for existing pointers.
 
 
-Upload intent erasure: `lake_upload_candidates` keys contain owner/conversation
-identifiers and plaintext digests, so they are user-derived data. The required
-final `lake_key_destroy` step checks every candidate for quiescence, then repeats
-verified prefix purge, deletes and verifies absence of every candidate under the
-owner's pinned release prefix (including abandoned intents and old bucket
-bindings), and destroys keys last. Young unsettled attempts block this final step
-until they settle or exceed the fixed 24-hour request assumption. Its single-field
-`key` range uses the automatic collection index. A newly created upload fenced
-at its post-put check removes its own blob generation. The shared discovery
-intent stays while other pre-fence uploads are active; the last fenced writer
-can erase it under the conversation tombstone, and account wipe erases any
-remaining intents at its final key step. Failed cleanup fails closed and retries.
+Upload intent erasure uses terminal storage-session status, not elapsed time.
+Candidates remain user-derived data with no TTL. The final key step cancels every
+pending session and queries status, then verifies prefix absence and repeats
+session fencing plus recorded-bucket deletion immediately before transactional
+compare-and-delete. Legacy timestamp-only attempts cannot be cancelled and block
+erasure, regardless of age. Lake writes have never been admitted outside
+local/offline/dev, so production has no legacy rows.
 
-Candidate admission reads the owner and conversation fences in the same
-Firestore transaction that creates the candidate. A writer delayed until after
-the purge scan therefore cannot recreate an intent even if it dies before put.
-With the bucket unset, the prefix step still performs zero IO; the final key
-step still deletes each recorded object in its recorded bucket and verifies absence
-before erasing candidate rows and tombstoning the keys. A bucket change cannot
-strand decryptable content by discarding its discovery row.
-
-Put-success budgets remain positive: a positive drain gives half its duration;
-zero drain uses a fixed five-second put budget. The maximum budget remains 30
-seconds. SDK socket budgets are not hard request deadlines. The independent
-24-hour bound assumes no storage request can commit a day after admission;
-changing drain configuration cannot shorten it. Conversation deletion retains
-unsettled candidates of any age, and schedules a re-purge strictly after the
-newest admission plus 24 hours via the existing sync Cloud Tasks queue. The
-hidden OIDC handler re-deletes each recorded object and verifies absence before
-erasing expired rows. Missing dispatch configuration or enqueue failure makes
-deletion retry and preserves discovery; no new infrastructure is provisioned.
+Candidate admission reads owner and conversation fences in the same Firestore
+transaction that records a session. A delayed writer cannot recreate discovery
+after the purge scan; failed admission cancels the empty session best-effort.
+The five-second put-success budget does not authorize erasure. Storage status
+must prove finalization, cancellation or expiry; nonterminal status and transport
+errors keep discovery and keys for retry. There are no delayed tasks or new
+infrastructure bindings.
 See [candidate protocol](../../docs/listen_pusher_pipeline/changes/2026-11-08-lake-upload-candidates.md).

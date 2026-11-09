@@ -882,7 +882,6 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_RELEASED_WRITERS_COVERED` | Initially absent; v2:<unique-epoch> attests every released-memory writer atomically advances a retry-safe server generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | keep | — | dazheng |
-| `OBJECT_LAKE_WIPE_DRAIN_SECONDS` | Default 5 seconds; bounded 0..60 quiesce after the deletion-fence check before lake prefix purge | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | keep | — | unowned |
 | `OMI_CHAT_PROMPT_CACHE_TTL` | Shaped GPT-5.6 explicit cache TTL; default and currently only supported value 30m. | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. | backend | env | closed | — | — | 3 | — | keep | keep | — | dazheng |
@@ -1390,7 +1389,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — Serve cohort SHA256 digests; default empty, never raw identifiers (fail: closed)
 - `NOTES_SHORT_CLIP_FLOOR` — Default on; server notes minimum below 4 seconds or 12 English words, independently of notes-v2 (fail: open)
-- `OBJECT_LAKE_WIPE_DRAIN_SECONDS` — Default 5 seconds; bounded 0..60 quiesce after the deletion-fence check before lake prefix purge (fail: closed)
 - `OCCASION_CONVERSATIONS_ENABLED` — Default on unless set off (0/false/off/no); for the episodes cohort with a capable client, a mobile live conversation stays open across lulls and reconnects for 15 min (3 h span cap), one occasion per conversation (fail: closed)
 - `OMI_CANONICAL_DEMAND_WINDOW_ENABLED` — Default on; refill raw canonical list batches to the requested page demand independently of indexed candidate rollout (fail: open)
 - `OMI_CHAT_PROMPT_CACHE_TTL` — Shaped GPT-5.6 explicit cache TTL; default and currently only supported value 30m. (fail: closed)
