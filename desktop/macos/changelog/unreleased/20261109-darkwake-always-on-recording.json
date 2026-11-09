@@ -1,0 +1,3 @@
+{
+  "change": "Fixed always-on recording staying off while the Mac keeps running after sleep"
+}
