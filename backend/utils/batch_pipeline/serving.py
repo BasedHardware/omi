@@ -583,13 +583,21 @@ def start_serving_from_env():
             await run_blocking(db_executor, pump.shards.release)
 
     async def run():
-        if pump_enabled:
-            await projection_pump()
-        else:
-            loops = [supervise(), drain(), dispatch_recovery()]
-            if projection_shards_enabled():
-                loops.append(shard_pump())
-            await asyncio.gather(*loops)
+        from utils.batch_pipeline.projection_drain import set_recurring_sweep
+
+        # Owner drains hold live-target owners passively only while this loop
+        # will sweep them again.
+        set_recurring_sweep('pump' if pump_enabled else 'serving')
+        try:
+            if pump_enabled:
+                await projection_pump()
+            else:
+                loops = [supervise(), drain(), dispatch_recovery()]
+                if projection_shards_enabled():
+                    loops.append(shard_pump())
+                await asyncio.gather(*loops)
+        finally:
+            set_recurring_sweep(None)
 
     return stop, start_background_task(
         run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'

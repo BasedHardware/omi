@@ -320,3 +320,52 @@ def test_pending_query_oldest_first_keyset_survives_removed_cursor():
         ('order', 'record_snapshot.finished_at'),
         ('order', '__name__'),
     ]
+
+
+@pytest.mark.parametrize('bad_stamp', [0, -100])
+def test_invalid_finish_clock_preserves_debt_and_candidates_but_not_age(monkeypatch, bad_stamp):
+    now = 1800000000
+    monkeypatch.setattr(worker.time, 'time', lambda: now)
+    jobs = [(name, {'conversation_id': name}) for name in ('invalid', 'normal')]
+    rows = {
+        name: {
+            'status': 'completed',
+            'record_lane_owner': 'batch_live_v1',
+            'finished_at': datetime.fromtimestamp(stamp, timezone.utc),
+        }
+        for name, stamp in [('invalid', bad_stamp), ('normal', now - 1000)]
+    }
+    monkeypatch.setattr(claims, 'pending_page', Mock(side_effect=[(jobs[:1], 'cursor'), (jobs[1:], None), ([], None)]))
+    monkeypatch.setattr(claims, 'conversation_ref', lambda _, job: SimpleNamespace(path=job['conversation_id']))
+    client = Mock()
+    client.get_all.side_effect = lambda refs, **_: [
+        SimpleNamespace(reference=ref, to_dict=lambda ref=ref: rows[ref.path]) for ref in refs
+    ]
+    metrics = worker.Metrics('r', 'n')
+    scanner = worker.Scanner(client, 'batch_pipeline_dev', metrics)
+    assert scanner.page() == (['invalid'], False)
+    assert metrics.invalid_clocks._value.get() != metrics.invalid_clocks._value.get()
+    assert scanner.page() == (['normal'], True)
+    assert metrics.backlog._value.get() == 2
+    assert metrics.oldest._value.get() == 1000
+    assert (
+        metrics.registry.get_sample_value(
+            'omi_record_seal_invalid_clock_rows', {'worker_release': 'r', 'namespace': 'n'}
+        )
+        == 1
+    )
+    assert scanner.page() == ([], True)
+    assert metrics.backlog._value.get() == metrics.oldest._value.get() == metrics.invalid_clocks._value.get() == 0
+
+
+def test_invalid_seal_clock_keeps_success_count_without_histogram_sample():
+    metrics = worker.Metrics('r', 'n')
+    metrics.outcome('sealed', None)
+    assert metrics.sealed._value.get() == 1
+    assert metrics.age._sum.get() == 0
+    labels = {'worker_release': 'r', 'namespace': 'n'}
+    assert metrics.registry.get_sample_value('omi_record_seal_age_seconds_count', labels) == 0
+    metrics.outcome('sealed', 1000)
+    assert metrics.sealed._value.get() == 2
+    assert metrics.age._sum.get() == 1000
+    assert metrics.registry.get_sample_value('omi_record_seal_age_seconds_count', labels) == 1

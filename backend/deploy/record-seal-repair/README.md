@@ -120,13 +120,15 @@ permission before Helm applies (the existing ci-deployer pods:list grant may
 already cover it). No workload YAML/env or PodList is logged or stored.
 
 Counts-only structured JSON rows (`record_seal_repair_row`) contain a closed
-disposition, count=1, and seal age in seconds (zero for refusals). Proof
+disposition, count=1, and seal age in seconds (zero for refusals). Invalid-clock
+rows omit seal age and are excluded from both summary age maxima;
+`invalid_clock_rows` counts those attempted rows without changing repair eligibility. Proof
 refusals also carry a closed `proof_reason`: `tail_lagging`,
 `tail_lost_or_unproven`, `overlap_conflict`, `decode_or_checksum`, `budget_limit`,
 `finish_missing`, `registration_refused`, or `other`. Tail lagging is a
 necessary-condition failure, not proof that an upload will recover or is lost.
 No terminal marker or age-gate exemption is written. Summaries
-include dispositions, observed oldest age, saturation and deferred rows. Native
+include dispositions, observed oldest age, invalid-clock attempts, saturation and deferred rows. Native
 SDK stdout/stderr is suppressed; IDs, exceptions, paths and plan digests are
 never output. `log-metrics.json` defines rows by disposition and seal-age
 distribution and proof-reason counts; lead installs these metrics through the normal monitoring path.

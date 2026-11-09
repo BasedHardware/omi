@@ -166,7 +166,13 @@ def test_log_metrics_use_only_allowlisted_row_counts_and_numeric_age():
     assert all('jsonPayload.logger="record-seal-repair"' in metric['filter'] for metric in metrics)
     assert all('jsonPayload.message' in metric['filter'] for metric in metrics)
     assert extract(metrics[1]['valueExtractor'], {'seal_age_seconds': 1801}) == '1801'
+    assert 'jsonPayload.message:"\\\"seal_age_seconds\\\""' in metrics[1]['filter']
     assert extract(metrics[2]['valueExtractor'], {'oldest_unsealed_seconds': 1802}) == '1802'
+    invalid = next(metric for metric in metrics if metric['name'].endswith('_invalid_clock_rows'))
+    assert invalid['filter'] == metrics[2]['filter']
+    assert invalid['metricDescriptor'] == {'metricKind': 'DELTA', 'valueType': 'INT64', 'unit': '1'}
+    assert extract(invalid['valueExtractor'], {'invalid_clock_rows': 2}) == '2'
+
     proof = next(metric for metric in metrics if metric['name'].endswith('_proof_refused'))
     assert list(proof['labelExtractors']) == ['proof_reason']
     assert 'proof_refused' in proof['filter']

@@ -74,3 +74,12 @@ Hermetic coverage:
   wiring and the deadline.
 - `tests/unit/test_batch_projection_shard_drain.py`: two processes with real
   drains on shared fakeredis.
+
+Main's passive live-target holds retain their no-wake overflow behavior. Active
+retry overflow records local intent, avoiding a Redis push on the event loop.
+Serving registers its recurring-sweep runtime around all serving loops,
+including the optional shard pump, and clears it in finally on shutdown.
+A passive live-target stop hands the taken wake back to the shard pump while
+its local hold remains, allowing the existing durable retry score to be
+persisted immediately. The owner leaves inflight admission and a replacement
+pump still waits for that score; the local hold creates no extra request.

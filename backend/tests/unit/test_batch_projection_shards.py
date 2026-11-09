@@ -21,7 +21,7 @@ from database.jobstore.postgres_store import PostgresStore
 from testing.pipeline_sim.postgres_store import PgSimStore
 from testing.pipeline_sim.store import CustomerData, SimStore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain
-from utils.batch_pipeline import projection, projection_shard_pump, projection_shards
+from utils.batch_pipeline import projection, projection_drain, projection_shard_pump, projection_shards
 from utils.batch_pipeline.projection_shard_pump import ShardPump
 from utils.batch_pipeline.projection_shards import BACKLOG, FRESH, ProjectionShards, Wake, share, shard_of
 from utils.batch_pipeline.scheduler import owner_key
@@ -1203,3 +1203,62 @@ def test_discovery_replays_preserve_taken_retry_across_restart(server, blocking_
     now[0] = retry_at
     assert asyncio.run(next_pump.tick()) == 1
     assert next_drains.requested == ['due-backlog', 'retry']
+
+
+@pytest.mark.parametrize('wake', (False, True))
+def test_overflow_preserves_passive_hold_and_uses_local_shard_intent(monkeypatch, wake):
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 0)
+    projector = Mock()
+    drains = projection_drain.OwnerDrains(projector)
+    assert not drains.defer('owner', delay=30.0, wake=wake)
+    projector.request_drain.assert_not_called()
+    if wake:
+        projector.request_local_drain.assert_called_once_with('owner')
+    else:
+        projector.request_local_drain.assert_not_called()
+    assert not drains.delayed
+
+
+def test_passive_live_target_hold_returns_and_persists_the_shard_wake(server, blocking_inline, monkeypatch):
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', 'serving')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP', 'on')
+    monkeypatch.setenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', 'on')
+    now = [1000.0]
+    pump, shards, _ = pump_for(server)
+    shards.clock = lambda: now[0]
+    pump.monotonic = lambda: now[0]
+    shards.push('held', owner_key('held'), BACKLOG, 10.0)
+    assert asyncio.run(pump.tick()) == 1
+    drains = projection_drain.OwnerDrains(pump.projector)
+    pump.projector.drains = drains
+    pump.attach()
+    holds = []
+
+    def hold(owner, *, delay, wake):
+        holds.append((owner, delay, wake))
+        drains.delayed[owner] = Mock()
+        return True
+
+    monkeypatch.setattr(drains, 'defer', hold)
+    task = Mock()
+    task.cancelled.return_value = False
+    task.exception.return_value = None
+    task.result.return_value = False
+    drains.stops['held'] = 'head_awaiting_live_target'
+    drains.finished('held', task)
+    assert holds == [('held', 30, False)]
+    assert 'held' in drains.delayed
+    assert 'held' not in pump.inflight
+    assert len(pump.deferring) == 1
+    retry_at = pump.deferring[0][1]
+    assert retry_at > now[0]
+    assert asyncio.run(pump.tick()) == 0
+    assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'held') == retry_at
+    replacement_drains = FakeDrains()
+    replacement = ShardPump(FakeProjector(replacement_drains), shards, monotonic=lambda: now[0])
+    now[0] = retry_at - 0.001
+    assert asyncio.run(replacement.tick()) == 0
+    now[0] = retry_at
+    assert asyncio.run(replacement.tick()) == 1
+    assert replacement_drains.requested == ['held']
+    drains.close()

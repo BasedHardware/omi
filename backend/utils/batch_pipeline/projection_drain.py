@@ -23,7 +23,25 @@ from config.batch_pipeline import (
     projection_drain_live_target_backoff_enabled,
     projection_drain_privacy_backoff_enabled,
     projection_drain_privacy_backoff_seconds,
+    serving_projection_sweep_enabled,
 )
+
+# Which recurring projection sweep this process runs, set by the serving
+# runtime while its loop is alive: 'pump', 'serving' (its sweep still obeys
+# BATCH_PIPELINE_SERVING_PROJECTION_SWEEP each tick) or None. A passive owner
+# hold is safe only while one of them will re-request the owner.
+_recurring_sweep: str | None = None
+
+
+def set_recurring_sweep(mode: str | None) -> None:
+    global _recurring_sweep
+    _recurring_sweep = mode
+
+
+def recurring_sweep_active() -> bool:
+    return _recurring_sweep == 'pump' or (_recurring_sweep == 'serving' and serving_projection_sweep_enabled())
+
+
 from database.batch_pipeline_projection_claim import projection_claim_held
 from utils.batch_pipeline.metrics import (
     PROJECTION_DRAIN_CLAIM_HELD,
@@ -77,7 +95,8 @@ class OwnerDrains:
         self.closed = False
         # Called as ``on_idle(owner, stop)`` once an owner leaves this drain
         # entirely (no task, queue entry, delay or continuation). Shard pumps
-        # settle or cool their wakes here.
+        # settle or cool their wakes here. A passive live-target hold also
+        # hands its wake back, so a local timer cannot strand shard inflight state.
         self.on_idle: Callable[[str, str], None] | None = None
         # Optional shard admission policy; legacy productive turns keep their FIFO.
         self.yield_continuation: Callable[[str], bool] | None = None
@@ -162,14 +181,21 @@ class OwnerDrains:
             )
             return False, False
 
-    def defer(self, owner: str, *, delay: float | None = None) -> bool:
+    def defer(self, owner: str, *, delay: float | None = None, wake: bool = True) -> bool:
+        """Hold ``owner`` out of admission for ``delay`` seconds.
+
+        ``wake=True`` re-requests the owner when the hold expires. ``wake=False``
+        only releases the hold: the owner waits for its next ordinary request
+        (the sweep), so the hold can never make retries more frequent.
+        """
         if owner in self.delayed or self.closed:
             return False
         if len(self.delayed) >= MAX_DELAYED_OWNERS:
             # Return overflow intent to the next serving pass; no extra timers,
             # immediate busy loop, or delay for productive FIFO continuations.
-            # Local on purpose: the shard router would push to Redis on the loop.
-            getattr(self.projector, 'request_local_drain', self.projector.request_drain)(owner)
+            if wake:
+                # Local on purpose: the shard router would push to Redis on the loop.
+                getattr(self.projector, 'request_local_drain', self.projector.request_drain)(owner)
             return False
 
         handle = None
@@ -181,7 +207,7 @@ class OwnerDrains:
             # releases the version hold for one ordinary drain turn.
             self.privacy_heads.pop(owner, None)
             self.delayed.pop(owner, None)
-            if owner not in self.tasks:
+            if wake and owner not in self.tasks:
                 self.request([owner])
 
         handle = asyncio.get_running_loop().call_later(random.uniform(5.0, 15.0) if delay is None else delay, retry)
@@ -212,6 +238,7 @@ class OwnerDrains:
             return
         stop = self.stops.pop(owner, None)
         head = self.stopped_heads.pop(owner, None)
+        passive_live_target = False
         if self.closed:
             return
         if stop != 'head_awaiting_live_target':
@@ -240,7 +267,7 @@ class OwnerDrains:
             and projection_drain_live_target_backoff_enabled()
             and self.defer_live_target(owner)
         ):
-            pass
+            passive_live_target = recurring_sweep_active()
         elif owner in self.again and owner not in self.queue:
             if projection_drain_claim_aware_enabled() and stop == 'claim_busy':
                 PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS.inc()
@@ -251,7 +278,7 @@ class OwnerDrains:
         last = self.turn_stops.pop(owner, None)
         if task.exception() is not None:
             last = 'error'
-        if self.on_idle is not None and not self.busy(owner):
+        if self.on_idle is not None and (not self.busy(owner) or passive_live_target):
             try:
                 # Only a turn that walked to the chain end reports 'end'.
                 self.on_idle(owner, stop or last or 'unknown')
@@ -264,7 +291,14 @@ class OwnerDrains:
 
     def defer_live_target(self, owner: str) -> bool:
         attempt = min(self.live_target_attempts.get(owner, 0) + 1, 5)
-        if not self.defer(owner, delay=min(30 * 2 ** (attempt - 1), 300)):
+        # Passive hold (2026-11-09 readback): an expiry wake re-requested blocked
+        # owners every 30-300 s, faster than the sweep that found them before,
+        # and doubled owner-chain conflicts. Expiry only re-admits the owner
+        # while a recurring sweep runs in this process to re-request it; without
+        # one (serving off, sweep switch off, or a one-off reconcile request),
+        # the hold keeps its wake so no owner is stranded.
+        passive = recurring_sweep_active()
+        if not self.defer(owner, delay=min(30 * 2 ** (attempt - 1), 300), wake=not passive):
             return False
         self.live_target_attempts.pop(owner, None)
         if len(self.live_target_attempts) >= MAX_DELAYED_OWNERS:
