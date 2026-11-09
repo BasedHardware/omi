@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from testing.import_isolation import load_module_fresh, stub_modules
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -149,6 +149,7 @@ def memory_ledger():
         "database.legal_holds": legal_holds_stub,
         "google": google_pkg,
         "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": AutoMockModule("google.cloud.firestore"),
         "google.cloud.firestore_v1": firestore_v1_stub,
     }
     with stub_modules(fakes):

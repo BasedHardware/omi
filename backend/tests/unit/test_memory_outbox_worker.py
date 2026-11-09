@@ -1204,9 +1204,9 @@ def test_lease_and_ack_index_new_string_leaves_atomically():
     lease_tokens = set(db.docs[path]['privacy_reference_tokens'])
     assert set(privacy_reference_tokens(UID, {'new-worker', 'processing'})) <= lease_tokens
     assert worker._ack_leased_event(
-        db_client=db, lease=leases[0], patch={'last_error_code': 'new-error', 'status': 'retryable'}
+        db_client=db, lease=leases[0], patch={'last_error_code': 'new-error', 'status': 'retryable_failure'}
     )
     assert lease_tokens <= set(db.docs[path]['privacy_reference_tokens'])
-    assert set(privacy_reference_tokens(UID, {'new-error', 'retryable'})) <= set(
+    assert set(privacy_reference_tokens(UID, {'new-error', 'retryable_failure'})) <= set(
         db.docs[path]['privacy_reference_tokens']
     )

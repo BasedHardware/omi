@@ -11,7 +11,7 @@ import json
 import os
 from typing import Any
 
-from google.cloud.firestore_v1.transforms import ArrayUnion
+from google.cloud.firestore import ArrayUnion
 
 PRIVACY_REFERENCE_TOKENS = 'privacy_reference_tokens'
 PRIVACY_HISTORY_COLLECTIONS = (
