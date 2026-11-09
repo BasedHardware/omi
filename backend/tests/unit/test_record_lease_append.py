@@ -25,7 +25,7 @@ def test_partial_wal_retains_interior_holes_create_only(world, monkeypatch):
         span_blob_metadata({'start': 109, 'samples': 16000, 'sample_rate': 16000}),
     )
     original = {key: dict(value) for key, value in world.bucket.objects.items()}
-    world.wal['units'] = [audio_unit(105, tone(1, 5))]
+    world.wal['units'] = [audio_unit(105, tone(1, 5)), audio_unit(105.5, tone(1, 6))]
     monkeypatch.setattr(append.gap, 'create_storage_client', lambda: object())
     monkeypatch.setattr(append, 'list_audio_chunks', lambda *a, **kw: world.bucket.listing())
     monkeypatch.setattr(append.gap, 'gap_fill_bucket', lambda *a: world.bucket)
@@ -34,6 +34,8 @@ def test_partial_wal_retains_interior_holes_create_only(world, monkeypatch):
     for key, value in original.items():
         assert world.bucket.objects[key] == value
     assert world.bucket.objects[f'chunks/{UID}/{CID}/105.000000.bin']['data'] == tone(1, 5)
+    assert f'chunks/{UID}/{CID}/105.500000.bin' not in world.bucket.objects
+    assert world.bucket.objects[f'chunks/{UID}/{CID}/106.000000.bin']['data'] == tone(0.5, 6)
     objects = {key: dict(value) for key, value in world.bucket.objects.items()}
     append.retain(UID, CID, row, ['synthetic'])
     assert world.bucket.objects == objects  # exact retry neither overwrites nor adds audio

@@ -43,7 +43,7 @@ def retain(uid, cid, row, paths):
         if first >= last:
             continue
         refs = [{'start_frame': first, 'offset_frame': first, 'frames': last - first}]
-        missing, _ = missing_units([(unit.capture_at, len(pcm) / (2 * gap.RATE), refs)], coverage)
+        missing, updated_coverage = missing_units([(unit.capture_at, len(pcm) / (2 * gap.RATE), refs)], coverage)
         for timestamp, _, slices in missing:
             for ref in slices:
                 count = ref['frames']
@@ -65,6 +65,7 @@ def retain(uid, cid, row, paths):
                     if created is None:
                         raise ValueError('concurrent custody chunk exists; retain WAL for coverage proof')
                 budget -= count
+        coverage = updated_coverage
 
 
 def wake_partial(store, uid, cid, now):
