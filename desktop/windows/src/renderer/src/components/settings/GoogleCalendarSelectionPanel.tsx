@@ -19,13 +19,13 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const [saved, setSaved] = useState(false)
   const [connecting, setConnecting] = useState(false)
-  const mounted = useRef(true)
-  const connectionSerial = useRef(0)
+  const lifecycle = useRef({ mounted: true, connectionSerial: 0 })
 
   useEffect(() => {
-    mounted.current = true
+    const state = lifecycle.current
+    state.mounted = true
     const unsubscribe = onAuthStateChanged(auth, () => {
-      connectionSerial.current++
+      state.connectionSerial++
       setData(null)
       setSelected([])
       setBusy(false)
@@ -34,8 +34,8 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
       setConnecting(false)
     })
     return () => {
-      mounted.current = false
-      connectionSerial.current++
+      state.mounted = false
+      state.connectionSerial++
       unsubscribe()
     }
   }, [])
@@ -43,9 +43,11 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
   const connect = async (): Promise<void> => {
     const owner = auth.currentUser
     if (!owner || busy) return
-    const attempt = ++connectionSerial.current
+    const attempt = ++lifecycle.current.connectionSerial
     const current = (): boolean =>
-      mounted.current && auth.currentUser === owner && attempt === connectionSerial.current
+      lifecycle.current.mounted &&
+      auth.currentUser === owner &&
+      attempt === lifecycle.current.connectionSerial
     setBusy(true)
     setConnecting(true)
     setFailed(false)
@@ -83,13 +85,13 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
     setData(null)
     try {
       const result = await loadGoogleCalendarSelection()
-      if (!mounted.current || auth.currentUser !== owner) return
+      if (!lifecycle.current.mounted || auth.currentUser !== owner) return
       setData(result)
       setSelected(result.selected_ids)
     } catch {
-      if (mounted.current && auth.currentUser === owner) setFailed(true)
+      if (lifecycle.current.mounted && auth.currentUser === owner) setFailed(true)
     } finally {
-      if (mounted.current && auth.currentUser === owner) setBusy(false)
+      if (lifecycle.current.mounted && auth.currentUser === owner) setBusy(false)
     }
   }
 
@@ -100,14 +102,14 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
     setSaved(false)
     try {
       const result = await saveGoogleCalendarSelection(data, selected)
-      if (!mounted.current || auth.currentUser !== data.owner) return
+      if (!lifecycle.current.mounted || auth.currentUser !== data.owner) return
       setData(result)
       setSelected(result.selected_ids)
       setSaved(true)
     } catch {
-      if (mounted.current && auth.currentUser === data.owner) setFailed(true)
+      if (lifecycle.current.mounted && auth.currentUser === data.owner) setFailed(true)
     } finally {
-      if (mounted.current && auth.currentUser === data.owner) setBusy(false)
+      if (lifecycle.current.mounted && auth.currentUser === data.owner) setBusy(false)
     }
   }
 
@@ -127,7 +129,7 @@ export function GoogleCalendarSelectionPanel(): React.JSX.Element {
           <button
             className="btn-ghost"
             onClick={() => {
-              connectionSerial.current++
+              lifecycle.current.connectionSerial++
               setConnecting(false)
               setBusy(false)
             }}
