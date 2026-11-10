@@ -1102,10 +1102,15 @@ def is_deferred(episode: Optional[Mapping[str, Any]]) -> bool:
     return bool(episode and episode.get('compose_deferred_at'))
 
 
+def _opened_deferral(episode: Mapping[str, Any]) -> bool:
+    at = _utc(episode.get('compose_deferred_at'))
+    return at is not None and _utc(episode.get('compose_opened_deferred_at')) == at
+
+
 def _deferred_within_grace(episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> bool:
     """A deferred episode the read-side safety net must leave alone until the grace window ends."""
     at = _utc(episode.get('compose_deferred_at'))
-    if at is None:
+    if at is None or _opened_deferral(episode):
         return False
     current = now or datetime.now(timezone.utc)
     return (current - at).total_seconds() < episode_late_compose_grace_hours() * 3600
@@ -1136,7 +1141,7 @@ def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
     if episode.get('composed_fingerprint') and not needs_compose(episode, opened=True):
         return False
     if is_deferred(episode):
-        return True
+        return not _opened_deferral(episode)
     title = _first_member_title(uid, episode, c)
     now = datetime.now(timezone.utc)
     # A composed episode keeps its composed title; only an uncomposed row falls back.
@@ -1145,6 +1150,7 @@ def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
     def stamp(current: Mapping[str, Any]) -> dict[str, Any]:
         return {
             'compose_deferred_at': now,
+            'compose_opened_deferred_at': None,
             # The row reads as the first member's summary until the composer replaces it.
             **({'title': fallback} if fallback else {}),
         }
@@ -1206,6 +1212,30 @@ def schedule_opened(uid: str, episode: Optional[Mapping[str, Any]], *, collabora
         return False
     if not needs_compose(episode, opened=True):
         return False
+    # Remember the deferral epoch that the user opened. A member finishing after
+    # the bounded client poll must still schedule normally, even on another replica.
+    if not _opened_deferral(episode):
+        try:
+            c = collaborators or SimpleNamespace(firestore_client=None)
+            _write(
+                uid,
+                str(episode['id']),
+                c,
+                {'compose_opened_deferred_at': episode['compose_deferred_at']},
+                guard=lambda current: (
+                    'superseded' if current.get('compose_deferred_at') != episode['compose_deferred_at'] else None
+                ),
+            )
+        except Exception as error:
+            logger.warning('event=episode_compose_open_stamp outcome=error exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='conversation_notes',
+                from_mode='episode_compose_deferred',
+                to_mode='episode_compose_immediate',
+                reason='enqueue_failed',
+                outcome='degraded',
+                log=logger,
+            )
     return schedule(uid, str(episode['id']), collaborators=collaborators, throttle=True, trigger='read')
 
 
@@ -1556,6 +1586,7 @@ def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, An
         'compose_pending_evidence': None,
         'compose_pending_membership': None,
         'compose_deferred_at': None,
+        'compose_opened_deferred_at': None,
     }
 
 
@@ -1761,6 +1792,8 @@ def schedule(
                 with _inflight_lock:
                     again = outcome != 'kept_pending' and (key in _rerun or outcome in {'stale', 'superseded'})
                     _rerun.discard(key)
+                    if outcome == 'waiting' and trigger == 'read':
+                        _recent.pop(key, None)
                     foreground = foreground or key in _foreground
                     _foreground.discard(key)
                     if outcome not in {'settling', 'kept_pending'}:
