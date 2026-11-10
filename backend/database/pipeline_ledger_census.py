@@ -17,8 +17,6 @@ import time
 from collections import Counter
 from typing import Any, Mapping
 
-from prometheus_client import REGISTRY, Gauge
-
 from database import pipeline_ledger
 from utils.conversations import home_step
 from utils.conversations.fragment_visibility import (
@@ -36,35 +34,6 @@ NEW_STUCK_WINDOW_SECONDS = 3600
 
 class CensusSchemaMismatch(RuntimeError):
     """A ledger row is not the schema this census understands; fail closed."""
-
-
-def _gauge(name: str, doc: str, labels: tuple[str, ...] = ()) -> Any:
-    return getattr(REGISTRY, '_names_to_collectors', {}).get(name) or Gauge(name, doc, list(labels))
-
-
-_STUCK_ROWS = _gauge('omi_pipeline_ledger_stuck_rows', 'Stuck ledger rows by stage.', ('stage',))
-_STUCK_USERS = _gauge('omi_pipeline_ledger_stuck_users', 'Distinct owners with stuck rows by stage.', ('stage',))
-_OLDEST_STUCK = _gauge('omi_pipeline_ledger_oldest_stuck_age_seconds', 'Oldest stuck row age by stage.', ('stage',))
-_NEW_STUCK = _gauge('omi_pipeline_ledger_new_stuck_per_hour', 'Rows that became stuck in the last hour.', ('stage',))
-_UNKNOWN_END_SHARE = _gauge('omi_pipeline_ledger_unknown_end_type_share', 'Share of rows with an unknown end type.')
-_REFRESHED_AT = _gauge('omi_pipeline_ledger_refreshed_at_seconds', 'Unix time of the last census refresh.')
-
-
-def refresh_gauges(result: Mapping[str, Any]) -> None:
-    """Publish the census as bounded-label gauges; never a healthy zero for unknown data."""
-    stuck = result.get('stuck') or {}
-    new_stuck = (result.get('new_stuck_per_hour') or {}).get('by_stage') or {}
-    for stage in STUCK_STAGES:
-        _STUCK_ROWS.labels(stage=stage).set(float((stuck.get('by_stage') or {}).get(stage, 0)))
-        _STUCK_USERS.labels(stage=stage).set(float((stuck.get('affected_users') or {}).get(stage, 0)))
-        _OLDEST_STUCK.labels(stage=stage).set(float((stuck.get('oldest_age_seconds') or {}).get(stage, 0)))
-        _NEW_STUCK.labels(stage=stage).set(float(new_stuck.get(stage, 0)))
-    _UNKNOWN_END_SHARE.set(float((result.get('end_types') or {}).get('unknown_share', 0.0)))
-    _REFRESHED_AT.set(float(result.get('generated_at') or time.time()))
-
-
-def _epoch(value: Any) -> float | None:
-    return pipeline_ledger._epoch(value)
 
 
 def _conversation(client: Any, uid: str, conversation_id: str) -> dict[str, Any] | None:
@@ -127,19 +96,6 @@ def _km_quantiles(observations: list[tuple[float | None, float | None, bool]], q
     return result
 
 
-def _stage_label(stage: Any) -> str:
-    return pipeline_ledger.stage_label(stage if isinstance(stage, str) else 'other')
-
-
-def _speech(row: Mapping[str, Any]) -> tuple[bool, bool]:
-    """``(real_speech, speech_unknown)`` for one ledger row."""
-    seconds = row.get('speech_seconds')
-    real = (isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0) or row.get(
-        'has_speech'
-    ) is True
-    return real, row.get('speech_basis') == 'unknown'
-
-
 def census(
     uid: str,
     start: Any,
@@ -168,13 +124,13 @@ def census(
         if row.get('schema_version') != SCHEMA_VERSION:
             raise CensusSchemaMismatch('ledger schema_version mismatch')
         stage = row.get('stage')
-        by_stage[_stage_label(stage)] += 1
-        updated = _epoch(row.get('updated_at'))
+        by_stage[pipeline_ledger.stage_label(stage if isinstance(stage, str) else 'other')] += 1
+        updated = pipeline_ledger._epoch(row.get('updated_at'))
         if updated is not None and (latest_updated is None or updated > latest_updated):
             latest_updated = updated
-        deadline = _epoch(row.get('deadline_at'))
+        deadline = pipeline_ledger._epoch(row.get('deadline_at'))
         if not row.get('terminal') and deadline is not None and current > deadline:
-            label = _stage_label(stage)
+            label = pipeline_ledger.stage_label(stage if isinstance(stage, str) else 'other')
             if label in STUCK_STAGES:
                 stuck_by_stage[label] += 1
                 owner = row.get('owner_key')
@@ -183,9 +139,12 @@ def census(
                 oldest_stuck[label] = max(oldest_stuck[label], current - deadline)
                 if current - NEW_STUCK_WINDOW_SECONDS <= deadline < current:
                     new_stuck[label] += 1
-        real, unknown = _speech(row)
+        seconds = row.get('speech_seconds')
+        real = (isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0) or row.get(
+            'has_speech'
+        ) is True
         real_speech += int(real)
-        speech_unknown += int(unknown)
+        speech_unknown += int(row.get('speech_basis') == 'unknown')
         conversation = _conversation(client, uid, row['capture_id']) if row.get('capture_id') else None
         visible, step = _home_visible(conversation, current)
         home_unknown += int(conversation is None or step is None)
@@ -194,8 +153,8 @@ def census(
         end_type_rows[end_type] += 1
         end_type_real[end_type] += int(real)
         end_type_visible[end_type] += int(real and visible)
-        clock_start = _epoch(row.get('end_at')) or _epoch(row.get('admitted_at'))
-        event_at = _epoch(row.get('home_ready_at'))
+        clock_start = pipeline_ledger._epoch(row.get('end_at')) or pipeline_ledger._epoch(row.get('admitted_at'))
+        event_at = pipeline_ledger._epoch(row.get('home_ready_at'))
         if clock_start is None:
             clock_unknown += 1
         elif event_at is not None and event_at >= clock_start:
@@ -279,7 +238,7 @@ def explain(uid: str, conversation_id: str, *, firestore_client: Any = None) -> 
         return None
     doc = snapshot.to_dict() or {}
     transitions = [
-        {'stage': entry.get('stage'), 'at': _epoch(entry.get('at')), 'reason': entry.get('reason')}
+        {'stage': entry.get('stage'), 'at': pipeline_ledger._epoch(entry.get('at')), 'reason': entry.get('reason')}
         for entry in (doc.get('transitions') or [])[: pipeline_ledger.MAX_TRANSITIONS]
         if isinstance(entry, Mapping)
     ]
@@ -287,12 +246,12 @@ def explain(uid: str, conversation_id: str, *, firestore_client: Any = None) -> 
         'schema_version': pipeline_ledger.SCHEMA_VERSION,
         'conversation_id': conversation_id,
         'stage': doc.get('stage'),
-        'entered_at': _epoch(doc.get('entered_at')),
-        'deadline_at': _epoch(doc.get('deadline_at')),
+        'entered_at': pipeline_ledger._epoch(doc.get('entered_at')),
+        'deadline_at': pipeline_ledger._epoch(doc.get('deadline_at')),
         'attempt': doc.get('attempt'),
         'reason': doc.get('reason'),
         'end_type': doc.get('end_type'),
-        'end_at': _epoch(doc.get('end_at')),
+        'end_at': pipeline_ledger._epoch(doc.get('end_at')),
         'transitions': transitions,
         'redaction': {'uids': False, 'content': False, 'titles': False, 'transcripts': False},
     }

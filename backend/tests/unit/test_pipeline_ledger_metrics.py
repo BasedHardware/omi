@@ -5,7 +5,7 @@ from __future__ import annotations
 from prometheus_client import generate_latest
 from prometheus_client.parser import text_string_to_metric_families
 
-from database import pipeline_ledger_census as census
+from utils.conversations import pipeline_ledger_metrics as metrics
 
 
 def _result():
@@ -34,7 +34,7 @@ def _samples():
 
 
 def test_refresh_sets_bounded_stage_gauges():
-    census.refresh_gauges(_result())
+    metrics.refresh_gauges(_result())
     samples = _samples()
     assert samples[('omi_pipeline_ledger_stuck_rows', (('stage', 'sealed'),))].value == 2
     assert samples[('omi_pipeline_ledger_stuck_users', (('stage', 'sealed'),))].value == 1
@@ -45,7 +45,7 @@ def test_refresh_sets_bounded_stage_gauges():
 
 
 def test_gauges_never_carry_an_owner_label():
-    census.refresh_gauges(_result())
+    metrics.refresh_gauges(_result())
     for family in text_string_to_metric_families(generate_latest().decode()):
         if not family.name.startswith('omi_pipeline_ledger_'):
             continue

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from database import pipeline_ledger_census
+from utils.conversations import pipeline_ledger_metrics
 from routers import pipeline_ledger as routes
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -111,7 +112,7 @@ def test_census_returns_aggregates_without_ids(monkeypatch):
     app = _app()
     app.dependency_overrides[routes.verify_census] = lambda: None
     monkeypatch.setattr(pipeline_ledger_census, 'census', lambda *a, **k: _census_payload())
-    monkeypatch.setattr(pipeline_ledger_census, 'refresh_gauges', lambda result: None)
+    monkeypatch.setattr(pipeline_ledger_metrics, 'refresh_gauges', lambda result: None)
     response = TestClient(app).get(
         '/v2/pipeline-ledger/census', params={'uid': 'owner-secret', 'start': '0', 'end': '3600'}
     )

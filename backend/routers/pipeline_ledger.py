@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from database import pipeline_ledger_census
+from utils.conversations import pipeline_ledger_metrics
 from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ async def get_census(
         raise HTTPException(status_code=503, detail='ledger window truncated; fail closed') from None
     except pipeline_ledger_census.CensusSchemaMismatch:
         raise HTTPException(status_code=503, detail='ledger schema mismatch; fail closed') from None
-    pipeline_ledger_census.refresh_gauges(result)
+    pipeline_ledger_metrics.refresh_gauges(result)
     result['window'] = {'start': start_epoch, 'end': end_epoch, 'seconds': end_epoch - start_epoch}
     return JSONResponse(result)
 
