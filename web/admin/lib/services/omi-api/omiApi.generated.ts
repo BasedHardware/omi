@@ -2615,10 +2615,14 @@ export interface EpisodeLookupResponse {
 export interface EpisodeMember {
   emoji?: string;
   finished_at?: string | null;
+  home_step?: string | null;
   id: string;
+  is_locked?: boolean;
+  overview?: string;
   started_at: string;
   status?: string;
   title?: string;
+  title_provenance?: string | null;
 }
 
 export interface EpisodeMoment {

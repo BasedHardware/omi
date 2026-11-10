@@ -17,6 +17,8 @@ Host: m1-mac-studio. Heavy commands use omi-heavy.
   noise expanded, Home no count and narrow light mode at larger type. Inspected
   real-font source frames and comparison boards. The final lock bit defaults false
   for these fixtures; final wrapper refresh produced identical PNG bytes.
+- First-party TypeScript DTOs regenerated with backend/scripts/generate_ts_openapi_types.py
+  after the first push hook detected stale clients; its --check now passes.
 - Repository checks before the additive lock-bit follow-up: make preflight passed
   51 checks; PR preflight --all passed 52 gates, zero failed/skipped for time.
   Normal pre-push checks validate the publishing head; final result is in PR #25022.
