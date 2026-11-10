@@ -41,8 +41,10 @@ parts.
    reading them neither mutates their score nor their sequence. Legacy local
    continuations keep their FIFO behavior. Future captures use backlog, with no
    clock-skew allowance. Tail and whole-log discovery route each owner using its
-   freshest non-future capture across the bounded pages, retaining its oldest
-   commit for backlog. A later whole-log page can promote a previous backlog
+   freshest non-future capture, retaining its oldest commit for backlog. Tail
+   aggregation spans its bounded pages; whole-log aggregation is per page so
+   routing stays inside its scan budget and survives later page-read failures.
+   A later whole-log page can promote a previous backlog
    hint to fresh; discovery never demotes a fresh wake. The same Lua push
    atomically removes the old backlog wake and advances its sequence, so a
    stale take cannot settle or defer the promoted wake. A future retry score

@@ -1101,6 +1101,26 @@ def test_discovery_promotes_backlog_without_demoting_or_stealing_a_lease(server,
     assert observer.held == set() and holder.healthy == held
 
 
+def test_whole_log_discovery_routes_collected_owners_when_a_later_page_fails():
+    store = Mock()
+    cursor = (996.0, 'fresh')
+    store.store.projection_page_owners.side_effect = [
+        ([('old', 'gpu', 1.0, None), ('fresh', 'gpu', 996.0, 990.0)], cursor),
+        ConnectionError('page unavailable'),
+        ([], None),
+    ]
+    real = projection.Projector(store, Mock(), clock=lambda: 1000.0)
+    real.store = store
+    route = Mock()
+    with pytest.raises(ConnectionError, match='page unavailable'):
+        real.discover_owners(route, pages=2, budget_seconds=5)
+    route.assert_called_once_with('gpu', 1.0, 990.0)
+    assert real.backstop_after == cursor
+    real.discover_owners(route, pages=1, budget_seconds=5)
+    assert store.store.projection_page_owners.call_args.kwargs['after'] == cursor
+    assert real.backstop_after is None
+
+
 def test_discovery_promotion_preserves_a_future_retry_across_holder_replacement(server):
     now = [1000.0]
     shards = make(server, count=1, clock=lambda: now[0])
@@ -1119,6 +1139,24 @@ def test_discovery_promotion_preserves_a_future_retry_across_holder_replacement(
     now[0] = 1200.0
     (due,) = replacement.take(FRESH, 10)
     assert (due.owner_id, due.score) == ('gpu', 1200.0)
+
+
+def test_whole_log_discovery_includes_routing_in_its_page_budget(monkeypatch):
+    elapsed = [0.0]
+    monkeypatch.setattr(projection.time, 'monotonic', lambda: elapsed[0])
+    store = Mock()
+    cursor = (1.0, 'old')
+    store.store.projection_page_owners.return_value = ([('old', 'gpu', 1.0, None)], cursor)
+    real = projection.Projector(store, Mock(), clock=lambda: 1000.0)
+    real.store = store
+
+    def route(*args):
+        elapsed[0] = 10.0
+
+    counts = real.discover_owners(route, pages=2, budget_seconds=5)
+    assert counts == {'pages': 1, 'rows': 1, 'owners': 1, 'wrapped': 0}
+    assert store.store.projection_page_owners.call_count == 1
+    assert real.backstop_after == cursor
 
 
 def test_a_failed_take_turns_the_process_back_to_the_sweep(server):

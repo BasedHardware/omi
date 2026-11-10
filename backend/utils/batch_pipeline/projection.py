@@ -603,8 +603,9 @@ class Projector:
     ) -> dict:
         """Discovery-only backstop for sharded serving (maintenance leader only).
 
-        Pages the durable pending log and hands each owner found to ``route``
-        once per call, oldest commit first. No assignment, claim or per-row
+        Pages the durable pending log and hands owners to ``route``, oldest
+        commit first, repeating an owner only for a fresher capture on a later page.
+        No assignment, claim or per-row
         read: owners come from the page rows. The cursor resumes across calls
         and wraps at a short page, so every pending row is revisited. Aggregate
         captures before routing so a later fresh row wins over older backlog.
@@ -612,7 +613,7 @@ class Projector:
         deadline = time.monotonic() + budget_seconds
         now = self.clock()
         counts = {'pages': 0, 'rows': 0, 'owners': 0, 'wrapped': 0}
-        owners: dict[str, tuple[float, float | None]] = {}
+        seen: dict[str, float | None] = {}
         for _ in range(max(1, pages)):
             if counts['pages'] and time.monotonic() >= deadline:
                 break
@@ -622,17 +623,21 @@ class Projector:
             self.backstop_after = after
             counts['pages'] += 1
             counts['rows'] += len(rows)
+            owners: dict[str, tuple[float, float | None]] = {}
             for _segment_id, owner_id, committed_at, capture_at in rows:
                 oldest, freshest = owners.get(owner_id, (committed_at, None))
                 if capture_at is not None and capture_at <= now and (freshest is None or capture_at > freshest):
                     freshest = capture_at
                 owners[owner_id] = (min(oldest, committed_at), freshest)
+            for owner_id, (committed_at, capture_at) in owners.items():
+                previous = seen.get(owner_id)
+                if owner_id not in seen or (capture_at is not None and (previous is None or capture_at > previous)):
+                    route(owner_id, committed_at, capture_at)
+                    seen[owner_id] = capture_at
             if after is None:
                 counts['wrapped'] = 1
                 break
-        for owner_id, (committed_at, capture_at) in owners.items():
-            route(owner_id, committed_at, capture_at)
-        counts['owners'] = len(owners)
+        counts['owners'] = len(seen)
         return counts
 
     def owe_followups(self, segment_ids) -> None:

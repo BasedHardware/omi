@@ -9611,12 +9611,15 @@ keeps its lane position. Wake keys expire 7 days after their last push.
 4. Leader backstop. After the tail, the leader pages the whole pending log,
    discovery-only.
    - At most 30 pages of 100 rows in 10 s, from a resuming cursor that wraps.
-   - It routes each owner once per tick and runs the sweep's finish page.
-   - Captures are aggregated across the bounded pages before routing. Any fresh
+   - It routes owners to shard holders and runs the sweep's finish page.
+   - Captures are aggregated within each page before routing. Any fresh
      capture selects the fresh lane; the oldest commit orders backlog owners.
      Discovery promotes an existing backlog wake atomically, invalidating stale
      backlog takes without touching leases or shortening future retry deadlines.
      Replays preserve fresh wakes and never demote them.
+     A later page re-routes an owner only when it finds a fresher capture.
+     Routing remains inside the scan budget; a later read failure preserves
+     wakes already routed from earlier pages.
 
 Followers skip the sweep. Every process keeps its own async follow-up
 discovery.
