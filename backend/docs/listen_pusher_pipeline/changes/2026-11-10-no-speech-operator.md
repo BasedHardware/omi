@@ -42,7 +42,7 @@ exits are row-local, including upload_pending and privacy_skipped. Each apply
 uses a new private ledger; partial pages are undone separately before replan.
 
 Coverage follow-up: planning and apply both prove coverage on fresh raw listings
-using refreshed capture_start/capture_end, explicit zero gap_count and decoded
+using generation/metageneration-fenced capture_start/capture_end, explicit zero gap_count and decoded
 16 kHz sample counts. Missing coverage is limited to a cumulative 20 ms (320
 frames), including boundaries. Byte-identical overlaps are deduplicated before
 VAD; conflicting overlaps or unknown timing return coverage_incomplete with an

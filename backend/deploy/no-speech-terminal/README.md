@@ -23,11 +23,12 @@ removes the marker.
 ## Capture coverage proof
 
 Planning and apply reproof each list the raw objects afresh, pin their data
-generations, and decode through the existing authenticated source reader. The
+generations and metadata versions (metageneration), and decode through the existing authenticated source reader. The
 capture interval is the row's timezone-aware `started_at` and `finished_at`.
-Each object's refreshed `capture_start` (or canonical filename start),
+Each object's versioned `capture_start` (or canonical filename start),
 `capture_end`, explicit zero `gap_count`, and decoded mono 16 kHz PCM sample
-count must agree. Missing/unknown timing, internal gaps, conflicting overlaps,
+count must agree. Missing listing size/metageneration, a failed download precondition,
+missing/unknown timing, internal gaps, conflicting overlaps,
 or objects extending outside the capture beyond tolerance refuse the proof.
 
 The retained-audio sample-range `union` helper proves coverage from actual

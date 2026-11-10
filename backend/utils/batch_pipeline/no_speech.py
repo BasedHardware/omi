@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 import math
 import time
 
+from google.api_core.exceptions import PreconditionFailed
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -110,6 +111,8 @@ def _raw_refs(storage_client, uid, cid):
                 'bucket': private_cloud_sync_bucket,
                 'generation': str(blob.generation),
                 'metadata': metadata,
+                'size': blob.size,
+                'metageneration': blob.metageneration,
                 'sample_rate': int(metadata.get('record_sample_rate', 16000)),
             }
         )
@@ -122,7 +125,16 @@ def _measure(storage_client, uid, cid, refs, row):
     capture_bounds(row, MAX_AUDIO_SECONDS)
     sources, decoded_bytes = [], 0
     for ref in refs:
-        chunk = read_reference(storage_client, ref, uid, cid, {private_cloud_sync_bucket}, key, source_metadata=True)
+        if (
+            type(ref.get('size')) is not int
+            or ref['size'] <= 0
+            or type(ref.get('metageneration')) is not int
+            or ref['metageneration'] <= 0
+        ):
+            raise CoverageIncomplete('coverage_incomplete')
+        chunk = read_reference(
+            storage_client, ref, uid, cid, {private_cloud_sync_bucket}, key, source_metadata=True, listed_source=ref
+        )
         if not chunk or len(chunk) % 2:
             raise ValueError('invalid retained PCM')
         decoded_bytes += len(chunk)
@@ -165,7 +177,7 @@ def _measure_row(storage_client, uid, cid, row):
             speech, audio = _measure(storage_client, uid, cid, refs, row)
         except BatchPrivacyBlocked:
             raise
-        except CoverageIncomplete:
+        except (CoverageIncomplete, PreconditionFailed):
             return 'coverage_incomplete', None, None, len(refs), 0
         except Exception:
             return 'decode_failed', None, None, len(refs), 0

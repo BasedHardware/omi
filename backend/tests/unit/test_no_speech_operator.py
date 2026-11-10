@@ -1,5 +1,6 @@
 """Synthetic strict-VAD/operator contracts; no cloud credentials or IO."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -9,6 +10,8 @@ from types import SimpleNamespace
 from unittest.mock import ANY, Mock
 
 import pytest
+
+from google.api_core.exceptions import PreconditionFailed
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from scripts import mark_no_speech_orphans as tool
@@ -554,7 +557,11 @@ def coverage_operator(monkeypatch, specs):
                 'capture_end': str(start.timestamp() + offset + duration),
                 'gap_count': '0',
             }
-            blobs.append(SimpleNamespace(name=path, generation=1, metadata=metadata))
+            blobs.append(
+                SimpleNamespace(
+                    name=path, generation=1, metadata=metadata, size=round(duration * 32000), metageneration=1
+                )
+            )
             pcm_by_path[path] = value * round(duration * 16000)
 
     replace_sources(specs)
@@ -639,3 +646,41 @@ def test_missing_chunk_at_apply_is_coverage_incomplete(monkeypatch):
     }
     ledger.prepare.assert_not_called()
     assert client.rows[storage_tests.PATH] == before
+
+
+@pytest.mark.parametrize('metadata_changed', [False, True])
+def test_coverage_download_fences_listed_metadata_version(monkeypatch, metadata_changed):
+    from utils.batch_pipeline import source_audio
+
+    client, store, storage, _, vad = coverage_operator(monkeypatch, [(0, 8, b'\x01\0')])
+    listed = storage.bucket.return_value.list_blobs()[0]
+    raw = b'\x01\0' * (8 * 16000)
+    listed.metadata.update(sha256=hashlib.sha256(raw).hexdigest(), format='pcm16le', sample_rate='16000', channels='1')
+    downloaded = storage.bucket.return_value.blob.return_value
+    downloaded.download_as_bytes.side_effect = (
+        PreconditionFailed('synthetic metageneration mismatch') if metadata_changed else lambda **kwargs: raw
+    )
+    monkeypatch.setattr(no_speech, 'read_reference', source_audio.read_reference)
+    before = dict(client.rows[storage_tests.PATH])
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], storage)
+    assert planned['entries'][0]['disposition'] == ('coverage_incomplete' if metadata_changed else 'no_speech')
+    downloaded.reload.assert_not_called()
+    assert downloaded.download_as_bytes.call_args.kwargs['if_generation_match'] == 1
+    assert downloaded.download_as_bytes.call_args.kwargs['if_metageneration_match'] == 1
+    if metadata_changed:
+        vad.assert_not_called()
+        ledger = Mock()
+        assert no_speech.apply_no_speech(store, planned, planned['plan_sha256'], storage, ledger=ledger) == {
+            'coverage_incomplete': 1
+        }
+        ledger.prepare.assert_not_called()
+        assert client.rows[storage_tests.PATH] == before
+
+
+@pytest.mark.parametrize('field', ['size', 'metageneration'])
+def test_coverage_refuses_unversioned_listing_metadata(monkeypatch, field):
+    _, store, storage, _, vad = coverage_operator(monkeypatch, [(0, 8, b'\x01\0')])
+    setattr(storage.bucket.return_value.list_blobs()[0], field, None)
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], storage)
+    assert planned['entries'][0]['disposition'] == 'coverage_incomplete'
+    vad.assert_not_called()
