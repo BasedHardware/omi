@@ -148,10 +148,6 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
-  - name: FIRST_SUMMARY_DEADLINE_ENABLED
-    value: "true"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "100"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -188,8 +184,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -356,8 +350,6 @@ env:
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: SPEAKER_MATCH_SCORES_ENABLED
-    value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
   - name: BUCKET_OBJECT_LAKE

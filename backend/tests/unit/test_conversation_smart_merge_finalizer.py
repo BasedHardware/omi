@@ -190,8 +190,6 @@ async def test_record_registration_precedes_terminal_fanout_even_for_silent_back
 async def test_completed_minimum_reaches_processing_under_its_existing_job(harness, monkeypatch):
     calls, row = harness
     row.update(summary_title_provenance='server_minimum', summary_output_present=False)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     original = finalizer.run_blocking
     processed = []
 

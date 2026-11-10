@@ -182,6 +182,7 @@ def maintain(now: float) -> dict[str, int]:
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
         'summary_debt_errors': 0,
+        'summary_debt_expired_seen': 0,
     }
     # C8 provider-STT units rely on this sweep when a post-commit wake is lost (contract (b),
     # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
@@ -202,11 +203,12 @@ def maintain(now: float) -> dict[str, int]:
         summary = summary_debt_repair.tick(now=now)
     except Exception as error:
         logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
-        summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+        summary = {'scanned': 0, 'admitted': 0, 'errors': 1, 'expired_seen': 0}
     counts.update(
         summary_debt_scanned=summary['scanned'],
         summary_debt_admitted=summary['admitted'],
         summary_debt_errors=summary['errors'],
+        summary_debt_expired_seen=summary['expired_seen'],
     )
     return counts
 

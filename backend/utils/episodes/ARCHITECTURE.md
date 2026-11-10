@@ -315,8 +315,7 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
 
 `config/episodes.py`:
 - `EPISODES_ENABLED` defaults on and is the kill switch.
-- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST`
-  select the admitted cohort. The allowlist bypasses the percentage.
+- Every nonempty owner is admitted while the kill switch is on.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's
 per-conversation UI, and episode lifecycle reads, writes and model calls stop.

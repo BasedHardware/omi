@@ -42,7 +42,6 @@ def client(monkeypatch):
     # is exercised by the recorded-time service/emulator suites.
     monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     # The capability marker is Redis; test_episodes_client_gate covers it.
     monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
     monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid, fresh=False: None)
@@ -190,14 +189,14 @@ def test_list_rejects_invalid_window_and_page_arguments(client, params):
     assert http.get('/v1/episodes', params=params).status_code == 422
 
 
-def test_list_store_channel_never_reads(client, monkeypatch):
+def test_list_unknown_channel_never_reads(client, monkeypatch):
     _, http = client
     monkeypatch.setattr(router_module.home_read, 'list_episode_window', lambda *a, **kw: pytest.fail('must not read'))
     assert (
         http.get(
             '/v1/episodes',
             params={'from': T0.isoformat(), 'to': T0.isoformat()},
-            headers={'X-Omi-App-Channel': 'store'},
+            headers={'X-Omi-App-Channel': 'unknown'},
         ).json()['enabled']
         is False
     )

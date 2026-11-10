@@ -8,20 +8,17 @@ Controls (read per call, never at import):
 
 - ``CONVERSATION_NOTES_AGENT_ENABLED``: kill switch, default on. ``false``/``off``/``0``
   returns every conversation to the one-shot path.
-- ``CONVERSATION_NOTES_AGENT_PERCENT``: stable conversation-hash cohort, default 100.
 - ``CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED``: default on. Off restores
   legacy lookup charging, tool schema, prompt, packet and investigation floor.
 """
 
 from __future__ import annotations
 
-import hashlib
 import os
 from dataclasses import dataclass
 from typing import Optional
 
 FLAG = 'CONVERSATION_NOTES_AGENT_ENABLED'
-PERCENT = 'CONVERSATION_NOTES_AGENT_PERCENT'
 LOOKUP_EFFICIENCY = 'CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED'
 
 # A conversation this long is worth an agent on words alone.
@@ -72,25 +69,9 @@ def lookup_efficiency_enabled() -> bool:
     return os.getenv(LOOKUP_EFFICIENCY, 'true').strip().lower() not in {'false', 'off', '0', 'no'}
 
 
-def _percent() -> int:
-    raw = os.getenv(PERCENT, '').strip()
-    if not raw:
-        return 100
-    try:
-        return max(0, min(100, int(raw)))
-    except ValueError:
-        # An unreadable ramp value must not silently widen the cohort.
-        return 0
-
-
 def in_cohort(uid: Optional[str], conversation_id: Optional[str]) -> bool:
-    percent = _percent()
-    if percent >= 100:
-        return True
-    if percent <= 0 or not conversation_id:
-        return False
-    bucket = int(hashlib.sha256(f'notes-agent:{conversation_id}'.encode()).hexdigest()[:8], 16) % 100
-    return bucket < percent
+    """Permanent full admission (David 2026-11-09 flag rulings)."""
+    return True
 
 
 def budget_for_words(words: int) -> NotesAgentBudget:

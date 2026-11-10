@@ -262,11 +262,9 @@ def test_event_loop_cold_path_never_blocks(monkeypatch, clock):
 
 def test_bound_config_modules_read_runtime_percent(monkeypatch):
     monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: {'first-summary': 100.0}.get(name, default))
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    assert summary_guarantee.enabled('synthetic-owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'synthetic-owner'})
     monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: default)
-    assert not summary_guarantee.enabled('synthetic-owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'synthetic-owner'})
     # After E1 the batch and retire percents come from the policy resolver, which reads _ramp
     # through the same seam (production only; explicit replay flags never read it).
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
