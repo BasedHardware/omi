@@ -9401,6 +9401,15 @@ repair triggers. Summaries and speaker labels remain prompt inputs, and the full
 fingerprint still owns leases and composed-state validation. See the
 [change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).
 
+`EPISODE_LATE_COMPOSE` defaults on (unset or blank). A recording repaired or
+synced more than `EPISODE_LATE_COMPOSE_AFTER_HOURS` (default 48) after capture
+does not compose at finalize: it keeps the first member's title and composes when
+its episode page is first opened (`GET /v1/episodes/{id}`). A read-side safety
+net composes it after `EPISODE_LATE_COMPOSE_GRACE_HOURS` (default 24). Invalid or
+nonpositive hour values use the defaults. `off` restores composing every closed
+episode at finalize. See the
+[change note](listen_pusher_pipeline/changes/2026-11-10-episode-late-compose.md).
+
 ### Provisional identities from meeting notes
 
 The rich notes call receives approved screenshots (at most four), screen moments,

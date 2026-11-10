@@ -265,7 +265,7 @@ EPISODE_COMPOSE_SECONDS = reuse_or_create(
     ['outcome'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
 )
-COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
+COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged', 'late_deferred'})
 EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_trigger_skipped_total',

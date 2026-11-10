@@ -2233,6 +2233,8 @@ def test_a_stored_section_seconds_long_runs_to_the_next_on_its_recording():
 
 @pytest.mark.parametrize('read', ['live', 'lookup'])
 def test_idle_closing_read_schedules_compose_immediately(monkeypatch, read):
+    # This fixture's capture is old enough to be "late"; keep today's close-time compose.
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_ENV, 'off')
     store = StrictFirestore()
     _attach(store, 'c1', minutes=0)
     first = episodes_db.get_current_episode(UID, firestore_client=store)
@@ -2251,6 +2253,8 @@ def test_idle_closing_read_schedules_compose_immediately(monkeypatch, read):
 def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
     from utils.episodes import home_read
 
+    # This fixture's capture is old enough to be "late"; keep today's close-time compose.
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_ENV, 'off')
     store = StrictFirestore()
     _attach(store, 'c1', minutes=0)
     first = episodes_db.get_current_episode(UID, firestore_client=store)
