@@ -22,6 +22,10 @@ class Reference:
         self.client.commit([(self, patch, option)])
 
 
+def due_value(value, kind):
+    return datetime.fromtimestamp(value, tz=timezone.utc) if kind == 'timestamp' else value
+
+
 class Query:
     def __init__(self, client):
         self.client = client
@@ -55,9 +59,19 @@ class Query:
         assert self.orders == ['summary_due_at', '__name__']
         self.client.queries += 1
         page = []
-        for path, row in sorted(self.client.rows.items(), key=lambda item: (item[1]['summary_due_at'] or 0, item[0])):
+        for path, row in sorted(
+            self.client.rows.items(),
+            key=lambda item: (isinstance(item[1]['summary_due_at'], datetime), item[1]['summary_due_at'] or 0, item[0]),
+        ):
             due = row['summary_due_at']
-            if due is None or due > self.cutoff or (self.cursor and (due, path) <= self.cursor):
+            # Firestore inequalities match the operand's value type. Python cannot
+            # compare mixed datetime/numeric values; keep the fake equally strict.
+            if (
+                due is None
+                or isinstance(due, datetime) != isinstance(self.cutoff, datetime)
+                or due > self.cutoff
+                or (self.cursor and (due, path) <= self.cursor)
+            ):
                 continue
             data = deepcopy(row)
             page.append(
@@ -68,7 +82,7 @@ class Query:
                 )
             )
         page = page[: self.take]
-        if self.client.on_stream:
+        if page and self.client.on_stream:
             callback, self.client.on_stream = self.client.on_stream, None
             callback(self.client)
         return iter(page)
@@ -137,9 +151,10 @@ DURABLE = [
 ]
 
 
+@pytest.mark.parametrize('kind', ['numeric', 'timestamp'])
 @pytest.mark.parametrize('patch,reason', DURABLE)
-def test_every_durable_class_is_classified_by_serving_refusal_and_cleared(patch, reason):
-    row = {**owed(), **patch, 'summary_first_pending_at': 1}
+def test_every_durable_class_is_classified_by_serving_refusal_and_cleared(patch, reason, kind):
+    row = {**owed(), **patch, 'summary_first_pending_at': 1, 'summary_due_at': due_value(10, kind)}
     assert backfill.summary_delivery.refusal(row) == reason
     client = Client({'users/synthetic/conversations/target': row})
     result = backfill.run_backfill(client, apply=True, now=20)
@@ -173,8 +188,9 @@ def test_every_durable_class_is_classified_by_serving_refusal_and_cleared(patch,
         {'discarded': True, 'finalization_status': 'blocked_byok'},
     ],
 )
-def test_owed_any_age_and_transient_or_local_owners_never_clear(patch):
-    row = {**owed(), **patch}
+@pytest.mark.parametrize('kind', ['numeric', 'timestamp'])
+def test_owed_any_age_and_transient_or_local_owners_never_clear(patch, kind):
+    row = {**owed(), **patch, 'summary_due_at': due_value(10, kind)}
     client = Client({'target': row})
     assert backfill.run_backfill(client, apply=True, now=20)['eligible'] == 0
     assert client.rows == {'target': row}
@@ -192,6 +208,10 @@ def test_dry_run_default_counts_only_and_cutoff():
         'written': 0,
         'conflicts': 0,
         'apply': False,
+        'passes': {
+            'numeric': {'scanned': 1, 'eligible': 1, 'classes': {'lifecycle': 1}, 'written': 0, 'conflicts': 0},
+            'timestamp': {'scanned': 0, 'eligible': 0, 'classes': {}, 'written': 0, 'conflicts': 0},
+        },
     }
     assert 'private-path' not in str(result)
     assert client.rows == before
@@ -206,21 +226,27 @@ def test_pagination_tied_due_cursor_and_limit_include_retained_rows(tmp_path):
     import json
 
     position = json.loads(cursor.read_text())
-    assert position == {'due': 10, '__name__': 'users/synthetic/conversations/0800'}
+    assert position == {'pass': 'numeric', 'due': 10, '__name__': 'users/synthetic/conversations/0800'}
     assert cursor.stat().st_mode & 0o777 == 0o600
     resumed = backfill.run_backfill(client, apply=True, now=20, start_after=position)
     assert resumed['scanned'] == 4 and resumed['written'] == 2
 
 
+@pytest.mark.parametrize('kind', ['numeric', 'timestamp'])
 @pytest.mark.parametrize('deleted', [False, True])
-def test_concurrent_rearm_or_delete_aborts_batch_and_never_clears_new_state(deleted):
-    client = Client({'changed': owed(deleted=True), 'unchanged': owed(user_title='Edited')})
+def test_concurrent_rearm_or_delete_aborts_batch_and_never_clears_new_state(deleted, kind):
+    client = Client(
+        {
+            name: {**owed(**patch), 'summary_due_at': due_value(10, kind)}
+            for name, patch in [('changed', {'deleted': True}), ('unchanged', {'user_title': 'Edited'})]
+        }
+    )
 
     def race(store):
         if deleted:
             del store.rows['changed']
         else:
-            store.rows['changed'] = {**owed(), 'summary_due_at': 100}
+            store.rows['changed'] = {**owed(), 'summary_due_at': due_value(100, kind)}
             store.versions['changed'] = datetime(2026, 11, 11, tzinfo=timezone.utc)
 
     client.on_stream = race
@@ -228,7 +254,7 @@ def test_concurrent_rearm_or_delete_aborts_batch_and_never_clears_new_state(dele
     assert result['written'] == 1 and result['conflicts'] == 1
     assert client.rows['unchanged']['summary_due_at'] is None
     if not deleted:
-        assert client.rows['changed']['summary_due_at'] == 100
+        assert client.rows['changed']['summary_due_at'] == due_value(100, kind)
 
 
 def test_full_batches_of_400():
@@ -341,3 +367,158 @@ def test_main_failure_is_counts_only(monkeypatch, capsys):
     output = capsys.readouterr()
     assert output.out == ''
     assert output.err == '{"failed": 1}\n'
+
+
+@pytest.mark.parametrize('apply', [False, True])
+def test_mixed_passes_are_disjoint_bounded_and_report_counts(apply):
+    rows = {
+        f'{kind}-{name}': {**owed(**flags), 'summary_due_at': due_value(due, kind)}
+        for kind in ('numeric', 'timestamp')
+        for name, flags, due in [
+            ('refused', {'deleted': True}, 10),
+            ('owed', {}, 10),
+            ('future', {'deleted': True}, 100),
+        ]
+    }
+    client = Client(rows)
+    result = backfill.run_backfill(client, apply=apply, now=20, page_size=1)
+    assert result['scanned'] == 4 and result['eligible'] == 2
+    assert result['written'] == (2 if apply else 0)
+    for kind in ('numeric', 'timestamp'):
+        assert result['passes'][kind] == {
+            'scanned': 2,
+            'eligible': 1,
+            'written': int(apply),
+            'conflicts': 0,
+            'classes': {'lifecycle': 1, 'retained': 1},
+        }
+        for name in ('refused', 'owed', 'future'):
+            key = f'{kind}-{name}'
+            expected = {**rows[key], 'summary_due_at': None} if apply and name == 'refused' else rows[key]
+            assert client.rows[key] == expected
+    assert 'numeric-refused' not in str(result) and 'timestamp-refused' not in str(result)
+
+
+def test_resume_numeric_limit_then_timestamp_cursor_never_replays_numeric(tmp_path):
+    import json
+    from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+
+    due = DatetimeWithNanoseconds.from_rfc3339('1970-01-01T00:00:10.123456Z')
+    client = Client(
+        {
+            'numeric-kept': owed(),
+            'numeric-refused': owed(deleted=True),
+            **{f'timestamp-{n}': {**owed(deleted=True), 'summary_due_at': due} for n in range(3)},
+        }
+    )
+    cursor = tmp_path / 'cursor.json'
+    first = backfill.run_backfill(client, apply=True, now=20, limit=1, cursor_file=cursor)
+    numeric_position = json.loads(cursor.read_text())
+    assert first['scanned'] == 1 and numeric_position['pass'] == 'numeric'
+    second = backfill.run_backfill(
+        client, apply=True, now=20, limit=2, start_after=numeric_position, cursor_file=cursor
+    )
+    position = json.loads(cursor.read_text())
+    assert second['passes']['numeric']['scanned'] == second['passes']['timestamp']['scanned'] == 1
+    assert position == {'pass': 'timestamp', 'due': {'timestamp': due.rfc3339()}, '__name__': 'timestamp-0'}
+    third = backfill.run_backfill(client, apply=True, now=20, start_after=position, cursor_file=cursor)
+    assert third['scanned'] == third['written'] == 2
+    assert third['passes']['numeric']['scanned'] == 0
+    assert client.rows['numeric-kept']['summary_due_at'] == 10
+
+
+def test_checkpoint_pass_boundary_survives_interruption(tmp_path, monkeypatch):
+    import json
+
+    client = Client(
+        {'number': owed(deleted=True), 'stamp': {**owed(deleted=True), 'summary_due_at': due_value(10, 'timestamp')}}
+    )
+    cursor = tmp_path / 'cursor.json'
+    checkpoint = backfill._checkpoint
+
+    def interrupt(path, position):
+        checkpoint(path, position)
+        if position['pass'] == 'timestamp' and position['due'] is None:
+            raise RuntimeError('synthetic interruption at pass boundary')
+
+    monkeypatch.setattr(backfill, '_checkpoint', interrupt)
+    with pytest.raises(RuntimeError, match='pass boundary'):
+        backfill.run_backfill(client, apply=True, now=20, cursor_file=cursor)
+    position = json.loads(cursor.read_text())
+    assert position == {'pass': 'timestamp', 'due': None, '__name__': None}
+    assert client.rows['number']['summary_due_at'] is None
+    monkeypatch.setattr(backfill, '_checkpoint', checkpoint)
+    resumed = backfill.run_backfill(client, apply=True, now=20, start_after=position, cursor_file=cursor)
+    assert resumed['scanned'] == resumed['written'] == 1
+    assert resumed['passes']['numeric']['scanned'] == 0
+    assert client.rows['stamp']['summary_due_at'] is None
+
+
+def test_both_passes_keep_400_write_batch_cap():
+    client = Client(
+        {
+            f'{kind}-{n:04d}': {**owed(deleted=True), 'summary_due_at': due_value(10, kind)}
+            for kind in ('numeric', 'timestamp')
+            for n in range(401)
+        }
+    )
+    result = backfill.run_backfill(client, apply=True, now=20, page_size=999)
+    assert result['written'] == 802
+    assert client.batch_sizes == [400, 1, 400, 1]
+    assert result['passes']['numeric']['written'] == result['passes']['timestamp']['written'] == 401
+
+
+@pytest.mark.parametrize(
+    'position',
+    [
+        {'pass': 'unknown', 'due': 10},
+        {'pass': 'timestamp', 'due': 10},
+        {'pass': 'numeric', 'due': {'timestamp': '1970-01-01T00:00:10Z'}},
+    ],
+)
+def test_mismatched_cursor_pass_fails_before_query(position):
+    client = Client({})
+    with pytest.raises(ValueError):
+        backfill.run_backfill(client, start_after=position, now=20)
+    assert client.queries == 0
+
+
+def test_mixed_value_types_against_loopback_firestore(monkeypatch):
+    import os
+    from uuid import uuid4
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+
+    host = os.getenv('SUMMARY_BACKFILL_TEST_FIRESTORE_HOST')
+    if not host:
+        pytest.skip('Loopback Firestore not requested')
+    assert host.startswith('127.0.0.1:')
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', host)
+    client = firestore.Client(project='demo-summary-types-' + uuid4().hex[:8], credentials=AnonymousCredentials())
+    try:
+        rows = {
+            f'{kind}-{name}': {**owed(**flags), 'summary_due_at': due_value(due, kind)}
+            for kind in ('numeric', 'timestamp')
+            for name, flags, due in [
+                ('refused', {'deleted': True}, 10),
+                ('owed', {}, 10),
+                ('future', {'deleted': True}, 100),
+            ]
+        }
+        refs = {
+            name: client.collection('users').document('synthetic').collection('conversations').document(name)
+            for name in rows
+        }
+        for name, row in rows.items():
+            refs[name].set(row)
+        dry = backfill.run_backfill(client, now=20, page_size=1)
+        assert dry['scanned'] == 4 and dry['eligible'] == 2 and dry['written'] == 0
+        applied = backfill.run_backfill(client, apply=True, now=20, page_size=1)
+        assert applied['scanned'] == 4 and applied['written'] == 2
+        for kind in ('numeric', 'timestamp'):
+            assert applied['passes'][kind]['scanned'] == 2
+            assert refs[f'{kind}-refused'].get().to_dict()['summary_due_at'] is None
+            assert refs[f'{kind}-owed'].get().to_dict()['summary_due_at'] == due_value(10, kind)
+            assert refs[f'{kind}-future'].get().to_dict()['summary_due_at'] == due_value(100, kind)
+    finally:
+        client.close()

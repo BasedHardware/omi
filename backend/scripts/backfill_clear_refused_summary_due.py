@@ -11,8 +11,10 @@ Usage (from backend/):
     python scripts/backfill_clear_refused_summary_due.py --apply --limit 5000 --cursor-file /private/tmp/summary-cursor.json
     python scripts/backfill_clear_refused_summary_due.py --apply --start-after /private/tmp/summary-cursor.json
 
---start-after reads a private JSON file containing {"due": <number>, "__name__":
-<document path>}. --cursor-file checkpoints that pair after each committed page;
+--start-after reads a private JSON file containing {"pass": "numeric" or
+"timestamp", "due": <number or tagged RFC3339 timestamp>, "__name__": <path>}.
+Each pass has its own cursor; a null due/path marks the timestamp-pass boundary.
+--cursor-file checkpoints after each committed page and at the pass boundary;
 keep dry-run and apply cursor files separate. Stdout/stderr contain counts only,
 never document paths. A conflict skips the changed row; a later sweep can revisit
 it. Owed rows at every age, processing rows, generation-owned rows and local-only
@@ -27,7 +29,7 @@ import os
 import sys
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -154,63 +156,93 @@ def run_backfill(
 
     limit bounds scanned rows (not just writes), so a canary is bounded even
     when most of its page is owed. Restart a full sweep without its cursor to
-    reconsider conflicts. The fixed cutoff and (due, name) cursor survive clears.
+    reconsider conflicts. Numeric and timestamp passes use the same fixed instant,
+    separate (due, name) cursors, and a shared scanned-row limit. Counts are
+    reported both per pass and in aggregate. Cursor positions survive clears.
     """
     if limit is not None and limit <= 0:
         raise ValueError('limit must be positive')
     page_size = min(max(int(page_size), 1), _BATCH_LIMIT)
     cutoff = time.time() if now is None else now
-    scanned = written = conflicts = 0
-    classified: Counter[str] = Counter()
-    cursor = None
-    if start_after is not None:
-        due = start_after['due']
-        if isinstance(due, dict):
-            due = DatetimeWithNanoseconds.from_rfc3339(due['timestamp'])
-        cursor = {'summary_due_at': due, '__name__': client.document(start_after['__name__'])}
-    while limit is None or scanned < limit:
-        take = page_size if limit is None else min(page_size, limit - scanned)
-        query = (
-            client.collection_group('conversations')
-            .where(filter=FieldFilter('summary_due_at', '<=', cutoff))
-            .order_by('summary_due_at')
-            .order_by('__name__')
-            .select(CLASSIFIER_FIELDS)
-            .limit(take)
+    pass_cutoffs = {'numeric': cutoff, 'timestamp': datetime.fromtimestamp(cutoff, tz=timezone.utc)}
+    passes = {name: {'scanned': 0, 'written': 0, 'conflicts': 0, 'classes': Counter()} for name in pass_cutoffs}
+    resume = dict(start_after or {})
+    due = resume.get('due')
+    if isinstance(due, dict):
+        due = DatetimeWithNanoseconds.from_rfc3339(due['timestamp'])
+    # Older checkpoints had no pass marker. Infer their type without using a
+    # numeric cursor to seek in the timestamp pass (or replaying numeric rows).
+    active = resume.get('pass', 'timestamp' if isinstance(due, datetime) else 'numeric')
+    if active not in passes:
+        raise ValueError('unknown cursor pass')
+    if due is not None and isinstance(due, datetime) != (active == 'timestamp'):
+        raise ValueError('cursor type does not match pass')
+    scanned = 0
+    for name, pass_cutoff in pass_cutoffs.items():
+        if name == 'numeric' and active == 'timestamp':
+            continue
+        counts = passes[name]
+        cursor = (
+            {'summary_due_at': due, '__name__': client.document(resume['__name__'])}
+            if name == active and due is not None
+            else None
         )
-        if cursor is not None:
-            query = query.start_after(cursor)
-        page = list(query.stream())
-        if not page:
+        while limit is None or scanned < limit:
+            take = page_size if limit is None else min(page_size, limit - scanned)
+            query = (
+                client.collection_group('conversations')
+                .where(filter=FieldFilter('summary_due_at', '<=', pass_cutoff))
+                .order_by('summary_due_at')
+                .order_by('__name__')
+                .select(CLASSIFIER_FIELDS)
+                .limit(take)
+            )
+            if cursor is not None:
+                query = query.start_after(cursor)
+            page = list(query.stream())
+            if not page:
+                break
+            pending = []
+            for snapshot in page:
+                row = snapshot.to_dict() or {}
+                scanned += 1
+                counts['scanned'] += 1
+                reason = durable_refusal(row)
+                counts['classes'][reason or 'retained'] += 1
+                if reason is not None and apply:
+                    if snapshot.update_time is None:
+                        raise ValueError('update_time required')
+                    pending.append(snapshot)
+            if pending:
+                written, conflicts = _commit(client, pending)
+                counts['written'] += written
+                counts['conflicts'] += conflicts
+            last = page[-1]
+            last_due = last.to_dict()['summary_due_at']
+            cursor = {'summary_due_at': last_due, '__name__': last.reference}
+            if cursor_file is not None:
+                _checkpoint(cursor_file, {'pass': name, 'due': last_due, '__name__': last.reference.path})
+            if len(page) < take:
+                break
+        if limit is not None and scanned >= limit:
             break
-        pending = []
-        for snapshot in page:
-            row = snapshot.to_dict() or {}
-            scanned += 1
-            reason = durable_refusal(row)
-            classified[reason or 'retained'] += 1
-            if reason is not None and apply:
-                if snapshot.update_time is None:
-                    raise ValueError('update_time required')
-                pending.append(snapshot)
-        if pending:
-            page_written, page_conflicts = _commit(client, pending)
-            written += page_written
-            conflicts += page_conflicts
-        last = page[-1]
-        due = last.to_dict()['summary_due_at']
-        cursor = {'summary_due_at': due, '__name__': last.reference}
-        if cursor_file is not None:
-            _checkpoint(cursor_file, {'due': due, '__name__': last.reference.path})
-        if len(page) < take:
-            break
+        if name == 'numeric' and cursor_file is not None:
+            # Commit the pass boundary before the first timestamp query. A crash
+            # there resumes without repeating retained numeric rows or writes.
+            _checkpoint(cursor_file, {'pass': 'timestamp', 'due': None, '__name__': None})
+    classified: Counter[str] = Counter()
+    for counts in passes.values():
+        classified.update(counts['classes'])
+        counts['eligible'] = sum(n for reason, n in counts['classes'].items() if reason != 'retained')
+        counts['classes'] = dict(sorted(counts['classes'].items()))
     return {
-        'scanned': scanned,
-        'eligible': sum(count for reason, count in classified.items() if reason != 'retained'),
+        **{
+            key: sum(counts[key] for counts in passes.values())
+            for key in ('scanned', 'eligible', 'written', 'conflicts')
+        },
         'classes': dict(sorted(classified.items())),
-        'written': written,
-        'conflicts': conflicts,
         'apply': apply,
+        'passes': passes,
     }
 
 
@@ -226,7 +258,9 @@ def main() -> None:
     parser.add_argument('--confirm-production-project', help='Required for --apply on based-hardware.')
     parser.add_argument('--page-size', type=int, default=_DEFAULT_PAGE_SIZE, help='Rows per page (max 400).')
     parser.add_argument('--limit', type=int, default=None, help='Maximum rows scanned, including retained rows.')
-    parser.add_argument('--start-after', type=Path, help='Resume from a private JSON (due + __name__) cursor file.')
+    parser.add_argument(
+        '--start-after', type=Path, help='Resume from a private JSON (pass + due + __name__) cursor file.'
+    )
     parser.add_argument(
         '--cursor-file', type=Path, help='Checkpoint after each successful page; contains document paths.'
     )
