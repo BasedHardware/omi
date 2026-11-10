@@ -410,6 +410,7 @@ def test_parked_recovery_has_a_real_privacy_blocked_exit(monkeypatch):
     row.set(
         {
             'record_lane_owner': 'batch_live_v1',
+            'private_cloud_sync_enabled': True,
             'finished_at': datetime.now(timezone.utc),
             'record_upload_revision': 7,
             'record_upload_sessions': {},
