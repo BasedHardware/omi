@@ -214,6 +214,9 @@ environment_shared:
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          value: 'true'
+          category: rollout
         X_OAUTH_REDIRECT_URI:
           config_map:
             name: '{env}-omi-backend-config'
@@ -720,6 +723,9 @@ environment_shared:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          source: literal
+          value: 'true'
         STT_SERVICE_MODELS:
           source: literal
         TYPESENSE_HOST:
@@ -1139,6 +1145,9 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
             env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
             provisional: true
@@ -1490,6 +1499,9 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -1844,6 +1856,9 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -2183,6 +2198,9 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           HOSTED_LID_API_URL: {value: '', category: service_discovery}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery

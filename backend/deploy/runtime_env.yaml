@@ -143,6 +143,7 @@ environments:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
           X_OAUTH_REDIRECT_URI:
             config_map:
               name: dev-omi-backend-config
@@ -554,6 +555,7 @@ environments:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
           STT_SERVICE_MODELS:
             value: modulate-velma-2,soniox
             category: stt_policy
@@ -647,6 +649,9 @@ environments:
           STT_PRERECORDED_MODEL:
             source: literal
             value: parakeet,modulate-velma-2
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            source: literal
+            value: 'true'
           STT_SERVICE_MODELS:
             source: literal
             value: modulate-velma-2,soniox
@@ -956,6 +961,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
@@ -1242,6 +1248,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
             OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
@@ -1548,6 +1555,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
             OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
@@ -1835,6 +1843,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -2357,6 +2366,7 @@ environments:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
           X_OAUTH_REDIRECT_URI:
             config_map:
               name: prod-omi-backend-config
@@ -2923,6 +2933,9 @@ environments:
           STT_PRERECORDED_MODEL:
             source: literal
             value: parakeet,modulate-velma-2
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            source: literal
+            value: 'true'
           STT_SERVICE_MODELS:
             source: literal
             value: parakeet-window,modulate-velma-2,soniox
@@ -3295,6 +3308,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
@@ -3707,6 +3721,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
             OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
@@ -4141,6 +4156,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
             OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
@@ -4543,6 +4559,7 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -4655,6 +4672,9 @@ environments:
               value: https://backend-integration-hhibjajaja-uc.a.run.app
               category: service_auth
             SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+            SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT:
+              value: '8'
+              category: config
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
