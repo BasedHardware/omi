@@ -4,8 +4,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 
 /// What a Home row that is not finished yet is waiting on, least advanced first.
-/// A run of such rows shows its least advanced step. Explicit server failures
-/// remain separate, terminal rows: the age projection does not populate Activity.
+/// A run of such rows shows its least advanced step. Confirmed placement keeps
+/// failures only in Activity; rollback retains the previous terminal Home rows.
 enum HomeStep { transcribing, writingNotes, failed }
 
 /// A display row only: neither episodes nor conversations are mutated or persisted.
@@ -80,6 +80,10 @@ class HomeEpisodeLayout {
   }
 }
 
+/// Failed status and the server's failed projection both belong to Activity.
+bool isFailedHomeConversation(ServerConversation c) =>
+    c.status == ConversationStatus.failed || homeStepOf(c) == HomeStep.failed;
+
 List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode> episodes,
     {required bool enabled,
     Set<String> liveConversationIds = const {},
@@ -91,16 +95,32 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     String? processingTitle,
     bool groupAwaitingTranscript = false,
     bool processingTodayOnly = false,
+    bool activityOnlyFailures = false,
     DateTime? now}) {
-  if (!enabled && !groupAwaitingTranscript) return [for (final c in conversations) HomeRow(c)];
+  if (!enabled && !groupAwaitingTranscript) {
+    return [
+      for (final c in conversations)
+        if (!activityOnlyFailures || !isFailedHomeConversation(c)) HomeRow(c)
+    ];
+  }
+  final failedIds = <String>{
+    if (activityOnlyFailures)
+      for (final c in [
+        ...conversations,
+        ...knownConversations,
+        ...processingConversations,
+        for (final e in episodes) ...e.members
+      ])
+        if (isFailedHomeConversation(c)) c.id,
+  };
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
   final listeningOwnedIds = {...liveConversationIds};
-  final hidden = {...liveConversationIds};
+  final hidden = {...liveConversationIds, ...failedIds};
   final rows = <HomeRow>[];
   final singleIds = <String>{};
   final failures = <String, ServerConversation>{
     for (final c in conversations)
-      if (c.homeStep == 'failed' && (c.episodeId == null || c.episodeId!.isEmpty)) c.id: c,
+      if (!activityOnlyFailures && c.homeStep == 'failed' && (c.episodeId == null || c.episodeId!.isEmpty)) c.id: c,
   };
   // A conversation's episode_id arrives with the list row, often before the
   // episode fetch. Reconstruct its owner immediately instead of flashing a
@@ -134,12 +154,15 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys.toSet();
     for (final id in retainedIds) {
       final member = byId[id] ?? metadata[id];
-      if (member?.homeStep == 'failed' && (member?.episodeId == null || member!.episodeId!.isEmpty))
+      if (!activityOnlyFailures &&
+          member?.homeStep == 'failed' &&
+          (member?.episodeId == null || member!.episodeId!.isEmpty)) {
         failures[id] = member!;
+      }
     }
     final pending = processingConversations
         .where((c) => retainedIds.contains(c.id) && !c.discarded && !c.deleted && !deletedIds.contains(c.id))
-        .where((c) => !_serverFinished(c))
+        .where((c) => !failedIds.contains(c.id) && !_serverFinished(c))
         .toList();
     final listeningOwns =
         episode.live && (episode.id == liveEpisodeId || episode.conversationIds.any(liveConversationIds.contains));
@@ -186,6 +209,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           !member.discarded &&
           !member.deleted &&
           !deletedIds.contains(id) &&
+          !failedIds.contains(id) &&
           (member.homeStep != 'failed' || member.episodeId == episode.id) &&
           (member.episodeId == null || member.episodeId!.isEmpty || member.episodeId == episode.id)) {
         members.add(member);

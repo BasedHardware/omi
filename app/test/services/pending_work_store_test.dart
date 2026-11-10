@@ -128,6 +128,42 @@ void main() {
     store.dispose();
   });
 
+  test('failed pending rows belong only to Activity when on; off restores catch-up', () async {
+    var enabled = true;
+    final store = PendingWorkStore(
+        loadPending: () async => ApiSuccess(PendingWorkSnapshot(
+            enabled: true,
+            homeProcessingToday: enabled,
+            items: const [
+              PendingWorkItem(
+                  id: 'conv:f', kind: 'conversation', state: 'summarizing', conversationIds: ['f'], homeStep: 'failed')
+            ],
+            attentionUnseenCount: 0)),
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+    await store.refresh();
+    expect(store.pending, isEmpty);
+    expect(store.pendingForActivity.single.homeStep, 'failed');
+    enabled = false;
+    await store.refresh();
+    expect(store.pending.single.id, 'conv:f');
+    final wireItem = PendingWorkItem.fromJson(
+        {'id': 'conv:f', 'kind': 'conversation', 'state': 'summarizing', 'home_step': 'failed'});
+    expect(wireItem!.homeStep, 'failed');
+    store.dispose();
+  });
+
+  test('confirmed failed ledger attempt uses a fresh key for the next retry', () async {
+    final calls = _Calls();
+    final store = _store(calls,
+        attention: ApiSuccess(AttentionItemsPage(enabled: true, items: [_item('x')], unseenCount: 1)),
+        retry: (id) => ApiSuccess(AttentionRetryResult(itemId: id, state: AttentionRetryState.failed)));
+    await store.refresh();
+    await store.retry(store.attention.single);
+    await store.retry(store.attention.single);
+    expect(calls.retryKeys, ['key-0', 'key-1']);
+    store.dispose();
+  });
+
   test('generated pending work keeps the recording count and legacy default', () {
     for (final count in [null, 3]) {
       final decoded = wire.GeneratedPendingWorkSnapshot.fromJson({

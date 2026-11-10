@@ -115,6 +115,9 @@ void main() {
     expectValue(GeneratedPendingWorkSnapshot.fromJson(confirmed.toJson()).homeProcessingToday == enabled, 'placement must round-trip');
   }
   expectValue(pending.items.single.durationSeconds == 12.5, 'fractional duration should decode');
+  expectValue(pending.items.single.homeStep == null, 'old pending items omit the Home step');
+  final failedLink = GeneratedPendingWorkItem.fromJson({...pending.items.single.toJson(), 'home_step': 'failed'});
+  expectValue(failedLink.homeStep == 'failed' && failedLink.toJson()['home_step'] == 'failed', 'failed pending step must round-trip');
   final roundTrip = GeneratedPendingWorkSnapshot.fromJson(pending.toJson());
   expectValue(roundTrip.items.single.startedAt?.toUtc() == DateTime.utc(2026, 10, 16), 'dates should round-trip');
   expectValue(roundTrip.items.single.updatedAt == null, 'nullable dates should round-trip');

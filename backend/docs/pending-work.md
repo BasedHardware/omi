@@ -49,10 +49,23 @@ and retry-all use the full active set. Sync duration is unchanged.
 Flutter chooses the user's current **local recorded day**, using `started_at`
 (or `created_at`), including recordings that cross midnight: after midnight they
 move to Processing in Activity. A foreground civil-clock check and resume
-recheck update both surfaces. Explicit projected failures remain terminal Home
-rows, including today's expired presentation wait, and do not duplicate Activity.
-Ready rows return to their recorded Home day. Search, folders, stars and selection
-retain exact matches. Queued work is labelled Transcribing, not Writing notes.
+recheck update both surfaces. Relay 9e09f1 (David, 2026-11-10 11:53Z) overrides the earlier failed Home UI:
+**no failed conversation appears on mobile Home**. Failed status, failed Home
+projection and failed episode members appear only in Activity with retry, on any
+day. Ledger entries keep the existing keyed retry; projected failures without a
+ledger item use the existing fenced conversation reprocess endpoint. Activity
+merges pending/episode members and loaded conversations, deduplicates ledger ids,
+and lets a finished conversation override stale pending data. A retry failure
+leaves the row and action available; success updates the shared conversation
+provider and restores normal Home placement.
+
+Pending conversation items now optionally echo `home_step` while the switch is
+on, including `failed` for expired presentation waits. This keeps an unloaded old
+job reachable in Activity without a new query or stored lifecycle state. Catch-up
+and On the Way exclude these projected failures when the switch is confirmed on;
+the raw pending view remains available to Activity. Off/failure restores the
+previous consumers and failed Home placement.
+Ready rows return to their recorded Home day. Search, folders, stars and selection retain exact matches except failed Home rows under this ruling. Queued work is labelled Transcribing, not Writing notes.
 
 Limits: pending is a bounded window, not an all-history backlog. Loaded Home
 conversations supplement Activity independently of the pending cap, so every

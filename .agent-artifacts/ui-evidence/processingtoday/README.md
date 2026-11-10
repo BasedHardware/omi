@@ -1,8 +1,7 @@
 # Processing today UI evidence — 2026-11-10 follow-up
 
 Synthetic fixtures; no account data or remote backend was read. David approved
-previous renders via relay 718fe8. This batch regenerates all eight original
-renders and adds 009/010 for relay 66d9fd episode ownership before its fetch arrives.
+previous renders via relay 718fe8. All original renders were regenerated, 009/010 cover relay 66d9fd episode ownership before its fetch arrives, and 011–014 implement David's superseding failed-row ruling (relay 9e09f1).
 The first four before/after pairs use placement off/on. The episode pair omits/
 includes the formerly unparsed episode_id, keeping other fixture inputs identical.
 
@@ -13,7 +12,7 @@ Home fixtures include the unfinished row in both listed and local processing sta
 
 See [prereview-dispositions.md](prereview-dispositions.md) for every review finding,
 integration order, fixes and explicitly deferred discovery limits. The tests also
-cover an expired today wait remaining exactly one terminal Home row, API episodeId
+cover an expired today wait appearing only in Activity with retry, API episodeId
 parsing/copy/cache, delayed episode fetch, cold/failed rollback, account fencing,
 100-item pending plus loaded supplement, DST and open-page midnight movement.
 
@@ -43,8 +42,7 @@ The PR body records the final command results and commit-pinned render URLs.
 
 Classification/deadlines remain unchanged. The backend flag stays default-on;
 new clients require explicit successful confirmation. Absent/error/404/account
-changes restore prior placement. Projected terminal failures remain on Home via
-#25013, while date-hidden processing reaches Activity. The recorded start day is
+changes restore prior placement. David relay 9e09f1 supersedes #25013: projected terminal failures stay off Home and appear in Activity with retry; date-hidden processing also reaches Activity. The recorded start day is
 used even when a capture crosses midnight. Every loaded Home row supplements the
 pending window in Activity; historical episode-only/unstamped debt discovery and
 all-history pagination remain deferred. Catch-up consumers retain their existing
@@ -52,3 +50,7 @@ through-notes-completion meaning. Physical-device behavior and live query latenc
 are unmeasured on this headless host. No merge/deploy or PCM CPU-guard changes.
 
 Batched follow-up verification: 296 focused Flutter tests; 146 backend tests; 26 unit/widget tests in each of America/New_York, Pacific/Kiritimati and Pacific/Pago_Pago; analyzer ratchet and generated Dart wire-hardening check pass. Full preflight/hook results are recorded in the PR body.
+
+Relay 9e09f1 adds render pairs 011/012 (failed Home before/after) and 013/014 (Activity retry before/after). Switch off uses #25013's previous Home failure row. Tests cover a successful retry, double-tap fencing, retry errors remaining actionable, ledger deduplication and a pending failed step outside loaded Home history. Mobile UI only; web Home has no conversation rows and macOS does not share Flutter Home code. No new query, stored job state or flag.
+
+Latest relay 9e09f1 verification: 146 focused backend tests and 34 unit/widget tests in each of America/New_York, Pacific/Kiritimati and Pacific/Pago_Pago pass. Analyzer ratchet and generated Dart wire check pass. 312 expanded Flutter tests pass. Final repository-gate results are recorded in the PR body.

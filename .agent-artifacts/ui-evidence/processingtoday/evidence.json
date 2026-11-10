@@ -70,8 +70,36 @@
       "description": "Episode membership before the episode fetch, after. Before omits the previously unparsed episode_id; after keeps both recordings inside their episode.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-home-failed-before.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on home, before; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-home-failed-after.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on home, after; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-activity-failed-before.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on activity, before; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-activity-failed-after.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on activity, after; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-10T11:30:26.560167+00:00",
+  "captured_at_utc": "2026-11-10T12:08:08.828373+00:00",
   "method": "Flutter widget-test RepaintBoundary, real production widgets, iOS theme, SF Pro fixtures; render-only Apple emoji font from this Mac, never bundled."
 }

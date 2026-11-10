@@ -702,6 +702,7 @@ def test_pending_conversations_fills_visible_page_after_owned_page(monkeypatch, 
     monkeypatch.setattr(store, 'db', client)
     result = store.pending_conversations(UID, exclude=lambda row: row['id'] != 'outside')
     assert [item['id'] for item in result] == ['conv:outside']
+    assert ('home_step' in result[0]) is (mode == 'on')
     query.start_after.assert_called_once_with(owned[-1])
 
 
@@ -871,6 +872,7 @@ def test_pending_keeps_unfinished_jobs_past_home_deadline_and_bounds_stale_candi
     monkeypatch.setattr(store, 'db', client)
     result = store.pending_conversations(UID)
     assert [item['id'] for item in result] == ['conv:queued']
+    assert result[0]['home_step'] == 'failed'
     assert query.stream.call_count == 3
     query.start_after.assert_not_called()
 

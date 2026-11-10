@@ -724,17 +724,17 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
-        if (!defaultHome &&
-            showRecordings &&
-            !convoProvider.isSelectionModeActive &&
-            _pendingWork.homeProcessingToday) {
+        if (!defaultHome && _pendingWork.homeProcessingToday) {
           final today = localHomeDay(clock.now());
           conversationsByDate = {
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
-                  if (localHomeDay(c.startedAt ?? c.createdAt) == today ||
-                      !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c)))
+                  if (!isFailedHomeConversation(c) &&
+                      (!showRecordings ||
+                          convoProvider.isSelectionModeActive ||
+                          localHomeDay(c.startedAt ?? c.createdAt) == today ||
+                          !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c))))
                     c,
               ],
           };
@@ -783,6 +783,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             groupAwaitingTranscript: true,
             now: clock.now(),
             processingTodayOnly: _pendingWork.homeProcessingToday,
+            activityOnlyFailures: _pendingWork.homeProcessingToday,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
@@ -844,7 +845,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                 [
                   for (final c in snapshot.processingConversations)
                     if (!projectedMemberIds.contains(c.id) &&
-                        (!_pendingWork.homeProcessingToday || localHomeDay(c.startedAt ?? c.createdAt) == localToday))
+                        (!_pendingWork.homeProcessingToday ||
+                            (!isFailedHomeConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
                       c,
                 ],
                 clock.now())

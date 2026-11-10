@@ -39,7 +39,11 @@ class PendingWorkStore extends ChangeNotifier {
 
   /// Server pending work the phone may not know about (another device, a filtered list, a lost
   /// event).
-  List<PendingWorkItem> get pending => _pending;
+  List<PendingWorkItem> get pending =>
+      homeProcessingToday ? _pending.where((item) => item.homeStep != 'failed').toList() : _pending;
+
+  /// Activity owns projected failures; catch-up/Home consumers exclude them.
+  List<PendingWorkItem> get pendingForActivity => _pending;
 
   /// Server-driven Home placement kill switch, shared by Home and Activity.
   bool homeProcessingToday = false;
@@ -120,6 +124,9 @@ class PendingWorkStore extends ChangeNotifier {
     final result = await _retry(item.id, idempotencyKey: key);
     switch (result) {
       case ApiSuccess(:final data):
+        // A confirmed failed attempt is terminal; the next user action starts
+        // a fresh claim. Transport failures below keep their ambiguous key.
+        if (data.state == AttentionRetryState.failed) _retryKeys.remove(item.id);
         _replace(item.id, (i) => i.copyWith(retryState: data.state));
         return true;
       case ApiFailure():

@@ -163,4 +163,6 @@ Once installed, the app will run on your iPhone independently from your developm
 
 - 💬 Join our [Discord Community](http://discord.omi.me)
 
-Processing placement compatibility: the backend must explicitly confirm `home_processing_today: true`; missing fields, failed reads, 404s and account changes keep prior Home placement. The recorded start day is authoritative, including captures crossing midnight. Explicit terminal failures stay on Home. Episode membership from `episode_id` is honored before the episode fetch arrives.
+Processing placement compatibility: the backend must explicitly confirm `home_processing_today: true`; missing fields, failed reads, 404s and account changes keep prior Home placement. The recorded start day is authoritative, including captures crossing midnight. David relay 9e09f1: every failed conversation stays off Home and is listed with retry in Activity; switch off restores the previous failed Home row. Episode membership from `episode_id` is honored before the episode fetch arrives.
+
+Failed-row surface scope (relay 9e09f1): mobile Home and Activity changed. Web `/home` is chat/tasks/goals and has no conversation rows; its `/conversations` gallery is a separate destination. macOS uses separate Swift presentation, not Flutter Home rows. Neither web nor macOS UI is changed by this addition. Pending wire types in all clients are regenerated for the optional step.

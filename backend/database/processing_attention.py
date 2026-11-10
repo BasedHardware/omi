@@ -383,6 +383,7 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
                     {
                         'id': 'conv:' + snapshot.id,
                         'kind': 'conversation',
+                        **({'home_step': step} if today_only and step is not None else {}),
                         'state': (
                             'transcribing'
                             if step == home_step.TRANSCRIBING

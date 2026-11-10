@@ -14,6 +14,7 @@ class PendingWorkItem {
     required this.kind,
     required this.state,
     required this.conversationIds,
+    this.homeStep,
     this.recordingCount = 1,
     this.startedAt,
     this.durationSeconds,
@@ -27,6 +28,7 @@ class PendingWorkItem {
 
   /// `queued`, `transcribing` or `summarizing`.
   final String state;
+  final String? homeStep;
   final List<String> conversationIds;
   final int recordingCount;
   final DateTime? startedAt;
@@ -43,6 +45,7 @@ class PendingWorkItem {
       id: id,
       kind: kind,
       state: state,
+      homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       conversationIds: ids is List
           ? [
               for (final c in ids)

@@ -29,7 +29,7 @@ List<ServerConversation> pastProcessingConversations({
         createdAt: item.startedAt!,
         startedAt: item.startedAt,
         structured: Structured('', ''),
-        homeStep: item.state != 'summarizing' ? 'transcribing' : 'writing_notes',
+        homeStep: item.homeStep ?? (item.state != 'summarizing' ? 'transcribing' : 'writing_notes'),
       );
     }
   }
@@ -65,6 +65,36 @@ List<ServerConversation> pastProcessingConversations({
         (step == HomeStep.transcribing || step == HomeStep.writingNotes) &&
         localHomeDay(c.startedAt ?? c.createdAt).isBefore(today);
   }).toList()
+    ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+}
+
+/// Projected failures (including an expired Home wait) have no ledger item yet.
+/// Loaded rows override pending/episode snapshots; ledger items render once in
+/// the existing Needs attention list and keep their keyed retry policy.
+List<ServerConversation> failedActivityConversations({
+  required List<PendingWorkItem> pending,
+  required Iterable<ServerConversation> conversations,
+  List<Episode> episodes = const [],
+  Set<String> attentionIds = const {},
+}) {
+  final byId = <String, ServerConversation>{
+    for (final item in pending)
+      if (item.kind == 'conversation' && item.homeStep == 'failed' && item.startedAt != null)
+        for (final id in item.conversationIds)
+          id: ServerConversation(
+              id: id,
+              createdAt: item.startedAt!,
+              startedAt: item.startedAt,
+              structured: Structured('', ''),
+              homeStep: 'failed'),
+    for (final episode in episodes)
+      for (final member in episode.members) member.id: member,
+    for (final c in conversations) c.id: c,
+  };
+  return byId.values
+      .where((c) =>
+          !attentionIds.contains(c.id) && !c.deleted && !c.discarded && !c.isLocked && isFailedHomeConversation(c))
+      .toList()
     ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
 }
 

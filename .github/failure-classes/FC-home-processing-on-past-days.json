@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "id": "FC-home-processing-on-past-days",
-  "violated_contract": "Home processing rows belong only to the viewer's current local day. Older pending work must stay reachable from Activity, and completion must restore the normal row on its recorded day.",
-  "canonical_prevention": "Keep server classification independent of timezone. Apply a local-day boundary to both grouped Home rows and local processing insertions, and use the same projection to populate Activity from filter-independent pending work and loaded conversations. Finished rows override stale pending snapshots. Contract tests exercise midnight, rollback, episode waits, completion and conversation links.",
+  "violated_contract": "Home processing rows belong only to the viewer's current local day. Older pending work must stay reachable from Activity, and completion must restore the normal row on its recorded day. Failed conversations belong only in Activity with retry, never on Home (David relay 9e09f1).",
+  "canonical_prevention": "Keep server classification independent of timezone. Apply a local-day boundary to both grouped Home rows and local processing insertions, and use the same projection to populate Activity from filter-independent pending work and loaded conversations. Finished rows override stale pending snapshots. Contract tests exercise midnight, rollback, episode waits, completion and conversation links. Filter failed status/projection in every Home insertion path and episode membership; Activity merges pending home_step and loaded rows, deduplicates ledger items and preserves failed retry actions. The kill switch restores previous placement.",
   "canonical_prevention_artifact": [
     "app/test/unit/processing_today_test.dart",
     "app/test/widgets/processing_today_render_test.dart",

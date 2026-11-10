@@ -1,3 +1,9 @@
+import 'package:omi/pages/activity/needs_attention_section.dart';
+import 'dart:async';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/utils/local_day_rollover.dart';
 import 'package:clock/clock.dart';
 import 'dart:convert';
@@ -394,6 +400,165 @@ void main() {
       await tester.pump(const Duration(minutes: 1));
       expect(changes, 1);
     });
+    debugDefaultTargetPlatformOverride = null;
+  });
+  for (final after in [false, true]) {
+    evidenceTest('failed conversation Home ${after ? 'after' : 'before'}', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = _phone;
+      addTearDown(tester.view.reset);
+      final at = clock.now().subtract(const Duration(hours: 8));
+      final failed = ServerConversation(
+          id: 'failed',
+          createdAt: at,
+          startedAt: at,
+          status: ConversationStatus.processing,
+          homeStep: 'failed',
+          structured: Structured('Unfinished planning', ''));
+      final ready = _conversation('ready', at.subtract(const Duration(hours: 1)), title: 'Coffee with Maya');
+      final rows = [failed, ready];
+      final provider = ConversationProvider(
+          isSignedIn: () => true,
+          conversationListFetcher: () async => (items: rows, ok: true),
+          dailySummariesChecker: () async => false)
+        ..conversations = rows
+        ..processingConversations = [failed]
+        ..groupedConversations = {DateTime(at.year, at.month, at.day): rows};
+      final store = _store(after, []);
+      await store.refresh();
+      addTearDown(provider.dispose);
+      addTearDown(store.dispose);
+      final boundary = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+          key: boundary, child: await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme())));
+      await _capture(tester, boundary, '${after ? '012' : '011'}-mobile-ios-home-failed-${after ? 'after' : 'before'}');
+      expect(find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'failed'),
+          after ? findsNothing : findsOneWidget);
+      expect(find.text('Coffee with Maya'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    evidenceTest('failed conversation Activity ${after ? 'after' : 'before'} and retry', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = _phone;
+      addTearDown(tester.view.reset);
+      SharedPreferences.setMockInitialValues({'uid': 'fixture'});
+      await SharedPreferencesUtil.init();
+      final at = clock.now().subtract(const Duration(hours: 8));
+      final failed = ServerConversation(
+          id: 'failed',
+          createdAt: at,
+          startedAt: at,
+          homeStep: 'failed',
+          status: ConversationStatus.processing,
+          structured: Structured('Unfinished planning', ''));
+      final provider = ConversationProvider(
+          isSignedIn: () => true,
+          conversationListFetcher: () async => (items: [failed], ok: true),
+          dailySummariesChecker: () async => false)
+        ..conversations = [failed];
+      final store = _store(after, [
+        PendingWorkItem(
+            id: 'conv:failed',
+            kind: 'conversation',
+            state: 'summarizing',
+            conversationIds: ['failed'],
+            startedAt: at,
+            homeStep: 'failed')
+      ]);
+      final monitor = CaptureWedgeMonitor(
+          featureGate: () async => false,
+          track: (_, __) {},
+          bleRetry: (_) async {},
+          appBuild: () => 'fixture',
+          platform: () => 'ios');
+      addTearDown(provider.dispose);
+      addTearDown(store.dispose);
+      addTearDown(monitor.dispose);
+      final retry = Completer<ServerConversation?>();
+      var calls = 0;
+      final boundary = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+          key: boundary,
+          child: ChangeNotifierProvider<ConversationProvider>.value(
+              value: provider,
+              child: MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: _theme(),
+                  localizationsDelegates: AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
+                  home: ActivityPage(
+                      pendingWork: store,
+                      captureWedgeMonitor: monitor,
+                      reprocessConversation: (id) {
+                        expect(id, 'failed');
+                        calls++;
+                        return retry.future;
+                      },
+                      seen: ActivitySeen(read: () => 0, write: (_) {}),
+                      probeDreamReport: () async => false,
+                      loadRecaps: () async => (items: <DailySummary>[], ok: true),
+                      loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])))))));
+      await _capture(
+          tester, boundary, '${after ? '014' : '013'}-mobile-ios-activity-failed-${after ? 'after' : 'before'}');
+      expect(find.byKey(const Key('activity_failed_failed')), after ? findsOneWidget : findsNothing);
+      expect(find.text('Try Again'), after ? findsOneWidget : findsNothing);
+      if (after) {
+        await tester.tap(find.text('Try Again'));
+        await tester.tap(find.text('Try Again'));
+        expect(calls, 1);
+        await tester.pump();
+        retry.complete(_conversation('failed', at, title: 'Planning complete'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('activity_failed_failed')), findsNothing);
+        expect(provider.conversations.single.structured.title, 'Planning complete');
+      }
+      await tester.pumpWidget(const SizedBox());
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  evidenceTest('failed Activity retry errors remain visible and can be retried again', (tester) async {
+    final failed = ServerConversation(
+        id: 'retry-error', createdAt: clock.now(), homeStep: 'failed', structured: Structured('Unfinished notes', ''));
+    final store = _store(true, []);
+    await store.refresh();
+    final monitor = CaptureWedgeMonitor(
+        featureGate: () async => false,
+        track: (_, __) {},
+        bleRetry: (_) async {},
+        appBuild: () => 'fixture',
+        platform: () => 'ios');
+    addTearDown(store.dispose);
+    addTearDown(monitor.dispose);
+    var attempts = 0;
+    String? opened;
+    await tester.pumpWidget(MaterialApp(
+        theme: _theme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+            body: NeedsAttentionSection(
+                store: store,
+                captureMonitor: monitor,
+                failedConversations: [failed],
+                openConversation: (_, id) async => opened = id,
+                reprocess: (_) async {
+                  attempts++;
+                  throw StateError('offline');
+                }))));
+    for (var i = 1; i <= 2; i++) {
+      await tester.tap(find.text('Try Again'));
+      await tester.pumpAndSettle();
+      expect(attempts, i);
+      expect(find.byKey(const Key('activity_failed_retry-error')), findsOneWidget);
+      expect(find.text('Try Again'), findsOneWidget);
+    }
+    expect(opened, isNull);
+    await tester.tap(find.text('Unfinished notes'));
+    expect(opened, 'retry-error');
+    await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
   });
 }

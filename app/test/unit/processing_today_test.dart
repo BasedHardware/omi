@@ -13,7 +13,11 @@ void main() {
       id: id, createdAt: at.toUtc(), startedAt: at.toUtc(), structured: Structured('Planning', ''), homeStep: step);
   List<HomeRow> home(List<ServerConversation> rows, {bool todayOnly = true, List<Episode> episodes = const []}) =>
       buildHomeRows(rows, episodes,
-          enabled: episodes.isNotEmpty, groupAwaitingTranscript: true, processingTodayOnly: todayOnly, now: midnight);
+          enabled: episodes.isNotEmpty,
+          groupAwaitingTranscript: true,
+          processingTodayOnly: todayOnly,
+          activityOnlyFailures: todayOnly,
+          now: midnight);
 
   for (final step in ['transcribing', 'writing_notes']) {
     test('$step moves at local midnight; ready returns to its original day', () {
@@ -43,7 +47,8 @@ void main() {
         status: ConversationStatus.processing,
         homeStep: 'failed');
     expect(pastProcessingConversations(pending: pending, conversations: [expiredWait], now: midnight), isEmpty);
-    expect(home([expiredWait]).single.conversation.id, 'old');
+    expect(home([expiredWait]), isEmpty);
+    expect(failedActivityConversations(pending: pending, conversations: [expiredWait]).single.id, 'old');
     expect(pastProcessingConversations(pending: pending, conversations: [row('old', at, 'ready')], now: midnight),
         isEmpty);
     expect(pastProcessingConversations(pending: pending, conversations: [], attentionIds: {'old'}, now: midnight),
@@ -108,7 +113,7 @@ void main() {
         ], now: midnight),
         isEmpty);
   });
-  test('expired today wait is exactly one terminal Home row, never Activity', () {
+  test('expired today wait is only in Activity; rollback restores the Home row', () {
     final at = midnight.add(const Duration(hours: 1));
     final expired = ServerConversation(
         id: 'expired',
@@ -126,9 +131,11 @@ void main() {
         enabled: false,
         groupAwaitingTranscript: true,
         processingTodayOnly: true,
+        activityOnlyFailures: true,
         now: midnight.add(const Duration(hours: 8)));
-    expect(rows.single.conversation.id, 'expired');
-    expect(rows.single.isProcessing, isFalse);
+    expect(rows, isEmpty);
+    expect(failedActivityConversations(pending: pending, conversations: [expired]).single.id, 'expired');
+    expect(home([expired], todayOnly: false).single.conversation.id, 'expired');
     expect(
         pastProcessingConversations(
             pending: pending, conversations: [expired], now: midnight.add(const Duration(hours: 8))),
@@ -165,7 +172,7 @@ void main() {
         <Episode>[],
         [episode]
       ]) {
-        final rows = home([member], episodes: episodes);
+        final rows = home([member], episodes: episodes, todayOnly: step != 'failed');
         expect(rows, hasLength(1));
         expect(rows.single.episode?.id, 'e');
         expect(rows.single.episodeConversationIds, contains('member'));
@@ -234,5 +241,42 @@ void main() {
     expect(home([outside]), isEmpty);
     expect(pastProcessingConversations(pending: items, conversations: [outside], now: midnight).map((c) => c.id),
         contains('outside-window'));
+  });
+  test('failed pending links reach Activity without a loaded Home day and dedupe ledger', () {
+    final at = midnight.subtract(const Duration(days: 20));
+    final pending = [
+      PendingWorkItem(
+          id: 'conv:f',
+          kind: 'conversation',
+          state: 'summarizing',
+          conversationIds: ['f'],
+          startedAt: at,
+          homeStep: 'failed')
+    ];
+    expect(failedActivityConversations(pending: pending, conversations: []).single.id, 'f');
+    expect(failedActivityConversations(pending: pending, conversations: [], attentionIds: {'f'}), isEmpty);
+    expect(failedActivityConversations(pending: pending, conversations: [row('f', at, 'ready')]), isEmpty);
+    expect(pastProcessingConversations(pending: pending, conversations: [], now: midnight), isEmpty);
+  });
+
+  test('failed episode members are hidden even when all members failed', () {
+    final member = ServerConversation(
+        id: 'f', createdAt: midnight, episodeId: 'e', homeStep: 'failed', structured: Structured('Failed notes', ''));
+    final episode = Episode(
+        id: 'e', live: false, startedAt: midnight, lastActivityAt: midnight, members: [member], conversationIds: ['f']);
+    expect(home([member], episodes: [episode]), isEmpty);
+    expect(failedActivityConversations(pending: [], conversations: [], episodes: [episode]).single.id, 'f');
+    expect(home([member], episodes: [episode], todayOnly: false).single.episode?.id, 'e');
+  });
+
+  test('failure exclusion also protects ungrouped Home and locked legacy status', () {
+    final failed = ServerConversation(
+        id: 'f',
+        createdAt: midnight,
+        status: ConversationStatus.failed,
+        isLocked: true,
+        structured: Structured('', ''));
+    expect(buildHomeRows([failed], [], enabled: false, activityOnlyFailures: true), isEmpty);
+    expect(buildHomeRows([failed], [], enabled: false), hasLength(1));
   });
 }

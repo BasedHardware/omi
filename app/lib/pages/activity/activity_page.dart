@@ -50,6 +50,7 @@ class ActivityPage extends StatefulWidget {
     this.probeDreamReport,
     this.pendingWork,
     this.captureWedgeMonitor,
+    this.reprocessConversation,
   });
 
   final RecentRecapsLoader? loadRecaps;
@@ -59,6 +60,7 @@ class ActivityPage extends StatefulWidget {
 
   /// Injectable for tests; defaults to [PendingWorkStore.instance].
   final PendingWorkStore? pendingWork;
+  final Future<ServerConversation?> Function(String id)? reprocessConversation;
 
   /// Injectable for tests and visual audits; defaults to [CaptureWedgeMonitor.instance].
   final CaptureWedgeMonitor? captureWedgeMonitor;
@@ -251,11 +253,26 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final attention = NeedsAttentionSection(store: _pendingWork, captureMonitor: _captureMonitor);
     final provider = context.watch<ConversationProvider?>();
+    final failures = _pendingWork.homeProcessingToday
+        ? failedActivityConversations(
+            pending: _pendingWork.pendingForActivity,
+            conversations: [...?provider?.processingConversations, ...?provider?.conversations],
+            episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
+            attentionIds: {
+              for (final item in _pendingWork.attention)
+                if (item.conversationId != null) item.conversationId!
+            },
+          )
+        : <ServerConversation>[];
+    final attention = NeedsAttentionSection(
+        store: _pendingWork,
+        captureMonitor: _captureMonitor,
+        failedConversations: failures,
+        reprocess: widget.reprocessConversation);
     final processing = _pendingWork.homeProcessingToday
         ? pastProcessingConversations(
-            pending: _pendingWork.pending,
+            pending: _pendingWork.pendingForActivity,
             episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
             conversations: [
               ...?provider?.processingConversations,
@@ -268,7 +285,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
           )
         : <ServerConversation>[];
     final hasAttention = processing.isNotEmpty ||
-        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor);
+        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor, failures);
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();

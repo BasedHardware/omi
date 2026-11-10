@@ -5,6 +5,7 @@
 class GeneratedPendingWorkItem {
   final List<String> conversationIds;
   final double durationSeconds;
+  final String? homeStep;
   final String id;
   final String kind;
   final int recordingCount;
@@ -15,6 +16,7 @@ class GeneratedPendingWorkItem {
   const GeneratedPendingWorkItem({
     required this.conversationIds,
     required this.durationSeconds,
+    this.homeStep,
     required this.id,
     required this.kind,
     this.recordingCount = 1,
@@ -27,6 +29,7 @@ class GeneratedPendingWorkItem {
     return GeneratedPendingWorkItem(
       conversationIds: _required(_readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: true, nullable: false), "conversation_ids"),
       durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
+      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       recordingCount: _required(_readFieldValue<int>(_readField(json, const ["recording_count"]), "recording_count", _readInt, requiredField: false, nullable: false, defaultValue: 1), "recording_count"),
@@ -40,6 +43,7 @@ class GeneratedPendingWorkItem {
     return {
       'conversation_ids': conversationIds,
       'duration_seconds': durationSeconds,
+      'home_step': homeStep,
       'id': id,
       'kind': kind,
       'recording_count': recordingCount,
