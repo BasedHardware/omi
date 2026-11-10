@@ -177,7 +177,20 @@ def test_memory_boundary_skips_all_l1_l2_work_only_for_persisted_minimum(pc, mon
     row = SimpleNamespace(
         id='synthetic-conversation',
         structured=Structured(title='Recording', title_provenance='server_minimum' if minimum else None),
-        transcript_segments=[],
+        # A non-minimum row carries real owner speech so the separate noise/short-speech
+        # admission gate is not what this test measures.
+        transcript_segments=(
+            []
+            if minimum
+            else [
+                SimpleNamespace(
+                    text=' '.join(['word'] * 40),
+                    start=0.0,
+                    end=5.0,
+                    speaker='SPEAKER_00',
+                )
+            ]
+        ),
         source='omi',
     )
     service = MagicMock()

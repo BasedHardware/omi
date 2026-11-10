@@ -274,24 +274,20 @@ def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, mon
 
 
 @pytest.mark.parametrize('route_file', ['model_config.py', 'model_constants.py', 'clients.py', 'providers.py'])
-def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, route_file):
+def test_route_module_changes_do_not_invalidate_feature_fingerprints(monkeypatch, route_file):
+    """Model routing is not prompt text: a deploy that touches it must not re-buy unchanged input."""
     from pathlib import Path
 
     original = Path.read_bytes
-    dedupe.implementation_digest.cache_clear()
     before = {feature: dedupe.fingerprint(feature, 'same input') for feature in ('notes', 'l1')}
 
     def changed_route(path):
         contents = original(path)
         return contents + b'\n# changed route' if path.name == route_file else contents
 
-    try:
-        monkeypatch.setattr(Path, 'read_bytes', changed_route)
-        dedupe.implementation_digest.cache_clear()
-        for feature, old in before.items():
-            assert dedupe.fingerprint(feature, 'same input') != old
-    finally:
-        dedupe.implementation_digest.cache_clear()
+    monkeypatch.setattr(Path, 'read_bytes', changed_route)
+    for feature, old in before.items():
+        assert dedupe.fingerprint(feature, 'same input') == old
 
 
 def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch):
@@ -347,7 +343,9 @@ def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled
     assert digest() == legacy
 
 
-def test_implementation_digest_tracks_packet_output_language_and_evidence_modules():
-    # Read the actual dependency closure; a missing/renamed module must invalidate generation.
-    dedupe.implementation_digest.cache_clear()
-    assert len(dedupe.implementation_digest('notes')) == 64
+def test_implementation_digest_is_the_explicit_prompt_version():
+    # The reuse key is a deliberate version, not a digest of the source tree.
+    from config.llm_input_versions import PROMPT_VERSIONS
+
+    assert dedupe.implementation_digest('notes') == PROMPT_VERSIONS['notes']
+    assert dedupe.implementation_digest('l1') == PROMPT_VERSIONS['l1']
