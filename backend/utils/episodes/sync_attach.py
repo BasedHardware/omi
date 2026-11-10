@@ -10,6 +10,7 @@ from database import episodes as episodes_db, episode_attach_memo
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.recorded_time import conversation_span
 from utils.episodes import capture_groups as episode_groups
+from utils.episodes import late_member
 from utils.episodes.visibility import hidden_conversation, hidden_member
 
 SYNC_UPDATE = 'sync_update'
@@ -122,8 +123,6 @@ def attach(
                     return recovered
                 if recovered in {'applied', 'skipped_applied'} and not absorbed_from:
                     episode_attach_memo.complete(uid, conversation_id, row, owner, firestore_client=c.firestore_client)
-            from utils.episodes import late_member
-
             late_member.joined(uid, conversation_id, row, owner, c)
             return outcome
         except episodes_db.EpisodeConflict:
