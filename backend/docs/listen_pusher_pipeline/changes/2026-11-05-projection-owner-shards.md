@@ -99,3 +99,12 @@ caller route on `db_executor`; a Redis push failure still records local intent.
 That short routing handoff is only an advisory notification: process loss
 before it runs leaves the committed pending results for the resuming
 tail/whole-log backstop, or the legacy sweep, to rediscover.
+
+A Redis deferral error marks the coordinator unhealthy. The pump retains the
+ordered batch and its original deadlines, releases its leases, and falls back
+to the legacy sweep/local drain. The next tick retries after a lease pass;
+another deferral error disengages it again. Sequence checks make replay safe
+even if Redis committed a write but its reply was lost. A superseded sequence
+alone is not an outage. During an outage, durable result-log discovery remains
+the recovery backstop; persisted retry scores govern replacement holders once
+Redis returns. No new flag, retry duration or capacity accompanies this path.
