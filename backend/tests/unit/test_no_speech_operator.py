@@ -245,3 +245,201 @@ def test_apply_rejects_changed_row_before_ledger_or_close(monkeypatch):
     ) == {'state_changed': 1}
     ledger.prepare.assert_not_called()
     close.assert_not_called()
+
+
+def test_plan_keeps_upload_pending_row_local(monkeypatch):
+    plan_for(monkeypatch, 'no_speech', speech=0.0, audio=1.0)
+    pending = {**original_row(), 'record_upload_sessions': ['active-upload']}
+    monkeypatch.setattr(
+        no_speech, '_snapshot', lambda store, uid, cid: (pending if cid == 'pending' else original_row(), 'rev-1')
+    )
+    planned = no_speech.plan_no_speech(
+        FakeStore(original_row()), [f'users/{UID}/conversations/pending', ROW_PATH], Mock()
+    )
+    assert [row['disposition'] for row in planned['entries']] == ['upload_pending', 'no_speech']
+    assert planned['entries'][0]['exit'] == 'operator_review'
+    assert no_speech.summary(planned)['actionable'] == 1
+
+
+@pytest.mark.parametrize(
+    'reason,expected', [('privacy_skipped', 'privacy_skipped'), ('unexpected-private-label', 'proof_refused')]
+)
+def test_plan_normalizes_refusal_exits_per_row(monkeypatch, reason, expected):
+    plan_for(monkeypatch, 'no_speech', speech=0.0, audio=1.0)
+    monkeypatch.setattr(
+        no_speech, '_snapshot', lambda store, uid, cid: ({**original_row(), 'odd': cid == 'odd'}, 'rev-1')
+    )
+    monkeypatch.setattr(no_speech, 'candidate_refusal', lambda row, now: reason if row.get('odd') else None)
+    planned = no_speech.plan_no_speech(FakeStore(original_row()), [f'users/{UID}/conversations/odd', ROW_PATH], Mock())
+    assert [row['disposition'] for row in planned['entries']] == [expected, 'no_speech']
+    report = no_speech.summary(planned)
+    assert report['actionable'] == 1
+    assert 'unexpected-private-label' not in json.dumps(report)
+
+
+def private_ledger(tmp_path, client):
+    tmp_path.chmod(0o700)
+    path = tmp_path / 'page.jsonl'
+    ledger = tool.Ledger(path, create=True)
+    ledger.prepare(
+        {
+            'row_sha256': no_speech.row_state(original_row()),
+            'revision': client.revisions[storage_tests.PATH].isoformat(),
+        },
+        UID,
+        CID,
+        'run-1',
+    )
+    ledger.close()
+    return path
+
+
+def test_prepared_only_cli_undo_needs_no_encryption_or_storage(monkeypatch, tmp_path, capsys):
+    client = operator_client(monkeypatch)
+    before = dict(client.rows[storage_tests.PATH])
+    path = private_ledger(tmp_path, client)
+    storage_tests.close(client)  # Simulate process death before ledger.committed.
+    monkeypatch.delenv('ENCRYPTION_SECRET', raising=False)
+    storage = Mock(side_effect=OSError('storage unavailable'))
+    monkeypatch.setattr(tool, 'create_storage_client', storage)
+    monkeypatch.setenv('NO_SPEECH_TERMINAL_ENABLED', 'false')
+    tool.main(['--undo', '--apply', '--ledger', str(path)])
+    assert json.loads(capsys.readouterr().out)['outcomes'] == {'restored': 1}
+    assert client.rows[storage_tests.PATH] == before
+    assert client.deletes == []
+    storage.assert_not_called()
+
+
+def test_empty_write_results_apply_records_unknown_then_undo_restores(monkeypatch, tmp_path, capsys):
+    client = operator_client(monkeypatch)
+    before = dict(client.rows[storage_tests.PATH])
+    original_snapshot = no_speech._snapshot
+    plan_for(monkeypatch, 'no_speech', speech=0.0, audio=1.0)
+    monkeypatch.setattr(no_speech, '_snapshot', original_snapshot)
+    monkeypatch.setenv('NO_SPEECH_TERMINAL_ENABLED', 'true')
+    store = FakeStore(original_row())
+    store.client = client
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], Mock(), run_id='run-1')
+
+    def missing_result(transaction):
+        transaction.write_results = []
+
+    monkeypatch.setattr(storage_tests.Transaction, '_commit', missing_result)
+    tmp_path.chmod(0o700)
+    path = tmp_path / 'unknown.jsonl'
+    ledger = tool.Ledger(path, create=True)
+    try:
+        outcomes = no_speech.apply_no_speech(store, planned, planned['plan_sha256'], Mock(), ledger=ledger)
+        entries = ledger.entries()
+    finally:
+        ledger.close()
+    assert outcomes == {'committed_revision_unknown': 1}
+    assert entries[0]['committed_revision'] == storage_tests.terminal.COMMITTED_REVISION_UNKNOWN
+    monkeypatch.delenv('ENCRYPTION_SECRET', raising=False)
+    monkeypatch.setattr(tool, 'create_storage_client', Mock(side_effect=AssertionError('undo touched GCS')))
+    tool.main(['--undo', '--apply', '--ledger', str(path)])
+    assert json.loads(capsys.readouterr().out)['outcomes'] == {'restored': 1}
+    assert client.rows[storage_tests.PATH] == before
+    assert client.deletes == []
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'status': 'processing'},
+        {'discarded': False},
+        {'terminal_no_derived_effects': False},
+        {'no_speech_terminal': {'run_id': 'foreign'}},
+    ],
+)
+def test_prepared_only_undo_refuses_foreign_or_changed_closed_shape(monkeypatch, change):
+    client = operator_client(monkeypatch)
+    storage_tests.close(client)
+    client.rows[storage_tests.PATH].update(change)
+    client.tick(storage_tests.PATH)
+    before = dict(client.rows[storage_tests.PATH])
+    entry = {'uid': UID, 'conversation_id': CID, 'run_id': 'run-1', 'committed_revision': None}
+    result = no_speech.undo_no_speech(SimpleNamespace(client=client), [entry], ledger=Mock())
+    assert result == {'not_matching_close': 1}
+    assert client.rows[storage_tests.PATH] == before
+    assert client.deletes == []
+
+
+def test_prepared_only_undo_fences_edits_after_resolution(monkeypatch):
+    client = operator_client(monkeypatch)
+    storage_tests.close(client)
+    snapshot = no_speech._snapshot
+
+    def racing_snapshot(store, uid, cid):
+        row, revision = snapshot(store, uid, cid)
+        client.rows[storage_tests.PATH]['user_title'] = 'later edit'
+        client.tick(storage_tests.PATH)
+        return row, revision
+
+    monkeypatch.setattr(no_speech, '_snapshot', racing_snapshot)
+    entry = {'uid': UID, 'conversation_id': CID, 'run_id': 'run-1', 'committed_revision': None}
+    assert no_speech.undo_no_speech(SimpleNamespace(client=client), [entry], ledger=Mock()) == {'revision_changed': 1}
+    assert client.rows[storage_tests.PATH]['discarded'] is True
+    assert client.rows[storage_tests.PATH]['user_title'] == 'later edit'
+
+
+def test_undo_dry_run_counts_prepared_entries_without_secrets_or_storage(monkeypatch, tmp_path, capsys):
+    client = operator_client(monkeypatch)
+    path = private_ledger(tmp_path, client)
+    storage_tests.close(client)
+    before = dict(client.rows[storage_tests.PATH])
+    monkeypatch.delenv('ENCRYPTION_SECRET', raising=False)
+    monkeypatch.setattr(tool, 'create_storage_client', Mock(side_effect=AssertionError('undo touched GCS')))
+    tool.main(['--undo', '--ledger', str(path)])
+    assert json.loads(capsys.readouterr().out)['outcomes'] == {'would_restore': 1}
+    assert client.rows[storage_tests.PATH] == before
+
+
+@pytest.mark.parametrize(
+    'args,tier,emulator',
+    [
+        ([], 'ro-dev', False),
+        (['--apply', '--approve-plan-sha256', 'digest', '--ledger', '/private/ledger'], 'ro-prod', False),
+        ([], 'prod-operator', True),
+        (['--limit', '0'], 'prod-operator', False),
+        (['--limit', '129'], 'prod-operator', False),
+        (['--pace-seconds', '0'], 'prod-operator', False),
+        (['--pace-seconds', '61'], 'prod-operator', False),
+        (['--apply', '--approve-plan-sha256', 'digest'], 'prod-operator', False),
+        (['--apply', '--ledger', '/private/ledger'], 'prod-operator', False),
+        (['--undo', '--ledger', '/private/ledger', '--after-file', '/private/cursor'], 'prod-operator', False),
+        (['--undo', '--ledger', '/private/ledger', '--next-file', '/private/cursor'], 'prod-operator', False),
+        (['--after-file', '/private/cursor', '--next-file', '/private/cursor'], 'prod-operator', False),
+    ],
+)
+def test_cli_guard_table_is_counts_only_before_any_io(monkeypatch, capsys, args, tier, emulator):
+    monkeypatch.setenv('GCP_AGENT_TIER', tier)
+    monkeypatch.setenv('NO_SPEECH_TERMINAL_ENABLED', 'true')
+    if emulator:
+        monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:9999')
+    else:
+        monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    run = Mock(side_effect=AssertionError('invalid request performed IO'))
+    monkeypatch.setattr(tool, 'run', run)
+    with pytest.raises(SystemExit) as error:
+        tool.main(args)
+    assert error.value.code == 2
+    assert json.loads(capsys.readouterr().out) == {'operation': no_speech.OPERATION, 'outcome': 'invalid_arguments'}
+    run.assert_not_called()
+
+
+def test_ledger_refuses_mode_symlink_and_reusing_page_path(tmp_path):
+    tmp_path.chmod(0o700)
+    path = tmp_path / 'ledger.jsonl'
+    path.write_text('private existing bytes')
+    path.chmod(0o644)
+    with pytest.raises(ValueError, match='private ledger mode required'):
+        tool.Ledger(path)
+    path.chmod(0o600)
+    link = tmp_path / 'ledger-link.jsonl'
+    link.symlink_to(path)
+    with pytest.raises(ValueError, match='private ledger path required'):
+        tool.Ledger(link)
+    with pytest.raises(FileExistsError):
+        tool.Ledger(path, create=True)
+    assert path.read_text() == 'private existing bytes'

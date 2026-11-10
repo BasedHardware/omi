@@ -48,6 +48,8 @@ EXITS = {
     'retained_audio_unmeasured': 'operator_review',
     'decode_failed': 'operator_review',
     'privacy_blocked': 'operator_rerun_after_consent',
+    'privacy_skipped': 'operator_rerun_after_consent',
+    'upload_pending': 'operator_review',
     'not_candidate': 'existing_lifecycle_owner',
     'barrier_mismatch': 'operator_review',
     'already_registered': 'normal_batch_pipeline',
@@ -65,7 +67,7 @@ EXITS = {
     'row_retired_or_locked': 'operator_review',
     'already_discarded': 'operator_review',
     'unbound_plan': 'operator_rerun',
-    'commit_revision_unavailable': 'operator_rerun',
+    'committed_revision_unknown': 'operator_undo_resolves_marker',
     'not_matching_close': 'operator_review',
     'invalid_snapshot': 'operator_review',
     'privacy_changed': 'operator_rerun_after_consent',
@@ -245,13 +247,17 @@ def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=
                         privacy_generation=generation,
                         revision=revision,
                     )
+            # Validate each row's disposition inside its own failure boundary.
+            # Future/odd refusal labels cannot abort another row's plan.
+            if entry['disposition'] not in EXITS:
+                raise ValueError('unknown disposition')
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_blocked'
         except (ValueError, TypeError, KeyError):
             entry['disposition'] = 'proof_refused'
         except Exception:
             entry['disposition'] = 'read_error'
-        entry['exit'] = EXITS[entry['disposition']]
+        entry['exit'] = EXITS.get(entry['disposition'], 'operator_review')
         entries.append(entry)
         if pace:
             time.sleep(pace)
@@ -310,7 +316,8 @@ def apply_no_speech(store, plan, approved_digest, storage_client, *, ledger, pac
                 firestore_client=store.client,
             )
             ledger.committed(token, revision)
-            outcomes['closed'] += 1
+            outcome = 'committed_revision_unknown' if revision == terminal_db.COMMITTED_REVISION_UNKNOWN else 'closed'
+            outcomes[outcome] += 1
         except BatchPrivacyBlocked:
             outcomes['privacy_blocked'] += 1
         except NoSpeechRefused as error:
@@ -328,10 +335,23 @@ def undo_no_speech(store, entries, *, ledger, pace=0.0):
     outcomes = Counter()
     for entry in entries:
         try:
+            expected_revision = entry.get('committed_revision')
+            if not expected_revision or expected_revision == terminal_db.COMMITTED_REVISION_UNKNOWN:
+                row, expected_revision = _snapshot(store, entry['uid'], entry['conversation_id'])
+                marker = row.get(terminal_db.MARKER) or {}
+                if (
+                    marker.get('run_id') != entry['run_id']
+                    or row.get('status') != 'completed'
+                    or row.get('discarded') is not True
+                    or row.get(terminal_db.TERMINAL_NO_DERIVED_EFFECTS_FIELD) is not True
+                ):
+                    raise terminal_db.NoSpeechConflict('not_matching_close')
+                if not expected_revision:
+                    raise terminal_db.NoSpeechConflict('committed_revision_unknown')
             lifecycle.restore_no_speech_capture(
                 entry['uid'],
                 entry['conversation_id'],
-                expected_closed_revision=entry['committed_revision'],
+                expected_closed_revision=expected_revision,
                 run_id=entry['run_id'],
                 firestore_client=store.client,
             )

@@ -38,6 +38,11 @@ requested private next-page cursor. The report contains counts, closed exits, a
 plan digest, measured speech/audio seconds and raw/legacy object counts. It
 never prints a UID, conversation ID, object path or decoded audio.
 
+Use a new ledger path for each page. A ledger is created exclusively and cannot
+be reused for another apply, including a partially applied page after a crash.
+Undo the old ledger separately, then plan again with a new ledger path. This
+keeps each ledger bounded to one page; do not concatenate or append ledgers.
+
 Review the dispositions and the digest, then apply the same page:
 
 ```sh
@@ -57,7 +62,12 @@ a fresh plan and approval. Pace pages manually; do not run parallel applies.
 
 The ledger is the only undo input. It records the row identity, run id, prior
 row digest, planned revision and committed revision. Undo restores only the
-unchanged generation this run closed:
+unchanged generation this run closed. A prepared-only entry (crash or receipt
+write failure) or committed_revision_unknown is resolved by reading the row:
+marker.run_id and the three closed fields must match, then restoration fences
+on that current revision. A receipt with a known revision keeps its original
+exact-revision fence. Undo requires neither ENCRYPTION_SECRET nor a GCS client:
+
 
 ```sh
 NO_SPEECH_TERMINAL_ENABLED=false python backend/scripts/mark_no_speech_orphans.py \
@@ -66,7 +76,12 @@ NO_SPEECH_TERMINAL_ENABLED=false python backend/scripts/mark_no_speech_orphans.p
 ```
 
 A later edit, deletion, merge, lock or finalization job refuses the restore. The
-row then stays in the no-speech terminal for operator review.
+row then stays in the no-speech terminal for operator review. Never replace a
+known receipt revision just to bypass revision_changed. For manual recovery,
+an operator must review the current row and marker.prior, confirm this run and
+closed shape still own the three lifecycle fields, then submit a separately
+approved restore with that exact current revision; preserve unrelated edits,
+all content and audio. This runbook authorizes no production recovery.
 
 ## Dispositions and exits
 
@@ -78,10 +93,13 @@ row then stays in the no-speech terminal for operator review.
   tool does not claim silence it did not measure. Exit: **operator review**.
 - `decode_failed`: retained audio could not be decoded. Left untouched. Exit:
   **operator review**.
-- `privacy_blocked`: owner or capture privacy refused. Left untouched. Exit:
+- `privacy_blocked` / `privacy_skipped`: owner or capture privacy refused. Left untouched. Exit:
   **operator re-run after consent**.
 - `not_candidate`, `barrier_mismatch`, `already_registered`: left to the
   existing lifecycle owner or normal batch pipeline.
+- `upload_pending`: left untouched for **operator review** of the upload.
+- `committed_revision_unknown`: hide committed without an SDK revision receipt;
+  exit: **ledger undo resolves the matching marker**, rather than a fresh close.
 - `already_marked`: already in the no-speech terminal. Exit: **operator undo**.
 - `state_changed`, `proof_refused`, `read_error`, `write_error`: park for
   **operator re-run**.

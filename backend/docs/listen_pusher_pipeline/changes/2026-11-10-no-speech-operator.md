@@ -28,3 +28,10 @@ Synthetic tests cover classification, decoding/privacy refusals, bounded
 queries, deterministic digest approval, counts-only successful close reporting,
 and CLI undo from a real private ledger with the switch false. No staging or
 production acceptance is claimed.
+
+Pre-review recovery: prepared-only and committed_revision_unknown ledger entries
+are resolved from the matching run marker/closed shape, then restored with the
+current revision as the fence. Known receipt revisions retain their original
+fence. Undo no longer needs an encryption secret or storage client. Refusal
+exits are row-local, including upload_pending and privacy_skipped. Each apply
+uses a new private ledger; partial pages are undone separately before replan.

@@ -113,16 +113,12 @@ class Refused(ValueError):
 
 
 def run(args):
-    if len(os.getenv('ENCRYPTION_SECRET', '')) < 32:
-        raise Refused('encryption_secret_required')
     client = get_firestore_client()
     store = FirestoreStore('batch_pipeline_prod', firestore_client=client)
-    storage = create_storage_client()
     if args.undo:
         ledger = Ledger(args.ledger)
         try:
-            entries = [entry for entry in ledger.entries() if entry.get('committed_revision')]
-            entries = entries[: args.limit]
+            entries = ledger.entries()[: args.limit]
             if args.apply:
                 outcomes = undo_no_speech(store, entries, ledger=ledger, pace=args.pace_seconds)
             else:
@@ -135,6 +131,9 @@ def run(args):
             'undo': True,
             'outcomes': outcomes,
         }
+    if len(os.getenv('ENCRYPTION_SECRET', '')) < 32:
+        raise Refused('encryption_secret_required')
+    storage = create_storage_client()
     after = json.loads(Path(args.after_file).read_text())['after'] if args.after_file else None
     paths, next_after = discover(client, limit=args.limit, after=after)
     planned = plan_no_speech(store, paths, storage, pace=args.pace_seconds)
