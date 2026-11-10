@@ -1,6 +1,7 @@
 """Explicit restore registers recording debt before committing visibility metadata."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -14,6 +15,7 @@ from database import conversation_finalization_jobs as jobs
 from database import conversations as conversations_db
 from database import processing_attention as attention_db
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_staging import artifact_id
 from routers import conversations as conversations_router
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import live
@@ -376,3 +378,112 @@ def test_restore_with_closed_empty_server_archive_creates_no_obligation(restore_
     assert lifecycle.restore_discarded(UID, CID) is True
     assert JOB_PATH not in restore_store.rows
     assert restore_store.rows[ROW_PATH]['discarded'] is False
+
+
+@pytest.mark.parametrize('origin', [None, 'restore'])
+def test_record_assignment_reads_restore_obligation_before_clearing_discard(restore_store, monkeypatch, origin):
+    start = datetime.fromtimestamp(100, timezone.utc)
+    restore_store.rows[ROW_PATH].update(
+        started_at=start,
+        transcript_segments=[],
+        relevance_decision={'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript'},
+    )
+    restore_store.rows[JOB_PATH] = {'state': 'record_pending', 'registration_origin': origin}
+    # The strict fake measures read-before-write, not SDK commit/retry behavior.
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda body: body)
+    monkeypatch.setattr(
+        conversations_db,
+        'run_sync_assignment',
+        lambda client, body, full_ids, **kwargs: body(client.transaction(), full_ids),
+    )
+    monkeypatch.setattr(
+        conversations_db, 'encode_sync_assignment_plan', lambda uid, client, tx, row, old: deepcopy(row)
+    )
+    monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations_db, 'index_sync_assignment', lambda *args: None)
+    incoming = {
+        'id': CID,
+        'started_at': start,
+        'transcript_segments': [{'id': 'speech', 'start': 0, 'end': 1, 'text': 'Synthetic speech'}],
+        '_batch_replace_live': {'start': 100, 'end': 110},
+    }
+    result, created, survivors = conversations_db.assign_sync_conversation(
+        UID,
+        incoming,
+        target_id=CID,
+        firestore_client=restore_store,
+    )
+    assert not created and survivors
+    assert result['discarded'] is (origin == 'restore')
+    assert restore_store.rows[ROW_PATH]['discarded'] is (origin == 'restore')
+    assert bool(result['relevance_decision']) is (origin == 'restore')
+
+
+@pytest.mark.asyncio
+async def test_failed_restore_metadata_does_not_admit_or_process_full_archive(restore_store, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    monkeypatch.setattr(live, 'UPLOAD_GRACE_SECONDS', 0)
+    # This synthetic fleet is empty. Fairness queries are outside the strict
+    # document-transaction fake; retain real enqueue with its empty frontier.
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
+    row = restore_store.rows[ROW_PATH]
+    row.update(
+        started_at=datetime.fromtimestamp(100, timezone.utc),
+        finished_at=datetime.fromtimestamp(110, timezone.utc),
+        language='en',
+    )
+    restore_metadata = conversations_db.restore_conversation_from_discarded
+    monkeypatch.setattr(
+        conversations_db,
+        'restore_conversation_from_discarded',
+        Mock(side_effect=RuntimeError('synthetic metadata failure')),
+    )
+    with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='restore metadata unavailable'):
+        lifecycle.restore_discarded(UID, CID)
+    pending = restore_store.rows[JOB_PATH]
+    assert pending['registration_origin'] == 'restore'
+    now = pending['available_at']
+    if row['discarded'] is not True or pending['state'] != 'record_pending':
+        raise RuntimeError('repro requires a discarded row with successful restore registration')
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=restore_store)
+    monkeypatch.setattr(live, 'create_storage_client', lambda: object())
+    monkeypatch.setattr(live, 'list_audio_chunks', lambda *a, **kw: [{'generation': 1}])
+    monkeypatch.setattr(live, 'retained_record_units', lambda *a, **kw: (unit for unit in [(100, 10, [])]))
+
+    def stage_audio(item, body):
+        uri = 'gs://synthetic-batch/manifest#1'
+        store.run(
+            lambda tx: tx.put(
+                'artifacts',
+                artifact_id(item.segment_id, uri),
+                {'owner_id': UID, 'privacy_generation': item.privacy_generation},
+            )
+        )
+        return uri
+
+    monkeypatch.setattr(
+        live,
+        'create_artifact_store',
+        lambda *a: SimpleNamespace(
+            authorize=lambda item: SimpleNamespace(level='enhanced'),
+            key_for_owner=lambda uid: b'x' * 32,
+            stage_audio=stage_audio,
+        ),
+    )
+    # Keep the real admit_recording -> admit_record_units -> intake.admit chain.
+    # The existing refusal is raised to drain_recordings, which retains and
+    # defers the record_pending obligation for retry; it is not a batch result.
+    with pytest.raises(ValueError, match='^registered record target unavailable$'):
+        await live.admit_recording(store, pending, now=now)
+    assert row['discarded'] is True
+    assert restore_store.rows[JOB_PATH]['state'] == 'record_pending'
+    assert sum(path[0] == 'batch_pipeline_dev_jobs' for path in restore_store.rows) == 1
+    assert not any(
+        path[0] in {'batch_pipeline_dev_content', 'batch_pipeline_dev_intakes'} for path in restore_store.rows
+    )
+
+    # Retrying the real metadata commit releases exactly the same obligation.
+    monkeypatch.setattr(conversations_db, 'restore_conversation_from_discarded', restore_metadata)
+    assert lifecycle.restore_discarded(UID, CID) is True
+    assert restore_store.rows[ROW_PATH]['discarded'] is False
+    assert (await live.admit_recording(store, pending, now=now))['outcome'] == 'batch'

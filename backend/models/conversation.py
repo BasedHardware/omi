@@ -608,7 +608,7 @@ class Conversation(BaseModel):
     def _collect_match_scores(self):
         try:
             updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
-            if updates and match_scores.enabled():
+            if updates:
                 self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
         except Exception:
             self.speaker_match_scores = None

@@ -11,19 +11,9 @@ rather than silently keeping it running. Off makes the episodes API report
 ``enabled: false``: released and current apps then show today's
 per-conversation UI, and no episode state is read, written or computed.
 
-``EPISODES_PERCENT`` (default 100) and
-``EPISODES_UID_ALLOWLIST`` select the admitted cohort: a stable salted uid
-bucket below the percentage, or a listed uid, is admitted. Invalid percentages
-admit nobody beyond the allowlist.
-
-Admission alone never spends money. Episode work (the per-moment listen update
-and the finalizer's tail and reconciliation) also requires an inferred client
-capability: the user's app called a ``/v1/episodes`` route within
-``CLIENT_SEEN_TTL_SECONDS``, recorded as the Redis marker
-``episodes:client_seen:{uid}`` (``utils/episodes/client_gate.py``). Old mobile
-builds, the desktop app and web never call that API, so their users cost
-nothing. The API itself stays available to every admitted uid, since it is what
-sets the marker. The allowlist bypasses the percentage, not the marker.
+Every nonempty owner is admitted while the kill switch is on. Admission alone
+never spends money: episode work still requires the existing recent capable-client
+marker.
 
 ``EPISODES_CLIENT_CHANNELS`` (default ``beta``) is the client cohort. The app
 sends ``X-Omi-App-Channel: beta|store`` on every request (TestFlight and
@@ -48,8 +38,6 @@ from config.app_channel import APP_CHANNELS, app_channel
 from config.jev_decisions import JEV_CLIENT_TIMEOUT_SECONDS, percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
-EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
-EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
@@ -65,7 +53,6 @@ EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
-_COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -76,16 +63,8 @@ def episodes_enabled() -> bool:
 
 
 def episodes_enabled_for(uid: str) -> bool:
-    """The kill switch first, then the cohort (allowlist or stable uid bucket).
-
-    Admission only: callers that spend money also need ``client_gate.client_seen``.
-    """
-    if not uid or not episodes_enabled():
-        return False
-    allowlist = {item.strip() for item in os.getenv(EPISODES_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
-    if uid in allowlist:
-        return True
-    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
+    """All owners are admitted while the independent kill switch is on."""
+    return bool(uid and episodes_enabled())
 
 
 def episodes_client_channels() -> frozenset[str]:

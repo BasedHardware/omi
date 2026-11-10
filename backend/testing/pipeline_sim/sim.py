@@ -103,8 +103,6 @@ logger = logging.getLogger(__name__)
 # state disagrees across dates, so these are explicit simulation inputs.
 DEFAULT_FLAGS = {
     'OMI_ENV_STAGE': 'dev',
-    'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
-    'FIRST_SUMMARY_DEADLINE_PERCENT': '100',
     'BATCH_PIPELINE_ENABLED': 'true',
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',

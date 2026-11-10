@@ -144,10 +144,6 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "0"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -172,8 +168,6 @@ env:
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
@@ -186,8 +180,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -196,8 +188,6 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -296,10 +286,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION

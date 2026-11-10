@@ -849,17 +849,8 @@ def get_chat_quota_snapshot(
 
     Platform is retained for callers; all platforms use the real plan quota.
     """
-    # Flagged quota display and admission share one authority on Free and paid tiers.
-    enforcing = ladder_policy.budget_enforcement_enabled()
-    subscription = None
-    shared_budget = None
-    if enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
-
-    if not enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)

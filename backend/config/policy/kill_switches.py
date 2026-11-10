@@ -57,6 +57,8 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         'PROJECTION_PRIVACY_REFUSAL_RESUME',
     }:
         enabled = value != 'off'
+        if value in {'false', '0', 'no'}:
+            logger.warning("only 'off' disables %s; value '%s' keeps it ON", name, value)
     elif name == 'CONVERSATION_TERMINAL_FAMILY_MODE':
         enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':

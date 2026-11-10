@@ -1,6 +1,24 @@
 {
   "indexes": [
     {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "summary_first_pending_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "summary_due_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "sync_reprocess_outbox",
       "queryScope": "COLLECTION",
       "fields": [

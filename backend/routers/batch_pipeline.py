@@ -12,7 +12,6 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response, JSONResponse
 
 from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
-from config.summary_guarantee import enabled as summary_deadline_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
@@ -333,8 +332,8 @@ async def enrichment_response(payload: dict):
                 await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
             )
         # Summaries must not queue behind long transcription jobs. Reuse the
-        # conversation-processing bulkhead; the master flag restores the old pool.
-        executor = postprocess_executor if summary_deadline_enabled() else sync_executor
+        # conversation-processing bulkhead for every first-summary obligation.
+        executor = postprocess_executor
         status = await run_blocking(executor, run_enrichment, document_id, token)
         if status == 'busy':
             logger.info('event=batch_enrichment_sync_reprocess outcome=busy')

@@ -166,8 +166,6 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
     monkeypatch.setattr(process_module, 'trigger_conversation_apps', app_boundary)
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     paid = Mock(side_effect=AssertionError('minimum attempted paid intelligence'))
     monkeypatch.setattr(process_module, 'get_conversation_notes', paid)
     monkeypatch.setattr(process_module, 'extract_canonical_l1_memory_candidates', paid)

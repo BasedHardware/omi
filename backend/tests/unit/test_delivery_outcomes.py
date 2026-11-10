@@ -64,7 +64,6 @@ def test_summary_classification_is_pure(patch, existing, expected):
 
 
 def test_summary_counter_is_independent_of_first_summary_protocol_gate(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     write = dict(status='completed', structured={'title': 'Final', 'overview': 'Useful output'})
     assert delivery.summary_terminal_outcome({}, write) == 'delivered'
     assert 'summary_output_present' not in write
@@ -219,7 +218,6 @@ def test_malformed_summary_observation_does_not_reject_a_write():
 def test_real_minimum_preparation_keeps_open_summary_debt_deferred(monkeypatch):
     from utils.conversations import summary_delivery
 
-    monkeypatch.setattr(summary_delivery, 'enabled', lambda uid: True)
     write = dict(status='completed', structured={'title': 'Waiting', 'title_provenance': 'server_minimum'})
     summary_delivery.prepare(write, 'synthetic', now=100)
     assert write['summary_due_at'] > 100 and write['summary_output_present'] is False
@@ -230,7 +228,6 @@ def test_real_minimum_preparation_keeps_open_summary_debt_deferred(monkeypatch):
 def test_intentionally_waived_short_clip_debt_is_not_pending(monkeypatch):
     from utils.conversations import summary_delivery
 
-    monkeypatch.setattr(summary_delivery, 'enabled', lambda uid: True)
     write = dict(
         status='completed',
         structured={'title': 'Short capture', 'title_provenance': 'server_minimum'},

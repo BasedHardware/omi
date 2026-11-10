@@ -39,7 +39,6 @@ from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.llm.model_config import get_all_configured_features, get_byok_provider, get_provider
 from utils.subscription import request_has_llm_byok_key
 from utils import ladder_v1
-from config.stt_cap_dispatch import execution_admission_enabled
 from utils.generated_compute import generated_compute_allowed
 
 logger = logging.getLogger(__name__)
@@ -473,21 +472,6 @@ def _authorize_omi(uid: str, feature: str, *, subscription: Any) -> Decision:
                 plan=plan,
                 plan_resolved=plan_resolved,
             )
-        if execution_admission_enabled(uid, 'batch') and ladder_v1.policy.budget_enforcement_enabled():
-            # Only selected work passed shared funded admission above. Outside
-            # that scope, retain plan/feature policy without a budget read.
-            entitlement = (
-                ladder_v1.account(uid) if subscription is _UNRESOLVED else ladder_v1.account(uid, subscription)
-            )
-            if entitlement is not None:
-                return _decision(
-                    allowed=True,
-                    reason='ladder_budget_available',
-                    feature=feature,
-                    funding_owner='omi',
-                    plan=plan,
-                    plan_resolved=plan_resolved,
-                )
     except Exception:
         return _decision(
             allowed=False,

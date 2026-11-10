@@ -33,12 +33,10 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
     assert dream_levers.arms('owner-a') == {
         'idle_skip': 'off',
         'material_budget': 'shadow',
-        'history_compact': 'shadow',
         'hunt_backoff': 'shadow',
         'prescan': 'shadow',
         # The verify hold only moves budget from searching to verifying, so it serves.
         'verify_hold': 'serve',
-        'liberal_verifier': 'shadow',
     }
     monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '100')
@@ -351,81 +349,6 @@ def _scripted(owner_records, limits, monkeypatch):
         'load',
         lambda uid, caps: ({'targets': list(owner_records), 'vocabulary': []}, owner_records, [], limits),
     )
-
-
-def test_history_compaction_serve_elides_old_tool_results(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.HISTORY_COMPACT_MODE_ENV, 'serve')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', '1000')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_KEEP_RESULTS', '2')
-    monkeypatch.setattr(dream_agent, 'COMPACT_MIN_CHARS', 10)
-    limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=900000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    seen = []
-
-    async def model(uid, lane, mount, messages):
-        if lane != MAIN_LANE:
-            pytest.fail('No staged work should need verification')
-        step = len(seen) + 1
-        seen.append(deepcopy(messages))
-        tool_call = (
-            call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 6
-            else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
-        )
-        return Turn(
-            tokens=5000,
-            prompt_tokens=5000,
-            completion_tokens=0,
-            cached_tokens=0,
-            tool_calls=(tool_call,),
-            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
-        )
-
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
-    assert report['status'] == 'complete', report
-    final = seen[-1]
-    tools = [message for message in final if message.get('role') == 'tool']
-    elided = [message for message in tools if message['content'] == dream_agent.ELIDED_TOOL_RESULT]
-    assert elided and tools[-1]['content'] != dream_agent.ELIDED_TOOL_RESULT
-    assert len(tools) - len(elided) >= 2
-    # Seed and system prompt are untouched.
-    assert final[:2] == seen[0][:2]
-    compaction = report['levers']['history_compact']
-    assert compaction['arm'] == 'serve' and compaction['compactions'] >= 1 and compaction['elided_chars'] > 0
-
-
-def test_history_compaction_shadow_changes_nothing(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.HISTORY_COMPACT_MODE_ENV, 'shadow')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', '1000')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_KEEP_RESULTS', '2')
-    monkeypatch.setattr(dream_agent, 'COMPACT_MIN_CHARS', 10)
-    limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=900000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    seen = []
-
-    async def model(uid, lane, mount, messages):
-        step = len(seen) + 1
-        seen.append(deepcopy(messages))
-        tool_call = (
-            call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 6
-            else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
-        )
-        return Turn(
-            tokens=5000,
-            prompt_tokens=5000,
-            completion_tokens=0,
-            cached_tokens=0,
-            tool_calls=(tool_call,),
-            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
-        )
-
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
-    assert all(message.get('content') != dream_agent.ELIDED_TOOL_RESULT for message in seen[-1])
-    compaction = report['levers']['history_compact']
-    assert compaction['fired'] and compaction['compactions'] == 0 and compaction['would_elide_chars'] > 0
 
 
 def _idle_reader(count):

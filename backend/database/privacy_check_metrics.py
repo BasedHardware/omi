@@ -7,11 +7,13 @@ from contextvars import ContextVar
 from functools import wraps
 import inspect
 import logging
+import hashlib
+from dataclasses import dataclass, field
 import threading
 import time
 
 from prometheus_client import Counter, Gauge, Histogram
-from database.batch_privacy_attempt import PrivacyAttempt
+from database.batch_privacy_attempt import PrivacyAttempt, token_version
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,20 @@ READS = Counter('privacy_check_reads_total', 'Privacy document reads issued', ['
 WALKS = Counter('privacy_conversations_walked_total', 'Distinct conversation documents walked per check', ['mode'])
 DECISION_MISMATCH = Counter(
     'privacy_decision_mismatch_total', 'Live and candidate privacy decisions disagree', ['family', 'reason']
+)
+COMPARISONS = Counter(
+    'privacy_decision_comparison_total',
+    'Live/candidate comparisons with identifier-free cache evidence',
+    [
+        'family',
+        'result',
+        'candidate_source',
+        'cache_age',
+        'token_versions',
+        'generation_versions',
+        'marker_changed',
+        'cache_certification',
+    ],
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
@@ -96,6 +112,113 @@ _READ_CALLERS = {
 _SESSION: ContextVar['SessionCensus | None'] = ContextVar('privacy_metrics_session', default=None)
 _LOG_LOCK = threading.Lock()
 _LOG_AT = {}
+
+
+@dataclass
+class DecisionEvidence:
+    # Private, request-scoped observations. Only closed relations leave compare().
+    source: str = 'fresh_read'
+    age: float | None = None
+    certification: str = 'not_used'
+    token_seen: bool = False
+    token: object = None
+    generation: object = None
+    markers: dict = field(default_factory=dict)
+
+    def cached(self, payload, age):
+        self.age = age
+        try:
+            self.markers.update(payload.get('markers', {}))
+        except (TypeError, ValueError):
+            pass
+
+
+_EVIDENCE: ContextVar[DecisionEvidence | None] = ContextVar('privacy_comparison_evidence', default=None)
+
+
+@contextmanager
+def evidence_scope(evidence):
+    token = _EVIDENCE.set(evidence)
+    try:
+        yield evidence
+    finally:
+        _EVIDENCE.reset(token)
+
+
+def current_evidence():
+    return _EVIDENCE.get()
+
+
+def observe_snapshot(reference, snapshot, family):
+    evidence = _EVIDENCE.get()
+    if evidence is None:
+        return
+    try:
+        path = reference.path
+        parts = path.split('/') if isinstance(path, str) else list(path)
+        if parts[0] == 'batch_pipeline_privacy':
+            data = snapshot.to_dict() or {}
+            evidence.token_seen = True
+            evidence.token = token_version(snapshot)
+            evidence.generation = data.get('generation', 0)
+        elif parts[0] in {'account_deletions', 'legal_hold_deletion_gates'} or (
+            family == 'tombstone' and len(parts) == 4 and parts[2] == 'deleted_conversations'
+        ):
+            data = snapshot.to_dict() or {}
+            # Fixed-size private fingerprint: no paths or marker payloads in cache
+            # envelopes, logs or labels. Observe revisions AND state/existence.
+            revision = getattr(snapshot, 'update_time', None)
+            state = (
+                snapshot.exists,
+                str(revision),
+                getattr(revision, 'nanosecond', 0),
+                data.get('wipe_status'),
+                data.get('state'),
+            )
+            # Closed keys keep cache metadata bounded to two fingerprints;
+            # batch observes the owner erasure marker, not every source row.
+            key = parts[0] if parts[0] != 'users' else 'deleted_conversations'
+            evidence.markers[key] = hashlib.sha256(repr(state).encode()).hexdigest()
+    except Exception:
+        pass  # Instrumentation must not change the authoritative read.
+
+
+def version_relation(left, right):
+    if left is None or right is None:
+        return 'unavailable'
+    return 'same' if left == right else 'changed'
+
+
+def age_bucket(age):
+    if age is None:
+        return 'unknown'
+    if not isinstance(age, (int, float)) or not 0 <= age < float('inf'):
+        return 'unknown'
+    for bound, label in ((1, 'lt_1s'), (10, '1_10s'), (30, '10_30s'), (60, '30_60s')):
+        if age < bound:
+            return label
+    return 'expired'
+
+
+def comparison_labels(live, candidate):
+    live, candidate = live or DecisionEvidence(), candidate or DecisionEvidence(source='unknown')
+    observed = live.token_seen and candidate.token_seen
+    common = live.markers.keys() & candidate.markers.keys()
+    changed = (
+        'true' if any(live.markers[k] != candidate.markers[k] for k in common) else ('false' if common else 'unknown')
+    )
+    return (
+        candidate.source if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'fresh_read'} else 'unknown',
+        age_bucket(candidate.age),
+        version_relation(live.token, candidate.token) if observed else 'unknown',
+        version_relation(live.generation, candidate.generation) if observed else 'unknown',
+        changed,
+        (
+            candidate.certification
+            if candidate.certification in {'matched', 'mismatch', 'unavailable', 'miss'}
+            else 'not_used'
+        ),
+    )
 
 
 def _family(value):
@@ -206,6 +329,7 @@ def read_snapshot(family, reference, *, read_budget=None, **kwargs):
     finally:
         _READ_CALLER.reset(caller_token)
     _read_result(family, 'hit' if snapshot.exists else 'miss')
+    observe_snapshot(reference, snapshot, family)
     return snapshot
 
 
@@ -238,35 +362,39 @@ def mode_scope(mode):
         _MODE.reset(token)
 
 
-def compare(family, live, candidate, *, cached_age=None):
-    """Only bounded decision names leave this module; never exception text.
+def compare(family, live, candidate, *, cached_age=None, live_evidence=None, candidate_evidence=None):
+    """Emit only closed labels, never raw versions, paths or exception text.
 
-    ``cached_age`` is the age in seconds of a reused 60s-bounded decision
-    (database.privacy_ttl_cache). A stale allow younger than the ruling's bound
-    is the accepted cost of that bound, so it is labelled ``stale_within_ttl``
-    and kept apart from real mismatches; the kill switch ignores only that label.
+    TTL is an upper bound, never permission for a stale ALLOW. Version fields
+    describe live versus candidate observations, not raw token values. A marker
+    change is known only when both sides observed the same marker (including
+    a cached observation); token rotation alone does not prove marker change.
     """
     family, live, candidate = _family(family), _reason(live), _reason(candidate)
     mismatch = live != candidate
     try:
-        within = mismatch and candidate == 'allow' and cached_age is not None and 0 <= cached_age <= TTL_BOUND_SECONDS
-        SHADOW_CHECKS.labels(family, ('within_ttl' if within else 'mismatch') if mismatch else 'match').inc()
+        if candidate_evidence is None and cached_age is not None:
+            candidate_evidence = DecisionEvidence(age=cached_age)
+        labels = comparison_labels(live_evidence, candidate_evidence)
+        COMPARISONS.labels(family, 'mismatch' if mismatch else 'match', *labels).inc()
+        SHADOW_CHECKS.labels(family, 'mismatch' if mismatch else 'match').inc()
         if mismatch:
             reason = 'stale_allow' if candidate == 'allow' else 'stale_block' if live == 'allow' else 'block_reason'
-            if within:
-                reason = 'stale_within_ttl'
             DECISION_MISMATCH.labels(family, reason).inc()
-            # At most one fixed-size line per family per minute, across threads.
+            # Preserve at most one fixed-size line per family per minute.
             with _LOG_LOCK:
                 now = time.monotonic()
                 if now - _LOG_AT.get(family, -60.0) >= 60:
                     _LOG_AT[family] = now
                     logger.warning(
-                        'privacy shadow decision_mismatch family=%s reason=%s live=%s candidate=%s',
+                        'privacy shadow decision_mismatch family=%s reason=%s live=%s candidate=%s '
+                        'candidate_source=%s cache_age=%s token_versions=%s generation_versions=%s '
+                        'marker_changed=%s cache_certification=%s',
                         family,
                         reason,
                         live,
                         candidate,
+                        *labels,
                     )
     except Exception:
         pass
