@@ -6,7 +6,8 @@ by dead-lettering. A terminal row does **not** preserve an object past its
 existing lifecycle; recover it or obtain the original client bundle before then.
 
 `audio_staged_at` anchors the CURRENT staged object after exact-bundle repair
-replaces `audio_uri`. Legacy objects fall back to `enqueued_at`, the creation
+replaces `audio_uri`. An absent or malformed replacement clock falls back to
+`enqueued_at`, the earlier creation
 **proxy** because staging occurs at admission. Neither is a GCS metadata read.
 Quarantine, assignment, expiry and operator requeue do not reset object age. The scope is
 `audio_uri` under `gs://based-hardware-batch-pipeline-staging/`, not other buckets.
@@ -22,6 +23,18 @@ warning `omi-batch-staged-input-age` fires above 21 days for 10 minutes. A sampl
 must be younger than 900 seconds; absent/stale data is unknown, covered by the
 existing sampler-stale alert. No GCS reads or additional timer are introduced.
 
+`omi_batch_staged_input_clock_invalid_total` counts malformed clock observations
+in completed bounded age samples and existing held sweep pages, including rows
+with neither clock usable. Name-ordered held pages also observe missing clock
+fields that age-ordered queries cannot discover.
+Repeated observations count again; this is not a distinct-row fleet census.
+A valid admission clock still contributes its conservative age and the 21-day
+warning. When neither clock is usable, the row cannot enter `input_expiring`.
+When an age sample observes such a row,
+`omi_batch_timeliness_scan_truncated{leg="staged_input"}` is 1 so the existing
+scan-blind warning exposes the incomplete age sample. Failed scans retain the
+existing sample-error/staleness path. No IDs or clock values become labels.
+
 The existing held dead-letter sweep checks these same inputs at age **>=29 days**
 and writes job `state=dead`, `dead_letter_reason=input_expiring`, plus its prior
 leg and transition time. It retains audio, result receipts, intent/attempt
@@ -32,7 +45,10 @@ open operator/paid intents, privacy refusals and lost content ownership.
 Before the ordinary held name-cursor page, each five-minute sweep tick reads
 oldest-first cutoff pages for `enqueued_at` (legacy objects) and `audio_staged_at`
 (replacements), **128 rows per indexed query**, at most 256 candidates total.
-The legacy stream excludes stamped replacements; the transaction rechecks the
+The enqueue stream excludes only replacements with valid staging clocks;
+malformed replacements remain discoverable by admission age. The replacement
+stream admits only valid staging clocks, preventing duplicate candidates.
+The transaction rechecks the
 current object clock. Separate durable age cursors advance even over fresh
 restages, malformed rows and transaction refusals, so none can pin a prefix.
 Neither urgency cursor depends on the ordinary held name cursor. Crash replay

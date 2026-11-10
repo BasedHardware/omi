@@ -18,6 +18,7 @@ from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.batch_pipeline.input_retention import held_input_leg, staged_at, staged_enqueue, TERMINAL_SECONDS
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -764,8 +765,6 @@ def input_expiring_candidates(client, namespace, now, *, after=None):
     Advance independent age cursors even over filtered/fenced rows: fresh
     replacements in the legacy index must never pin its oldest prefix.
     """
-    from utils.batch_pipeline.input_retention import held_input_leg, staged_enqueue, TERMINAL_SECONDS
-
     collection = client.collection(f'{namespace}_jobs')
     cutoff = now - TERMINAL_SECONDS
     candidates, cursors = [], {}
@@ -783,9 +782,12 @@ def input_expiring_candidates(client, namespace, now, *, after=None):
         docs = list(query.limit(128).stream())
         for doc in docs:
             job = doc.to_dict() or {}
-            # Missing ordered fields are excluded by Firestore. Only legacy
-            # objects belong in the enqueue stream; replacements use their own.
-            if field == 'enqueued_at' and 'audio_staged_at' in job:
+            # Route by clock validity, not field presence. Malformed replacements
+            # retain the earlier enqueue protection, without duplicate candidates.
+            restaged = staged_at(job) is not None
+            if field == 'enqueued_at' and restaged:
+                continue
+            if field == 'audio_staged_at' and not restaged:
                 continue
             try:
                 stamp, leg = staged_enqueue(job), held_input_leg(job)

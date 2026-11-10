@@ -22,6 +22,7 @@ from database.batch_pipeline_quarantine_recovery import (
 )
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
+from utils.batch_pipeline.input_retention import held_input_leg, invalid_staged_clock
 
 PAGE_SIZE = 32
 INTERVAL_SECONDS = 300
@@ -42,6 +43,11 @@ class HeldDeadLetter:
             elif event == 'requeued':
                 self.metrics.record('requeued')
 
+    def _observe_clock(self, job):
+        # Name pages also see absent clock fields, excluded by ordered queries.
+        if self.metrics is not None and held_input_leg(job) and invalid_staged_clock(job):
+            self.metrics.staged_input_clock_invalid.inc()
+
     def tick(self, now):
         # Off has no queries, cursor writes, deadline stamps or expirations.
         # The separate RecoveryStore.requeue_quarantined tool remains usable.
@@ -60,8 +66,9 @@ class HeldDeadLetter:
         # Urgency discovery is independent of held_after and runs first. Its
         # age cursors advance over refusals; the transaction still owns every
         # current-object, privacy, content and active-intent check.
-        for sid, _ in urgent:
+        for sid, job in urgent:
             try:
+                self._observe_clock(job)
                 if self.recovery.expire_held(sid, now) == 'expired':
                     counts['expired'] += 1
                     self._record('expired')
@@ -73,8 +80,9 @@ class HeldDeadLetter:
                     type(error).__name__,
                 )
         page = held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=state.get('held_after'))
-        for sid, _ in page:
+        for sid, job in page:
             try:
+                self._observe_clock(job)
                 outcome = self.recovery.expire_held(sid, now)
             except (BatchPrivacyBlocked, ProjectionBlocked):
                 continue  # Revocation/content-owner loss never authorizes a transition.

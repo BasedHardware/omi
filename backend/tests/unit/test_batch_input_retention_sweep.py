@@ -5,12 +5,14 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from prometheus_client import CollectorRegistry
 
 from database import batch_pipeline_quarantine_recovery as queries
-from tests.unit.test_batch_input_retention import seed, ENQUEUED, NOW29
+from tests.unit.test_batch_input_retention import seed, BAD_STAGED_CLOCKS, ENQUEUED, NOW29
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup, row
 from utils.batch_pipeline import held_dead_letter as sweep
 from utils.batch_pipeline.input_retention import TERMINAL_SECONDS, staged_enqueue
+from utils.batch_pipeline.metrics import QueueMetrics
 
 
 @pytest.fixture(autouse=True)
@@ -155,6 +157,41 @@ def test_fresh_restage_is_skipped_until_its_own_day29(setup, monkeypatch):
     assert sweep.HeldDeadLetter(store).tick(NOW29) == {'expired': 0, 'requeued': 0}
     assert sweep.HeldDeadLetter(store).tick(NOW29 + TERMINAL_SECONDS) == {'expired': 1, 'requeued': 0}
     assert row(client)['dead_letter_reason'] == 'input_expiring'
+
+
+@pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
+@pytest.mark.parametrize('leg', ['gpu', 'assignment'])
+def test_malformed_restage_is_reachable_once_via_enqueue_stream(setup, monkeypatch, stamp, leg):
+    client, store, age = urgent_runner(setup, monkeypatch, leg)
+    row(client)['audio_staged_at'] = stamp
+    candidates, _ = queries.input_expiring_candidates(age, 'batch_pipeline_prod', NOW29)
+    assert [sid for sid, _ in candidates] == ['bad']
+    registry = CollectorRegistry()
+    assert sweep.HeldDeadLetter(store, metrics=QueueMetrics(registry)).tick(NOW29) == {'expired': 1, 'requeued': 0}
+    assert row(client)['dead_letter_reason'] == 'input_expiring'
+    assert registry.get_sample_value('omi_batch_staged_input_clock_invalid_total') == 1
+
+
+@pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
+def test_two_invalid_clocks_have_no_terminal(setup, monkeypatch, stamp):
+    client, store, _ = urgent_runner(setup, monkeypatch)
+    row(client).update(audio_staged_at=stamp, enqueued_at=0)
+    assert sweep.HeldDeadLetter(store).tick(NOW29) == {'expired': 0, 'requeued': 0}
+    assert row(client)['state'] == 'quarantined'
+
+
+@pytest.mark.parametrize(
+    'clocks', [{}, {'enqueued_at': 'bad', 'audio_staged_at': []}, {'enqueued_at': None, 'audio_staged_at': None}]
+)
+def test_name_page_counts_unusable_clocks_even_when_age_queries_cannot_see_them(setup, monkeypatch, clocks):
+    client, store, _ = urgent_runner(setup, monkeypatch)
+    row(client).pop('enqueued_at')
+    row(client).update(clocks)
+    monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **kw: [('bad', deepcopy(row(client)))])
+    registry = CollectorRegistry()
+    assert sweep.HeldDeadLetter(store, metrics=QueueMetrics(registry)).tick(NOW29) == {'expired': 0, 'requeued': 0}
+    assert row(client)['state'] == 'quarantined'
+    assert registry.get_sample_value('omi_batch_staged_input_clock_invalid_total') == 1
 
 
 def test_kill_off_has_no_urgency_queries(setup, monkeypatch):

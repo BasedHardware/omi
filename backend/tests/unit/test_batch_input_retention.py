@@ -31,6 +31,7 @@ URI = f'gs://{STAGING_BUCKET}/synthetic/audio#1'
 ENQUEUED = 1_000_000.0
 NOW29 = ENQUEUED + TERMINAL_SECONDS
 BACKEND = Path(__file__).resolve().parents[2]
+BAD_STAGED_CLOCKS = [None, False, True, 0, -1, float('nan'), float('inf'), float('-inf'), '123', {}, []]
 
 
 @pytest.fixture(autouse=True)
@@ -225,9 +226,52 @@ def test_fresh_current_object_does_not_expire_on_old_enqueue(setup, leg):
     assert RecoveryStore(store).expire_held('bad', NOW29 + TERMINAL_SECONDS) == 'expired'
 
 
-@pytest.mark.parametrize('stamp', [None, False, float('nan'), 0])
-def test_bad_restage_clock_does_not_fall_back_to_expired_object(stamp):
-    assert staged_enqueue({'audio_uri': URI, 'enqueued_at': ENQUEUED, 'audio_staged_at': stamp}) is None
+@pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
+def test_bad_restage_clock_falls_back_to_earlier_admission(stamp):
+    assert staged_enqueue({'audio_uri': URI, 'enqueued_at': ENQUEUED, 'audio_staged_at': stamp}) == ENQUEUED
+    assert staged_enqueue({'audio_uri': URI, 'enqueued_at': 0, 'audio_staged_at': stamp}) is None
+
+
+@pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
+@pytest.mark.parametrize('leg', ['gpu', 'assignment'])
+def test_bad_restage_clock_expires_by_admission_at_day29(setup, stamp, leg):
+    client, store, _ = seed(setup, leg)
+    row(client)['audio_staged_at'] = stamp
+    assert RecoveryStore(store).expire_held('bad', NOW29 - 1) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW29) == 'expired'
+    assert row(client)['dead_letter_reason'] == 'input_expiring'
+
+
+@pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
+@pytest.mark.parametrize('enqueued', [ENQUEUED, 0, None])
+def test_bad_clocks_are_visible_in_the_age_sample_and_exported_count(monkeypatch, stamp, enqueued):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    job = {
+        'state': 'quarantined',
+        'recovery_state': 'held',
+        'quarantine_reason': 'worker_failed',
+        'audio_uri': URI,
+        'enqueued_at': enqueued,
+        'audio_staged_at': stamp,
+    }
+    sample = _sample(jobs=[job], now=NOW29)
+    assert sample['held_oldest']['staged_input'] == (ENQUEUED if enqueued else None)
+    assert sample['staged_input_clock_invalid'] == 1
+    assert sample['truncated']['staged_input'] is (not bool(enqueued))
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    monkeypatch.setattr(metrics_module, 'timeliness_sample', lambda *a, **kw: sample)
+    monkeypatch.setattr(metrics_module, 'lever_enabled', lambda name: False)
+    monkeypatch.setattr(metrics_module, 'batch_timeliness_alarm_enabled', lambda: True)
+    metrics.refresh_timeliness(cast(Any, SimpleNamespace(client=None, namespace='ns')), NOW29)
+    assert registry.get_sample_value('omi_batch_staged_input_clock_invalid_total') == 1
+    assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': 'staged_input'}) == (
+        TERMINAL_SECONDS if enqueued else 0
+    )
+    assert registry.get_sample_value('omi_batch_timeliness_scan_truncated', {'leg': 'staged_input'}) == (
+        0 if enqueued else 1
+    )
 
 
 def test_metric_uses_current_object_and_does_not_mask_older_legacy_input():
