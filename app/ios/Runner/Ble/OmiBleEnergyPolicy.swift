@@ -121,6 +121,12 @@ struct OmiBleReconnectDiagnostics {
         return (timestamp, max(0, atMs - timestamp))
     }
 
+    /// Start timestamp of one disconnect-history row, used to match a reconnect
+    /// interval back to the event that started it.
+    static func eventTimestamp(_ entry: [String: Any]) -> Int64 {
+        entry["timestamp"] as? Int64 ?? 0
+    }
+
     /// Age of one disconnect-history row. A resolved lost-audio row stays until
     /// the later of its start and `lostAudioResolvedAt` leaves the window, so
     /// Dart can import a recovery whose outage began earlier. Unresolved rows
