@@ -65,7 +65,11 @@ def test_accepted_repair_reaches_exact_owner_check_after_new_upload_lookback(
         ),
     )
     monkeypatch.setattr(sync, 'validate_backfill_uploads', lambda *args: None)
-    monkeypatch.setattr(sync, 'has_transcription_credits', lambda *args: True)
+    monkeypatch.setattr(
+        sync,
+        'resolve_transcription_allowance',
+        lambda *args: SimpleNamespace(managed=True, reason='plan_within_allowance'),
+    )
     monkeypatch.setattr(sync, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(sync, 'has_byok_keys', lambda: False)
     # A staged name with a parseable capture time: admission reads it since #24501.

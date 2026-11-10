@@ -174,11 +174,7 @@ from utils.sync.repeat_work_metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
-from utils.subscription import (
-    TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS,
-    has_transcription_credits,
-    resolve_transcription_allowance,
-)
+from utils.subscription import TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS, resolve_transcription_allowance
 from utils.sync import playback as sync_playback
 from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
 from config.rollout_cohorts import warm_rollout_cohorts
@@ -792,10 +788,10 @@ async def sync_local_files_v2(
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
-    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+    has_credits = allowance.managed
     should_lock = False
     if not has_credits:
-        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
         should_lock = (
             allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
             and allowance.reason != 'usage_budget_exhausted'

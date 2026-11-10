@@ -172,8 +172,11 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(router, 'get_sync_ledger_fence_mode', lambda: router.SyncLedgerFenceMode.ACTIVE)
     monkeypatch.setattr(router, 'get_hard_restriction_status', lambda _: (False, None))
     monkeypatch.setattr(router, 'is_daily_audio_ceiling_exceeded', lambda _: False)
-    monkeypatch.setattr(router, 'has_transcription_credits', lambda _: False)
-    monkeypatch.setattr(router, 'resolve_transcription_allowance', lambda _: Mock(reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(
+        router,
+        'resolve_transcription_allowance',
+        lambda _: Mock(managed=False, reason='plan_allowance_exhausted'),
+    )
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_a, **_k: [])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
     monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
@@ -205,6 +208,76 @@ def test_v2_route_accepts_capture_time_ahead_of_server_within_tolerance(client):
 
     assert response.status_code == 202, response.text
     assert response.json()['status'] == 'completed'
+
+
+@pytest.mark.parametrize('dispatch', ['cloud_tasks', 'inline'])
+@pytest.mark.parametrize(
+    'managed,reason,expected_lock',
+    [
+        (True, 'plan_within_allowance', False),
+        (False, 'plan_allowance_exhausted', True),
+        (False, 'subscription_inactive', True),
+        (False, 'usage_budget_exhausted', False),
+        *((False, reason, False) for reason in sorted(router.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS)),
+    ],
+)
+def test_v2_one_allowance_drives_lock_and_both_dispatch_paths(
+    client, monkeypatch, dispatch, managed, reason, expected_lock
+):
+    """The admission answer and lock predicate share one resolver result and one Firestore lookup path."""
+    from config.policy import BatchUnitPolicy
+
+    allowance = Mock(managed=managed, reason=reason)
+    resolver = Mock(return_value=allowance)
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(router.legacy_dark, 'current_mode', lambda *_: router.legacy_dark.LegacySyncMode.ON)
+    monkeypatch.setattr(router, 'ramp_admission_policy', lambda *_a, **_kw: BatchUnitPolicy())
+    monkeypatch.setattr(router, 'claim_sync_content', lambda *_a: {'outcome': 'owned'})
+
+    async def legacy_route(**_kwargs):
+        return router.RecordUploadRoute.LEGACY
+
+    async def shadow(**_kwargs):
+        return None
+
+    monkeypatch.setattr(router, 'registered_record_response', legacy_route)
+    monkeypatch.setattr(router, '_offer_shadow_upload', shadow)
+
+    dispatched = {}
+    if dispatch == 'cloud_tasks':
+        monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: True)
+
+        async def staged(_paths):
+            return None
+
+        def enqueue(payload):
+            dispatched['should_lock'] = payload['should_lock']
+
+        monkeypatch.setattr(router, '_stage_files_to_gcs_with_hold_recheck', staged)
+        monkeypatch.setattr(router, 'enqueue_sync_job', enqueue)
+    else:
+
+        def pipeline(*args, **_kwargs):
+            dispatched['should_lock'] = args[4]
+            return Mock()
+
+        monkeypatch.setattr(router, 'try_acquire_sync_job_run_lock', lambda _: 'inline-token')
+        monkeypatch.setattr(router, 'bind_or_converge_sync_ledger_completion', lambda **_kwargs: None)
+        monkeypatch.setattr(router, 'run_full_pipeline_background_async', pipeline)
+        monkeypatch.setattr(router, 'start_background_task', Mock())
+
+    response = _post_sync(client, _filename(0))
+
+    assert response.status_code == 202, response.text
+    assert {key: value for key, value in response.json().items() if key != 'job_id'} == {
+        'status': 'queued',
+        'total_files': 1,
+        'total_segments': 0,
+        'poll_after_ms': 3000,
+        'lane': 'fresh',
+    }
+    resolver.assert_called_once_with('synthetic-uid')
+    assert dispatched['should_lock'] is expected_lock
 
 
 def test_v2_route_rejects_five_year_future_stamp_with_typed_400(client):

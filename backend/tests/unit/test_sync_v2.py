@@ -1647,7 +1647,9 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
         sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
-        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
+            return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
+        )
 
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -3693,7 +3695,9 @@ class TestV2EndpointExecution:
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
-        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
+            return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
+        )
         sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
         sync_pkg = types.ModuleType('utils.sync')
         sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
