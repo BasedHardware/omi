@@ -10,7 +10,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/conversations/home_rows.dart';
 
 void main() {
   setUp(() async {
@@ -48,223 +47,6 @@ void main() {
       }
     });
   }
-
-  for (final status in [ConversationStatus.processing, ConversationStatus.merging]) {
-    for (final homeStep in <String?>['failed', null]) {
-      test('${status.name} probe with home_step=$homeStep honors Home failure', () async {
-        final provider = ConversationProvider(
-          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-          conversationLifecycleFetcher: (_) async =>
-              (item: _conversation('c1', status: status, homeStep: homeStep), ok: true),
-          isSignedIn: () => true,
-        );
-        addTearDown(provider.dispose);
-        provider.addProcessingConversation(_conversation('c1', status: status));
-
-        await provider.forceRefreshConversations();
-
-        expect(provider.processingConversations.map((row) => row.id), homeStep == 'failed' ? isEmpty : ['c1']);
-      });
-    }
-
-    test('${status.name} failed page is not admitted and websocket replay cannot revive it', () async {
-      final failed = _conversation('c1', status: status, homeStep: 'failed');
-      final provider = ConversationProvider(
-        conversationListFetcher: () async => (items: [failed], ok: true),
-        isSignedIn: () => true,
-      );
-      addTearDown(provider.dispose);
-
-      await provider.fetchConversations();
-      expect(provider.processingConversations, isEmpty);
-      expect(provider.conversations.single.homeStep, 'failed');
-      provider.addProcessingConversation(_conversation('c1', status: status));
-      expect(provider.processingConversations, isEmpty);
-
-      // A detail refresh still carries stored status and may omit home_step.
-      provider.upsertConversation(_conversation('c1', status: status, title: 'Fresh detail'));
-      expect(provider.conversations.single.structured.title, 'Fresh detail');
-      expect(homeStepOf(provider.conversations.single), HomeStep.failed);
-      expect(
-          buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true)
-              .single
-              .isProcessing,
-          isFalse);
-    });
-
-    test('${status.name} failed page wins over missing or inconclusive detail projection', () async {
-      for (final probeOk in [true, false]) {
-        final failed = _conversation('c1', status: status, homeStep: 'failed');
-        final provider = ConversationProvider(
-          conversationListFetcher: () async => (items: [failed], ok: true),
-          conversationLifecycleFetcher: (_) async => (item: _conversation('c1', status: status), ok: probeOk),
-          isSignedIn: () => true,
-        );
-        addTearDown(provider.dispose);
-        provider.addProcessingConversation(_conversation('c1', status: status));
-        // A previous detail upsert must not leave a normal Home row behind.
-        provider.upsertConversation(_conversation('c1', status: status));
-
-        await provider.forceRefreshConversations();
-
-        expect(provider.processingConversations, isEmpty);
-        expect(homeStepOf(provider.conversations.single), HomeStep.failed);
-        expect(
-            buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true)
-                .single
-                .isProcessing,
-            isFalse);
-        provider.updateConversationInSortedList(_conversation('c1', status: status));
-        expect(homeStepOf(provider.conversations.single), HomeStep.failed);
-      }
-    });
-  }
-
-  for (final ok in [true, false]) {
-    test('cache restore keeps known failure when initial fetch ok=$ok', () async {
-      final cached = _conversation('c1', status: ConversationStatus.processing);
-      final provider = ConversationProvider(
-        conversationListFetcher: () async => (items: <ServerConversation>[], ok: ok),
-        conversationCacheLoader: () async => [cached],
-        isSignedIn: () => true,
-      );
-      addTearDown(provider.dispose);
-      provider
-          .addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
-      provider.conversations.clear(); // Simulate a cold cache fallback after the projection was learned.
-      await provider.fetchConversations();
-      expect(provider.conversations.single.homeStep, 'failed');
-      expect(provider.processingConversations, isEmpty);
-      expect(
-          buildHomeRows(provider.conversations, [], enabled: false, groupAwaitingTranscript: true).single.isProcessing,
-          isFalse);
-    });
-  }
-
-  test('cache restore respects its own failed projection without a remembered id', () async {
-    final provider = ConversationProvider(
-      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-      conversationCacheLoader: () async =>
-          [_conversation('cached', status: ConversationStatus.processing, homeStep: 'failed')],
-      isSignedIn: () => true,
-    );
-    addTearDown(provider.dispose);
-    await provider.fetchConversations();
-    expect(homeStepOf(provider.conversations.single), HomeStep.failed);
-    expect(provider.processingConversations, isEmpty);
-  });
-
-  test('failed target removes an optimistic placeholder', () async {
-    final provider = ConversationProvider(
-      conversationListFetcher: () async =>
-          (items: [_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed')], ok: true),
-      conversationLifecycleFetcher: (_) async =>
-          (item: _conversation('c1', status: ConversationStatus.processing), ok: true),
-      isSignedIn: () => true,
-    );
-    addTearDown(provider.dispose);
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
-    await provider.fetchConversations();
-    expect(provider.processingConversations, isEmpty);
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
-    expect(provider.processingConversations, isEmpty);
-  });
-
-  for (final nextStep in <String?>['writing_notes', null]) {
-    test('fresh page home_step=$nextStep clears a previous Home failure', () async {
-      var page = _conversation('c1', status: ConversationStatus.processing, homeStep: 'failed');
-      final provider = ConversationProvider(
-        conversationListFetcher: () async => (items: [page], ok: true),
-        isSignedIn: () => true,
-      );
-      addTearDown(provider.dispose);
-      await provider.fetchConversations();
-      page = _conversation('c1', status: ConversationStatus.processing, homeStep: nextStep);
-      await provider.forceRefreshConversations();
-      expect(provider.processingConversations.map((row) => row.id), ['c1']);
-    });
-  }
-
-  test('stale page cannot erase a websocket Home failure received during refresh', () async {
-    final probe = Completer<({ServerConversation? item, bool ok})>();
-    final provider = ConversationProvider(
-      conversationListFetcher: () async =>
-          (items: [_conversation('c1', status: ConversationStatus.processing)], ok: true),
-      conversationLifecycleFetcher: (_) => probe.future,
-      isSignedIn: () => true,
-    );
-    addTearDown(provider.dispose);
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
-    final refresh = provider.forceRefreshConversations();
-    await Future<void>.delayed(Duration.zero);
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
-    probe.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
-    await refresh;
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
-    expect(provider.processingConversations, isEmpty);
-  });
-
-  test('a failed row on a later page clears tracking and fences replay', () async {
-    final provider = ConversationProvider(
-      conversationListFetcher: () async => (
-        items: List.generate(50, (i) => _conversation('page-$i', status: ConversationStatus.completed)),
-        ok: true,
-      ),
-      isSignedIn: () => true,
-    );
-    addTearDown(provider.dispose);
-    await provider.fetchConversations();
-    provider.addProcessingConversation(_conversation('later', status: ConversationStatus.processing));
-    provider.conversationPageFetcherOverride = () async => (
-          items: [_conversation('later', status: ConversationStatus.processing, homeStep: 'failed')],
-          ok: true,
-          truncated: false,
-        );
-
-    await provider.getMoreConversationsFromServer();
-
-    expect(provider.processingConversations, isEmpty);
-    provider.addProcessingConversation(_conversation('later', status: ConversationStatus.processing));
-    expect(provider.processingConversations, isEmpty);
-    expect(homeStepOf(provider.conversations.firstWhere((row) => row.id == 'later')), HomeStep.failed);
-  });
-
-  test('carrying Home failure preserves fresh detail fields and deletion', () async {
-    final provider = ConversationProvider(
-      conversationListFetcher: () async =>
-          (items: [_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed')], ok: true),
-      isSignedIn: () => true,
-    );
-    addTearDown(provider.dispose);
-    await provider.fetchConversations();
-    final detail = _conversation('c1', status: ConversationStatus.processing, title: 'Fresh', starred: true)
-      ..isNew = false
-      ..transcriptCarried = true;
-    provider.upsertConversation(detail);
-    final projected = provider.conversations.single;
-    expect(projected.homeStep, 'failed');
-    expect(projected.structured, same(detail.structured));
-    expect(projected.starred, isTrue);
-    expect(projected.isNew, isFalse);
-    expect(projected.transcriptCarried, isTrue);
-    expect(detail.homeStep, isNull);
-
-    provider.updateConversationInSortedList(_conversation('c1', status: ConversationStatus.processing, deleted: true));
-    expect(provider.conversations, isEmpty);
-  });
-
-  test('explicit failed websocket row drops tracking and session clear forgets the projection', () {
-    final provider = ConversationProvider(isSignedIn: () => true);
-    addTearDown(provider.dispose);
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
-    expect(provider.processingConversations, isEmpty);
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
-    expect(provider.processingConversations, isEmpty);
-    provider.clearUserData();
-    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
-    expect(provider.processingConversations.map((row) => row.id), ['c1']);
-  });
 
   testWidgets('unknown optimistic row expires offline without refresh', (tester) async {
     final provider = ConversationProvider(isSignedIn: () => false);
@@ -1445,11 +1227,9 @@ ServerConversation _conversation(
   required ConversationStatus status,
   DateTime? createdAt,
   bool discarded = false,
-  bool deleted = false,
   bool starred = false,
   String? folderId,
   String title = 'Title',
-  String? homeStep,
 }) =>
     ServerConversation(
       id: id,
@@ -1457,8 +1237,6 @@ ServerConversation _conversation(
       structured: Structured(title, 'Overview'),
       status: status,
       discarded: discarded,
-      deleted: deleted,
       starred: starred,
       folderId: folderId,
-      homeStep: homeStep,
     );

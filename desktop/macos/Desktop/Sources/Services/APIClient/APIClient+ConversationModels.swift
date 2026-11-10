@@ -221,7 +221,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
       && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
-      && lhs.homeStep == rhs.homeStep
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
       && lhs.isLocked == rhs.isLocked && lhs.visibility == rhs.visibility
       && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
@@ -268,8 +267,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let meetingIdentity: ConversationMeetingIdentity?
 
   let status: ConversationStatus
-  /// Optional server Home projection; status remains the pipeline state.
-  var homeStep: String?
   let discarded: Bool
   let deleted: Bool
   let isLocked: Bool
@@ -298,7 +295,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case source
     case language
     case status
-    case homeStep = "home_step"
     case discarded
     case deleted
     case isLocked = "is_locked"
@@ -352,7 +348,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       ConversationMeetingIdentity(calendarContext: wire.externalData?["calendar_meeting_context"]?.value)
       ?? wire.calendarEvent.map(ConversationMeetingIdentity.init)
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
-    homeStep = try container.decodeIfPresent(String.self, forKey: .homeStep)
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
     isLocked = wire.isLocked ?? false
@@ -421,7 +416,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     createdFromSegments: Bool = false,
     meetingIdentity: ConversationMeetingIdentity? = nil,
     status: ConversationStatus,
-    homeStep: String? = nil,
     discarded: Bool,
     deleted: Bool,
     isLocked: Bool,
@@ -453,7 +447,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.createdFromSegments = createdFromSegments
     self.meetingIdentity = meetingIdentity
     self.status = status
-    self.homeStep = homeStep
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
@@ -490,7 +483,6 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     if isLocked {
       return .locked
     }
-    if homeStep == "failed" { return .failed }
     // This is a bounded server transcription wait, not a running summary job.
     // Keep its explicit title and do not offer the summary stall's Reprocess.
     if isAwaitingTranscription {
@@ -544,17 +536,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
   /// The server's presentation-only batch wait must not start the summary stall clock.
   var isAwaitingTranscription: Bool {
-    homeStep != "failed" && !isLocked && !deferred && status == .processing && structured.title == "Transcribing…"
-      && transcriptSegments.isEmpty
-  }
-
-  /// Detail polling also follows transcription/deferred rows, unlike the summary badge.
-  var needsProcessingDetailRefresh: Bool {
-    homeStep != "failed" && (deferred || status == .processing)
+    !isLocked && !deferred && status == .processing && structured.title == "Transcribing…" && transcriptSegments.isEmpty
   }
 
   var showsSummaryProcessing: Bool {
-    homeStep != "failed" && !isAwaitingTranscription && (deferred || status == .processing)
+    !isAwaitingTranscription && (deferred || status == .processing)
   }
 
   /// The string a row/header should display in the title slot.

@@ -136,8 +136,6 @@ export type Structured = Omit<GeneratedStructured, 'sections'> & {
 
 export type Conversation = Omit<GeneratedConversation, 'structured'> & {
   structured: Structured;
-  /** Optional server Home projection, independent of pipeline status. */
-  home_step?: string | null;
 };
 
 /**
