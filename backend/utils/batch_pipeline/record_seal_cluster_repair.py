@@ -371,8 +371,11 @@ def discover_jobs(
         after = None
     # Deadline order can safely expand its tail as new rows enter the final day.
     # Recency passes freeze their head so continuous inflow cannot prevent wrap.
-    horizon = None if urgent else (after or {}).get('horizon' if age_order else 'finished_at')
-    horizon = horizon or datetime.now(timezone.utc)
+    horizon = (
+        datetime.now(timezone.utc)
+        if urgent
+        else (after or {}).get('horizon' if age_order else 'finished_at') or datetime.now(timezone.utc)
+    )
 
     def page_for(age_order, after):
         budget.check()
@@ -448,7 +451,11 @@ def discover_jobs(
             continue
         if urgent:
             deadline = job.get(order_field)
-            if not valid_metric_clock(deadline) or deadline > horizon.timestamp() + NEAR_DEAD_LETTER_SECONDS:
+            if (
+                not isinstance(deadline, (int, float))
+                or not valid_metric_clock(deadline)
+                or deadline > horizon.timestamp() + NEAR_DEAD_LETTER_SECONDS
+            ):
                 continue
         age = horizon.timestamp() - enqueued
         if age < config.JOBS_MIN_AGE_SECONDS:
@@ -845,6 +852,6 @@ def run(*, progress=lambda _: None):
                 frontier.write(last_attempted, budget)
             if last_job_attempted and jobs_frontier is not None:
                 jobs_frontier.write(last_job_attempted, budget)
-            if last_urgent_attempted:
+            if last_urgent_attempted and urgent_frontier is not None:
                 urgent_frontier.write(last_urgent_attempted, budget)
     return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}
