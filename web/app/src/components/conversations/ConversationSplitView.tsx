@@ -372,20 +372,6 @@ export function ConversationSplitView() {
     if (recapsHasMore) void loadMoreRecaps();
   }, [isSearching, hasMore, loadMore, recapsHasMore, loadMoreRecaps]);
 
-  // Reprocess returns the authoritative new attempt/result. Update an open
-  // detail only if it still belongs to this conversation, then reload the feed.
-  const handleRetryUpdate = useCallback(
-    (updated: Conversation) => {
-      const activeSelection = selectionRef.current;
-      if (activeSelection?.kind === 'conversation' && activeSelection.id === updated.id) {
-        updateSelectedConversation(updated);
-      }
-      void refresh();
-      if (submittedSearchQuery) void performSearch(submittedSearchQuery);
-    },
-    [updateSelectedConversation, refresh, submittedSearchQuery, performSearch],
-  );
-
   // Handle star toggle
   const handleStarToggle = useCallback(
     async (id: string, starred: boolean) => {
@@ -883,7 +869,6 @@ export function ConversationSplitView() {
                 onConversationClick={handleConversationClick}
                 onRecapClick={handleRecapClick}
                 onStarToggle={handleStarToggle}
-                onConversationUpdate={handleRetryUpdate}
                 isSelectionMode={isSelectionMode}
                 selectedIds={selectedIds}
                 onSelect={toggleSelection}

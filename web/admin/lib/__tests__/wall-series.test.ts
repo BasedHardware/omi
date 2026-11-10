@@ -8,7 +8,9 @@ import {
   GOOD_MARK,
   headlineDelta,
   GROWTH_WEEKS,
+  MARGIN_DAYS,
   MARGIN_PLANS,
+  marginFrames,
   resetSeriesCache,
   Row,
   SeriesName,
@@ -654,6 +656,33 @@ describe("margin by plan (allocated estimate)", () => {
         { month: "short", day: "numeric", timeZone: "UTC" }
       )} · STT estimate · SaaS estimate · Infra non-GCP estimate as of Oct 16 · Stripe fees unavailable (finops key scope)`
     );
+  });
+
+  it("never emits a day older than the panel's 35-day window", () => {
+    // Prod 2026-11-10: the only day with both plan cost and a book was 35 days
+    // back, at 00:00Z — before the panel's now − 35d start, so Grafana showed
+    // "Data outside time range" instead of the empty-state message.
+    const at = (k: number) => ({ [day(k)]: plans(1) });
+    const legs = {
+      planCost: { plans: { ...at(MARGIN_DAYS), ...at(MARGIN_DAYS - 1) } },
+      finops: {
+        mrr: { [day(MARGIN_DAYS)]: book, [day(MARGIN_DAYS - 1)]: book },
+      },
+    } as unknown as Parameters<typeof marginFrames>[0];
+    const allIn = [MARGIN_DAYS, MARGIN_DAYS - 1].map((k) => ({
+      date: day(k),
+      total: 500,
+    })) as unknown as Parameters<typeof marginFrames>[1];
+    const start = now.getTime() - MARGIN_DAYS * 86_400_000;
+    const rows = marginFrames(legs, allIn, now);
+    expect(rows.map((r) => String(r.date).slice(0, 10))).toEqual([
+      day(MARGIN_DAYS - 1),
+    ]);
+    for (const r of rows)
+      expect(Date.parse(String(r.date))).toBeGreaterThanOrEqual(start);
+    // Only the out-of-window day has both inputs: an empty frame, not a hidden row.
+    delete (legs.finops!.mrr as Record<string, unknown>)[day(MARGIN_DAYS - 1)];
+    expect(marginFrames(legs, allIn, now)).toEqual([]);
   });
 
   it("prefers a measured FinOps STT line and labels it measured", async () => {
