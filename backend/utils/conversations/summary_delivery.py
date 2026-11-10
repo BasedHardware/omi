@@ -17,10 +17,12 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
+PROJECTION_DEBT_ENV = 'SUMMARY_PROJECTION_DEBT_ENABLED'
 MAX_EMPTY_REARMS = 2
 EMPTY_BLOCKED_REASON = 'empty_output_exhausted'
 EMPTY_LIFETIME_BLOCKED_REASON = 'empty_output_lifetime_exhausted'
@@ -156,6 +158,56 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_first_pending_at', current)
         data.setdefault('summary_due_at', data['summary_first_pending_at'] + deadline_seconds())
         data.setdefault('summary_lane', lane(data))
+
+
+def projection_debt_enabled() -> bool:
+    """Default on; false restores the pre-fix behavior for batch projections."""
+    return default_on(PROJECTION_DEBT_ENV)
+
+
+def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
+    """Stamp first-summary debt when a batch projection lands a transcript on an untitled row.
+
+    A batch row that completes with no title never passes through the
+    server-minimum intake path, so it carries no debt: Home hides it and the
+    repair refuses it as ``unknown_provenance``. The projection is the only
+    write that sees the transcript land, so it stamps the same obligation the
+    intake minimum would have. Rows that already carry debt or a summary,
+    curated rows, discards, below-floor clips and local-only rows are untouched.
+    """
+    if not projection_debt_enabled():
+        return False
+    if write.get('status') != 'completed' or write.get('deleted') or write.get('discarded'):
+        return False
+    if write.get('terminal_no_derived_effects') or write.get('deferred'):
+        return False
+    if write.get('processing_state') == 'local_pending':
+        return False
+    if write.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
+        return False
+    if write.get('user_title') is not None or write.get('user_overview') is not None:
+        return False
+    if write.get('summary_completed_at') or write.get('summary_output_present'):
+        return False
+    if write.get('summary_due_at') is not None or write.get('summary_first_pending_at') is not None:
+        return False
+    if write.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS:
+        return False
+    structured = write.get('structured')
+    if not isinstance(structured, dict):
+        structured = {}
+        write['structured'] = structured
+    if str(structured.get('title') or '').strip() or present(structured):
+        return False
+    if intentional_short_clip_minimum(write):
+        return False
+    current = time.time() if now is None else now
+    structured['title_provenance'] = 'server_minimum'
+    write['summary_title_provenance'] = 'server_minimum'
+    write['summary_first_pending_at'] = current
+    write['summary_due_at'] = current + deadline_seconds()
+    write.setdefault('summary_lane', lane(write))
+    return True
 
 
 @phase_shadow.compare('summary_repair', accepts=lambda result: result is None)

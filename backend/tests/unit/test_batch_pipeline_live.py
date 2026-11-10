@@ -575,6 +575,58 @@ def test_projection_without_new_text_keeps_the_automatic_discard():
     assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
 
 
+def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
+    from config.summary_guarantee import deadline_seconds
+    from utils.conversations import home_step
+
+    result, new = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+    assert new
+    assert result['summary_title_provenance'] == 'server_minimum'
+    assert result['structured']['title_provenance'] == 'server_minimum'
+    assert isinstance(result['summary_first_pending_at'], float)
+    assert result['summary_due_at'] == result['summary_first_pending_at'] + deadline_seconds()
+    # The list read omits transcript_segments; debt plus provenance is what Home reads.
+    listed = {key: value for key, value in result.items() if key != 'transcript_segments'}
+    assert home_step.classify(listed) == home_step.WRITING_NOTES
+
+
+def test_projection_does_not_double_stamp_existing_debt():
+    original = recording(
+        summary_first_pending_at=50.0,
+        summary_due_at=170.0,
+        summary_title_provenance='server_minimum',
+        structured={'title_provenance': 'server_minimum'},
+    )
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
+    assert result['summary_first_pending_at'] == 50.0
+    assert result['summary_due_at'] == 170.0
+    assert result['summary_title_provenance'] == 'server_minimum'
+
+
+def test_projection_leaves_titled_rows_untouched():
+    original = recording(structured={'title': 'Synthetic title'})
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
+    assert 'summary_due_at' not in result
+    assert 'summary_first_pending_at' not in result
+    assert result['structured'] == {'title': 'Synthetic title'}
+
+
+def test_projection_leaves_an_existing_summary_untouched():
+    original = recording(summary_completed_at=90.0, summary_output_present=True)
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
+    assert 'summary_due_at' not in result
+    assert 'summary_first_pending_at' not in result
+
+
+def test_projection_debt_kill_switch_off_restores_todays_behavior(monkeypatch):
+    monkeypatch.setenv('SUMMARY_PROJECTION_DEBT_ENABLED', 'false')
+    result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+    assert 'summary_due_at' not in result
+    assert 'summary_first_pending_at' not in result
+    assert 'summary_title_provenance' not in result
+    assert 'structured' not in result
+
+
 @pytest.mark.parametrize(
     'changes',
     [
