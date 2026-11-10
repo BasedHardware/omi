@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 
@@ -149,7 +149,11 @@ def test_operator_tool_refuses_apply_when_kill_switch_is_off(monkeypatch, capsys
 
 def operator_client(monkeypatch):
     client = storage_tests.Client(
-        {('users', UID): {'private_cloud_sync_enabled': True}, storage_tests.PATH: original_row()}
+        {
+            ('users', UID): {'private_cloud_sync_enabled': True},
+            storage_tests.PATH: original_row(),
+            storage_tests.PRIVACY_PATH: {'generation': 7},
+        }
     )
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-encryption-secret-32-characters')
@@ -496,3 +500,38 @@ tool.main(sys.argv[1:])
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)['outcomes'] == ({} if apply else {'would_restore': 0})
+
+
+def test_apply_refuses_privacy_generation_changed_after_reproof(monkeypatch):
+    client = operator_client(monkeypatch)
+    original_snapshot = no_speech._snapshot
+    plan_for(monkeypatch, 'no_speech', speech=0.0, audio=1.0)
+    monkeypatch.setattr(no_speech, '_snapshot', original_snapshot)
+    monkeypatch.setenv('NO_SPEECH_TERMINAL_ENABLED', 'true')
+    store = FakeStore(original_row())
+    store.client = client
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], Mock(), run_id='run-1')
+    before = dict(client.rows[storage_tests.PATH])
+    original_revision = client.revisions[storage_tests.PATH]
+    privacy_read = Mock(return_value=7)
+    monkeypatch.setattr(no_speech, 'privacy_read', privacy_read)
+
+    def revoke_and_reenable(*args):
+        # prepare follows the real _reprove. Consent is enabled again and the
+        # conversation revision is unchanged, but the approval is now stale.
+        privacy_read.assert_called_once_with(ANY, UID, (CID,), expected_generation=7)
+        client.rows[storage_tests.PRIVACY_PATH]['generation'] = 9
+        client.tick(storage_tests.PRIVACY_PATH)
+        return 'prepared-token'
+
+    ledger = Mock()
+    ledger.prepare.side_effect = revoke_and_reenable
+    assert no_speech.apply_no_speech(store, planned, planned['plan_sha256'], Mock(), ledger=ledger) == {
+        'privacy_changed': 1
+    }
+    ledger.prepare.assert_called_once()
+    ledger.committed.assert_not_called()
+    assert client.rows[storage_tests.PATH] == before
+    assert client.revisions[storage_tests.PATH] == original_revision
+    assert all(not txn.has_written for txn in client.transactions)
+    assert client.deletes == []

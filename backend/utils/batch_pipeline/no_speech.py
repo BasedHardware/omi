@@ -281,6 +281,7 @@ def apply_no_speech(store, plan, approved_digest, storage_client, *, ledger, pac
                 uid,
                 cid,
                 expected_revision=entry['revision'],
+                expected_privacy_generation=entry['privacy_generation'],
                 run_id=plan['run_id'],
                 speech_seconds=speech or 0.0,
                 audio_seconds=audio or 0.0,

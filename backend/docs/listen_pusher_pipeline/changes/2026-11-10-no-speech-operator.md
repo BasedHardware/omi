@@ -14,7 +14,11 @@ archive listing alone never proves silence: raw-live listing is checked first.
 A content-derived run identity makes a page's digest reproducible across dry-run
 and apply. Apply rechecks privacy generation, row proof, job absence and VAD
 measurement, then prepares a private mode-0600 fsynced ledger before the L6a
-transaction and records its committed revision. Reports contain counts, closed
+transaction and records its committed revision. The approved privacy generation
+is passed through the lifecycle intent and re-read inside that transaction; a
+revoke/re-enable after measurement refuses with privacy_changed even when the
+current consent fields are enabled. Direct storage callers can omit the optional
+generation fence to retain their consent-only behavior. Reports contain counts, closed
 dispositions and digests only; no identities, object paths, content or audio.
 No conversation row or audio object is deleted. Changed/foreign restores fail.
 
