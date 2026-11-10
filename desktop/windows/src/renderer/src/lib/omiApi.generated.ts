@@ -2577,6 +2577,7 @@ export interface Episode {
   bullets?: Array<string>;
   close_reason?: "user" | "gap" | "idle" | "hard_cap" | "source_change" | "calendar_boundary" | "moved_on" | null;
   closed_at?: string | null;
+  compose_deferred?: boolean;
   conversation_ids?: Array<string>;
   emoji?: string;
   follow_ups?: Array<string>;

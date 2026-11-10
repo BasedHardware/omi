@@ -379,8 +379,11 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 # The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
 # per throttle window, per process.
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
-# One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
-COMPOSER_LEASE_SECONDS = 240
+# Every logical turn permits two 90s provider attempts plus 30s retry/processing
+# headroom. The lease covers all permitted turns plus a final-write margin.
+COMPOSER_MAX_PAID_TURNS = 2  # initial + optional repair; L9 extends this bound
+COMPOSER_CALL_BUDGET_SECONDS = COMPOSER_TIMEOUT_SECONDS * 2 + 30
+COMPOSER_LEASE_SECONDS = COMPOSER_MAX_PAID_TURNS * COMPOSER_CALL_BUDGET_SECONDS + 60
 COMPOSER_SETTLE_SECONDS = 10 * 60
 COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until

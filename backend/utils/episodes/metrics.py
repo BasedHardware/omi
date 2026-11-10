@@ -247,6 +247,7 @@ COMPOSE_OUTCOMES = frozenset(
         'empty',
         'no_episode',
         'superseded',
+        'kept_pending',
         'stale',
         'backoff',
         'conflict',
@@ -284,6 +285,12 @@ EPISODE_COMPOSE_INPUT_TOKENS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_input_tokens_total',
     'Input tokens spent by closed-episode composes, by prompt mode (full|notes_first). Never labeled by uid.',
+    ['mode'],
+)
+EPISODE_COMPOSE_OUTPUT_TOKENS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_output_tokens_total',
+    'Reported billed output tokens on every composer reply, including terminal parse failures.',
     ['mode'],
 )
 EPISODE_COMPOSE_TOOL_CALLS = reuse_or_create(
@@ -521,13 +528,19 @@ def record_compose_call(trigger: str, outcome: str) -> None:
         pass
 
 
-def record_compose_tokens(mode: str, input_tokens: int, tool_calls: int) -> None:
-    """Input tokens and excerpt-tool calls for one paid compose, by prompt mode."""
+def record_compose_reply(mode: str, input_tokens: int, output_tokens: int) -> None:
+    """Reported billed usage on every reply, even if parse/repair later fails."""
     try:
         label = _label(mode, COMPOSE_MODES)
-        if input_tokens > 0:
-            EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode=label).inc(input_tokens)
-        EPISODE_COMPOSE_TOOL_CALLS.labels(mode=label).observe(max(0, int(tool_calls)))
+        EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode=label).inc(max(0, input_tokens))
+        EPISODE_COMPOSE_OUTPUT_TOKENS_TOTAL.labels(mode=label).inc(max(0, output_tokens))
+    except Exception:
+        pass
+
+
+def record_compose_tools(mode: str, tool_calls: int) -> None:
+    try:
+        EPISODE_COMPOSE_TOOL_CALLS.labels(mode=_label(mode, COMPOSE_MODES)).observe(max(0, int(tool_calls)))
     except Exception:
         pass
 

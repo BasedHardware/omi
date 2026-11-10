@@ -72,8 +72,9 @@ class EpisodeProvider extends ChangeNotifier {
             if (episode.live ||
                 (episode.composed &&
                     episode.members
-                            .where((m) =>
-                                !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
+                            .where(
+                              (m) => !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id),
+                            )
                             .length >=
                         2))
               episode.id: episode.members
@@ -106,10 +107,17 @@ class EpisodeProvider extends ChangeNotifier {
       ..removeWhere((id) => !pending.contains(id) && restored.contains(id));
     if (setEquals(hidden, _hiddenHomeMembers)) return;
     _hiddenHomeMembers = hidden;
+    _openedEpisodes.removeWhere((_, episode) => episode.conversationIds.any(hidden.contains));
+    _byConversation.removeWhere((_, episode) => episode?.conversationIds.any(hidden.contains) ?? false);
     notifyListeners();
   }
 
   void invalidateHome() {
+    _openedEpisodes.clear();
+    _byConversation.clear();
+    _cachedAt.clear();
+    _opening.clear();
+    _openTokens.clear();
     _homeHold?.cancel();
     _homeReadingKey = null;
     _homeReadAt = null;
@@ -130,8 +138,13 @@ class EpisodeProvider extends ChangeNotifier {
     return _refreshHome(from, to, force: force, bootstrap: bootstrap);
   }
 
-  Future<bool> _refreshHome(DateTime from, DateTime to,
-      {required bool force, required bool bootstrap, Set<String>? heldIds}) {
+  Future<bool> _refreshHome(
+    DateTime from,
+    DateTime to, {
+    required bool force,
+    required bool bootstrap,
+    Set<String>? heldIds,
+  }) {
     final key = '$_ownerUid|$from|$to|$bootstrap';
     if (!force && key == _homeReadingKey && _homeRead != null) return _homeRead!;
     final read = _readHome(from, to, force: force, bootstrap: bootstrap, heldIds: heldIds);
@@ -145,8 +158,13 @@ class EpisodeProvider extends ChangeNotifier {
     });
   }
 
-  Future<bool> _readHome(DateTime from, DateTime to,
-      {required bool force, required bool bootstrap, Set<String>? heldIds}) async {
+  Future<bool> _readHome(
+    DateTime from,
+    DateTime to, {
+    required bool force,
+    required bool bootstrap,
+    Set<String>? heldIds,
+  }) async {
     if (!_enabled && !bootstrap) return false;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
     if (!force &&
@@ -210,7 +228,7 @@ class EpisodeProvider extends ChangeNotifier {
         ? collected.values.toList()
         : [
             for (final episode in _homeEpisodes)
-              heldIds.contains(episode.id) ? collected[episode.id] ?? episode : episode
+              heldIds.contains(episode.id) ? collected[episode.id] ?? episode : episode,
           ];
     _homeFrom = from;
     _homeTo = to;
@@ -230,8 +248,9 @@ class EpisodeProvider extends ChangeNotifier {
     _homeHold?.cancel();
     final now = _clock();
     final episodeCalls = _homeHoldEpisodeCalls.putIfAbsent(_ownerUid, () => {});
-    final held =
-        _homeEpisodes.where((e) => e.members.length != 1 && (e.awaitingSummary(now) || _homeHeldByProcessingMember(e)));
+    final held = _homeEpisodes.where(
+      (e) => e.members.length != 1 && (e.awaitingSummary(now) || _homeHeldByProcessingMember(e)),
+    );
     final eligible = held.where((e) => (episodeCalls[e.id] ?? 0) < homeHoldAttempts).toList();
     if (eligible.isEmpty || (_homeHoldWindowCalls['$_ownerUid|$key'] ?? 0) >= homeHoldWindowCalls) {
       _homeHoldAttempts = 0;
@@ -345,6 +364,8 @@ class EpisodeProvider extends ChangeNotifier {
     _homeGeneration++;
     _byConversation.clear();
     _openedEpisodes.clear();
+    _opening.clear();
+    _openTokens.clear();
     _cachedAt.clear();
     _lookups.clear();
     _ended.clear();
@@ -567,31 +588,61 @@ class EpisodeProvider extends ChangeNotifier {
   Episode? cachedEpisodeFor(String conversationId) =>
       _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
 
-  /// How long the page waits for a late episode's deferred compose: the server starts it
-  /// on this read and it takes about ten seconds.
   static const openComposePolls = 8;
   static const openComposePollInterval = Duration(seconds: 5);
+  static const openComposeReadTimeout = Duration(seconds: 4);
+  final Map<String, Future<Episode?>> _opening = {};
+  final Map<String, Object> _openTokens = {};
 
-  /// The episode page was opened. The server composes a late episode on this read, so
-  /// fetch it once and, while it is still uncomposed, poll a bounded number of times so
-  /// the composed copy lands on the page without a manual refresh.
-  Future<Episode?> openEpisode(String episodeId) async {
+  /// One read per open, with at most eight more reads only while the server says
+  /// notes are deferred. Concurrent opens coalesce; leaving the page cancels polling.
+  Future<Episode?> openEpisode(String episodeId) {
     _ensureOwner();
+    if (_disposed || episodeId.isEmpty) return Future.value(null);
+    final existing = _opening[episodeId];
+    if (existing != null) return existing;
+    final token = Object();
+    _openTokens[episodeId] = token;
+    final future = _readOpened(episodeId, token).whenComplete(() {
+      if (identical(_openTokens[episodeId], token)) {
+        _opening.remove(episodeId);
+        _openTokens.remove(episodeId);
+      }
+    });
+    _opening[episodeId] = future;
+    return future;
+  }
+
+  void cancelOpenEpisode(String episodeId) {
+    _openTokens.remove(episodeId);
+    _opening.remove(episodeId);
+  }
+
+  Future<Episode?> _readOpened(String episodeId, Object token) async {
     final uid = _ownerUid;
-    if (episodeId.isEmpty) return null;
-    final first = await _detail(episodeId);
-    if (_disposed || uid != SharedPreferencesUtil().uid) return null;
-    if (first is! ApiSuccess<Episode>) return null;
-    var episode = first.data;
-    _mergeOpened(episode);
-    for (var attempt = 0; attempt < openComposePolls && !episode.live && !episode.composed; attempt++) {
-      await Future<void>.delayed(openComposePollInterval);
-      if (_disposed || uid != SharedPreferencesUtil().uid) return null;
-      final next = await _detail(episodeId);
-      if (_disposed || uid != SharedPreferencesUtil().uid) return null;
-      if (next is! ApiSuccess<Episode>) return episode;
-      episode = next.data;
+    bool active() => !_disposed && uid == SharedPreferencesUtil().uid && identical(_openTokens[episodeId], token);
+    final deadline = _clock().add(const Duration(seconds: 45));
+    Episode? episode;
+    for (var attempt = 0; attempt <= openComposePolls && active(); attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(openComposePollInterval);
+        if (!active() || !_clock().isBefore(deadline)) break;
+      }
+      ApiResult<Episode> result;
+      try {
+        final remaining = deadline.difference(_clock());
+        if (remaining <= Duration.zero) break;
+        result = await _detail(
+          episodeId,
+        ).timeout(remaining < openComposeReadTimeout ? remaining : openComposeReadTimeout);
+      } on TimeoutException {
+        break;
+      }
+      if (!active()) return null;
+      if (result is! ApiSuccess<Episode>) break;
+      episode = result.data;
       _mergeOpened(episode);
+      if (episode.live || !episode.composeDeferred) break;
     }
     return episode;
   }
@@ -604,7 +655,6 @@ class EpisodeProvider extends ChangeNotifier {
       _byConversation[id] = episode;
       _cachedAt[id] = _clock();
     }
-    _homeEpisodes = [for (final e in _homeEpisodes) e.id == episode.id ? episode : e];
     notifyListeners();
   }
 

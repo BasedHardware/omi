@@ -86,6 +86,8 @@ class Episode(BaseModel):
     bullets: list[str] = Field(default_factory=list)
     # Composed episodes: one or two sentences above the moments; empty for the live running state.
     lede: str = ''
+    # Explicit server signal: only deferred notes warrant bounded detail polling.
+    compose_deferred: bool = False
     # Composed episodes: next steps someone committed to, as written by the composer.
     follow_ups: list[str] = Field(default_factory=list)
     people: list[str] = Field(default_factory=list)

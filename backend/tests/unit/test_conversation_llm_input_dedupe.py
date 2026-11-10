@@ -395,3 +395,18 @@ def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, f
     old = dedupe._fingerprint(feature, inputs, LEGACY_IMPLEMENTATIONS[feature][0])
     monkeypatch.setattr(dedupe, 'routing_digest', lambda: 'new-model-route')
     assert not dedupe._matches(old, feature, inputs, dedupe.fingerprint(feature, inputs))
+
+
+def test_additive_gist_does_not_rebuy_a_stable_l8a_checkpoint(enabled, monkeypatch):
+    from models.structured import Structured
+
+    original = dedupe.implementation_digest
+    monkeypatch.setattr(dedupe, 'implementation_digest', lambda _: f'notes-1:{dedupe.routing_digest()}')
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored notes'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': generate.return_value.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    monkeypatch.setattr(dedupe, 'implementation_digest', original)
+    assert dedupe.notes('u', enabled, 'unchanged', generate, {}).overview == 'Useful stored notes'
+    assert generate.call_count == 1

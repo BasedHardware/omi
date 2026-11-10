@@ -50,6 +50,8 @@ from config.episodes import (
     episode_compose_settle_enabled,
     episode_compose_keep_paid_enabled,
     COMPOSER_LEASE_SECONDS,
+    COMPOSER_CALL_BUDGET_SECONDS,
+    COMPOSER_MAX_PAID_TURNS,
     COMPOSER_MAX_FAILURES,
     COMPOSER_MAX_PAID_FAILURES,
     COMPOSER_MAX_DETAILS,
@@ -158,12 +160,12 @@ def fingerprint(members: Sequence[Mapping[str, Any]]) -> str:
                 s.get('speaker'),
                 s.get('person_id'),
                 s.get('person_name'),
+                s.get('id'),
+                s.get('end'),
             )
             for s in _segments(row)
         ]
-        evidence = json.dumps(
-            [structured.get('title'), structured.get('overview'), items, speech], default=str, ensure_ascii=False
-        )
+        evidence = json.dumps([structured, items, speech, _origin(row), _span(row)], default=str, ensure_ascii=False)
         parts.append([str(row.get('id')), hashlib.sha256(evidence.encode()).hexdigest()[:24]])
     raw = json.dumps([COMPOSER_VERSION, parts], separators=(',', ':'))
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
@@ -336,7 +338,11 @@ def _recorded_seconds(members: Sequence[Mapping[str, Any]]) -> float:
 
 
 def _short_episode(members: Sequence[Mapping[str, Any]]) -> bool:
-    return _recorded_seconds(members) <= COMPOSER_SHORT_EPISODE_SECONDS
+    return (
+        bool(members)
+        and all(all(_span(row)) for row in members)
+        and _recorded_seconds(members) <= COMPOSER_SHORT_EPISODE_SECONDS
+    )
 
 
 def parse(content: str) -> dict[str, Any]:
@@ -606,12 +612,11 @@ def _section_offsets(member: Mapping[str, Any], sections: Sequence[Mapping[str, 
 
 def has_notes(member: Mapping[str, Any]) -> bool:
     """Whether a member's own notes can stand in for a composed episode."""
-    structured = member.get('structured') or {}
-    return bool(
-        str(structured.get('title') or '').strip()
-        or str(structured.get('overview') or '').strip()
-        or structured.get('sections')
-    )
+    return _readable_body(single_member_updates(member))
+
+
+def _readable_body(state: Mapping[str, Any]) -> bool:
+    return bool(str(state.get('lede') or '').strip() or any(m.get('points') for m in state.get('moments') or []))
 
 
 def single_member_updates(member: Mapping[str, Any]) -> dict[str, Any]:
@@ -783,7 +788,9 @@ def _write(
     return outcome
 
 
-def _record_failure(uid: str, episode_id: str, c: Any, print_: str, *, count: int = 1) -> None:
+def _record_failure(
+    uid: str, episode_id: str, c: Any, print_: str, *, count: int = 1, lease_token: str | None = None
+) -> None:
     """Back off after failed paid attempts. The count is per evidence: new evidence starts at one.
 
     ``count`` is the number of paid calls this attempt burned (a parse failure plus its
@@ -802,17 +809,28 @@ def _record_failure(uid: str, episode_id: str, c: Any, print_: str, *, count: in
                 ),
                 'compose_failed_fingerprint': print_,
                 'compose_failed_at': datetime.now(timezone.utc),
-                **_release(current, print_),
+                **_release(current, print_, lease_token),
             },
+            guard=lambda current: (
+                'superseded'
+                if lease_token is not None and (current.get('compose_lease') or {}).get('token') != lease_token
+                else None
+            ),
         )
     except Exception:
         pass
 
 
-def _release(current: Mapping[str, Any], print_: str) -> dict[str, Any]:
+def _release(current: Mapping[str, Any], print_: str, lease_token: str | None = None) -> dict[str, Any]:
     """Clear the lease only if it is still ours; a newer compose's lease stays."""
     lease = current.get('compose_lease')
-    return {'compose_lease': None} if isinstance(lease, Mapping) and lease.get('fingerprint') == print_ else {}
+    return (
+        {'compose_lease': None}
+        if isinstance(lease, Mapping)
+        and lease.get('fingerprint') == print_
+        and (lease_token is None or lease.get('token') == lease_token)
+        else {}
+    )
 
 
 def _max_failures() -> int:
@@ -888,7 +906,9 @@ def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
     """
     if not episode_late_compose_enabled() or not episode_composer_enabled():
         return False
-    if not is_late(episode) or episode.get('composed_fingerprint'):
+    if not is_late(episode):
+        return False
+    if episode.get('composed_fingerprint') and not needs_compose(episode, opened=True):
         return False
     if is_deferred(episode):
         return True
@@ -904,16 +924,28 @@ def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
             **({'title': fallback} if fallback else {}),
         }
 
-    if (
-        _write(
+    try:
+        result = _write(
             uid,
             str(episode['id']),
             c,
             stamp,
-            guard=lambda current: 'unchanged' if current.get('composed_fingerprint') else None,
+            guard=lambda current: (
+                'unchanged' if current.get('composed_fingerprint') != episode.get('composed_fingerprint') else None
+            ),
         )
-        != 'written'
-    ):
+    except Exception as error:
+        logger.warning('event=episode_compose_defer outcome=error exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversation_notes',
+            from_mode='episode_compose_deferred',
+            to_mode='episode_compose_immediate',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
+    if result != 'written':
         return False
     metrics.record_compose_trigger_skipped('late_deferred')
     return True
@@ -945,7 +977,7 @@ def schedule_after_close(
 
 def schedule_opened(uid: str, episode: Optional[Mapping[str, Any]], *, collaborators: Any = None) -> bool:
     """The episode page was opened: a deferred late episode composes now, at most once per window."""
-    if not episode or policy.is_live(episode):
+    if not episode_late_compose_enabled() or not is_deferred(episode) or not episode or policy.is_live(episode):
         return False
     if not needs_compose(episode, opened=True):
         return False
@@ -1029,7 +1061,14 @@ def _compose(
         _write(uid, episode_id, c, stamp)
         return 'empty'
     print_ = fingerprint(members)
-    if episode_compose_settle_enabled() and not force and _trigger_unchanged(episode, _evidence(members)):
+    single = episode_single_member_compose_enabled() and len(members) == 1
+    if (
+        episode_compose_settle_enabled()
+        and not force
+        and _trigger_unchanged(episode, _evidence(members))
+        and _readable_body(episode)
+        and (not single or episode.get('composed_fingerprint') == print_)
+    ):
         metrics.record_compose_trigger_skipped('evidence_unchanged')
         if episode.get('compose_pending_since'):
             _write(uid, episode_id, c, _trigger_stamp(episode, members))
@@ -1039,13 +1078,14 @@ def _compose(
         and episode.get('composed_fingerprint') == print_
         and episode.get('composed_notes') == notes_hash(episode)
         and not episode.get('summary_needs_regeneration')
+        and _readable_body(episode)
     ):
         if episode.get('compose_pending_since') or (
             episode_compose_settle_enabled() and episode.get('composed_evidence') is None
         ):
             _write(uid, episode_id, c, _trigger_stamp(episode, members))
         return 'unchanged'
-    if episode_single_member_compose_enabled() and len(members) == 1 and has_notes(members[0]):
+    if single and has_notes(members[0]):
         # No model call, so no lease, settle window or failure backoff: the notes are already paid for.
         return _write_single_member(uid, episode_id, c, episode, members, print_, member_ids)
     if not force and _backed_off(episode, print_):
@@ -1076,13 +1116,19 @@ def _compose(
 
     # One paid call per evidence across replicas: claim a short lease for this fingerprint.
     now = datetime.now(timezone.utc)
+    lease_token = uuid4().hex
+    lease_until = now + timedelta(seconds=COMPOSER_LEASE_SECONDS)
 
     def lease_guard(current: Mapping[str, Any]) -> Optional[str]:
         lease = current.get('compose_lease') or {}
         until = _utc(lease.get('until')) if isinstance(lease, Mapping) else None
         if until and until > now and lease.get('fingerprint') == print_ and not force:
             return 'leased'
-        if current.get('composed_fingerprint') == print_ and current.get('composed_notes') == notes_hash(current):
+        if (
+            current.get('composed_fingerprint') == print_
+            and current.get('composed_notes') == notes_hash(current)
+            and _readable_body(current)
+        ):
             return 'unchanged' if not force else None
         return None
 
@@ -1090,7 +1136,7 @@ def _compose(
         uid,
         episode_id,
         c,
-        {'compose_lease': {'fingerprint': print_, 'until': now + timedelta(seconds=COMPOSER_LEASE_SECONDS)}},
+        {'compose_lease': {'fingerprint': print_, 'token': lease_token, 'until': lease_until}},
         guard=lease_guard,
     )
     if claimed != 'written':
@@ -1107,35 +1153,44 @@ def _compose(
     mode = 'full'
     keep_paid = episode_compose_keep_paid_enabled()
     call_started = datetime.now(timezone.utc)
-    input_tokens = output_tokens = tool_calls = paid_failures = paid_calls = 0
+    input_tokens = output_tokens = tool_calls = paid_calls = 0
     repaired = False
 
-    def call(trigger_label: str, payload: list[Any], **kwargs: Any) -> Any:
+    def call(payload: list[Any], **kwargs: Any) -> Any:
         nonlocal input_tokens, output_tokens, paid_calls
+        # Do not start a turn unless both provider attempts fit inside our claim.
+        if (
+            paid_calls >= COMPOSER_MAX_PAID_TURNS
+            or datetime.now(timezone.utc) + timedelta(seconds=COMPOSER_CALL_BUDGET_SECONDS) > lease_until
+        ):
+            raise ComposeFailed('compose_deadline')
+        current = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or {}
+        if (current.get('compose_lease') or {}).get('token') != lease_token:
+            raise ComposeFailed('lease_lost')
         paid_calls += 1
         reply_ = invoke(uid, payload, **kwargs)
         call_input, call_output = _usage(reply_)
         input_tokens += call_input
         output_tokens += call_output
+        metrics.record_compose_reply(mode, call_input, call_output)
         return reply_
 
     def parse_or_repair(reply_: Any) -> dict[str, Any]:
-        nonlocal repaired, paid_failures
+        nonlocal repaired
         content = _content(reply_)
         try:
             return parse(content)
         except ComposeFailed as error:
             if not keep_paid or str(error) != 'parse_error':
                 raise
-            paid_failures = 1
             metrics.record_compose_call(trigger, 'parse_error')
             repaired = True
-            return parse(_content(call('repair', build_repair_messages(content))))
+            return parse(_content(call(build_repair_messages(content))))
 
     try:
-        reply = call(trigger, build_messages(named, owner=owner, tz=tz, language=language))
+        reply = call(build_messages(named, owner=owner, tz=tz, language=language))
         data = parse_or_repair(reply)
-        metrics.record_compose_tokens(mode, input_tokens, tool_calls)
+        metrics.record_compose_tools(mode, tool_calls)
         times = {str(row['id']): speech_times(row) for row in members}
         spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
         composed = to_updates(data, members, tz, spans, times)
@@ -1146,23 +1201,28 @@ def _compose(
                 raise ComposeFailed('no_sections')
     except ComposeFailed as error:
         metrics.record_compose_call('repair' if repaired else trigger, str(error))
-        _record_failure(uid, episode_id, c, print_, count=max(1, paid_failures + 1))
+        _record_failure(uid, episode_id, c, print_, count=max(1, paid_calls), lease_token=lease_token)
         raise
     except Exception:
         metrics.record_compose_call('repair' if repaired else trigger, 'error')
-        _record_failure(uid, episode_id, c, print_, count=max(1, paid_failures + 1))
+        _record_failure(uid, episode_id, c, print_, count=max(1, paid_calls), lease_token=lease_token)
         raise
     metrics.record_compose_call('repair' if repaired else trigger, 'ok')
 
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
     # membership change since then makes this result stale; its own trigger composes again.
-    fresh_state, fresh = _members(
-        uid, episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode, c
-    )
+    fresh_episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
+    fresh_state, fresh = _members(uid, fresh_episode, c)
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
-    removed_member = bool(set(member_ids) - {str(row['id']) for row in fresh})
+    removed_member = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
+    # Waiting members collapse _members to []; check visibility of the original
+    # paid set separately so an actual removal/hidden member still cannot leak.
+    for cid in member_ids:
+        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
+            removed_member = True
     if superseded and (not keep_paid or removed_member):
-        _write(uid, episode_id, c, lambda current: _release(current, print_))
+        _write(uid, episode_id, c, lambda current: _release(current, print_, lease_token))
         return 'superseded'
 
     kept_pending = {'value': superseded}
@@ -1186,20 +1246,24 @@ def _compose(
             'compose_failures': 0,
             # The deferral is one-shot: a later arrival defers again on its own.
             'compose_deferred_at': None,
-            **_release(current, print_),
+            **_release(current, print_, lease_token),
         }
         membership_changed = sorted(_retained_ids(current)) != sorted(_retained_ids(episode))
         if superseded or membership_changed:
             # Keep the paid result and mark the episode pending: a settled compose refreshes it
             # with the evidence that arrived during the call instead of throwing this one away.
             kept_pending['value'] = True
-            payload['compose_pending_since'] = current.get('compose_pending_since') or call_started
+            payload['compose_pending_since'] = call_started
             payload['compose_activity_at'] = call_started
             payload['compose_pending_evidence'] = _evidence(fresh) if fresh_state == 'ok' else None
             payload['compose_pending_membership'] = sorted(_retained_ids(current))
         return payload
 
     def finish_guard(current: Mapping[str, Any]) -> Optional[str]:
+        if (current.get('compose_lease') or {}).get('token') != lease_token or datetime.now(
+            timezone.utc
+        ) >= lease_until:
+            return 'superseded'
         if set(member_ids) - set(_retained_ids(current)):
             return 'superseded'
         if superseded:
@@ -1221,13 +1285,16 @@ def _compose(
             guard=finish_guard,
         )
     if written in {'conflict', 'refused'}:
-        _record_failure(uid, episode_id, c, print_)
+        _record_failure(uid, episode_id, c, print_, lease_token=lease_token)
         return 'conflict'
     if written != 'written':
-        _write(uid, episode_id, c, lambda current: _release(current, print_))
+        _write(uid, episode_id, c, lambda current: _release(current, print_, lease_token))
         return written
     if kept_pending['value']:
-        # The paid result is stored and the episode is pending; the settle timer refreshes it.
+        # Retain the paid result and let the quiet-window timer refresh it.
+        if episode_compose_settle_enabled():
+            _defer(uid, episode_id, c, COMPOSER_SETTLE_SECONDS)
+            return 'kept_pending'
         return 'superseded'
     # A transcript change that landed between the evidence re-read and the write: compose again.
     after_state, after = _members(
@@ -1247,6 +1314,7 @@ def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, An
         'compose_activity_at': None,
         'compose_pending_evidence': None,
         'compose_pending_membership': None,
+        'compose_deferred_at': None,
     }
 
 
@@ -1449,11 +1517,11 @@ def schedule(
                         },
                     )
                 with _inflight_lock:
-                    again = key in _rerun or outcome in {'stale', 'superseded'}
+                    again = outcome != 'kept_pending' and (key in _rerun or outcome in {'stale', 'superseded'})
                     _rerun.discard(key)
                     foreground = foreground or key in _foreground
                     _foreground.discard(key)
-                    if outcome != 'settling':
+                    if outcome not in {'settling', 'kept_pending'}:
                         _deferred.pop(key, None)
                 if outcome == 'settling' and not foreground:
                     break
@@ -1464,7 +1532,9 @@ def schedule(
                 # A read/finalize can arrive after the loop decides to stop but before it releases
                 # inflight ownership. Hand it off instead of dropping its promotion until the timer.
                 enabled = episode_compose_settle_enabled()
-                promote = enabled and (key in _foreground or (foreground and key in _deferred))
+                promote = (
+                    enabled and outcome != 'kept_pending' and (key in _foreground or (foreground and key in _deferred))
+                )
                 reschedule = enabled and (key in _rerun or promote)
                 if promote:
                     _deferred[key] = (time.monotonic(), collaborators)
@@ -1531,6 +1601,13 @@ def schedule_for_conversation(
                         else episode.get('composed_membership')
                     )
                     changed = evidence != baseline or membership != sorted(_retained_ids(episode))
+                    if (
+                        member
+                        and episode_single_member_compose_enabled()
+                        and _retained_ids(episode) == [conversation_id]
+                    ):
+                        named_member = {**member, 'id': conversation_id, 'transcript_segments': _named(uid, member, c)}
+                        changed = changed or fingerprint([named_member]) != episode.get('composed_fingerprint')
                     if not changed and not needs_compose(episode):
                         metrics.record_compose_trigger_skipped('evidence_unchanged')
                         return

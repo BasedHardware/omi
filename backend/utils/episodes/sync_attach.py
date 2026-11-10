@@ -122,6 +122,9 @@ def attach(
                     return recovered
                 if recovered in {'applied', 'skipped_applied'} and not absorbed_from:
                     episode_attach_memo.complete(uid, conversation_id, row, owner, firestore_client=c.firestore_client)
+            from utils.episodes import late_member
+
+            late_member.joined(uid, conversation_id, row, owner, c)
             return outcome
         except episodes_db.EpisodeConflict:
             if attempt == 2:

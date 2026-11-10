@@ -286,3 +286,90 @@ def _reply():
         'people': [],
     }
     return SimpleNamespace(content=json.dumps(data), usage_metadata={'input_tokens': 100, 'output_tokens': 20})
+
+
+@pytest.mark.parametrize(
+    'change', ['sections', 'gist', 'participants', 'emoji', 'action_status', 'span', 'segment_end', 'segment_id']
+)
+def test_shortcut_fingerprint_covers_every_read_field(store, change):
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed_single'
+    old = store.episode['composed_fingerprint']
+    row = store.rows['c1']
+    structured = row['structured']
+    if change == 'sections':
+        structured['sections'][0]['body_markdown'] = '- A corrected launch decision.'
+    elif change == 'gist':
+        structured['gist'] = 'A corrected gist'
+    elif change == 'participants':
+        structured['participants'][0]['name'] = 'David'
+    elif change == 'emoji':
+        structured['emoji'] = '🛠️'
+    elif change == 'action_status':
+        structured['action_items'][0]['completed'] = True
+    elif change == 'span':
+        row['recorded_end'] += timedelta(minutes=1)
+        row['finished_at'] += timedelta(minutes=1)
+    elif change == 'segment_end':
+        row['transcript_segments'][1]['end'] += 1
+    else:
+        row['transcript_segments'][0]['id'] = 'replacement-id'
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed_single'
+    assert store.episode['composed_fingerprint'] != old
+
+
+def test_title_only_notes_use_paid_composer_and_later_body_refreshes(store):
+    store.rows['c1']['structured'] = {'title': 'Title alone'}
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert store.episode['lede'] and len(calls) == 1
+    store.rows['c1']['structured']['gist'] = 'Now a readable summary'
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed_single'
+    assert store.episode['lede'] == 'Now a readable summary'
+
+
+def test_member_final_gist_only_change_refreshes_the_shortcut(store, monkeypatch):
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed_single'
+    store.rows['c1']['structured']['gist'] = 'A later corrected gist'
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **k: store.episode)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    composer.schedule_for_conversation(UID, 'c1', collaborators=_c(), row=store.rows['c1'])
+    assert store.episode['lede'] == 'A later corrected gist'
+
+
+def test_an_old_title_only_empty_compose_is_repaired_without_input_change(store):
+    store.rows['c1']['structured'] = {'title': 'Title alone'}
+    store.episode.update(
+        composed_fingerprint=composer.fingerprint(list(store.rows.values())),
+        composed_notes=composer.notes_hash(store.episode),
+    )
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert store.episode['lede'] and len(calls) == 1
+
+
+def test_refused_member_activity_retries_only_the_window_field(store, monkeypatch):
+    real_write = store.update_episode
+    attempts = []
+
+    def write(*args, **kwargs):
+        attempts.append(kwargs['updates'])
+        if 'member_activity' in kwargs['updates']:
+            raise composer.episodes_db.EpisodeConflict('member_window_refused')
+        return real_write(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', write)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed_single'
+    assert len(attempts) == 4
+    assert all('member_activity' in update for update in attempts[:3])
+    assert 'member_activity' not in attempts[-1]
+    assert store.episode['lede'] and store.episode['moments']

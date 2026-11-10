@@ -40,12 +40,13 @@ void main() {
   test('Home collects every page, including empty filtered pages, before publishing membership', () async {
     final cursorCalls = <String?>[];
     final lastPage = Completer<ApiResult<EpisodePageRead>>();
-    final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) async {
-      cursorCalls.add(cursor);
-      if (cursor == null) return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'page-2'));
-      return lastPage.future;
-    })
-      ..debugSetLive(null);
+    final provider = EpisodeProvider(
+      fetchPage: (from, to, {cursor}) async {
+        cursorCalls.add(cursor);
+        if (cursor == null) return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'page-2'));
+        return lastPage.future;
+      },
+    )..debugSetLive(null);
     addTearDown(provider.dispose);
     final reading = provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
     await Future<void>.delayed(Duration.zero);
@@ -61,11 +62,12 @@ void main() {
   test('unfinished Home requests coalesce without treating the window as cached', () async {
     var calls = 0;
     final page = Completer<ApiResult<EpisodePageRead>>();
-    final provider = EpisodeProvider(fetchPage: (_, __, {cursor}) {
-      calls++;
-      return page.future;
-    })
-      ..debugSetLive(null);
+    final provider = EpisodeProvider(
+      fetchPage: (_, __, {cursor}) {
+        calls++;
+        return page.future;
+      },
+    )..debugSetLive(null);
     addTearDown(provider.dispose);
     final first = provider.refreshHome(_t0, _t0);
     final second = provider.refreshHome(_t0, _t0);
@@ -97,7 +99,12 @@ void main() {
         conversationIds: const ['a', 'b'],
         moments: [
           EpisodeMoment(
-              id: 'm', conversationId: 'a', startedAt: _t0, endedAt: _t0, points: const [EpisodePoint('Point')])
+            id: 'm',
+            conversationId: 'a',
+            startedAt: _t0,
+            endedAt: _t0,
+            points: const [EpisodePoint('Point')],
+          ),
         ],
       );
       final provider = EpisodeProvider(
@@ -206,11 +213,12 @@ void main() {
         final history = _HomeHistory()
           ..processingConversations = [
             ServerConversation(
-                id: 'a',
-                createdAt: _t0,
-                startedAt: _t0,
-                status: ConversationStatus.processing,
-                structured: Structured('', '')),
+              id: 'a',
+              createdAt: _t0,
+              startedAt: _t0,
+              status: ConversationStatus.processing,
+              structured: Structured('', ''),
+            ),
           ];
         Episode pending(String id) => Episode(
               id: id,
@@ -226,7 +234,8 @@ void main() {
           fetchPage: (from, to, {cursor}) async {
             reads++;
             return ApiSuccess(
-                EpisodePageRead(enabled: true, episodes: [pending('ep1'), if (includeSecond) pending('ep2')]));
+              EpisodePageRead(enabled: true, episodes: [pending('ep1'), if (includeSecond) pending('ep2')]),
+            );
           },
         )..debugSetLive(null);
         provider.observeHomeConversations(history);
@@ -255,15 +264,21 @@ void main() {
           clock: () => _t0,
           fetchPage: (from, to, {cursor}) async {
             reads++;
-            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [
-              Episode(
-                  id: episodeId,
-                  live: false,
-                  startedAt: _t0,
-                  lastActivityAt: _t0,
-                  closedAt: _t0,
-                  conversationIds: const ['a', 'b']),
-            ]));
+            return ApiSuccess(
+              EpisodePageRead(
+                enabled: true,
+                episodes: [
+                  Episode(
+                    id: episodeId,
+                    live: false,
+                    startedAt: _t0,
+                    lastActivityAt: _t0,
+                    closedAt: _t0,
+                    conversationIds: const ['a', 'b'],
+                  ),
+                ],
+              ),
+            );
           },
         )..debugSetLive(null);
         for (final id in ['ep1', 'ep2', 'ep3']) {
@@ -299,11 +314,12 @@ void main() {
               moments: id == 'ep2' && calls.length >= 5
                   ? [
                       EpisodeMoment(
-                          id: 'm',
-                          conversationId: 'a',
-                          startedAt: _t0,
-                          endedAt: _t0,
-                          points: const [EpisodePoint('Notes landed')]),
+                        id: 'm',
+                        conversationId: 'a',
+                        startedAt: _t0,
+                        endedAt: _t0,
+                        points: const [EpisodePoint('Notes landed')],
+                      ),
                     ]
                   : const [],
             );
@@ -312,7 +328,11 @@ void main() {
           fetchPage: (from, to, {cursor}) async {
             calls.add(cursor);
             return ApiSuccess(switch (cursor) {
-              null => EpisodePageRead(enabled: true, episodes: [_episode(id: 'live')], nextCursor: 'page-2'),
+              null => EpisodePageRead(
+                  enabled: true,
+                  episodes: [_episode(id: 'live')],
+                  nextCursor: 'page-2',
+                ),
               'page-2' => EpisodePageRead(enabled: true, episodes: [pending('ep2')], nextCursor: 'page-3'),
               _ => EpisodePageRead(enabled: true, episodes: [pending('ep3')]),
             });
@@ -325,10 +345,16 @@ void main() {
         expect(provider.homeEpisodes.map((e) => e.id), ['live', 'ep2', 'ep3']);
         expect(provider.homeEpisodes.singleWhere((e) => e.id == 'ep2').composed, isTrue);
         async.elapse(const Duration(hours: 2));
-        expect(calls.length, 3 + EpisodeProvider.homeHoldAttempts,
-            reason: '10 extra backend calls, not 10 full-window scans');
-        expect(calls.where((c) => c == 'page-3').length, 4,
-            reason: 'older held episodes remain reachable; the last retry stops when its call budget runs out');
+        expect(
+          calls.length,
+          3 + EpisodeProvider.homeHoldAttempts,
+          reason: '10 extra backend calls, not 10 full-window scans',
+        );
+        expect(
+          calls.where((c) => c == 'page-3').length,
+          4,
+          reason: 'older held episodes remain reachable; the last retry stops when its call budget runs out',
+        );
         expect(provider.homeEpisodes.map((e) => e.id), ['live', 'ep2', 'ep3']);
         provider.dispose();
         async.flushTimers();
@@ -343,7 +369,15 @@ void main() {
           wrapUp: (_, {conversationId}) async => ApiSuccess(_episode(id: 'ep2', live: false)),
           fetchPage: (from, to, {cursor}) async {
             reads++;
-            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting, _episode(id: 'ep2')]));
+            return ApiSuccess(
+              EpisodePageRead(
+                enabled: true,
+                episodes: [
+                  waiting,
+                  _episode(id: 'ep2'),
+                ],
+              ),
+            );
           },
         )..debugSetLive(_episode(id: 'ep2'));
         unawaited(provider.refreshHome(_t0, _t0));
@@ -383,11 +417,12 @@ void main() {
           moments: composed
               ? [
                   EpisodeMoment(
-                      id: 'm',
-                      conversationId: 'c1',
-                      startedAt: _t0,
-                      endedAt: _t0,
-                      points: const [EpisodePoint('Picked a trail')])
+                    id: 'm',
+                    conversationId: 'c1',
+                    startedAt: _t0,
+                    endedAt: _t0,
+                    points: const [EpisodePoint('Picked a trail')],
+                  ),
                 ]
               : const [],
         );
@@ -518,9 +553,16 @@ void main() {
 
   test('a failed later page preserves the last complete Home snapshot', () async {
     final provider = EpisodeProvider(
-        fetchPage: (from, to, {cursor}) async => cursor == null
-            ? ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(id: 'partial')], nextCursor: 'next'))
-            : const ApiFailure(ApiProblem(ApiProblemKind.transport)))
+      fetchPage: (from, to, {cursor}) async => cursor == null
+          ? ApiSuccess(
+              EpisodePageRead(
+                enabled: true,
+                episodes: [_episode(id: 'partial')],
+                nextCursor: 'next',
+              ),
+            )
+          : const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+    )
       ..debugSetLive(null)
       ..debugSetHomeEpisodes([_episode(id: 'complete', live: false)]);
     addTearDown(provider.dispose);
@@ -533,16 +575,16 @@ void main() {
       var calls = 0;
       var incomplete = false;
       final provider = EpisodeProvider(
-          clock: () => _t0,
-          fetchPage: (from, to, {cursor}) async {
-            calls++;
-            if (incomplete) {
-              if (failure == 'failed page') return const ApiFailure(ApiProblem(ApiProblemKind.transport));
-              return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'repeat'));
-            }
-            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)]));
-          })
-        ..debugSetLive(null);
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async {
+          calls++;
+          if (incomplete) {
+            if (failure == 'failed page') return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+            return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'repeat'));
+          }
+          return ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)]));
+        },
+      )..debugSetLive(null);
       addTearDown(provider.dispose);
       await provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
       incomplete = true;
@@ -558,9 +600,9 @@ void main() {
   test('Home acknowledges only fetched live episode snapshots', () async {
     final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));
     final history = _HomeHistory()..conversations = [member];
-    final episodes =
-        EpisodeProvider(fetchPage: (_, __, {cursor}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)))
-          ..debugSetLive(null);
+    final episodes = EpisodeProvider(
+      fetchPage: (_, __, {cursor}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+    )..debugSetLive(null);
     addTearDown(history.dispose);
     addTearDown(episodes.dispose);
     episodes.observeHomeConversations(history);
@@ -568,12 +610,13 @@ void main() {
     expect(history.heldHomeEpisodes!(), isEmpty, reason: 'failed or missing snapshot never grants suppression');
     episodes.debugSetHomeEpisodes([
       Episode(
-          id: 'live',
-          live: true,
-          startedAt: _t0,
-          lastActivityAt: _t0,
-          conversationIds: const ['c1'],
-          members: [member]),
+        id: 'live',
+        live: true,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        conversationIds: const ['c1'],
+        members: [member],
+      ),
     ]);
     expect(history.heldHomeEpisodes!().keys, ['live']);
     expect(history.heldHomeEpisodes!()['live']!.single.id, 'c1');
@@ -885,6 +928,7 @@ void main() {
   test('opening an uncomposed episode reads it once and folds the composed copy in', () {
     fakeAsync((async) {
       final waiting = Episode(
+        composeDeferred: true,
         id: 'ep1',
         live: false,
         startedAt: _t0,
@@ -901,7 +945,12 @@ void main() {
         conversationIds: const ['a', 'b'],
         moments: [
           EpisodeMoment(
-              id: 'm', conversationId: 'a', startedAt: _t0, endedAt: _t0, points: const [EpisodePoint('Point')])
+            id: 'm',
+            conversationId: 'a',
+            startedAt: _t0,
+            endedAt: _t0,
+            points: const [EpisodePoint('Point')],
+          ),
         ],
       );
       final reads = <String>[];
@@ -925,7 +974,8 @@ void main() {
       async.flushMicrotasks();
       expect(reads, ['ep1', 'ep1']);
       expect(opened?.composed, isTrue);
-      expect(provider.homeEpisodes.single.composed, isTrue, reason: 'the composed copy reaches the page');
+      expect(provider.openedEpisode('ep1')?.composed, isTrue, reason: 'the composed detail reaches the page');
+      expect(provider.homeEpisodes.single.composed, isFalse, reason: 'Home retains its filtered list projection');
       provider.dispose();
       async.flushTimers();
     });
@@ -942,7 +992,12 @@ void main() {
         conversationIds: const ['a', 'b'],
         moments: [
           EpisodeMoment(
-              id: 'm', conversationId: 'a', startedAt: _t0, endedAt: _t0, points: const [EpisodePoint('Point')])
+            id: 'm',
+            conversationId: 'a',
+            startedAt: _t0,
+            endedAt: _t0,
+            points: const [EpisodePoint('Point')],
+          ),
         ],
       );
       var reads = 0;
@@ -966,19 +1021,21 @@ void main() {
   });
   test('a lede-only detail compose is settled and cached outside Home', () async {
     final done = Episode(
-        id: 'detail',
-        live: false,
-        startedAt: _t0,
-        lastActivityAt: _t0,
-        title: 'Short notes',
-        lede: 'A brief planning conversation',
-        conversationIds: const ['c1']);
+      id: 'detail',
+      live: false,
+      startedAt: _t0,
+      lastActivityAt: _t0,
+      title: 'Short notes',
+      lede: 'A brief planning conversation',
+      conversationIds: const ['c1'],
+    );
     var reads = 0;
-    final provider = EpisodeProvider(detail: (_) async {
-      reads++;
-      return ApiSuccess(done);
-    })
-      ..debugSetLive(null);
+    final provider = EpisodeProvider(
+      detail: (_) async {
+        reads++;
+        return ApiSuccess(done);
+      },
+    )..debugSetLive(null);
     addTearDown(provider.dispose);
     final result = await provider.openEpisode('detail');
     expect(result?.composed, isTrue);
@@ -994,5 +1051,86 @@ void main() {
     provider.dispose();
     response.complete(ApiSuccess(_episode(id: 'detail', live: false)));
     expect(await reading, isNull);
+  });
+  test('a normal processing episode has one detail read and no compose poll', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final provider = EpisodeProvider(
+        detail: (_) async {
+          reads++;
+          return ApiSuccess(_episode(id: 'normal', live: false));
+        },
+      )..debugSetLive(null);
+      unawaited(provider.openEpisode('normal'));
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 2));
+      expect(reads, 1);
+      provider.dispose();
+    });
+  });
+
+  test('concurrent deferred opens coalesce and leaving cancels further polling', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final deferred = Episode(id: 'late', live: false, startedAt: _t0, lastActivityAt: _t0, composeDeferred: true);
+      final provider = EpisodeProvider(
+        detail: (_) async {
+          reads++;
+          return ApiSuccess(deferred);
+        },
+      )..debugSetLive(null);
+      final first = provider.openEpisode('late');
+      final second = provider.openEpisode('late');
+      expect(identical(first, second), isTrue);
+      async.flushMicrotasks();
+      expect(reads, 1);
+      provider.cancelOpenEpisode('late');
+      async.elapse(const Duration(minutes: 2));
+      async.flushMicrotasks();
+      expect(reads, 1);
+      provider.dispose();
+    });
+  });
+
+  test('a stalled detail read times out and releases the open claim', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final provider = EpisodeProvider(
+        detail: (_) {
+          reads++;
+          return Completer<ApiResult<Episode>>().future;
+        },
+      )..debugSetLive(null);
+      Episode? result;
+      unawaited(provider.openEpisode('late').then((value) => result = value));
+      async.elapse(EpisodeProvider.openComposeReadTimeout);
+      async.flushMicrotasks();
+      expect(result, isNull);
+      unawaited(provider.openEpisode('late'));
+      expect(reads, 2, reason: 'timeout releases the coalescing claim');
+      provider.dispose();
+      async.elapse(EpisodeProvider.openComposeReadTimeout);
+      async.flushMicrotasks();
+    });
+  });
+
+  test('deferred polling stops at the total deadline', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final deferred = Episode(id: 'late', live: false, startedAt: _t0, lastActivityAt: _t0, composeDeferred: true);
+      final provider = EpisodeProvider(
+        clock: () => _t0.add(async.elapsed),
+        detail: (_) async {
+          reads++;
+          return ApiSuccess(deferred);
+        },
+      )..debugSetLive(null);
+      unawaited(provider.openEpisode('late'));
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 2));
+      async.flushMicrotasks();
+      expect(reads, EpisodeProvider.openComposePolls + 1);
+      provider.dispose();
+    });
   });
 }

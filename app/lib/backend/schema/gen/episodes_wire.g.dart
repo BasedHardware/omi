@@ -210,6 +210,7 @@ class GeneratedEpisode {
   final List<String>? bullets;
   final String? closeReason;
   final DateTime? closedAt;
+  final bool composeDeferred;
   final List<String>? conversationIds;
   final String emoji;
   final List<String>? followUps;
@@ -231,6 +232,7 @@ class GeneratedEpisode {
     this.bullets,
     this.closeReason,
     this.closedAt,
+    this.composeDeferred = false,
     this.conversationIds,
     this.emoji = "",
     this.followUps,
@@ -254,6 +256,7 @@ class GeneratedEpisode {
       bullets: _readFieldValue<List<String>>(_readField(json, const ["bullets"]), "bullets", _readStringList, requiredField: false, nullable: true),
       closeReason: _readFieldValue<String>(_readField(json, const ["close_reason"]), "close_reason", _readString, requiredField: false, nullable: true),
       closedAt: _readFieldValue<DateTime>(_readField(json, const ["closed_at"]), "closed_at", _readDateTime, requiredField: false, nullable: true),
+      composeDeferred: _required(_readFieldValue<bool>(_readField(json, const ["compose_deferred"]), "compose_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "compose_deferred"),
       conversationIds: _readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: false, nullable: true),
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
       followUps: _readFieldValue<List<String>>(_readField(json, const ["follow_ups"]), "follow_ups", _readStringList, requiredField: false, nullable: true),
@@ -278,6 +281,7 @@ class GeneratedEpisode {
       'bullets': bullets,
       'close_reason': closeReason,
       'closed_at': closedAt?.toUtc().toIso8601String(),
+      'compose_deferred': composeDeferred,
       'conversation_ids': conversationIds,
       'emoji': emoji,
       'follow_ups': followUps,

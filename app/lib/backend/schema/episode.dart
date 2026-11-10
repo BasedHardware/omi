@@ -129,6 +129,7 @@ class Episode {
     this.members = const [],
     this.bullets = const [],
     this.lede = '',
+    this.composeDeferred = false,
     this.followUps = const [],
     this.people = const [],
     this.items = const [],
@@ -152,6 +153,7 @@ class Episode {
 
   /// A composed episode's one- or two-sentence summary above its sections; empty while live.
   final String lede;
+  final bool composeDeferred;
 
   /// A composed episode's next steps, as written by the composer.
   final List<String> followUps;
@@ -178,7 +180,7 @@ class Episode {
 
   List<EpisodeItem> get visibleItems => [
         for (final item in items)
-          if (item.visible) item
+          if (item.visible) item,
       ];
 
   Episode copyWith({
@@ -200,6 +202,7 @@ class Episode {
         members: members ?? this.members,
         bullets: bullets,
         lede: lede,
+        composeDeferred: composeDeferred,
         followUps: followUps,
         people: people,
         items: items ?? this.items,
@@ -227,12 +230,15 @@ class Episode {
               startedAt: m.startedAt.toLocal(),
               finishedAt: m.finishedAt?.toLocal(),
               structured: Structured(m.title, '', emoji: m.emoji),
-              status: ConversationStatus.values
-                  .firstWhere((s) => s.name == m.status, orElse: () => ConversationStatus.completed),
-            )
+              status: ConversationStatus.values.firstWhere(
+                (s) => s.name == m.status,
+                orElse: () => ConversationStatus.completed,
+              ),
+            ),
         ],
         bullets: e.bullets ?? const [],
         lede: e.lede,
+        composeDeferred: e.composeDeferred,
         followUps: e.followUps ?? const [],
         people: e.people ?? const [],
         items: [for (final item in e.provisionalItems ?? const []) EpisodeItem.fromGenerated(item)],

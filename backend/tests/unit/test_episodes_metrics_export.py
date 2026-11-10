@@ -23,9 +23,9 @@ def test_shared_metrics_export_includes_episode_moment_families():
 
 
 def test_compose_mode_metrics_are_exported_without_identity_labels():
-    from utils.episodes.metrics import record_compose_tokens
+    from utils.episodes.metrics import record_compose_reply
 
-    record_compose_tokens('notes_first', 10, 1)
+    record_compose_reply('full', 10, 1)
     exported = metrics_response().body.decode()
     assert '# HELP omi_episode_compose_input_tokens_total ' in exported
     assert '# HELP omi_episode_compose_tool_calls ' in exported

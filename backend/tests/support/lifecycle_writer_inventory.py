@@ -3213,6 +3213,7 @@ FIELD_SITES = {
                 'bullets',
                 'close_reason',
                 'closed_at',
+                'compose_deferred',
                 'conversation_ids',
                 'follow_ups',
                 'id',

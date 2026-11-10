@@ -2168,6 +2168,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'title': clean_text(episode.get('title'), 240),
         'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
         'lede': clean_text(episode.get('lede'), composer.COMPOSER_MAX_PARAGRAPH_CHARS),
+        'compose_deferred': composer.episode_late_compose_enabled() and composer.is_deferred(episode),
         'follow_ups': [clean_text(line, 400) for line in episode.get('follow_ups') or [] if clean_text(line, 400)],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [
