@@ -12,7 +12,7 @@ from prometheus_client import Counter
 logger = logging.getLogger(__name__)
 
 TRANSITIONS = (
-    # A held unit re-driven at or over MAX_HELD_REDRIVES (counter only).
+    # First committed re-drive after MAX_HELD_REDRIVES; once per unit.
     'held_redrive_budget_spent',
 )
 TERMINAL_TRANSITIONS = Counter(

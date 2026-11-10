@@ -788,3 +788,19 @@ def test_backlog_alert_metric_families_are_imported_by_the_cloud_run_exporters(e
         prefixes = yaml.safe_load(path.read_text(encoding='utf-8'))['stackdriver']['metrics']['prefixes']
         missing = sorted(family for family in families if not _imported(family, prefixes))
         assert not missing, f'{path.name} does not import {missing}'
+
+    # Check the producer-side GMP filters too: importing a family downstream
+    # cannot recover samples discarded by the source scrape allowlist.
+    for profile in ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'):
+        relabels = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())['spec']['endpoints'][0][
+            'metricRelabeling'
+        ]
+        for family in families:
+            labels = {'__name__': family}
+            for relabel in relabels:
+                value = ';'.join(labels.get(key, '') for key in relabel['sourceLabels'])
+                matched = re.fullmatch(relabel['regex'], value)
+                if relabel['action'] == 'keep':
+                    assert matched, (profile, family)
+                elif relabel['action'] == 'drop':
+                    assert not matched, (profile, family)

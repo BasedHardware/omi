@@ -9,8 +9,6 @@ import math
 import time
 
 from config.batch_pipeline import batch_held_dead_letter_enabled
-from utils.backlog_metrics import record_transition
-from utils.batch_pipeline.scheduler import held_redrive_budget_spent
 from config.refactor_modes import batch_input_expiring_enabled
 from database.batch_pipeline_record_dead_letter import record_dead_letter_stock
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -125,9 +123,6 @@ class HeldDeadLetter:
             after = state.get('dead_after') if state.get('redrive_day') == day else None
             dead = dead_held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=after)
             for sid, job in dead:
-                if held_redrive_budget_spent(job):
-                    # Class 6 counter: observe a spent re-drive budget (alerted).
-                    record_transition('held_redrive_budget_spent')
                 # A row expired today gets until the next night; stale snapshots
                 # are rechecked by the sanctioned content/privacy/lease CAS.
                 expired_at = job.get('held_expired_at')

@@ -11,6 +11,7 @@ from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
@@ -978,7 +979,9 @@ class Scheduler:
         return not tx.get('results', job['segment_id'])
 
     @staticmethod
-    def requeue_quarantined_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def requeue_quarantined_in_transaction(
+        tx: Transaction, job: dict, now: float, *, account=True
+    ) -> bool | Literal['spent']:
         """CAS requeue without deleting audio, results, intent or attempt history.
 
         RecoveryStore owns content/ledger/privacy checks, as the missing-input
@@ -990,28 +993,29 @@ class Scheduler:
         owner = tx.get('owners', job['owner_key'])
         owner['revision'] = owner.get('revision', 0) + 1
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
-        account_held_redrive(job)
+        spent = account_held_redrive(job, now) if account else False
         _append(tx, control, job)
         tx.put('owners', job['owner_key'], owner)
         tx.put('jobs', job['segment_id'], job)
-        return True
+        return 'spent' if spent else True
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float, *, operator=False) -> bool | Literal['spent']:
+    def redrive_in_transaction(
+        tx: Transaction, job: dict, now: float, *, operator=False, checked=None
+    ) -> bool | Literal['spent']:
         """True on redrive; 'spent' when a held re-drive starts at or over the held budget."""
         # Status polling must not silently undo an input-expiring terminal.
         if job.get('dead_letter_reason') == 'input_expiring' and not operator:
             return False
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
-        spent = False
         if job.get('dead_letter_reason') == 'held_expired':
-            # Every re-drive of a retained held dead letter (status poll or the
-            # operator /redrive-dead route) gets the nightly path's switched
-            # accounting and the same spent-budget signal, reported by the
-            # caller after commit.
-            spent = held_redrive_budget_spent(job)
-            account_held_redrive(job)
+            # A fresh budget and its telemetry require the same content-owner,
+            # privacy, result and active-intent CAS as an operator requeue.
+            if checked is None:
+                return False
+            job, _ = checked(tx, job['segment_id'])
+            return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(
             state='ready',
@@ -1023,12 +1027,14 @@ class Scheduler:
         )
         _append(tx, control, job)
         tx.put('jobs', job['segment_id'], job)
-        return 'spent' if spent else True
+        return True
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
         outcome = self.store.run(
-            lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now, operator=True)
+            lambda tx: self.redrive_in_transaction(
+                tx, tx.get('jobs', segment_id), now, operator=True, checked=RecoveryFence(self.store).checked
+            )
         )
         if outcome == 'spent':
             from utils.backlog_metrics import record_transition
@@ -1060,49 +1066,38 @@ class Scheduler:
 
 
 def held_redrives(job: dict) -> int:
-    """Re-drives already granted to this unit (nightly, operator or poll).
+    """Nonnegative integer metadata; integral Firestore doubles are valid.
 
-    Malformed metadata counts as spent so the budget signal is never lost.
+    Invalid legacy metadata is repaired from zero on the next committed re-drive.
+    Log only the static signal, never the malformed value or content.
     """
-    if 'held_redrives' not in job:
-        return 0
-    count = job['held_redrives']
-    return count if type(count) is int and count >= 0 else MAX_HELD_REDRIVES
+    count = job.get('held_redrives', 0)
+    if type(count) is int and count >= 0:
+        return count
+    if type(count) is float and math.isfinite(count) and count >= 0 and count.is_integer():
+        return int(count)
+    logger.warning('event=batch_held_redrives_malformed action=restart_budget')
+    return 0
 
 
-def account_held_redrive(job: dict) -> None:
-    """Switched accounting shared by every re-drive of a held unit (nightly, operator, poll).
+def account_held_redrive(job: dict, now: float) -> bool:
+    """Account a verified held re-drive; return its once-per-unit spent event.
 
-    Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED): count the re-drive.
-    Class 3 (BATCH_HELD_REDRIVE_BUDGET_ENABLED): grant a fresh attempt budget;
-    keeping attempt at the cap made the first failure re-quarantine. History
-    moves to held_redrive_last_attempt.
+    Durable accounting bounds class 3 independently of the telemetry switch.
+    The caller emits the returned signal only after the transaction commits.
+    Input-expiring repairs consume no held grant.
     """
-    counted = held_redrive_counter_enabled()
+    if job.get('dead_letter_reason') == 'input_expiring':
+        return False
     prior = held_redrives(job)
-    if counted:
-        job['held_redrives'] = prior + 1
-    # Class 3 takes effect only while it is bounded and alerted: with the class 6
-    # counter on, only while the unit's re-drive budget is unspent, and only where
-    # the batch retry cap enforces for this owner (class 1 on, or the owner in the
-    # served CAPTURE_COVERAGE_MODE cohort). Without enforcement a lease expiry
-    # only defers, so a fresh budget would keep the unit runnable without bound
-    # and unalerted; there the reset is a no-op and main's behavior is kept. The
-    # terminal stop is not in core, so an uncounted or spent unit keeps main's
-    # retained held loop (attempt at the cap) and the spent-budget signal.
-    # Rollback: switching class 3 OFF stops new budget resets; existing grants
-    # persist until their unit runs or finishes; no clawback. Each grant is
-    # capped at MAX_ATTEMPTS only while the retry cap enforces for the owner
-    # (class 1 on, or the owner in the served cohort). With class 1 off, lease
-    # expiries defer, as on main.
-    if (
-        held_redrive_budget_enabled()
-        and counted
-        and prior < MAX_HELD_REDRIVES
-        and retry_cap_enforced_for(job.get('owner_id', ''))
-    ):
+    spent = prior >= MAX_HELD_REDRIVES and 'held_redrive_budget_spent_at' not in job
+    job['held_redrives'] = prior + 1
+    if spent:
+        job['held_redrive_budget_spent_at'] = now
+    if held_redrive_budget_enabled() and prior < MAX_HELD_REDRIVES and retry_cap_enforced_for(job.get('owner_id', '')):
         job['held_redrive_last_attempt'] = job.get('attempt', 0)
         job['attempt'] = 0
+    return spent and held_redrive_counter_enabled()
 
 
 def retry_cap_enforced_for(owner_id: str) -> bool:
@@ -1116,12 +1111,3 @@ def retry_cap_enforced_for(owner_id: str) -> bool:
 
     decision = retry_cap(owner_id, 0, 1, enforce=True)
     return decision is not None and decision.serving
-
-
-def held_redrive_budget_spent(job: dict) -> bool:
-    """Class 6 counter: this re-drive starts at or over MAX_HELD_REDRIVES.
-
-    Shared by the nightly scan and status-poll re-drives so both report the
-    same held_redrive_budget_spent signal.
-    """
-    return held_redrive_counter_enabled() and held_redrives(job) >= MAX_HELD_REDRIVES

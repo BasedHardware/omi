@@ -143,6 +143,8 @@ def test_class_1_never_changes_the_sync_dispatch_cap(monkeypatch, switch, covera
 def held_dead(job, *, attempt=5, expired_at=20):
     job.update(
         state='dead',
+        quarantine_reason='worker_failed',
+        recovery_state='held',
         dead_letter_reason='held_expired',
         held_expired_at=expired_at,
         merge_pending=True,
@@ -163,7 +165,7 @@ def control_for(client):
 
 
 @pytest.mark.parametrize('switch', ['true', None, 'false'])
-def test_redrive_counter_counts_requeues_only_with_its_switch(setup, monkeypatch, switch):
+def test_durable_redrive_accounting_survives_telemetry_rollback(setup, monkeypatch, switch):
     """Class 6 counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON)."""
     if switch is not None:
         monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, switch)
@@ -171,14 +173,11 @@ def test_redrive_counter_counts_requeues_only_with_its_switch(setup, monkeypatch
     control_for(client)
     held_dead(bad(client), attempt=5)
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
-    if switch == 'false':
-        assert 'held_redrives' not in bad(client)
-    else:
-        assert bad(client)['held_redrives'] == 1
+    assert bad(client)['held_redrives'] == 1  # custody accounting is independent of telemetry
 
 
 @pytest.mark.parametrize('switch', ['true', None, 'false'])
-def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(monkeypatch, switch):
+def test_nightly_snapshot_never_reports_a_refused_redrive(monkeypatch, switch):
     from utils.batch_pipeline import held_dead_letter as sweep
 
     if switch is not None:
@@ -193,7 +192,7 @@ def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(monkeypatc
     monkeypatch.setattr(runner.recovery, 'requeue_quarantined', lambda *a, **k: False)
     before = transitions('held_redrive_budget_spent')
     runner.tick(86400)
-    assert transitions('held_redrive_budget_spent') == before + (0 if switch == 'false' else 1)
+    assert transitions('held_redrive_budget_spent') == before
 
 
 def test_repeated_poll_redrives_report_a_spent_budget(monkeypatch):
@@ -206,20 +205,27 @@ def test_repeated_poll_redrives_report_a_spent_budget(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
     store = MemoryStore()
+    store.namespace = 'batch_pipeline_test_intake'
     submit(store, *proposal())
     Scheduler(store).pull(100)
     seen = []
     for _ in range(sm.MAX_HELD_REDRIVES + 2):
         # The unit failed again and its held window expired: a retained dead letter again.
         store.rows['jobs', 'segment'].update(
-            state='dead', token='', lease_until=0, merge_pending=True, dead_letter_reason='held_expired'
+            state='dead',
+            token='',
+            lease_until=0,
+            merge_pending=True,
+            dead_letter_reason='held_expired',
+            quarantine_reason='worker_failed',
+            recovery_state='held',
         )
         before = transitions('held_redrive_budget_spent')
         durable_status(store, 'synthetic-owner', 'bp_first')
         assert store.rows['jobs', 'segment']['state'] == 'ready'
         seen.append(transitions('held_redrive_budget_spent') - before)
-    # Below the budget (0..MAX-1 prior re-drives): no signal. At or over it: one per committed poll.
-    assert seen == [0] * sm.MAX_HELD_REDRIVES + [1, 1]
+    # One event on entering spent; later cycles of the same unit never re-page.
+    assert seen == [0] * sm.MAX_HELD_REDRIVES + [1, 0]
     assert store.rows['jobs', 'segment']['held_redrives'] == sm.MAX_HELD_REDRIVES + 2
 
 
@@ -231,6 +237,7 @@ def test_client_poll_still_redrives_a_plain_historical_dead_row(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
     store = MemoryStore()
+    store.namespace = 'batch_pipeline_test_intake'
     submit(store, *proposal())
     Scheduler(store).pull(100)
     store.rows['jobs', 'segment'].update(state='dead', token='', lease_until=0)
@@ -301,6 +308,7 @@ def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, 
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
     store = MemoryStore()
+    store.namespace = 'batch_pipeline_test_intake'
     submit(store, *proposal())
     Scheduler(store).pull(100)
     store.rows['jobs', 'segment'].update(
@@ -309,15 +317,17 @@ def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, 
         lease_until=0,
         merge_pending=True,
         dead_letter_reason='held_expired',
+        quarantine_reason='worker_failed',
+        recovery_state='held',
         held_redrives=1,
         attempt=5,
     )
     durable_status(store, 'synthetic-owner', 'bp_first')
     job = store.rows['jobs', 'segment']
     assert job['state'] == 'ready'
-    assert job['held_redrives'] == (2 if counter == 'true' else 1)
-    # Class 3 takes effect only with the counter on (bounded and alerted).
-    assert job['attempt'] == (0 if budget == 'true' and counter == 'true' else 5)
+    assert job['held_redrives'] == 2
+    # Telemetry rollback cannot change custody.
+    assert job['attempt'] == (0 if budget == 'true' else 5)
 
 
 def operator_redrive_app(store, monkeypatch):
@@ -343,7 +353,7 @@ def test_operator_redrive_dead_route_keeps_the_switched_accounting(setup, monkey
 
     The operator route must count the re-drive (class 6), reset attempt
     (class 3) and report a spent budget after commit, like the nightly and
-    poll re-drives. Each switch off keeps main's behavior for its field.
+    poll re-drives. Telemetry rollback preserves the custody budget.
     """
     # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
     monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
@@ -371,12 +381,9 @@ def test_operator_redrive_dead_route_keeps_the_switched_accounting(setup, monkey
     app.dependency_overrides.clear()
     assert bad(client) == job
     assert job['state'] == 'ready' and job['audio_uri'] == 'gs://synthetic/audio'
-    if counter == 'true':
-        assert job['held_redrives'] == prior + 1
-    else:
-        assert job.get('held_redrives', 0) == prior
-    # Class 3 takes effect only with the counter on and an unspent budget.
-    if budget == 'true' and counter == 'true' and prior < sm.MAX_HELD_REDRIVES:
+    assert job['held_redrives'] == prior + 1
+    # Class 3 is bounded independently of telemetry.
+    if budget == 'true' and prior < sm.MAX_HELD_REDRIVES:
         assert job['attempt'] == 0 and job['held_redrive_last_attempt'] == 5
     else:
         assert job['attempt'] == 5 and 'held_redrive_last_attempt' not in job
@@ -416,38 +423,29 @@ def alert_backtest():
     return module
 
 
-def nightly_counter_samples(monkeypatch, nights, prior):
-    """Run the real nightly pass over one held recording; return (time, counter) after each pass.
-
-    The recording is re-driven on each listed night and starts with ``prior``
-    held re-drives. A spent budget is observed by the pass's scan.
-    """
+def nightly_counter_samples(setup, monkeypatch, nights, prior):
+    """Exercise the real scan, content/privacy CAS and post-commit metric."""
     from utils.batch_pipeline import held_dead_letter as sweep
 
-    store = Mock()
-    store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    bad(client)['held_redrives'] = prior
     runner = sweep.HeldDeadLetter(store)
-    job = {'held_expired_at': 1, 'held_redrives': prior}
     monkeypatch.setattr(sweep, 'input_expiring_candidates', lambda *a, **k: ([], {}))
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
-    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('one-recording', dict(job))])
-
-    def requeue(*_, **__):
-        job['held_redrives'] += 1  # the counter's own increment on a committed requeue
-        return True
-
-    monkeypatch.setattr(runner.recovery, 'requeue_quarantined', requeue)
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('bad', deepcopy(bad(client)))])
     base = transitions('held_redrive_budget_spent')
     samples = []
     for night in nights:
         now = night * 86400 + 60
+        held_dead(bad(client), expired_at=now - 100)
         runner.tick(now)
         samples.append((now, transitions('held_redrive_budget_spent') - base))
     return samples
 
 
 def alert_episodes(rule, samples, end_day):
-    """Evaluate the rule hourly: A is PromQL increase(counter[window]) from the sampled counter."""
+    """Evaluate the rule every five minutes: A is PromQL increase(counter[window]) from the sampled counter."""
     import re
 
     b = alert_backtest()
@@ -458,7 +456,7 @@ def alert_episodes(rule, samples, end_day):
     def counter_at(t):
         return max([value for at, value in samples if at <= t], default=0)
 
-    step = 3600
+    step = 300
     frames = [
         (t, b.evaluate(rule, {'A': {(): [counter_at(t) - counter_at(t - window)]}}))
         for t in range(0, end_day * 86400, step)
@@ -477,14 +475,14 @@ def alert_episodes(rule, samples, end_day):
         (0, [1, 2, 3], False),
     ],
 )
-def test_one_looping_held_recording_fires_the_unit_alert(monkeypatch, prior, nights, fires):
+def test_one_looping_held_recording_fires_the_unit_alert(setup, monkeypatch, prior, nights, fires):
     """Custody review: one spent-budget unit must alert; the 64/h volume rule never sees it."""
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
-    samples = nightly_counter_samples(monkeypatch, nights, prior)
+    samples = nightly_counter_samples(setup, monkeypatch, nights, prior)
     looping = alert_episodes(backlog_alert('omi-backlog-held-redrive-unit-looping'), samples, 20)
     assert (looping['episodes'] > 0) is fires
     if fires:
-        # Stays firing while the unit keeps looping (no gap between cycles).
+        # Exactly one page episode, even for cycles beyond the eight-day window.
         assert looping['episodes'] == 1
     # The volume rule stays quiet for a single recording (why the unit rule exists).
     assert alert_episodes(backlog_alert('omi-backlog-held-redrive-budget-spent'), samples, 20)['episodes'] == 0
@@ -512,13 +510,13 @@ def test_operator_requeue_quarantined_route_reports_a_spent_budget(setup, monkey
     app.dependency_overrides.clear()
     job = bad(client)
     assert job['state'] == 'ready'
-    assert job.get('held_redrives', 0) == prior + (1 if counter == 'true' else 0)
+    assert job['held_redrives'] == prior + 1
     spent = counter == 'true' and prior >= sm.MAX_HELD_REDRIVES
     assert transitions('held_redrive_budget_spent') == before + (1 if spent else 0)
 
 
 def test_nightly_requeue_is_not_double_counted(setup, monkeypatch):
-    """The nightly pass observes in its scan; its requeue call must not signal again."""
+    """Only the committed CAS emits; a second attempt sees ready and emits nothing."""
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true')
     client, store, _, _, _, _ = setup
     control_for(client)
@@ -526,7 +524,9 @@ def test_nightly_requeue_is_not_double_counted(setup, monkeypatch):
     bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
     before = transitions('held_redrive_budget_spent')
     assert RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400) is True
-    assert transitions('held_redrive_budget_spent') == before
+    assert transitions('held_redrive_budget_spent') == before + 1
+    assert not RecoveryStore(store).requeue_quarantined('bad', 30, dead_before=86400)
+    assert transitions('held_redrive_budget_spent') == before + 1
 
 
 # Custody review on 53a692de1d1d -------------------------------------------------
@@ -549,7 +549,7 @@ def held_cycles(client, store, cycles, max_attempts=3):
 @pytest.mark.parametrize(
     'budget,counter,expected_fresh',
     [
-        ('true', 'false', 0),  # no count, no alert: the reset must not take effect
+        ('true', 'false', sm.MAX_HELD_REDRIVES),  # telemetry off keeps bounded grants
         ('true', 'true', sm.MAX_HELD_REDRIVES),  # stop is excluded from core: bounded by the counter
         (None, None, 0),  # defaults: budget off, counter on
     ],
@@ -557,13 +557,11 @@ def held_cycles(client, store, cycles, max_attempts=3):
 def test_held_budget_reset_is_bounded_and_alerted(setup, monkeypatch, budget, counter, expected_fresh):
     """B (luna-core-1, luna-core-2): class 3 never sustains an unbounded fresh-budget loop.
 
-    The reset takes effect only with the class 6 counter on and only while the
-    unit's re-drive budget is unspent; after that the unit keeps main's
-    retained held loop and the spent-budget signal (unit-looping alert).
+    The reset is bounded even with telemetry off; after the budget is spent
+    the retained loop continues and only its first spent transition can page.
     """
     # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
     monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
-    from utils.batch_pipeline.scheduler import held_redrive_budget_spent
 
     if budget is not None:
         monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
@@ -575,17 +573,16 @@ def test_held_budget_reset_is_bounded_and_alerted(setup, monkeypatch, budget, co
     assert fresh == expected_fresh
     job = bad(client)
     assert job['audio_uri'] == 'gs://synthetic/audio'  # retained
-    if counter != 'false':
-        assert job['held_redrives'] == 10
-        assert held_redrive_budget_spent(job)  # the nightly scan reports it: alerted
+    assert job['held_redrives'] == 10
+    assert 'held_redrive_budget_spent_at' in job
 
 
 @pytest.mark.parametrize('name', sorted(EXPECTED_DEFAULTS))
 @pytest.mark.parametrize('raw', ['TRUE', 'True', ' true', 'true ', '1', 'yes', 'on', ''])
-def test_backlog_switches_enable_only_on_exact_true(monkeypatch, name, raw):
-    """C (luna-core-2): only the exact value true enables; anything else set is off."""
+def test_backlog_switches_accept_trimmed_case_insensitive_true_fail_closed(monkeypatch, name, raw):
+    """Normalize like other true-only kill switches; unknown values stay off."""
     monkeypatch.setenv(name, raw)
-    assert READERS[name]() is False
+    assert READERS[name]() is (raw.strip().lower() == 'true')
     monkeypatch.setenv(name, 'true')
     assert READERS[name]() is True
     monkeypatch.delenv(name)
@@ -792,3 +789,181 @@ def test_class_1_on_to_off_keeps_grants_quarantines_only_while_on_then_defers(mo
     assert attempts == [1, 2, 3, 4]
     job = store.rows['jobs', 'capped']
     assert job['state'] != 'quarantined' and job['quarantined_at'] == quarantined_at
+
+
+@pytest.mark.parametrize('reason', ['expired_today', 'privacy', 'owner', 'ineligible', 'poll_won'])
+def test_nightly_spent_signal_requires_a_committed_eligible_cas(setup, monkeypatch, reason):
+    from utils.batch_pipeline import held_dead_letter as sweep
+
+    client, store, binding, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client), expired_at=1)
+    bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
+    snapshot = deepcopy(bad(client))
+    before = transitions('held_redrive_budget_spent')
+    if reason == 'expired_today':
+        bad(client)['held_expired_at'] = snapshot['held_expired_at'] = 86400
+    elif reason == 'privacy':
+        client.rows['account_deletions', binding.owner_id] = {'wipe_status': 'pending'}
+    elif reason == 'owner':
+        client.rows['users', binding.owner_id, 'sync_content_ledger', binding.content_id]['job_id'] = 'foreign'
+    elif reason == 'ineligible':
+        bad(client)['token'] = 'active'
+    else:
+        assert Scheduler(store).redrive_dead('bad', 20)
+        assert transitions('held_redrive_budget_spent') == before + 1
+        before += 1
+    runner = sweep.HeldDeadLetter(store)
+    monkeypatch.setattr(sweep, 'input_expiring_candidates', lambda *a, **k: ([], {}))
+    monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('bad', snapshot)])
+    assert runner.tick(86460)['requeued'] == 0
+    assert transitions('held_redrive_budget_spent') == before
+
+
+def test_staging_repair_does_not_consume_grants_or_page(setup, monkeypatch):
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client))
+    bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
+    expected = deepcopy(bad(client))
+    before = transitions('held_redrive_budget_spent')
+    assert RecoveryStore(store).requeue_quarantined('bad', 30, expected_job=expected)
+    assert bad(client)['held_redrives'] == sm.MAX_HELD_REDRIVES
+    assert bad(client)['attempt'] == 5
+    assert 'held_redrive_budget_spent_at' not in bad(client)
+    assert transitions('held_redrive_budget_spent') == before
+
+
+@pytest.mark.parametrize('path', ['/requeue-quarantined', '/redrive-dead'])
+@pytest.mark.parametrize('reason', ['input_expiring', 'held_expired'])
+def test_operator_routes_agree_on_held_grants(setup, monkeypatch, path, reason):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client))
+    bad(client)['dead_letter_reason'] = reason
+    app = operator_redrive_app(store, monkeypatch)
+    with TestClient(app) as api:
+        assert api.post('/v2/batch-pipeline' + path, json={'stage': 'prod', 'segment_id': 'bad'}).json() == {
+            'accepted': True
+        }
+    job = bad(client)
+    assert job.get('held_redrives', 0) == (1 if reason == 'held_expired' else 0)
+    assert job['attempt'] == (0 if reason == 'held_expired' else 5)
+
+
+@pytest.mark.parametrize('prior', [0, sm.MAX_HELD_REDRIVES])
+@pytest.mark.parametrize('entry', ['operator', 'poll'])
+@pytest.mark.parametrize('fence', ['binding', 'owner', 'privacy_generation', 'privacy'])
+def test_held_redrive_cannot_reset_attempt_across_a_changed_fence(setup, monkeypatch, entry, fence, prior):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    client, store, binding, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client))
+    bad(client)['held_redrives'] = prior
+    if fence == 'binding':
+        del bad(client)['projection_binding']
+    elif fence == 'owner':
+        client.rows['users', binding.owner_id, 'sync_content_ledger', binding.content_id]['job_id'] = 'foreign'
+    elif fence == 'privacy_generation':
+        bad(client)['privacy_generation'] = 1
+    else:
+        client.rows['account_deletions', binding.owner_id] = {'wipe_status': 'pending'}
+    before = deepcopy(bad(client))
+    count = transitions('held_redrive_budget_spent')
+    with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+        if entry == 'operator':
+            Scheduler(store).redrive_dead('bad', 30)
+        else:
+            store.run(
+                lambda tx: Scheduler.redrive_in_transaction(
+                    tx, tx.get('jobs', 'bad'), 30, checked=RecoveryStore(store).checked
+                )
+            )
+    assert bad(client) == before
+    assert transitions('held_redrive_budget_spent') == count
+
+
+@pytest.mark.parametrize(
+    'value,prior',
+    [(3.0, 3), (0.0, 0), ('bad', 0), (-1, 0), (True, 0), (None, 0), (3.5, 0), (float('nan'), 0), (float('inf'), 0)],
+)
+def test_held_redrive_metadata_is_repaired_without_permanent_spend(setup, monkeypatch, caplog, value, prior):
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client))
+    bad(client)['held_redrives'] = value
+    count = transitions('held_redrive_budget_spent')
+    assert RecoveryStore(store).requeue_quarantined('bad', 30)
+    job = bad(client)
+    assert type(job['held_redrives']) is int and job['held_redrives'] == prior + 1
+    assert job['attempt'] == (0 if prior < sm.MAX_HELD_REDRIVES else 5)
+    assert transitions('held_redrive_budget_spent') == count + (prior >= sm.MAX_HELD_REDRIVES)
+    assert ('event=batch_held_redrives_malformed' in caplog.text) is (type(value) is not float or prior != value)
+
+
+def test_aborted_and_retried_redrive_emits_only_the_winning_transition(setup, monkeypatch):
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    held_dead(bad(client))
+    bad(client)['held_redrives'] = sm.MAX_HELD_REDRIVES
+    original_run = store.run
+    before_rows = deepcopy(client.rows)
+    before = transitions('held_redrive_budget_spent')
+
+    def abort(fn):
+        original_run(fn)
+        client.rows = deepcopy(before_rows)
+        raise RuntimeError('synthetic commit failure')
+
+    monkeypatch.setattr(store, 'run', abort)
+    with pytest.raises(RuntimeError, match='synthetic commit failure'):
+        RecoveryStore(store).requeue_quarantined('bad', 30)
+    assert transitions('held_redrive_budget_spent') == before
+
+    def retry(fn):
+        original_run(fn)
+        client.rows = deepcopy(before_rows)
+        # A concurrent poll wins before the retry; the retry must clear the
+        # first callback's spent outcome rather than publish it after a CAS loss.
+        original_run(
+            lambda tx: Scheduler.redrive_in_transaction(
+                tx, tx.get('jobs', 'bad'), 30, checked=RecoveryStore(store).checked
+            )
+        )
+        return original_run(fn)
+
+    monkeypatch.setattr(store, 'run', retry)
+    assert not RecoveryStore(store).requeue_quarantined('bad', 30)
+    assert bad(client)['held_redrives'] == sm.MAX_HELD_REDRIVES + 1
+    assert transitions('held_redrive_budget_spent') == before
+
+
+def test_telemetry_toggle_preserves_budget_and_never_replays_a_spent_page(setup, monkeypatch):
+    monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
+    monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
+    client, store, _, _, _, _ = setup
+    control_for(client)
+    before = transitions('held_redrive_budget_spent')
+    for n in range(6):
+        monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, 'true' if n % 2 == 0 else 'false')
+        held_dead(bad(client))
+        assert RecoveryStore(store).requeue_quarantined('bad', 30 + n)
+        assert bad(client)['attempt'] == (0 if n < sm.MAX_HELD_REDRIVES else 5)
+        assert bad(client)['held_redrives'] == n + 1
+    # The first spent transition happened while silenced. Later ON cycles
+    # preserve its marker and cannot page about that already known unit.
+    assert bad(client)['held_redrive_budget_spent_at'] == 33
+    assert transitions('held_redrive_budget_spent') == before

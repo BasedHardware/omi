@@ -46,7 +46,7 @@ KILL_SWITCHES = {
     'BATCH_HELD_REDRIVE_BUDGET_ENABLED': False,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
-# Parsed literally (true means on); never re-read through the capture-coverage
+# Trimmed, case-insensitive true means on; never use the capture-coverage
 # serve-mode parser, which treats an unset default-off switch as on.
 BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
     {
@@ -63,10 +63,10 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
     if name in BACKLOG_STATE_MACHINE_SWITCHES:
-        # Exact literal: only the raw value "true" enables; any other set value
-        # is off, unset is the registered default. No case folding or trimming.
+        # Match the other true-only switches: trim and case-fold; unknown
+        # values fail closed and unset uses the registered default.
         raw = env.get(name)
-        enabled = KILL_SWITCHES[name] if raw is None else raw == 'true'
+        enabled = KILL_SWITCHES[name] if raw is None else raw.strip().lower() == 'true'
         if log:
             logger.info(
                 'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled

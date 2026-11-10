@@ -27,6 +27,7 @@ from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.sync_ledger import (
@@ -305,7 +306,10 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
             for job in jobs:
-                if Scheduler.redrive_in_transaction(tx, job, time.time()) == 'spent':
+                if (
+                    Scheduler.redrive_in_transaction(tx, job, time.time(), checked=RecoveryFence(store).checked)
+                    == 'spent'
+                ):
                     spent_redrives.append(job['segment_id'])
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must

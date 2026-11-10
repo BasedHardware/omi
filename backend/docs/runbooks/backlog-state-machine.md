@@ -14,18 +14,19 @@ deletes audio, results, custody tokens or privacy fences.
 
 ## Switches
 
-Parsed literally: only the exact value `true` is on (`TRUE`, ` true`, `1` and
-`yes` are off), any other set value is off, and unset means the default below. Defaults follow lead2's rule (64b2fa): ON only where a class just
+Values are trimmed and case-insensitive: `true`, `TRUE` and ` true ` are on.
+Every other set value (including `1`, `yes` and an empty string) fails closed
+to off; unset means the default below. Defaults follow lead2's rule (64b2fa): ON only where a class just
 cuts wasted work or retries, OFF where it changes custody, settle or expiry
-semantics. Each switch is read per decision; turning it off restores the old
-transition with no restart or migration, and fields written while it was on are
-inert.
+semantics. Each switch is read per decision without restart or migration. Class 1 and 3
+rollback stops new enforcement or resets; durable held accounting continues
+when the telemetry switch is off.
 
 | Switch | Default | Class | Turning it off |
 | --- | --- | --- | --- |
 | `CAPTURE_RETRY_CAP_ENFORCED` | OFF | 1: the cap only observed outside the serve cohort | Switching class 1 OFF stops new cap enforcement. Existing grants persist until they finish; no clawback. Each grant is capped at `MAX_ATTEMPTS` only while the retry cap enforces for the owner (class 1 on, or the owner in the served cohort). With class 1 off, lease expiries defer, as on main. |
 | `BATCH_HELD_REDRIVE_BUDGET_ENABLED` | OFF | 3: requeue kept `attempt` at the cap | Switching class 3 OFF stops new budget resets. Existing grants persist until their unit runs or finishes; no clawback. Each grant is capped at `MAX_ATTEMPTS` only while the retry cap enforces for the owner (class 1 on, or the owner in the served cohort). With class 1 off, lease expiries defer, as on main. |
-| `BATCH_HELD_REDRIVE_COUNTER_ENABLED` | ON | 6 (counter): held re-drives were not counted | No `held_redrives` increments and no spent-budget observation |
+| `BATCH_HELD_REDRIVE_COUNTER_ENABLED` | ON | 6 (counter): held re-drives were not counted | Silences spent-budget telemetry only; durable budget accounting and class 3 custody behavior continue |
 
 ## Class 1: retry cap enforcement
 
@@ -38,23 +39,42 @@ cohort decision, so this switch never changes the sync path. Alert: `omi-backlog
 
 ## Classes 3 and 6 (counter): held re-drives
 
-Every held re-drive (nightly re-drive, operator requeue, operator
-`/redrive-dead` or status poll of a `held_expired` dead letter) goes through one
-helper:
-the counter increments `held_redrives`, and class 3 resets `attempt` to 0 and keeps
-the prior value in `held_redrive_last_attempt`. Class 3 takes effect only with
-the counter on, only for a unit's first 3 re-drives, and only where the batch
-retry cap enforces for the owner (class 1 on, or the owner in the served
-`CAPTURE_COVERAGE_MODE` cohort): elsewhere lease expiries only defer, so a fresh
-budget would keep the unit runnable without bound and unalerted; after that the unit
-keeps main's retained held loop (attempt at the cap) and the spent-budget
-signal, so a fresh budget never sustains an unbounded loop. The nightly scan and committed
-poll and `/redrive-dead` re-drives record `held_redrive_budget_spent` at or over 3 re-drives.
-Alerts: `omi-backlog-held-redrive-unit-looping` (one unit, last 8 days) and
-`omi-backlog-held-redrive-budget-spent` (volume). The single-unit alert is a page:
-it is unmuted on `Omi - Services Alerting (Telegram)` and on `live-alert-gate.json`,
-because one looping unit stays under the volume threshold. There is no terminal stop in core;
-it ships in the follow-up branch behind its own default-off switch.
+Every held re-drive (nightly, operator `/requeue-quarantined`, operator
+`/redrive-dead`, or status poll of a `held_expired` dead letter) uses the same
+content-owner/privacy CAS and eligibility checks before accounting. Durable
+`held_redrives` always increments, independent of the telemetry switch. Class 3
+resets `attempt` to 0 and keeps the prior value in `held_redrive_last_attempt`
+only for the first 3 re-drives, and only where the batch retry cap enforces for
+the owner (class 1 on, or the served `CAPTURE_COVERAGE_MODE` cohort). The counter
+switch only silences the metric; it never changes custody or replenishes grants.
+`input_expiring` operator requeues and staging-input repair CAS calls consume no
+held grant and grant no attempt reset. Status polls still leave `input_expiring`
+terminal.
+
+After three grants the unit keeps the retained held loop with its existing
+attempt count; core has no terminal stop. On the first subsequent **committed**
+re-drive, `held_redrive_budget_spent_at` is written atomically with the queue
+mutation. Only that new transition emits `held_redrive_budget_spent`, after
+commit and only with telemetry enabled. Today-expired rows, privacy/content
+refusals, staging repairs, CAS losers and transaction retries emit nothing.
+The marker is retained through later cycles and is written even while telemetry
+is off, so re-enabling telemetry never replays old pages. Do not clear it as a
+silencing procedure.
+
+Malformed `held_redrives` values log the content-free
+`event=batch_held_redrives_malformed` signal and restart accounting from zero on
+the next verified commit. Nonnegative integral floats (for example `3.0`) are
+valid and normalized to integers. Operators should investigate the writer and
+repair metadata using verified history; malformed metadata alone never makes a
+unit permanently spent. A pre-existing spent marker is retained.
+
+Alerts: `omi-backlog-held-redrive-unit-looping` pages for a **new** spent
+transition in the last hour; `omi-backlog-held-redrive-budget-spent` covers
+volume. The page retains the live Telegram route and gate. Once the hour elapses,
+later nightly cycles of that unit cannot re-fire it. Investigate the recorded
+failure and retained audio before another re-drive. To silence telemetry set
+`BATCH_HELD_REDRIVE_COUNTER_ENABLED=false`; to stop new budget resets separately
+set `BATCH_HELD_REDRIVE_BUDGET_ENABLED=false`. Neither switch claws back grants.
 
 ## Metrics
 
