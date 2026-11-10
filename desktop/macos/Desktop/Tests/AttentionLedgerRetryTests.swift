@@ -162,9 +162,15 @@ private final class LedgerRetryProtocol: URLProtocol, @unchecked Sendable {
     case .reply(let code, let state, let operation):
       var payload = ["state": state]
       if let operation { payload["operation_id"] = operation }
-      let response = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: nil)!
+      guard let url = request.url,
+        let response = HTTPURLResponse(url: url, statusCode: code, httpVersion: nil, headerFields: nil),
+        let data = try? JSONSerialization.data(withJSONObject: payload)
+      else {
+        client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-      client?.urlProtocol(self, didLoad: try! JSONSerialization.data(withJSONObject: payload))
+      client?.urlProtocol(self, didLoad: data)
       client?.urlProtocolDidFinishLoading(self)
     }
   }
