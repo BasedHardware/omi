@@ -221,6 +221,12 @@ jobs:
             2. Go to **Settings** > **Device Settings**.
             3. Select **Product Update**.
         run: |
+          # The app's update check needs min_version: without it, it reports
+          # "up to date" even when the backend offers the release (3.0.24).
+          if [ -z "$MIN_FW" ]; then
+            echo "::error::minimum_firmware_required is required to publish (every CV1 release so far: 3.0.6, with minimum_app_version 1.0.74 and minimum_app_version_code 438)"
+            exit 1
+          fi
           OUT="$RUNNER_TEMP/cv1-body.md"
           OUT="$OUT" bash omi/firmware/scripts/ci/make-release-body.sh
           echo "file=$OUT" >> "$GITHUB_OUTPUT"
