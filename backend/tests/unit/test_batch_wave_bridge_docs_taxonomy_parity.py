@@ -161,7 +161,10 @@ def test_retry_gap_lines_carry_operation_attempt_and_delay(caplog):
     assert len(lines) == 4
     for index, line in enumerate(lines, start=1):
         assert re.fullmatch(
-            r'firestore_transaction_contention operation=taxonomy attempt=%d/5 outcome=retry delay_ms=\d+' % index,
+            # gate_ms=0: no storm gate is in scope on this bare chain, but the
+            # field itself is part of the line's taxonomy now.
+            r'firestore_transaction_contention operation=taxonomy attempt=%d/5 outcome=retry delay_ms=\d+ gate_ms=\d+'
+            % index,
             line,
         )
 

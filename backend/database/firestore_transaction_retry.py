@@ -18,9 +18,17 @@ itself.  Expired-transaction retirements count as contention here (an expired
 chain is atomic and wrote nothing, exactly like an aborted one), but only
 under those bounds; with no deadline in scope they keep the three-fresh-chain
 ceiling of the inner ``run_transactional`` default.
+
+A caller that owns a contention-shaping signal — the batch store's storm
+damper — can also space the chain's own remaining rungs out of a storm window
+a sibling armed mid-flight through ``inter_attempt_gate`` (see the retry
+function's docstring).
+
+Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-window
 """
 
 import logging
+import math
 import random
 import time
 from contextlib import contextmanager
@@ -161,6 +169,22 @@ def transaction_retry_deadline_scope(deadline: float | None) -> Iterator[None]:
             pass
 
 
+def normalized_gate_seconds(value: object) -> float:
+    """Clamp an inter-attempt gate's answer to a usable wait.
+
+    The gate is advisory spacing, never a decision input, so every answer it
+    cannot honestly defend — a bool, a non-number, a non-finite float, a zero
+    or negative wait — collapses to ``0.0`` and the chain keeps the bare
+    equal-jitter schedule. Never raises.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    seconds = float(value)
+    if not math.isfinite(seconds) or seconds <= 0.0:
+        return 0.0
+    return seconds
+
+
 def equal_jitter_delay(attempt: int, random_value: Callable[[], float] = random.random) -> float:
     """Equal-jitter delay for one failed attempt. ``attempt`` is 1-based.
 
@@ -192,6 +216,7 @@ def run_with_transaction_contention_retry(
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
     monotonic: Callable[[], float] = time.monotonic,
+    inter_attempt_gate: Callable[[int], float] | None = None,
 ) -> T:
     """Run a decorated Firestore transaction with bounded equal-jitter retry.
 
@@ -223,6 +248,22 @@ def run_with_transaction_contention_retry(
     inside; deadline-scoped callers are unchanged because the reserve gate
     and the never-past-deadline sleep bound their wall clock exactly as
     before.
+
+    ``inter_attempt_gate`` (optional) is a caller-owned contention-shaping
+    signal read after every failed attempt that will be retried, with the
+    1-based number of the attempt that just failed; the returned seconds are
+    added to that rung's equal-jitter wait, so the chain's own remaining
+    attempts stop colliding inside a storm window a sibling armed mid-flight
+    (the batch store's damper is the only current gate). The gate never
+    gates the first attempt — a caller that reached the transaction always
+    gets one try, the same rule the deadline follows — and it is advisory
+    only: a hostile answer (bool, non-number, non-finite, zero, negative)
+    and a raising gate all collapse to ``0.0`` and leave the bare
+    equal-jitter schedule byte-for-byte unchanged. Under a scoped deadline
+    the gate wait joins the jitter in the never-past-deadline check, so the
+    accepted wall-clock bound stays ``deadline + one in-flight attempt``;
+    without a deadline the gate can add at most the gate's own bound (the
+    damper cap) per remaining rung.
     """
 
     if max_attempts < 1:
@@ -288,29 +329,40 @@ def run_with_transaction_contention_retry(
                 ) from error
 
             delay = equal_jitter_delay(attempt, random_value)
-            if deadline is not None and deadline - monotonic() < delay:
+            gate_seconds = 0.0
+            if inter_attempt_gate is not None:
+                try:
+                    gate_seconds = normalized_gate_seconds(inter_attempt_gate(attempt))
+                except Exception:
+                    # A broken gate must not break the retry chain it spaces:
+                    # advisory spacing fails open to the bare jitter schedule.
+                    gate_seconds = 0.0
+            if deadline is not None and deadline - monotonic() < delay + gate_seconds:
                 # Never sleep past the deadline: after the attempts themselves,
-                # the jitter would be the only remaining overspend.
+                # the jitter plus the gate's spacing would be the only
+                # remaining overspend.
                 logger.error(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
-                    "remaining_ms=%d delay_ms=%d",
+                    "remaining_ms=%d delay_ms=%d gate_ms=%d",
                     operation_name,
                     attempt,
                     max_attempts,
                     round((deadline - monotonic()) * 1000),
                     round(delay * 1000),
+                    round(gate_seconds * 1000),
                 )
                 raise FirestoreContentionExhausted(
                     f"Firestore transaction retry deadline exhausted for {operation_name}",
                     reason="deadline_exhausted",
                 ) from error
             logger.warning(
-                "firestore_transaction_contention operation=%s attempt=%d/%d outcome=retry delay_ms=%d",
+                "firestore_transaction_contention operation=%s attempt=%d/%d outcome=retry delay_ms=%d gate_ms=%d",
                 operation_name,
                 attempt,
                 max_attempts,
                 round(delay * 1000),
+                round(gate_seconds * 1000),
             )
-            sleep(delay)
+            sleep(delay + gate_seconds)
 
     raise AssertionError("unreachable")

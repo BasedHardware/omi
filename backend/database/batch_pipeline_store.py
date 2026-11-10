@@ -280,6 +280,20 @@ class _ContentionStormDamper:
         self._sleeper(residual)
         return residual, generation
 
+    def peek(self, label: str) -> tuple[float, int]:
+        """Read ``(residual, generation)`` for ``label`` without sleeping.
+
+        The mid-ladder gate reads this between a retry chain's attempts: the
+        retry helper owns every pre-attempt sleep, so the damper must not
+        double-sleep a wait the chain's budget has not accounted for. The
+        residual never comes back negative — an expired window is ``0.0``,
+        exactly like no window at all.
+        """
+        with self._lock:
+            residual = self._armed_until.get(label, 0.0) - self._monotonic()
+            generation = self._generations.get(label, 0)
+        return max(residual, 0.0), generation
+
     def arm(self, label: str) -> float:
         """Record one exhaustion for ``label``; return the applied retry-after seconds."""
         with self._lock:
@@ -373,6 +387,21 @@ class FirestoreStore:
         ``event=batch_store_backoff``), while every other label runs
         untouched. The damper is dormant when either contention kill switch
         is off.
+
+        The damper also spaces the chain's OWN remaining rungs: between two
+        attempts of one chain, a sibling's exhaustion may have armed the
+        label's window mid-flight, and re-striking the hot document inside
+        that window burns every remaining rung against a collision the damper
+        has already measured. Each retry rung therefore re-reads the label's
+        residual through a non-sleeping damper peek and adds it to the rung's
+        equal-jitter wait (logged at INFO as
+        ``event=batch_store_backoff scope=mid_ladder``). The first attempt is
+        never gated — a chain that reached the transaction always gets one
+        try — and with the damper dormant the schedule is byte-for-byte the
+        bare ladder. A success clears the ladder only if no arm happened
+        since the latest consult or mid-ladder peek (generation guard).
+
+        Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-window
         """
         label = require_operation_label(operation if operation is not None else current_operation())
         damper = self._storm_damper if (contention_retry_enabled() and contention_storm_damper_enabled()) else None
@@ -381,6 +410,27 @@ class FirestoreStore:
             waited, generation = damper.consult(label)
             if waited > 0:
                 logger.info('event=batch_store_backoff operation=%s waited_ms=%d', label, round(waited * 1000))
+        # The latest damper generation this entry has observed: the entry
+        # consult's, refreshed by every mid-ladder peek, so a sibling arming
+        # the window mid-chain still holds the success-clearing guard honest.
+        latest_generation = generation
+
+        def mid_ladder_gate(failed_attempt: int) -> float:
+            nonlocal latest_generation
+            if damper is None:
+                return 0.0
+            residual, gate_generation = damper.peek(label)
+            latest_generation = gate_generation
+            if residual <= 0.0:
+                return 0.0
+            logger.info(
+                'event=batch_store_backoff scope=mid_ladder operation=%s attempt=%d waited_ms=%d',
+                label,
+                failed_attempt,
+                round(residual * 1000),
+            )
+            return residual
+
         client = self.client
 
         @firestore.transactional
@@ -399,6 +449,7 @@ class FirestoreStore:
                 lambda: client.transaction(max_attempts=1),
                 commit,
                 operation_name=label,
+                inter_attempt_gate=mid_ladder_gate,
             )
         except FirestoreContentionExhausted as error:
             # This label just burned its whole budget against hot documents;
@@ -411,7 +462,7 @@ class FirestoreStore:
                 error.retry_after = damper.arm(label)
             raise
         if damper is not None:
-            damper.note_success(label, generation)
+            damper.note_success(label, latest_generation)
         return result
 
     def probe(self, table: str, key: str) -> dict:
