@@ -7,9 +7,10 @@ for Plan v3 L2 (David's newest-first / near-dead-letter-first ruling, reference
 Pending jobs already past that deadline are included, while terminal jobs are
 excluded by the existing state filter.
 
-The jobs half of the existing first worker group checks urgent pending jobs in
-deadline/name ascending order, then fills remaining places with enqueue/name
-descending order. Conversation discovery uses finish/name descending order.
+The jobs half of the existing first worker group scans ordinary pending jobs in
+enqueue/name descending order every run, reserves their share, then scans urgent
+jobs in deadline/name ascending order. Urgent jobs are attempted first.
+Conversation discovery uses finish/name descending order.
 Urgent jobs precede ordinary jobs and conversations, with duplicates removed.
 The existing half-worker reservation for conversation discovery remains. This
 does not increase the production worker count (16), row/run budgets, candidate
@@ -17,12 +18,24 @@ cap (1,024), or aggregate scan cap (10,000). The extra urgent page consumes up t
 128 of that existing scan cap, rather than adding to it. All seal, privacy,
 producer-proof and minimum-age eligibility checks remain unchanged.
 
-The ordinary-job starvation bound is **unbounded while urgency fills every
-job allocation**: if each run selects `max(1, workers // 2)` urgent rows, the
-ordinary recency leg gets zero places until a run has spare urgent capacity.
-Conversation discovery retains its reservation. No finite wall-clock guarantee
-is claimed for ordinary work under a sustained urgent backlog; reserving an
-ordinary share is a follow-up fairness decision (production-safety P2-1).
+The ordinary-job starvation bound is **one run between ordinary scans** when
+jobs discovery is enabled and its existing shared discovery budget succeeds.
+For job allocation `A = max(1, workers // 2)`, ordinary work reserves
+`R = max(1, A // 4)` places when candidates are available. Urgent discovery is
+capped at `A - min(R, ordinary candidates)`; unused ordinary reserve flows back
+to urgency. At the production setting of 16 workers, that is 8 job places,
+including at least 2 ordinary places despite a sustained urgent backlog, or
+up to 8 urgent places when the ordinary pass is empty. Unused urgent capacity
+is filled from the ordinary candidates already discovered. Duplicate paths
+are attempted once. A single job place goes to ordinary work if available.
+
+This fixes production-safety P2-1 and Luna's FIX-FIRST at `0711777f`.
+Ordinary discovery precedes urgency so urgency cannot consume its query
+opportunity. Candidates held beyond the selected ordinary share stay ahead of
+the ordinary checkpoint, including when discovery reaches the end of a page.
+The bound concerns discovery and reserved places in the first worker group;
+proof refusal, discovery failure, budgets and run scheduling still prevent a
+finite settlement or wall-clock guarantee. Conversation reservation remains.
 Malformed deadlines are skipped before advancing the urgent frontier, including
 at a saturated page's tail; an all-malformed page wraps instead of persisting
 an unreadable cursor. Such a page can delay urgent progress until the corrupt
@@ -119,3 +132,24 @@ and `BACKEND_UNIT_FILE_BUDGET_SECONDS=3600`, under `omi-heavy`, with
 `CLOUDSDK_CORE_ACCOUNT` unset. `actionlint gcp_diarizer.yml` and
 `git diff --check` also pass. This is hermetic local evidence; no deployment,
 index apply or production data access was performed.
+
+
+## Ordinary reserve verification
+
+The Luna follow-up merges main without rebasing; L1 #25018 was still open at
+that fetch. Regression tests use the real bounded query and encrypted cursors
+across three runs with an urgent backlog larger than the job allocation.
+They assert the ordinary reserve each run, deadline-first urgent attempts,
+conversation capacity, and the pre-attempt checkpoint retaining deferred
+ordinary candidates. An exhausted ordinary pass returns its whole allocation
+to urgency. Coverage includes 2, 4 and 16 workers, including a one-place job
+allocation. The shared scan cap still accounts for one page per job leg.
+
+Verification recorded 2026-11-10T20:21:16+00:00 on m1-mac-studio after merging main
+`85de1985f0fb4fddd05e0de4b36c1ac68108d81e`: all 15 record-seal unit files
+ran through `backend/test.sh` under `omi-heavy`, with credential variables
+unset, file isolation, four file workers, a 3,600-second per-file budget and
+the unchanged 0.1/1.0-second CPU warning/failure guards. Result: **436 passed,
+3 skipped** (Firestore emulator tests without an emulator). This includes all
+38 priority tests, 136 coordinator tests and five row import-graph contracts.
+No production or emulator service was started.

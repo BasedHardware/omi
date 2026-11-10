@@ -106,7 +106,7 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
             self.writes.append(value)
 
     def jobs(client, *, urgent=False, selected_cursors, max_rows, **kwargs):
-        assert max_rows == (2 if urgent or urgent_index_error else 1)
+        assert max_rows == (1 if urgent else 2)
         if urgent and urgent_index_error:
             raise cluster.FailedPrecondition('private query requires an index: users/private')
         path = 'urgent' if urgent else 'recent-job'
@@ -272,3 +272,85 @@ def test_conversation_newest_first_encrypted_resume_frozen_horizon_and_wrap(monk
     frontier.write(None, budget)
     rows, _, _ = cluster.discover(client, budget=budget, after=frontier.read(budget), max_rows=1)
     assert rows[0][0].endswith('/new-arrival')
+
+
+@pytest.mark.parametrize('ordinary_count', [0, 1, 8, 32])
+@pytest.mark.parametrize('workers', [2, 4, 16])
+def test_ordinary_reserve_survives_sustained_urgent_backlog_and_returns_unused_capacity(
+    monkeypatch, ordinary_count, workers
+):
+    from database import _client
+    from utils.batch_pipeline import record_seal_sweeper
+
+    class Client(OrderedJobsClient):
+        def __init__(self, documents):
+            super().__init__(documents)
+            self.states = {}
+
+        def collection(self, name):
+            if name == 'batch_pipeline_prod_maintenance':
+                return SimpleNamespace(document=lambda key: self.states.setdefault(key, CursorClient()))
+            return super().collection(name)
+
+    ordinary = [pending_job(i, NOW - 10000 - i) for i in range(ordinary_count)]
+    urgent = [pending_job(100 + i, NOW - 5000 - i, record_dead_letter_deadline_at=NOW + i) for i in range(64)]
+    client = Client(ordinary + urgent)
+    allocation = max(1, workers // 2)
+    reserve = max(1, allocation // 4)
+    expected_ordinary = min(reserve, ordinary_count)
+    normal = RepairCursor(client, b'k' * 32, jobs=True)
+    # An exhausted ordinary pass can be empty while urgent has independent work.
+    normal.write(
+        {
+            'path': 'batch_pipeline_prod_jobs/head',
+            'enqueued_at': NOW - 9999 if ordinary_count else 0,
+            'horizon': datetime.fromtimestamp(NOW, timezone.utc),
+        },
+        SweepBudget(60),
+    )
+    calls = []
+
+    def conversations(client, *, advance_rows, **kwargs):
+        assert advance_rows == workers - allocation
+        assert kwargs['max_scan'] <= cluster.MAX_SCAN - 128
+        return [], False, None
+
+    def coordinate(rows, *, attempted, **kwargs):
+        calls.append([path for path, _ in rows])
+        if ordinary_count:
+            # Check the checkpoint BEFORE attempts can overwrite it. Candidates
+            # fetched beyond the ordinary reserve must remain for the next run.
+            checkpoint = normal.read(SweepBudget(60))
+            if ordinary_count == 1 and allocation > 1:
+                assert checkpoint is None  # Entire ordinary pass was selected.
+            else:
+                assert checkpoint['enqueued_at'] == NOW - 10000 - (len(calls) * reserve - 1)
+        for path, _ in rows:
+            attempted(path)
+        return {}
+
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: {})
+    monkeypatch.setattr(config, 'cursor_secret', lambda: b'k' * 32)
+    monkeypatch.setattr(config, 'settings', lambda: (workers, 270, 1500, 'apply'))
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: True)
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', lambda: None)
+    monkeypatch.setattr(record_seal_sweeper, 'require_fresh_proof', lambda _: None)
+    monkeypatch.setattr(cluster, 'discover', conversations)
+    monkeypatch.setattr(cluster, 'coordinate', coordinate)
+    for iteration in range(3 if ordinary_count >= 8 else 1):
+        assert cluster.run()['outcome'] == 'ok'
+        paths = calls[-1]
+        assert len(paths) == allocation and len(set(paths)) == allocation
+        urgent_count = allocation - expected_ordinary
+        assert paths[:urgent_count] == [
+            f'users/synthetic/conversations/capture-{100 + i}'
+            for i in range(iteration * urgent_count, (iteration + 1) * urgent_count)
+        ]
+        assert paths[urgent_count:] == [
+            f'users/synthetic/conversations/capture-{i}'
+            for i in range(iteration * reserve, iteration * reserve + expected_ordinary)
+        ]
+        # Every run performs ordinary discovery, despite >= allocation urgent jobs.
+        assert sum(query.order[0] == 'enqueued_at' for query in client.queries) == iteration + 1

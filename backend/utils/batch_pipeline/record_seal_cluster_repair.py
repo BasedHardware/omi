@@ -779,17 +779,29 @@ def run(*, progress=lambda _: None):
             urgent_rows, urgent_cursors, urgent_cursor = [], {}, None
             if config.jobs_enabled():
                 jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
-                if refactor_modes.record_seal_repair_age_order():
+                allocation = max(1, workers // 2)
+                # Scan ordinary jobs every run, even under continuous urgency.
+                job_rows, jobs_saturated, jobs_cursor = discover_jobs(
+                    client,
+                    budget=budget,
+                    after=jobs_frontier.read(budget),
+                    max_rows=allocation,
+                    selected_cursors=job_cursors,
+                    progress=progress,
+                )
+                ordinary_reserve = min(len(job_rows), max(1, allocation // 4))
+                if refactor_modes.record_seal_repair_age_order() and allocation > ordinary_reserve:
                     urgent_frontier = RepairCursor(client, config.cursor_secret(), jobs=True, urgent=True)
                     try:
-                        urgent_rows, jobs_saturated, urgent_cursor = discover_jobs(
+                        urgent_rows, urgent_saturated, urgent_cursor = discover_jobs(
                             client,
                             budget=budget,
                             after=urgent_frontier.read(budget),
-                            max_rows=max(1, workers // 2),
+                            max_rows=allocation - ordinary_reserve,
                             selected_cursors=urgent_cursors,
                             urgent=True,
                         )
+                        jobs_saturated = jobs_saturated or urgent_saturated
                     except FailedPrecondition:
                         # Fail only the urgent leg; never emit the SDK message.
                         record_fallback(
@@ -800,20 +812,17 @@ def run(*, progress=lambda _: None):
                             outcome='degraded',
                         )
                         progress({'event': 'record_seal_repair_urgent', 'outcome': 'index_unavailable'})
-                jobs_cursor = jobs_frontier.read(budget)
-                remaining = max(1, workers // 2) - len(urgent_rows)
-                if remaining:
-                    job_rows, recent_saturated, jobs_cursor = discover_jobs(
-                        client,
-                        budget=budget,
-                        after=jobs_cursor,
-                        max_rows=remaining,
-                        selected_cursors=job_cursors,
-                        progress=progress,
-                    )
-                    jobs_saturated = jobs_saturated or recent_saturated
+                remaining = allocation - len(urgent_rows)
+                job_rows = [(path, age) for path, age in job_rows if path not in urgent_cursors]
+                if len(job_rows) > remaining:
+                    jobs_saturated = True
+                    # Candidates held for the next run must stay ahead of the
+                    # ordinary frontier, even if discovery exhausted its page.
+                    jobs_cursor = job_cursors[job_rows[remaining - 1][0]]
+                    job_rows = job_rows[:remaining]
+                job_cursors = {path: job_cursors[path] for path, _ in job_rows}
                 # Keep the existing half-worker reservation for the conversation leg.
-                job_rows = urgent_rows + [(path, age) for path, age in job_rows if path not in urgent_cursors]
+                job_rows = urgent_rows + job_rows
             rows, saturated, cursor = discover(
                 client,
                 budget=budget,

@@ -168,7 +168,14 @@ recency/conversation documents remain for code rollback and are not advanced.
 
 Urgent and ordinary jobs together occupy at most half the first worker group
 (one for a single-worker run); conversations keep their existing reservation.
-A continuously full urgent allocation can starve ordinary jobs indefinitely;
+Ordinary discovery runs every enabled run within the shared discovery budget.
+For job allocation `A = max(1, workers // 2)`, it reserves `max(1, A // 4)`
+places when candidates exist; urgency gets the rest, including unused ordinary
+reserve. With 16 workers, ordinary work retains 2 of the 8 job places under
+continuous urgency; an empty ordinary pass allows 8 urgent jobs. Urgent jobs
+still run in deadline order before ordinary attempts. Unused urgent places
+return to ordinary candidates without advancing past held ordinary work.
+This is a one-run discovery starvation bound, not a settlement-time guarantee;
 see the [priority change note](../../docs/listen_pusher_pipeline/changes/2026-11-10-record-seal-priority.md).
 All three legs share the existing discovery deadline, aggregate scan cap, row
 cap, worker cap and run deadline. Preview writes none of the three frontiers.
