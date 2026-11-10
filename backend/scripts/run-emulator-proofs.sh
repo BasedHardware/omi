@@ -149,6 +149,13 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
+# PL-505/461: cache hints cannot authorize post-revocation work. Both local CI
+# stores are mandatory; complete local/staging qualification additionally
+# requires Postgres through OMI_REQUIRE_STORE_BACKENDS=all.
+run_proof "privacy revocation conformance (PL-505/461, sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -rxX -p no:cacheprovider scripts/privacy_revocation_emulator_test.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
