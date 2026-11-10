@@ -30,6 +30,7 @@ from utils.conversations.phase import ConversationPhase, EpisodePhase
 BACKEND = Path(__file__).resolve().parents[2]
 METRIC_MODULES = (
     'utils/metrics.py',
+    'database/record_token_lease_metrics.py',
     'utils/batch_pipeline/metrics.py',
     'utils/conversations/summary_delivery.py',
     'utils/observability/fair_use.py',
@@ -245,8 +246,37 @@ def assert_patch_contract(entry, deadline):
 
 def assert_clause(row, clause):
     if row.derived:
-        # Compatibility reader vocabulary has no state entry side effect.
-        assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
+        if row.machine == 'record_token':
+            # Per-token views derive from nested clocks, not a persisted phase.
+            # Their process-local stock and custody-invariant page do not claim
+            # an independent persisted-state deadline or backlog dwell alarm.
+            assert row.state in {'capturing', 'lease_lapsed'}
+            assert row.fields == ('record_upload_sessions',)
+            assert row.deadline_field is None and not row.deadline_stamped_at_entry and not row.deadline_entries
+            assert row.deadline_exemption
+            assert function_source(row.exit.cite), row.exit.cite
+            if clause == 'automatic_exit':
+                assert row.exit.kind in {'lease', 'sweeper'}
+                for writer in row.exit.automatic_writers:
+                    assert function_source(f'{writer.module}:{writer.function}'), writer
+                    assert writer.function in FIELD_BUILDERS.get(writer.module, {}).get('record_upload_sessions', ())
+            elif clause == 'entry_deadline':
+                assert function_source('config/record_seal_rules.py:token_lease_lapsed')
+            elif clause == 'dwell_metric':
+                assert row.dwell_metric == 'omi_record_token_lease_active' and row.dwell_metric in gauge_names()
+            elif clause == 'dwell_alert':
+                assert row.alert.uid == 'omi-record-token-lease-late-append' and row.alert.tier == 'page'
+                rule = alerts()[row.alert.uid]
+                assert rule.get('labels', {}).get('tier') == row.alert.tier and not rule.get('isPaused', False)
+                assert any(
+                    'omi_record_token_late_append_total' in item.get('model', {}).get('expr', '')
+                    for item in rule['data']
+                )
+            else:
+                raise AssertionError(clause)
+        else:
+            # Compatibility reader vocabulary has no state entry side effect.
+            assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
         return
     if row.quiescent:
         assert (row.machine, row.state) == ('fair_use', 'none')
@@ -531,6 +561,14 @@ def parameters():
 @pytest.mark.parametrize('row,clause', list(parameters()))
 def test_latch_clause(row, clause):
     assert_clause(row, clause)
+
+
+@pytest.mark.parametrize('clause', CLAUSES)
+def test_derived_record_token_view_rejects_unknown_states_and_fields(clause):
+    view = next(row for row in STATES if row.key == 'record_token:capturing')
+    for changed in (replace(view, state='invented'), replace(view, fields=('status',))):
+        with pytest.raises(AssertionError):
+            assert_clause(changed, clause)
 
 
 def test_declared_phase_vocabulary_matches_compatibility_reader():
