@@ -8,6 +8,8 @@ description: >-
   without a signed app session; this flow verifies the mounted destinations.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/AttentionLedgerStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/AttentionLedgerSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/FailedConversationsActivitySection.swift
@@ -73,7 +75,9 @@ steps:
       synthetic cases from attention-items, plus an unknown retryable kind.
       Verify each conversation appears once in Needs attention and noise stays
       off Home. Re-run notes uses the item retry endpoint, never conversation
-      reprocess. A 409 or transport failure keeps the row with an error; success
+      reprocess. Every item retry sends an Idempotency-Key. A transport failure
+      keeps that key for replay; a confirmed operation or 409 not_retryable clears
+      it before the next attempt. A 409 or transport failure keeps the row with an error; success
       removes it even if an old ledger/list read arrives late. Unknown kinds
       show no retry. Tasks and calendar events are unchanged. Disable placement
       and verify the new section disappears. Switch accounts during a delayed

@@ -105,3 +105,24 @@ Addition-only non-test delta: +954/-81 (1,035 changed lines), excluding upstream
 merges, tests/e2e and UI evidence/render harness; includes source, config, docs
 and localization/generated files (+205 localization lines). The immutable
 measurement and reproduction method are in notes-addition-line-delta.json.
+
+
+## Luna FIX-FIRST at 3840beec — macOS ledger idempotency
+
+**Fixed.** macOS now generates an in-memory UUID per attention item on its first
+retry, sends it as `Idempotency-Key` through the authenticated POST helper and
+reuses it after transport errors. A confirmed in-progress/succeeded/failed
+operation or `409 {"state":"not_retryable"}` clears the key; account reset also
+clears it. Failed requests keep the error row. The HTTP parser recognizes the
+contract's state-only 409 body. Unknown kinds remain display-only.
+
+Four new native tests exercise the actual request endpoint/header, transport-error
+replay, key renewal after confirmation, and account reset. The selected native
+run passed 185 tests, with two opt-in PNG tests skipped (187 executed). Mobile's
+22 focused notes/pending-store tests and web's nine API/hook tests pass, including
+notes-only header assertions. Both clients already send a key for
+`conversation_notes_failed_with_outputs`; neither needed a production change.
+Desktop test-quality checks pass. Full preflight and the one normal full-hook
+push are reported in the PR body. UI code, fixtures and approved PNGs are unchanged.
+Fresh fetch confirmed GitHub reports MERGEABLE, so this follow-up does not merge
+main, as requested. No force push, hook bypass or PR merge is authorized.

@@ -187,7 +187,7 @@ final class HomeFailurePlacementTests: XCTestCase {
           enabled: true,
           items: [self.ledger("summary", kind: "conversation_summary_failed"), notes, unknown])
       },
-      retry: { id in
+      retry: { id, _ in
         calls.append(id)
         return AttentionLedgerRetry(state: "in_progress", operationId: "op")
       },
@@ -208,7 +208,7 @@ final class HomeFailurePlacementTests: XCTestCase {
     for failure in [0, 1, 2] {
       let store = AttentionLedgerStore(
         load: { AttentionLedgerPage(items: [self.ledger()]) },
-        retry: { _ in
+        retry: { _, _ in
           if failure == 0 { throw RetryError.offline }
           if failure == 1 { throw APIError.httpError(statusCode: 409, detail: "not_retryable") }
           return AttentionLedgerRetry(state: "not_retryable")
@@ -238,7 +238,7 @@ final class HomeFailurePlacementTests: XCTestCase {
           }
         }
         return AttentionLedgerPage(items: [reads > 2 ? fresh : notes])
-      }, retry: { _ in AttentionLedgerRetry(state: "in_progress", operationId: "op") }, owner: { "fixture" })
+      }, retry: { _, _ in AttentionLedgerRetry(state: "in_progress", operationId: "op") }, owner: { "fixture" })
     await store.refresh()
     let refresh = Task { await store.refresh() }
     for await _ in started { break }
@@ -260,7 +260,7 @@ final class HomeFailurePlacementTests: XCTestCase {
     var owner = "first"
     let store = AttentionLedgerStore(
       load: { AttentionLedgerPage(items: [notes]) },
-      retry: { _ in
+      retry: { _, _ in
         calls += 1
         return try await withCheckedThrowingContinuation {
           completion = $0

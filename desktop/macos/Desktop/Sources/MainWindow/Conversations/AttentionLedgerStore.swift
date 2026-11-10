@@ -36,9 +36,12 @@ struct AttentionLedgerPage: Decodable {
 
 extension APIClient {
   func getAttentionLedger() async throws -> AttentionLedgerPage { try await get("v1/attention-items") }
-  func retryAttentionLedger(_ id: String) async throws -> AttentionLedgerRetry {
+  func retryAttentionLedger(
+    _ id: String, idempotencyKey: String, customBaseURL: String? = nil
+  ) async throws -> AttentionLedgerRetry {
     let encoded = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
-    return try await post("v1/attention-items/\(encoded)/retry")
+    return try await post(
+      "v1/attention-items/\(encoded)/retry", customBaseURL: customBaseURL, idempotencyKey: idempotencyKey)
   }
 }
 
@@ -51,20 +54,22 @@ final class AttentionLedgerStore: ObservableObject {
   @Published private(set) var errors = Set<String>()
   @Published private(set) var loadFailed = false
   private var accepted: [String: (conversation: String, operation: String?)] = [:]
+  // Keep ambiguous attempts in memory until acknowledged, scoped to this account session.
+  private var retryKeys: [String: String] = [:]
   private var readGeneration = 0
   private var session = 0
   private var identity: String?
   private let load: () async throws -> AttentionLedgerPage
-  private let retryCall: (String) async throws -> AttentionLedgerRetry
+  private let retryCall: (String, String) async throws -> AttentionLedgerRetry
   private let owner: () -> String?
 
   init(
     load: (() async throws -> AttentionLedgerPage)? = nil,
-    retry: ((String) async throws -> AttentionLedgerRetry)? = nil,
+    retry: ((String, String) async throws -> AttentionLedgerRetry)? = nil,
     owner: (() -> String?)? = nil
   ) {
     self.load = load ?? { try await APIClient.shared.getAttentionLedger() }
-    retryCall = retry ?? { try await APIClient.shared.retryAttentionLedger($0) }
+    retryCall = retry ?? { try await APIClient.shared.retryAttentionLedger($0, idempotencyKey: $1) }
     self.owner = owner ?? { AuthState.shared.userId }
   }
 
@@ -87,6 +92,7 @@ final class AttentionLedgerStore: ObservableObject {
     identity = nil
     items = []
     accepted = [:]
+    retryKeys = [:]
     errors = []
     retrying = []
     loadFailed = false
@@ -128,19 +134,29 @@ final class AttentionLedgerStore: ObservableObject {
       !accepted.values.contains(where: { $0.conversation == item.conversationId }),
       identity != nil, identity == owner()
     else { return }
+    let key = retryKeys[item.id] ?? UUID().uuidString
+    retryKeys[item.id] = key
     let attemptSession = session
     readGeneration += 1
     retrying.insert(item.id)
     errors.remove(item.id)
     defer { if attemptSession == session { retrying.remove(item.id) } }
     do {
-      let result = try await retryCall(item.id)
+      let result = try await retryCall(item.id, key)
       guard attemptSession == session, identity == owner() else { return }
+      if ["in_progress", "succeeded", "failed"].contains(result.state) {
+        retryKeys.removeValue(forKey: item.id)
+      }
       guard ["in_progress", "succeeded"].contains(result.state) else { throw APIError.invalidResponse }
       accepted[item.id] = (item.conversationId, result.operationId)
       items.removeAll { $0.id == item.id }
     } catch {
-      if attemptSession == session, identity == owner() { errors.insert(item.id) }
+      if attemptSession == session, identity == owner() {
+        if case APIError.httpError(statusCode: 409, detail: "not_retryable") = error {
+          retryKeys.removeValue(forKey: item.id)
+        }
+        errors.insert(item.id)
+      }
     }
   }
 }
