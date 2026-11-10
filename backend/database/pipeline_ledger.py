@@ -31,6 +31,12 @@ from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 from config.refactor_modes import pipeline_ledger_enabled
 from database._client import get_firestore_client, run_transactional
+from utils.observability.reasons import (
+    PipelineLedgerFailureReason,
+    PipelineLedgerOutcome,
+    ReasonFamily,
+    reason_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +300,7 @@ def plan_advance(
 
 def _observe_write(outcome: str) -> None:
     try:
-        _WRITE.labels(outcome=outcome).inc()
+        _WRITE.labels(outcome=reason_label(ReasonFamily.PIPELINE_LEDGER, outcome, PipelineLedgerOutcome)).inc()
     except Exception:  # Metrics must never break a transition.
         pass
 
@@ -315,7 +321,9 @@ def _observe_failure(error: BaseException) -> None:
         )
     )
     try:
-        _WRITE_FAILURES.labels(reason=reason).inc()
+        _WRITE_FAILURES.labels(
+            reason=reason_label(ReasonFamily.PIPELINE_LEDGER, reason, PipelineLedgerFailureReason)
+        ).inc()
     except Exception:
         pass
 
