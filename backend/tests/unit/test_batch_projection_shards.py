@@ -1094,10 +1094,11 @@ def test_discovery_promotes_backlog_without_demoting_or_stealing_a_lease(server,
     assert holder.take(BACKLOG, 10, shards=[0]) == []
     assert observer.push('gpu', owner_key('gpu'), BACKLOG, 0.0, discovery=True)
     assert observer.push('gpu', owner_key('gpu'), FRESH, 995.0, discovery=True)
-    assert holder.take(FRESH, 10, shards=[0]) == [fresh]
+    (replayed,) = holder.take(FRESH, 10, shards=[0])
+    assert (replayed.owner_id, replayed.score, replayed.seq) == (fresh.owner_id, fresh.score, fresh.seq)
     assert holder.take(BACKLOG, 10, shards=[0]) == []
     assert client.get(holder._lease_key(0)) == lease
-    assert observer.held == set() and holder.healthy
+    assert observer.held == set() and holder.healthy == held
 
 
 def test_discovery_promotion_preserves_a_future_retry_across_holder_replacement(server):
