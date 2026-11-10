@@ -1264,6 +1264,7 @@ def test_parse_failure_repairs_once_with_only_the_bad_output(store):
     assert len(calls) == 2
     system, human = calls[1]
     assert 'repair' in system[1].lower()
+    assert '{{' not in system[1] and '}}' not in system[1], 'repair schema must be actual JSON'
     # The repair prompt is the bad output alone: no transcript, no member summaries.
     assert human[1] == 'not json at all'
     assert 'We planned the launch' not in human[1] and 'Existing summary' not in human[1]

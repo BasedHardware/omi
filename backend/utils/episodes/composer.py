@@ -349,7 +349,7 @@ def build_messages(
 
 def build_repair_messages(content: str) -> list[tuple[str, str]]:
     """The one repair retry: the bad output alone, never the transcripts."""
-    return [('system', REPAIR_SYSTEM_PROMPT), ('human', str(content or ''))]
+    return [('system', REPAIR_SYSTEM_PROMPT.format()), ('human', str(content or ''))]
 
 
 def _sections_text(structured: Mapping[str, Any]) -> str:
