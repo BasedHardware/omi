@@ -34,3 +34,7 @@ ledger can record it and L6b resolves its matching marker before fenced undo.
 Restore deliberately has no privacy admission gate: it only restores the
 owner's existing row, without audio access or new cloud work. A later consent
 opt-out must not strand that row hidden; run/revision/shape fences still apply.
+
+The restore intent lives in the lightweight no_speech_restore lifecycle submodule,
+re-exported by lifecycle.py. The tripwire permits only restore_no_speech there,
+so CLI rollback can load without importing audio encryption or provider code.

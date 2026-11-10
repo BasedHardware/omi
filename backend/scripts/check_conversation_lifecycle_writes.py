@@ -140,7 +140,11 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         function = node.func
         if isinstance(function, ast.Attribute) and function.attr in LIFECYCLE_METHODS:
-            if self.relative_path != LIFECYCLE_SERVICE:
+            restore_owner = (
+                self.relative_path == 'backend/utils/conversations/no_speech_restore.py'
+                and function.attr == 'restore_no_speech'
+            )
+            if self.relative_path != LIFECYCLE_SERVICE and not restore_owner:
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: direct lifecycle database call {function.attr}; '
                     f'use utils.conversations.lifecycle instead'
