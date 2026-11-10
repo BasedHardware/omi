@@ -41,6 +41,8 @@ LIFECYCLE_METHODS = {
     'restore_conversation_from_discarded',
     'close_noise',
     'restore_noise',
+    'close_no_speech',
+    'restore_no_speech',
 }
 GENERIC_LIFECYCLE_MUTATION_METHODS = {'update_conversation'}
 FINALIZATION_ADMISSION_METHODS = {

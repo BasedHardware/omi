@@ -7,7 +7,6 @@ transaction read-before-write ordering and DELETE_FIELD.
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 from google.cloud import firestore
@@ -184,12 +183,11 @@ def test_close_then_restore_restores_original_fields_exactly(client):
     assert client.deletes == []
 
 
-def test_close_never_calls_audio_deletion(monkeypatch, client):
-    import utils.other.storage as storage
-
-    monkeypatch.setattr(storage, 'delete_conversation_audio_files', Mock(side_effect=AssertionError('deleted')))
+def test_close_preserves_retained_audio_and_never_deletes_row(client):
+    audio = client.rows[PATH]['audio_files']
     close(client)
-    assert client.rows[PATH]['audio_files']
+    assert client.rows[PATH]['audio_files'] == audio
+    assert client.deletes == []
 
 
 @pytest.mark.parametrize(
@@ -198,6 +196,7 @@ def test_close_never_calls_audio_deletion(monkeypatch, client):
         ({'status': 'completed'}, 'not_in_progress'),
         ({'discarded': True}, 'already_discarded'),
         ({'deleted': True}, 'row_retired_or_locked'),
+        ({'sync_merged_into': 'successor'}, 'row_retired_or_locked'),
         ({'is_locked': True}, 'row_retired_or_locked'),
         ({'finalization_job_id': 'job'}, 'row_retired_or_locked'),
         ({'record_lane_owner': 'batch_sync_v1'}, 'not_batch_live_owner'),
@@ -249,13 +248,9 @@ def test_restore_refuses_a_foreign_run(client):
     assert str(error.value) == 'not_matching_close'
 
 
-def test_home_hides_the_closed_row():
-    closed = {
-        'status': 'completed',
-        'discarded': True,
-        'terminal_no_derived_effects': True,
-        'no_speech_terminal': {'state': 'no_speech'},
-    }
+def test_home_hides_the_closed_row(client):
+    close(client)
+    closed = client.rows[PATH]
     assert is_visible_conversation(closed) is False
     # Export/compliance readers still see the preserved row.
     assert is_visible_conversation(closed, include_discarded=True) is True
@@ -269,8 +264,8 @@ def test_close_returns_receipt_when_post_commit_io_would_fail(monkeypatch, clien
         # The commit result is available, but every subsequent read/retirement
         # fails. Close must return that result without touching either service.
         monkeypatch.setattr(Document, 'get', fail)
-        monkeypatch.setattr(quiet_check_retirement, 'stop_quiet_check_for_conversation', fail)
-        monkeypatch.setattr(terminal, 'stop_quiet_check_for_conversation', fail, raising=False)
+        monkeypatch.setattr(client, 'collection', fail)
+        monkeypatch.setattr(client, 'transaction', fail)
 
     monkeypatch.setattr(Transaction, '_commit', commit)
     committed = close(client)
@@ -307,3 +302,39 @@ def test_restore_preserves_present_field_values(client, discarded, effects):
     committed = close(client)
     terminal.restore_no_speech(UID, CID, expected_closed_revision=committed, run_id='run-1', firestore_client=client)
     assert client.rows[PATH] == before
+
+
+@pytest.mark.parametrize('row_flag,custom_stt', [(False, False), (None, False), (True, True)])
+def test_close_enforces_canonical_row_privacy(client, row_flag, custom_stt):
+    if row_flag is None:
+        client.rows[PATH].pop('private_cloud_sync_enabled')
+    else:
+        client.rows[PATH]['private_cloud_sync_enabled'] = row_flag
+    client.rows[PATH]['uses_custom_stt'] = custom_stt
+    before = dict(client.rows[PATH])
+    with pytest.raises(terminal.NoSpeechConflict, match='^privacy_changed$'):
+        close(client)
+    assert client.rows[PATH] == before
+    assert client.deletes == []
+
+
+@pytest.mark.parametrize('results', [[], None, [None], [SimpleNamespace(update_time=None)]])
+def test_close_records_unknown_revision_without_raising_after_commit(monkeypatch, client, results):
+    def commit(transaction):
+        transaction.write_results = results
+
+    monkeypatch.setattr(Transaction, '_commit', commit)
+    assert close(client) == terminal.COMMITTED_REVISION_UNKNOWN
+    assert client.rows[PATH]['no_speech_terminal']['run_id'] == 'run-1'
+    assert client.rows[PATH]['discarded'] is True
+    assert client.deletes == []
+
+
+def test_restore_keeps_owner_row_recoverable_after_privacy_opt_out(client):
+    before = dict(client.rows[PATH])
+    committed = close(client)
+    client.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+    terminal.restore_no_speech(UID, CID, expected_closed_revision=committed, run_id='run-1', firestore_client=client)
+    assert client.rows[PATH] == before
+    assert is_visible_conversation(client.rows[PATH]) is True
+    assert client.deletes == []
