@@ -22,5 +22,6 @@
       "captured_by": "agent",
       "source": "visual-audit"
     }
-  ]
+  ],
+  "verification": "2026-11-10 L8b split: 103 focused Flutter tests plus 138 spine tests; current renders visually inspected."
 }
