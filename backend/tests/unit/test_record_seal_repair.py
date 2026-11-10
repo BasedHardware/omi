@@ -414,6 +414,7 @@ def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, 
     assert result['entries'][0]['disposition'] == 'eligible'
     from database import record_custody_append
 
+    monkeypatch.setattr(record_custody_append, 'time', SimpleNamespace(time=lambda: 10000))
     assert record_custody_append.begin('synthetic', 'record', 'custody:plan-race', firestore_client=client)
     assert client.rows[PATH].get('record_upload_revision', 0) == 0
     assert repair.apply_seals(store, result, result['plan_sha256']) == {'state_changed': 1}
@@ -424,8 +425,8 @@ def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, 
     record_custody_append.finish('synthetic', 'record', 'custody:plan-race', accepted=True, firestore_client=client)
     assert client.rows[PATH]['record_upload_revision'] == 1
     assert set(client.rows[PATH]['record_upload_sessions']) == {'s'}
-    # The independently live producer is still fenced after this uploader ends.
-    assert plan(source)['entries'][0]['disposition'] == 'upload_pending'
+    # The frame token's lease lapsed, so the record is eligible again once the custody uploader ends.
+    assert plan(source)['entries'][0]['disposition'] == 'eligible'
 
 
 def test_lease_kill_switch_after_plan_and_tail_refusal(source, monkeypatch):
