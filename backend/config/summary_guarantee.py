@@ -25,11 +25,21 @@ def deadline_seconds() -> int:
         return 120
 
 
+def _repair_limit(value: str, *, default: int, maximum: int) -> int:
+    try:
+        return max(1, min(maximum, int(value)))
+    except ValueError:
+        return default
+
+
 # One global leased scan per interval, irrespective of replica count.
 REPAIR_INTERVAL_SECONDS = 120
 REPAIR_SCAN_LIMIT = 100
-REPAIR_ADMISSION_LIMIT = 10
-# Five ticks (10 minutes): up to 5 * REPAIR_ADMISSION_LIMIT = 50 attempts
+REPAIR_ADMISSION_LIMIT = _repair_limit(os.getenv('SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT', '10'), default=10, maximum=60)
+REPAIR_PER_OWNER_TICK_LIMIT = _repair_limit(
+    os.getenv('SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT', '3'), default=3, maximum=10
+)
+# Five ticks (10 minutes): up to 50 attempts at the default admission limit
 # before expiry at the configured cadence. This is headroom, not a throughput
 # guarantee when urgent arrivals exceed capacity or admissions are blocked.
 REPAIR_NEAR_EXPIRY_SECONDS = 5 * REPAIR_INTERVAL_SECONDS

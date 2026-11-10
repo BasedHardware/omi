@@ -523,6 +523,7 @@ def test_near_expiry_is_not_starved_by_large_newer_pile_and_retains_unattempted_
 
     client, uid, tasks, ref, row = debt_store
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 10)
     now = 1_800_000_000.0
     cutoff = now - max_age_seconds()
     urgent = [ref.parent.document(f'urgent-{i:02}') for i in range(12)]
@@ -581,6 +582,7 @@ def test_expiry_band_boundary_goes_first_and_remaining_budget_goes_newest(debt_s
 
     client, uid, tasks, ref, row = debt_store
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 10)
     now = 1_800_000_000.0
     cutoff = now - max_age_seconds()
     pending = [cutoff, cutoff + REPAIR_NEAR_EXPIRY_SECONDS, cutoff + REPAIR_NEAR_EXPIRY_SECONDS + 1, now - 1]
@@ -641,4 +643,59 @@ def test_tick_repair_counter_matches_returned_counts_and_ignores_unclaimed_ticks
         assert {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys} == after
     finally:
         for added in refs:
+            added.delete()
+
+
+def test_owner_fairness_is_shared_across_phases_and_skipped_rows_return_next_tick(debt_store, monkeypatch):
+    from collections import Counter
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 3)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    now = 1_800_000_000.0
+    cutoff = now - max_age_seconds()
+    other = client.collection('users').document(uid + '-other').collection('conversations')
+    urgent = [ref.parent.document(f'urgent-{i}') for i in range(4)]
+    newest = [ref.parent.document(f'newest-{i}') for i in range(4)]
+    other_urgent = [other.document(f'urgent-{i}') for i in range(2)]
+    other_newest = [other.document(f'newest-{i}') for i in range(2)]
+    ref.update({'summary_due_at': None})
+    admitted = []
+
+    def redrive(client, owner, conversation_id, *, now):
+        admitted.append((owner, conversation_id))
+        client.collection('users').document(owner).collection('conversations').document(conversation_id).update(
+            {'summary_due_at': None}
+        )
+        return True
+
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        for refs, pending in (
+            (urgent, [cutoff + 400 + i for i in range(4)]),
+            (other_urgent, [cutoff + 420 + i for i in range(2)]),
+            (newest, [now - 10 - i for i in range(4)]),
+            (other_newest, [now - 30 - i for i in range(2)]),
+        ):
+            for added, at in zip(refs, pending):
+                added.set({**row, 'summary_first_pending_at': at, 'summary_due_at': now - 1})
+        for tick, expected, urgent_count in ((0, 6, 5), (1, 4, 1), (2, 2, 0)):
+            start = len(admitted)
+            counts = repair.tick(now=now + tick * repair.REPAIR_INTERVAL_SECONDS, client=client)
+            assert counts['admitted'] == expected
+            assert counts['near_expiry_admitted'] == urgent_count
+            assert counts['scanned'] <= repair.REPAIR_SCAN_LIMIT
+            assert max(Counter(owner for owner, _ in admitted[start:]).values()) <= 3
+            if tick == 0:
+                # One owner's fourth urgent row is retried next tick, while
+                # the other owner still receives urgent and newest capacity.
+                assert (uid, urgent[3].id) not in admitted
+                assert (uid + '-other', other_newest[0].id) in admitted
+            if tick == 1:
+                assert (uid, urgent[3].id) in admitted[start:]
+        assert len(admitted) == len(set(admitted)) == 12
+    finally:
+        for added in urgent + newest + other_urgent + other_newest:
             added.delete()

@@ -17,6 +17,7 @@ from config.summary_guarantee import (
     REPAIR_INTERVAL_SECONDS,
     REPAIR_SCAN_LIMIT,
     REPAIR_ADMISSION_LIMIT,
+    REPAIR_PER_OWNER_TICK_LIMIT,
 )
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_blocks_user_work
@@ -135,6 +136,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     # ASC cursor must never be reused for the new DESC phase.
     progress: Row = dict(cursor.get('phases') or {}) if cursor.get('version') == 2 else {}
     attempts = 0
+    owner_attempts: dict[str, int] = {}
     overdue = 0
     oldest = 0.0
     for phase in ('near_expiry', 'newest'):
@@ -146,10 +148,12 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         )
         counts['scanned'] += len(page)
         last = None
+        deferred = False
         for snapshot in page:
-            # Keep sampling the fetched page, but do not advance the cursor
-            # past candidates the admission budget cannot serve.
-            if attempts < REPAIR_ADMISSION_LIMIT:
+            # Sample the entire fetched page. Once a candidate is deferred,
+            # retain the preceding key so it is eligible again next tick.
+            previous = last
+            if not deferred:
                 last = snapshot
             row: Row = snapshot.to_dict() or {}
             if delivery.refusal(row):
@@ -166,9 +170,13 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 continue
             overdue += 1
             oldest = max(oldest, current - row['summary_due_at'])
-            if attempts >= REPAIR_ADMISSION_LIMIT:
+            if attempts >= REPAIR_ADMISSION_LIMIT or owner_attempts.get(parts[1], 0) >= REPAIR_PER_OWNER_TICK_LIMIT:
+                if not deferred:
+                    last = previous
+                    deferred = True
                 continue
             attempts += 1
+            owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
             try:
                 admitted = int(redrive(client, parts[1], parts[3], now=current))
                 counts['admitted'] += admitted
@@ -177,10 +185,11 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             except Exception:
                 # Existing sweep owns retry. Do not print document contents/errors.
                 counts['errors'] += 1
-        # A short exhausted page rewinds; a full or partially visited page
-        # resumes at the last examined row, including refusals/errors. Count the
-        # fetched tail against the read budget even when admissions stop early.
-        if last is not None and (len(page) == limit or last is not page[-1]):
+        # Wrap only exhausted pages with no deferrals. Fairness/global caps
+        # rewind before the first skipped candidate, while this tick can still
+        # admit other owners later in the bounded page. A heavy owner beyond a
+        # full page can still require several ticks of bounded discovery.
+        if last is not None and (len(page) == limit or deferred):
             row = last.to_dict() or {}
             progress[phase] = {
                 'phase': phase,
@@ -189,8 +198,9 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 'due': row.get('summary_due_at'),
                 'pending': row.get('summary_first_pending_at'),
             }
-        else:
+        elif not deferred:
             progress[phase] = None
+        # First-row deferral preserves the input cursor (or None on a rewind).
     delivery.DEBT.set(overdue)
     delivery.OLDEST.set(oldest)
     delivery.SAMPLED_AT.set(current)

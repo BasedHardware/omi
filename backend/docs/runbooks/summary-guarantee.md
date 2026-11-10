@@ -73,13 +73,13 @@ rows. Enabling the new flag alone is not a historical backlog drain.
 
 Only the existing scheduled two-minute sequencer sweep scans indexed overdue `summary_due_at` rows,
 including completed kept minimums. A global Firestore cursor/lease permits one
-scan per 120 seconds, at most 100 fetched documents and **10 admission attempts**
-per winning tick shared across two phases. First scan pending times in
+scan per 120 seconds, at most 100 fetched documents and **10 admission attempts
+by default** per winning tick shared across two phases. First scan pending times in
 `[now - max_age_seconds(), now - max_age_seconds() + REPAIR_NEAR_EXPIRY_SECONDS]`
 oldest-first; then scan the rest of the window newest-first. The named margin is
 five intervals (600 seconds), allowing up to 50 admission attempts before expiry
-at the configured cadence. This is headroom, not a guarantee under overload or
-blocked admissions. With the age gate disabled there is only the newest phase.
+at the default cap and configured cadence. This is headroom, not a guarantee
+under overload or blocked admissions. With the age gate disabled there is only the newest phase.
 Both order by due time then document name to break pending-time ties.
 
 Version 2 of the same cursor document stores independent `near_expiry` and
@@ -87,9 +87,23 @@ Version 2 of the same cursor document stores independent `near_expiry` and
 the existing lease/next-tick fence; flat fields are cleared so older readers also
 rewind on rollback. Each phase wraps at exhaustion and passes blocked rows.
 A phase stopped by the attempt cap resumes at the last examined row, never the
-unattempted fetched tail. Near-expiry admissions consume capacity first; only
-remaining reads and attempts go to newest-first. A large newer pile cannot
+unattempted fetched tail. Per-owner deferrals retain the cursor immediately
+before the first skipped candidate, so it is eligible again next tick even while
+other owners later in this bounded page can be served. Near-expiry admissions
+consume capacity first; only remaining reads and attempts go to newest-first. A large newer pile cannot
 consume the expiry band's budget. Urgent overload can consume all capacity.
+
+`SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT` is a startup setting clamped to 1..60
+(default 10; invalid uses 10). At 30 ticks/hour, the configured ceiling is
+`limit * 30`: 300 attempts/hour by default, 1,800 at the upper bound. The default
+is unchanged; raising a deployed value is a separate lead2 spend decision.
+`SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` is clamped to 1..10 (default 3; invalid
+uses 3). One owner share covers both phases in a tick. Failed/blocked attempts
+also consume the share, preventing one owner from spending the global attempt
+budget. These limits are configuration, not rollout flags; no deployment values
+are changed. Unset either setting to restore its default on process restart.
+Fairness applies to the fetched sample; a heavy owner filling a whole 100-row
+page can still delay discovery beyond the page.
 
 Existing eligibility excludes deleted, discarded and local-only rows. There is
 no reliable denormalized Home-today or active-user rank on the debt row. That
@@ -101,10 +115,12 @@ the same outbox key and transcript generation. The eventual lifecycle write
 rechecks repair eligibility and transcript revision. No new finalization job or
 revision is manufactured. The original backfill worker binding is retained.
 
-Worst-case document-read budget, excluding transaction retries: 100 scan reads
+Default worst-case document-read budget, excluding transaction retries: 100 scan reads
 + 1 cursor claim + 1 cursor finish + 10 × 8 admission reads = **182 per winning
-tick, 131,040/day** at the existing scheduled two-minute cadence. Duplicate
-scheduler deliveries cost one cursor read each and are refused by the durable
+tick, 131,040/day** at the existing scheduled two-minute cadence. At the maximum
+configured 60 attempts, the same formula is 582 reads/tick; owner shares and
+short pages can lower actual work. These are calculated ceilings, not measured
+throughput or spend. Duplicate scheduler deliveries cost one cursor read each and are refused by the durable
 lease/next-tick fence. Batch pump invocations never run the scan or read its cursor.
 Queries may additionally bill bounded index-entry batches because the cursor
 orders by timestamp and document name. Empty/short pages reduce cost. Both gates
