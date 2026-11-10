@@ -62,6 +62,11 @@ class EpisodeMember(BaseModel):
     id: str
     title: str = ''
     emoji: str = ''
+    # The conversation's one-line gist (notes `gist`, at most 12 words); empty on legacy notes.
+    gist: str = ''
+    # The conversation's Home row step (utils/conversations/home_step.py); null when the
+    # projection is off or the row has no step. Read-time only, never stored.
+    home_step: Optional[str] = None
     started_at: datetime
     finished_at: Optional[datetime] = None
     status: str = 'completed'

@@ -5,6 +5,8 @@
 class GeneratedEpisodeMember {
   final String emoji;
   final DateTime? finishedAt;
+  final String gist;
+  final String? homeStep;
   final String id;
   final DateTime startedAt;
   final String status;
@@ -13,6 +15,8 @@ class GeneratedEpisodeMember {
   const GeneratedEpisodeMember({
     this.emoji = "",
     this.finishedAt,
+    this.gist = "",
+    this.homeStep,
     required this.id,
     required this.startedAt,
     this.status = "completed",
@@ -23,6 +27,8 @@ class GeneratedEpisodeMember {
     return GeneratedEpisodeMember(
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: false, nullable: true),
+      gist: _required(_readFieldValue<String>(_readField(json, const ["gist"]), "gist", _readString, requiredField: false, nullable: false, defaultValue: ""), "gist"),
+      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "completed"), "status"),
@@ -34,6 +40,8 @@ class GeneratedEpisodeMember {
     return {
       'emoji': emoji,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
+      'gist': gist,
+      'home_step': homeStep,
       'id': id,
       'started_at': startedAt.toUtc().toIso8601String(),
       'status': status,

@@ -239,6 +239,7 @@ COMPOSE_OUTCOMES = frozenset(
     {
         'settling',
         'composed',
+        'composed_single',
         'unchanged',
         'leased',
         'waiting',

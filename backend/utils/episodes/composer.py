@@ -61,6 +61,7 @@ from config.episodes import (
     RECOVERY_NOTES_MIN_INTERVAL_SECONDS,
     COMPOSER_VERSION,
     episode_composer_enabled,
+    episode_single_member_compose_enabled,
 )
 from database import conversations as conversations_db
 from database import episodes as episodes_db
@@ -507,6 +508,170 @@ def to_updates(
     return updates
 
 
+_BULLET_LINE = re.compile(r'^(\s*)(?:[-*+•]|\d+[.)])\s+(.*)$')
+
+
+def _markdown_points(body: Any) -> list[dict[str, Any]]:
+    """A section body as the episode page's points: top-level bullets, nested details, prose paragraphs."""
+    points: list[dict[str, Any]] = []
+    paragraph: list[str] = []
+
+    def flush() -> None:
+        if paragraph:
+            text = _line(' '.join(paragraph), COMPOSER_MAX_POINT_CHARS)
+            if text:
+                points.append({'text': text, 'details': []})
+            paragraph.clear()
+
+    for raw in str(body or '').splitlines():
+        line = raw.rstrip()
+        if not line.strip() or line.lstrip().startswith('#'):
+            flush()
+            continue
+        match = _BULLET_LINE.match(line)
+        if match is None:
+            paragraph.append(line.strip())
+            continue
+        flush()
+        text = _line(match.group(2), COMPOSER_MAX_POINT_CHARS)
+        if not text:
+            continue
+        if match.group(1) and points:
+            points[-1]['details'].append(text)
+        else:
+            points.append({'text': text, 'details': []})
+    flush()
+    for point in points:
+        point['details'] = point['details'][:COMPOSER_MAX_DETAILS]
+    return points[:COMPOSER_MAX_POINTS]
+
+
+def _section_offsets(member: Mapping[str, Any], sections: Sequence[Mapping[str, Any]]) -> list[tuple[float, float]]:
+    """Each section's (start, end) seconds into its conversation, from its cited segments.
+
+    A section with no usable citation inherits the gap between its neighbours, so the
+    sections partition the conversation once instead of overlapping or inventing time.
+    """
+    segments = _segments(member)
+    by_id = {str(segment.get('id')): segment for segment in segments if segment.get('id')}
+    total = max((float(segment.get('end') or segment.get('start') or 0) for segment in segments), default=0.0)
+    known: list[Optional[tuple[float, float]]] = []
+    for section in sections:
+        cited = [by_id[str(sid)] for sid in section.get('source_segment_ids') or [] if str(sid) in by_id]
+        if cited:
+            known.append(
+                (
+                    min(float(segment.get('start') or 0) for segment in cited),
+                    max(float(segment.get('end') or segment.get('start') or 0) for segment in cited),
+                )
+            )
+        else:
+            known.append(None)
+    if not any(known):
+        # No citations at all: split the conversation evenly so the sections still read in order.
+        step = total / len(sections) if sections else 0.0
+        return [(index * step, (index + 1) * step) for index in range(len(sections))]
+    next_start = [total] * len(sections)
+    upcoming = total
+    for index in reversed(range(len(sections))):
+        next_start[index] = upcoming
+        interval = known[index]
+        if interval is not None:
+            upcoming = interval[0]
+    offsets: list[tuple[float, float]] = []
+    previous_end = 0.0
+    for index, interval in enumerate(known):
+        start, end = interval if interval is not None else (previous_end, next_start[index])
+        start = max(0.0, min(float(start), total))
+        end = max(start, min(float(end), total))
+        if end <= start:
+            end = min(total, start + 30.0) if total > start else start + 30.0
+        offsets.append((start, end))
+        previous_end = end
+    return offsets
+
+
+def has_notes(member: Mapping[str, Any]) -> bool:
+    """Whether a member's own notes can stand in for a composed episode."""
+    structured = member.get('structured') or {}
+    return bool(
+        str(structured.get('title') or '').strip()
+        or str(structured.get('overview') or '').strip()
+        or structured.get('sections')
+    )
+
+
+def single_member_updates(member: Mapping[str, Any]) -> dict[str, Any]:
+    """A one-conversation episode from that conversation's own notes: no model call.
+
+    The episode page and the conversation detail must agree, so the mapping is explicit:
+    title and emoji from the notes, the lede from the gist (or the overview when the notes
+    have no sections), one chapter per section with its bullets as points, follow-ups from
+    the open action items, and people from the participants.
+    """
+    structured = member.get('structured') or {}
+    sections = [section for section in structured.get('sections') or [] if isinstance(section, Mapping)]
+    cid = str(member.get('id'))
+    origin = _origin(member)
+    span_start, span_end = _span(member)
+    moments = []
+    for section, (start, end) in zip(sections, _section_offsets(member, sections)):
+        heading = _line(section.get('heading'), 60)
+        points = _markdown_points(section.get('body_markdown'))
+        if not heading and not points:
+            continue
+        started = origin + timedelta(seconds=start) if origin else span_start
+        ended = origin + timedelta(seconds=end) if origin else span_end
+        if started is None or ended is None:
+            continue
+        moments.append(
+            {
+                'id': uuid4().hex[:12],
+                'conversation_id': cid,
+                'started_at': started,
+                'ended_at': ended,
+                'start_offset': start,
+                'end_offset': end,
+                'heading': heading,
+                'points': points,
+                'composed': True,
+            }
+        )
+    gist = _line(structured.get('gist'), COMPOSER_MAX_PARAGRAPH_CHARS)
+    # The overview is the section render whenever sections exist, so it is only a lede
+    # when there is nothing else to read; otherwise the gist is the one-line lede.
+    lede = gist or ('' if sections else _line(structured.get('overview'), COMPOSER_MAX_PARAGRAPH_CHARS))
+    follow_ups = [
+        text
+        for item in structured.get('action_items') or []
+        if isinstance(item, Mapping) and not item.get('completed')
+        for text in [_line(item.get('description'), COMPOSER_MAX_POINT_CHARS)]
+        if text
+    ][:8]
+    people = [
+        name
+        for person in structured.get('participants') or []
+        if isinstance(person, Mapping)
+        for name in [_line(person.get('name'), 60)]
+        if name
+    ][:12]
+    updates: dict[str, Any] = {
+        'title': _line(structured.get('title'), 80),
+        'bullets': [lede] if lede else [],
+        'lede': lede,
+        'follow_ups': follow_ups,
+        'moments': moments,
+        'people': people,
+        'open_questions': [],
+    }
+    emoji = str(structured.get('emoji') or '').strip()
+    if emoji:
+        updates['emoji'] = emoji.split()[0][:16]
+    if span_end is not None:
+        updates['member_activity'] = {cid: span_end}
+    return updates
+
+
 def invoke_model(uid: str, messages: list[tuple[str, str]]) -> Any:
     with track_usage(uid, COMPOSER_FEATURE):
         llm = get_llm('episode_composer', uid=uid, request_timeout=COMPOSER_TIMEOUT_SECONDS, max_retries=1)
@@ -654,6 +819,45 @@ def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> boo
     return bool(failed_at and datetime.now(timezone.utc) - failed_at < backoff)
 
 
+def _write_single_member(
+    uid: str,
+    episode_id: str,
+    c: Any,
+    episode: Mapping[str, Any],
+    members: Sequence[Mapping[str, Any]],
+    print_: str,
+    member_ids: list[str],
+) -> str:
+    """Persist the code-built notes for a one-conversation episode. Never raises to callers."""
+    composed = single_member_updates(members[0])
+
+    def finish(current: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            **composed,
+            'composed_fingerprint': print_,
+            'composed_member_ids': member_ids,
+            **_trigger_stamp(episode, members),
+            'composed_notes': notes_hash(composed),
+            'composed_at': datetime.now(timezone.utc),
+            'composer_version': COMPOSER_VERSION,
+            'summary_needs_regeneration': False,
+            'compose_failures': 0,
+        }
+
+    written = _write(uid, episode_id, c, finish)
+    if written == 'refused':
+        # Older data can refuse a window change: keep the notes on the window it already has.
+        written = _write(
+            uid,
+            episode_id,
+            c,
+            lambda current: {k: v for k, v in finish(current).items() if k != 'member_activity'},
+        )
+    if written == 'written':
+        return 'composed_single'
+    return written if written in {'live', 'no_episode', 'conflict', 'refused'} else 'conflict'
+
+
 def _compose(
     uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any, trigger: str = 'close'
 ) -> str:
@@ -706,6 +910,9 @@ def _compose(
         ):
             _write(uid, episode_id, c, _trigger_stamp(episode, members))
         return 'unchanged'
+    if episode_single_member_compose_enabled() and len(members) == 1 and has_notes(members[0]):
+        # No model call, so no lease, settle window or failure backoff: the notes are already paid for.
+        return _write_single_member(uid, episode_id, c, episode, members, print_, member_ids)
     if not force and _backed_off(episode, print_):
         return 'backoff'
     if episode_compose_settle_enabled() and background and not force:

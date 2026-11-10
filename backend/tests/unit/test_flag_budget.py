@@ -64,6 +64,7 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
     'EPISODE_COMPOSE_KEEP_PAID',
+    'EPISODE_SINGLE_MEMBER_COMPOSE',
 }
 
 SCOPE = (
@@ -272,7 +273,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
-        elif name == 'EPISODE_COMPOSE_KEEP_PAID':
+        elif name in {'EPISODE_COMPOSE_KEEP_PAID', 'EPISODE_SINGLE_MEMBER_COMPOSE'}:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
         else:
