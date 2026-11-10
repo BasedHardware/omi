@@ -61,7 +61,12 @@ async def test_reconnect_finalize_without_audio_seals_persisted_batch_owner(reco
     assert not env  # Nothing flushed in this session.
     assert records.rows[PATH]['record_audio_closed'] is True
     assert records.rows[PATH]['opaque_content'] == 'preserved'
-    assert all(not tx.sets and not tx.creates for tx in records.transactions)
+    # The in-flight ledger may join the seal transaction; the conversation row
+    # itself must still be updated, never replaced or recreated.
+    assert all(
+        not any(path == PATH for path, _ in tx.sets) and not any(path == PATH for path, _ in tx.creates)
+        for tx in records.transactions
+    )
 
 
 @pytest.mark.parametrize('owner', [None, 'legacy_final_pass_v1'])

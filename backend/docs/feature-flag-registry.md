@@ -566,6 +566,7 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` | Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PHASE_SHADOW_ENABLED` | Default on; read-only conversation and episode phase disagreement and age telemetry | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `PIPELINE_LEDGER` | Default on; write-only fail-open in-flight capture ledger with stage deadlines and a bounded transition history | backend | env | open | — | — | — | — | keep | keep | — | pipeline-refactor |
 | `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `PROJECTION_DRAIN_CLAIM_AWARE` | Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` | Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
@@ -1270,6 +1271,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` — Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow (fail: open)
 - `PHASE_SHADOW_ENABLED` — Default on; read-only conversation and episode phase disagreement and age telemetry (fail: open)
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
+- `PIPELINE_LEDGER` — Default on; write-only fail-open in-flight capture ledger with stage deadlines and a bounded transition history (fail: open)
 - `PLAYBACK_MANIFEST_RECOVERY_ENABLED` — Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation (fail: closed)
 - `PROJECTION_DRAIN_CLAIM_AWARE` — Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests (fail: open)
 - `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` — Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds (fail: open)

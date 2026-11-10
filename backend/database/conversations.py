@@ -12,6 +12,7 @@ from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
+from database import pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
@@ -1282,6 +1283,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             _offload_processing_transcript(uid, write_data, existing)
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            if (
+                ledger is not None
+                and summary_receipt is not None
+                and summary_receipt.get('present')
+                and summary_receipt.get('reason') == 'summary'
+            ):
+                transaction.set(*ledger)
             delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1295,12 +1303,20 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         _offload_processing_transcript(uid, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        if (
+            ledger is not None
+            and summary_receipt is not None
+            and summary_receipt.get('present')
+            and summary_receipt.get('reason') == 'summary'
+        ):
+            transaction.set(*ledger)
         delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
+    ledger = pipeline_ledger.prepare(uid, conversation_data['id'], pipeline_ledger.NOTED, firestore_client=db)
     run_preloaded_transactional(db, _write_processing_result)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
@@ -1573,6 +1589,13 @@ def persist_processing_result_with_lifecycle(
 
         _offload_processing_transcript(uid, write_data, existing)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        if (
+            ledger is not None
+            and summary_receipt is not None
+            and summary_receipt.get('present')
+            and summary_receipt.get('reason') == 'summary'
+        ):
+            transaction.set(*ledger)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1592,6 +1615,7 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
+    ledger = pipeline_ledger.prepare(uid, conversation_data['id'], pipeline_ledger.NOTED, firestore_client=db)
     try:
         persisted = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
