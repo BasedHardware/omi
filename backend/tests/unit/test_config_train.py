@@ -19,6 +19,16 @@ import ops_train  # noqa: E402
 
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
 
+# Ruling 008024: production backlog capacity is intentionally not applied to staging.
+# Each field pins (prod, staging), so an exemption cannot hide drift on either side.
+INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES = {
+    'enrichment': {'max_concurrent_dispatches': (300, 50)},
+    'enrichment-fresh': {
+        'max_concurrent_dispatches': (30, 5),
+        'max_dispatches_per_second': (10.0, 2.0),
+    },
+}
+
 
 def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
     queue = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']['sync-jobs-fresh']
@@ -215,9 +225,14 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
     # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
     assert queues['enrichment'].enabled is True
+    enrichment = queues['enrichment']
+    assert (enrichment.fields['max_concurrent_dispatches'], enrichment.fields['max_dispatches_per_second']) == (
+        300,
+        25.0,
+    )
     fresh = queues['enrichment-fresh']
     assert fresh.enabled is True
-    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (5, 2.0)
+    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (30, 10.0)
     assert fresh.fields['max_attempts'] == -1
     provider = queues['provider-stt']
     assert provider.enabled is True
@@ -225,7 +240,7 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     assert provider.fields['max_attempts'] == -1
 
 
-def test_staging_mirrors_prod_except_names_and_prod_repair_spend_cap():
+def test_staging_mirrors_prod_except_names_and_intentional_env_and_capacity_divergences():
     prod, staging = ops_train.load_ops('prod'), ops_train.load_ops('staging')
     staging_services = {s.name: s for s in staging.services}
     for svc in prod.services:
@@ -244,8 +259,15 @@ def test_staging_mirrors_prod_except_names_and_prod_repair_spend_cap():
         assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in shared_env.items())
         # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
     staging_queues = {q.name: q for q in staging.queues}
+    assert INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES.keys() <= {q.name for q in prod.queues}
     for queue in prod.queues:
-        assert staging_queues[f'staging-{queue.name}'].fields == queue.fields
+        expected = dict(queue.fields)
+        for field, (prod_value, staging_value) in INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES.get(
+            queue.name, {}
+        ).items():
+            assert queue.fields[field] == prod_value, (queue.name, field)
+            expected[field] = staging_value
+        assert staging_queues[f'staging-{queue.name}'].fields == expected
 
 
 # ----------------------------------------------------------------------------- schema
