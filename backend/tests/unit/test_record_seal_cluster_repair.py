@@ -698,6 +698,7 @@ def test_frontier_advances_before_work_and_plan_never_writes(source, proof, monk
 @pytest.mark.parametrize('expiry_outcome', ['completed', 'error', 'budget_exhausted'])
 def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, monkeypatch, expiry_outcome):
     monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
     from database import _client, record_token_lease_metrics
     from utils.batch_pipeline import record_seal_sweeper
 
@@ -714,7 +715,15 @@ def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, mo
     monkeypatch.setattr(config, 'require_runtime', lambda: None)
     monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
     monkeypatch.setattr(config, 'settings', lambda: (2, 240, 1500, 'apply'))
-    attempted, events = [], []
+    attempted, events, promotions = [], [], []
+
+    def promote(client, namespace, now, *, budget):
+        assert namespace == 'batch_pipeline_prod'
+        budget.check()
+        promotions.append(now)
+        return 1
+
+    monkeypatch.setattr(cluster, 'promote_record_recoveries', promote)
 
     def expire(*args, **kwargs):
         if expiry_outcome == 'budget_exhausted':
@@ -738,6 +747,8 @@ def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, mo
     for _ in range(5):
         cluster.run(progress=events.append)
     assert attempted == paths
+    assert len(promotions) == 5
+    assert sum(event.get('promoted', 0) for event in events) == 5
     assert [event['outcome'] for event in events if event['event'] == 'record_custody_receipts_expiry'] == [
         expiry_outcome
     ] * 5

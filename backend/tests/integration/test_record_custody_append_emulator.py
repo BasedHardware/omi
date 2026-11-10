@@ -16,7 +16,7 @@ from starlette.responses import JSONResponse
 from config.record_audio import record_identity
 from database import record_custody_append as custody, record_token_lease_metrics as metrics, record_audio
 from database.batch_pipeline_record_lease_recovery import recovery_segment
-from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_store import promote_record_recoveries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database import record_recovery_gate, record_custody_receipts as receipts
 from utils.batch_pipeline.record_seal_budget import SweepBudget
@@ -234,8 +234,8 @@ def test_old_worker_cannot_run_recovery_before_original_publication(monkeypatch,
         custody.finish(uid, cid, 'custody:gate', accepted=True, firestore_client=client)
         assert recovery_ref.get().to_dict()['state'] == record_recovery_gate.WAITING_STATE
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-        store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
-        assert recovery_ref.id not in store.due('record_pending', now + 1, 10)
+        # Same bounded promotion entrypoint as the active production repair CronJob.
+        assert promote_record_recoveries(client, 'batch_pipeline_dev', now + 1, 10) == 0
         # Literal old-worker query: it has no lease_recovery check and sees no
         # runnable obligation, even if the current worker image rolls back.
         old_due = client.collection('batch_pipeline_dev_jobs').where('state', '==', 'record_pending').stream()
@@ -244,7 +244,7 @@ def test_old_worker_cannot_run_recovery_before_original_publication(monkeypatch,
             ledger.update({'status': 'completed'})
         else:
             original_ref.update({'state': 'committed'})
-        assert recovery_ref.id in store.due('record_pending', now + 62, 10)
+        assert promote_record_recoveries(client, 'batch_pipeline_dev', now + 62, 10) == 1
         assert recovery_ref.get().to_dict()['state'] == 'record_pending'
     finally:
         for ref in (receipt, recovery_ref, original_ref, intake, ledger, row, user):

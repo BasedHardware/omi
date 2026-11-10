@@ -29,6 +29,7 @@ from config import record_partial as partial_config
 from config.record_audio import record_identity
 from config import record_seal_rules as lease
 from database import record_custody_receipts
+from database.batch_pipeline_store import promote_record_recoveries
 from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
@@ -38,6 +39,7 @@ from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
+CUSTODY_MAINTENANCE_SECONDS = 30  # Per phase, independent of the audio-repair budget.
 _age_order_index_warned = False
 DISPOSITIONS = frozenset(
     {
@@ -807,9 +809,23 @@ def run(*, progress=lambda _: None):
     # and no activation of the idle seal worker's scanner are needed.
     REPAIR_OLDEST.set(max(metric_ages, default=0))
     if mode == 'apply':
+        # The checked-in production seal worker is idle. The active repair
+        # CronJob must resume parked accepted bytes in off/shadow/serve too.
         try:
             with silent_dependencies():
-                expiry_budget = SweepBudget(30)
+                promotion_budget = SweepBudget(CUSTODY_MAINTENANCE_SECONDS)
+                with promotion_budget.interrupt_io():
+                    promoted = promote_record_recoveries(
+                        client, 'batch_pipeline_prod', time.time(), budget=promotion_budget
+                    )
+            progress({'event': 'record_token_recovery_promotion', 'outcome': 'completed', 'promoted': promoted})
+        except BudgetExhausted:
+            progress({'event': 'record_token_recovery_promotion', 'outcome': 'budget_exhausted'})
+        except Exception:
+            progress({'event': 'record_token_recovery_promotion', 'outcome': 'error'})
+        try:
+            with silent_dependencies():
+                expiry_budget = SweepBudget(CUSTODY_MAINTENANCE_SECONDS)
                 with expiry_budget.interrupt_io():
                     expired = record_custody_receipts.prune(client, now=time.time(), budget=expiry_budget)
             progress(

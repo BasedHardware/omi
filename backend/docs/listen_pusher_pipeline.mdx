@@ -235,8 +235,8 @@ A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.
 Separate continuation jobs enter `record_recovery_waiting` until the original
 ledger/publication is complete. Old worker images cannot schedule that state.
-Current workers CAS-promote it to `record_pending` independent of lease mode,
-checking privacy again; old-image rollback retains the obligation until a current
+The active repair CronJob and current workers CAS-promote it to `record_pending`
+independent of lease mode, checking privacy again; old-image rollback retains the obligation until a current
 worker returns. Original work and projection bindings are not rewritten.
 Frame late-append counting follows successful durable window/object commit.
 Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that

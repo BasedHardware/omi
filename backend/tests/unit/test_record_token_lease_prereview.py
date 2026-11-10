@@ -267,3 +267,17 @@ async def test_failure_during_inflight_renewal_cannot_restore_bookkeeping(world,
     assert not barrier.registered_sessions
     assert not barrier.lease_renewed_at and not barrier.lease_locks and not barrier.late_appends
     assert metrics.ACTIVE._value.get() == before - 1
+
+
+def test_active_repair_promotion_does_not_depend_on_enabling_the_idle_worker():
+    from pathlib import Path
+    import yaml
+
+    chart = Path(__file__).resolve().parents[2] / 'charts/batch-pipeline-worker'
+    defaults = yaml.safe_load((chart / 'values.yaml').read_text())
+    prod = yaml.safe_load((chart / 'prod_omi_batch-pipeline-worker_values.yaml').read_text())
+    repair = defaults['recordSealRepair'] | prod['recordSealRepair']
+    worker = defaults['recordSealWorker'] | prod['recordSealWorker']
+    assert repair['enabled'] and repair['runtimeEnabled'] and not repair['suspend']
+    assert repair['mode'] == 'apply' and repair['serverFlags']
+    assert worker['runtimeEnabled'] is False and worker['serverFlags'] == {}
