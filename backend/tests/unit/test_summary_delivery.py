@@ -21,8 +21,6 @@ def summary_database_dependency():
 
 @pytest.fixture
 def enabled(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
 
 
@@ -40,31 +38,11 @@ def debt():
     return row
 
 
-def test_dark_defaults_and_no_shape_change_when_merge_is_disabled(monkeypatch):
+def test_first_summary_provenance_covers_known_owners_when_merge_is_disabled(monkeypatch):
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
-    monkeypatch.delenv('FIRST_SUMMARY_DEADLINE_ENABLED', raising=False)
-    row = minimum()
-    before = deepcopy(row)
-    delivery.prepare(row, 'u', now=100)
-    assert row == before
-    assert not flags.enabled('u') and not flags.repair_enabled()
-    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]), uid='u')
-    assert 'title_provenance' not in result.model_dump()
-
-
-def test_first_summary_provenance_is_cohort_scoped_when_merge_is_disabled(monkeypatch):
-    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
-    """PFS-F1: the gate being on somewhere must not stamp every owner's minimum."""
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     row = SimpleNamespace(transcript_segments=[])
-    assert flags.enabled() and not flags.enabled('outside-owner')
-    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()
     assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid=None).model_dump()
     assert 'title_provenance' not in build_deterministic_minimum_structured(row).model_dump()
-
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     assert build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()['title_provenance'] == (
         'server_minimum'
     )
@@ -116,8 +94,6 @@ def test_current_finalizer_finishes_completed_minimum_but_background_repair_cann
         {'finalization_job_id': None},
     ):
         assert not delivery.finalization_pending({**row, **changes}, 'u', 'current-job')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
-    assert not delivery.finalization_pending(row, 'u', 'current-job')
 
 
 @pytest.mark.parametrize('finish,expected', [(50, 1900), (1800, 200), (2100, None), (None, None)])
@@ -221,11 +197,7 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
         delivery.REPAIR_CONTEXT.reset(token)
 
 
-def test_allowlist_and_invalid_deadline_fail_closed(enabled, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    assert not flags.enabled('canary') and not flags.enabled('other')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary')
-    assert flags.enabled('canary') and not flags.enabled('other')
+def test_invalid_deadlines_remain_bounded(enabled, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')
     assert flags.deadline_seconds() == 120
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '999')
@@ -257,3 +229,45 @@ def test_discard_receipt_does_not_hide_a_later_first_summary(enabled):
     output = {'status': 'completed', 'summary_output_present': True}
     receipt = delivery.merge_result(restored, output, 'u', now=250)
     assert receipt['present'] and receipt['latency'] == 50
+
+
+def test_expired_seen_gauge_is_declared_for_production_scraping():
+    import json
+    from pathlib import Path
+
+    metric = next(iter(delivery.EXPIRED_SEEN.collect()))
+    assert metric.type == 'gauge'
+    assert metric.samples[0].labels == {}
+    inventory = json.loads(
+        (Path(__file__).resolve().parents[3] / 'backend/charts/monitoring/metric-inventory.prod.json').read_text()
+    )
+    assert metric.name in inventory['declared_metrics']
+
+
+@pytest.mark.parametrize('hours', ['72', '1', '0'])
+@pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'current'])
+def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, cursor_kind):
+    from database.summary_debt_queries import due_conversations
+    from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+    from utils.enrichment.age_gate import max_age_seconds
+
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', hours)
+    now = 1_800_000_000.0
+    after = {'due': now - 1, 'path': 'users/synthetic/conversations/c'}
+    if cursor_kind != 'legacy':
+        after['pending'] = now - 1 if cursor_kind == 'current' else now - 73 * 3600
+    client = RecordingFirestore()
+    with install_recorder(client), client.recording_context('database.summary_debt_queries.due_conversations', {}):
+        due_conversations(now=now, limit=1000, after=after, firestore_client=client)
+    shape = client.shapes[0]
+    assert shape.limit == 100
+    filters = {(f.field, f.operator, f.value) for f in shape.filters}
+    assert ('summary_due_at', '<=', now) in filters
+    if hours != '0':
+        assert ('summary_first_pending_at', '>=', now - max_age_seconds()) in filters
+        assert shape.orders[0] == ('summary_first_pending_at', 'ASCENDING')
+        assert shape.uses_cursors is (cursor_kind == 'current')
+    else:
+        assert len(filters) == 1
+        assert shape.orders[0] == ('summary_due_at', 'ASCENDING')
+        assert shape.uses_cursors is (cursor_kind == 'legacy')

@@ -20,7 +20,7 @@ def initialized_summary(monkeypatch):
 
 
 @pytest.mark.parametrize('enforce', [False, True])
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])
 @pytest.mark.parametrize('clock_offset', [0.0, -1000000000.0])
 def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued, ladder, clock_offset):
@@ -482,7 +482,7 @@ def test_production_pipeline_result_crash_restart_and_cache_capacity_never_force
             assert previous['provider_result'] == 'old-ciphertext' * 50000
 
 
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize(
     'origin,lanes,checked',
     [('live', 'live', True), ('sync', 'live', False), ('batch', 'live', False), ('live', 'sync,batch', False)],
@@ -529,81 +529,3 @@ def test_default_offline_gate_holds_outside_all_legacy_scopes(tmp_path, monkeypa
     test_exhaustion_holds_before_url_or_provider_dispatch(
         tmp_path, monkeypatch, enforce=not kill, queued=queued, ladder=False, clock_offset=0.0
     )
-
-
-@pytest.mark.parametrize('boundary', ['probe', 'retry', 'multilingual'])
-def test_late_denial_holds_without_spending_next_provider_call(tmp_path, monkeypatch, boundary):
-    from pathlib import Path
-    from utils.stt import batch_language
-    from utils.observability.stt_cap_dispatch import DispatchPath
-
-    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    path = tmp_path / '1792152000.wav'
-    with wave.open(str(path), 'wb') as output:
-        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
-        output.writeframes(b'\0' * 32000)
-    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _: 'synthetic-url')
-    monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
-    hold = Mock()
-    monkeypatch.setattr(cap_hold, 'defer_segment', hold)
-    denied = {
-        'probe': DispatchPath.LANGUAGE_PROBE,
-        'retry': DispatchPath.EMPTY_RETRY,
-        'multilingual': DispatchPath.MULTILINGUAL,
-    }[boundary]
-    seen = []
-
-    def allowed(*args, **kwargs):
-        seen.append(kwargs.get('path'))
-        return kwargs.get('path') != denied
-
-    monkeypatch.setattr(pipeline, 'sync_allowed', allowed)
-    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *a, **k: SimpleNamespace(reason='available'))
-
-    probe_client = Mock(side_effect=AssertionError('denied LID must not reach the provider'))
-    monkeypatch.setattr(batch_language.httpx, 'Client', probe_client)
-    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-key')
-
-    def select(language, path, *, selector, before_probe, **kwargs):
-        if boundary == 'probe':
-            batch_language.detect(Path(path).read_bytes(), before_probe=before_probe)
-        else:
-            before_probe()
-        return 'parakeet', 'en', 'parakeet'
-
-    monkeypatch.setattr(batch_language, 'resolve_file', select)
-    stt = Mock(return_value=([], 'en'))
-    alternate = Mock(side_effect=AssertionError('denied fallback must not run'))
-    monkeypatch.setattr(pipeline, 'prerecorded', stt)
-    monkeypatch.setattr(pipeline, 'modulate_prerecorded_from_bytes', alternate)
-    monkeypatch.setattr(pipeline, 'sync_safety_wal_enabled', lambda: False)
-    monkeypatch.setattr(pipeline.minimal_redrive, 'paid_recovery_enabled', lambda _: True)
-
-    def recover(path, *, transcribe, authorize, observe):
-        authorize()
-        return transcribe(b'synthetic')
-
-    monkeypatch.setattr(pipeline.empty_recovery, 'recover', recover)
-    # A probe denial must also deny the following STT boundary, as a real
-    # exhausted snapshot would. The probe itself must never spend.
-    if boundary == 'probe':
-        original = allowed
-
-        def allowed(*args, **kwargs):
-            if denied in seen:
-                return False
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(pipeline, 'sync_allowed', allowed)
-    errors = []
-    outcome = {}
-    assert not pipeline.process_segment(str(path), 'synthetic', {}, threading.Lock(), errors, deferred_outcome=outcome)
-    assert not errors
-    assert denied in seen
-    hold.assert_called_once()
-    assert outcome['cap_held'] is True
-    assert stt.call_count == {'probe': 0, 'retry': 1, 'multilingual': 2}[boundary]
-    alternate.assert_not_called()
-    probe_client.assert_not_called()

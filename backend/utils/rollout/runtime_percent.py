@@ -25,9 +25,12 @@ import os
 from threading import RLock
 import time
 from types import MappingProxyType
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Callable, Iterable, Literal, Mapping
+from weakref import WeakSet
 
-from prometheus_client import Gauge
+from prometheus_client import CollectorRegistry, Gauge, REGISTRY
+from prometheus_client.metrics_core import Metric
+from prometheus_client.registry import Collector
 
 from config import rollout_cohorts as policy
 from config.policy.batch import COHORT_SALTS, cohort_bucket
@@ -50,16 +53,23 @@ logger = logging.getLogger(__name__)
 RUNTIME_PERCENT_SOURCE = Gauge(
     'omi_runtime_percent_source',
     'Current source of runtime percents (1 for the active source): firestore, lkg, env_default, or pending.',
-    ['source'],
+    ['source', 'revision', 'revision_name'],
+    registry=None,
+    multiprocess_mode='liveall',
 )
 RUNTIME_PERCENT_ERROR_SECONDS = Gauge(
     'omi_runtime_percent_read_error_seconds',
     'Seconds since `_ramp` reads started failing; 0 while reads succeed. Alert above 300.',
+    ['revision', 'revision_name'],
+    registry=None,
+    multiprocess_mode='liveall',
 )
 RUNTIME_PERCENT_VALUE = Gauge(
     'omi_runtime_percent',
-    'Percent served from the `_ramp` document (after nesting clamp); absent names are not exported.',
-    ['name'],
+    'Effective runtime rollout percent after the TTL read and nesting clamp, including environment fallback.',
+    ['name', 'revision', 'revision_name'],
+    registry=None,
+    multiprocess_mode='liveall',
 )
 
 
@@ -235,13 +245,111 @@ def _on_event_loop() -> bool:
     return True
 
 
-def _export(snapshot: RampSnapshot) -> None:
+def runtime_revision() -> str:
+    """Immutable serving artifact identity; never use the mutable ramp document revision."""
+    return (
+        os.getenv('K_REVISION')
+        or os.getenv('ROLLOUT_POD_TEMPLATE_HASH')
+        or os.getenv('OMI_BACKEND_RELEASE_SHA')
+        or 'unknown'
+    )
+
+
+def effective_percents(snapshot: RampSnapshot) -> dict[str, float]:
+    """The same runtime read and env parsers as the consuming config predicates.
+
+    Export the numeric controls even when a UID cohort/enable switch prevents a
+    particular request from using them. Invalid summary config stays NaN so a
+    guard cannot mistake it for a qualified zero.
+    """
+    from config import directory_routing
+    from config.policy.batch import parse_percent, rollout_env_percents
+
+    def percent(name: str, default: float) -> float:
+        return _snapshot_percent(snapshot, name, default)
+
+    defaults = rollout_env_percents()
+    batch = percent('batch-pipeline', defaults['batch-pipeline'])
+    try:
+        owner_default = directory_routing.new_owner_percent_env()
+    except ValueError:
+        owner_default = math.nan
+    return {
+        'batch-pipeline': batch,
+        # First-summary deadlines graduated to every owner on 2026-11-09.
+        'first-summary': 100.0,
+        'batch-live-stt-retire': min(percent('batch-live-stt-retire', defaults['batch-live-stt-retire']), batch),
+        'legacy-sync': percent('legacy-sync', 0.0),
+        'batch-vendor-routing': min(
+            percent('batch-vendor-routing', parse_percent(os.getenv('BATCH_VENDOR_ROUTING_PERCENT', '0'))), batch
+        ),
+        'new-owner-cell1': percent('new-owner-cell1', owner_default),
+    }
+
+
+def _export(snapshot: RampSnapshot) -> bool:
+    try:
+        _export_values(snapshot)
+        return True
+    except Exception:
+        # Telemetry must never change admission or strand a refresh Future.
+        logger.warning('event=runtime_percent_export outcome=error')
+        # The sync parent may be reading mmap gauges. Invalidate previous
+        # adoption evidence rather than refreshing stale values on every scrape.
+        try:
+            identity = {'revision': runtime_revision(), 'revision_name': os.getenv('K_REVISION', '')}
+            for source in SOURCES:
+                RUNTIME_PERCENT_SOURCE.labels(source=source, **identity).set(0)
+            for name in RAMP_NAMES:
+                RUNTIME_PERCENT_VALUE.labels(name=name, **identity).set(math.nan)
+        except Exception:
+            pass  # A broken metrics sink cannot change the serving result.
+        return False
+
+
+def _export_values(snapshot: RampSnapshot) -> None:
+    values = effective_percents(snapshot)
+    identity = {'revision': runtime_revision(), 'revision_name': os.getenv('K_REVISION', '')}
     for source in SOURCES:
-        RUNTIME_PERCENT_SOURCE.labels(source=source).set(1 if snapshot.source == source else 0)
-    RUNTIME_PERCENT_ERROR_SECONDS.set(snapshot.error_seconds)
-    for name in RAMP_NAMES:
-        if name in snapshot.percents:
-            RUNTIME_PERCENT_VALUE.labels(name=name).set(snapshot.percents[name])
+        RUNTIME_PERCENT_SOURCE.labels(source=source, **identity).set(1 if snapshot.source == source else 0)
+    RUNTIME_PERCENT_ERROR_SECONDS.labels(**identity).set(snapshot.error_seconds)
+    for name, value in values.items():
+        RUNTIME_PERCENT_VALUE.labels(name=name, **identity).set(value)
+
+
+class RuntimePercentCollector(Collector):
+    """Refresh via the serving TTL on scrape, including idle processes.
+
+    Describe is deliberately IO-free: registering the exporter must not read
+    Firestore. Private worker registries use this same collector as Cloud Run.
+    """
+
+    def describe(self) -> Iterable[Metric]:
+        for gauge in (RUNTIME_PERCENT_VALUE, RUNTIME_PERCENT_SOURCE, RUNTIME_PERCENT_ERROR_SECONDS):
+            yield from gauge.describe()
+
+    def collect(self) -> Iterable[Metric]:
+        # Scrapes are synchronous: schedule IO, but never use the serving
+        # reader's bounded cold-start wait or publish a pending zero as adoption.
+        _cache.start_refresh()
+        snapshot = _cache.snapshot_now()
+        if snapshot.source == 'pending' or not _export(snapshot):
+            return
+        for gauge in (RUNTIME_PERCENT_VALUE, RUNTIME_PERCENT_SOURCE, RUNTIME_PERCENT_ERROR_SECONDS):
+            yield from gauge.collect()
+
+
+_collector = RuntimePercentCollector()
+_registries: WeakSet[CollectorRegistry] = WeakSet()
+_registry_lock = RLock()
+
+
+def register_runtime_percent(registry: CollectorRegistry = REGISTRY) -> None:
+    """Idempotent, IO-free wiring for every serving registry."""
+    with _registry_lock:
+        if registry not in _registries:
+            registry.register(_collector)
+            _registries.add(registry)
 
 
 def _read_ramp_document() -> dict[str, Any] | None:
@@ -261,13 +369,20 @@ def runtime_percent(name: str, *, env_default: float) -> float:
         return env_default
     try:
         snapshot = ramp_snapshot()
-        if snapshot.source == 'pending':
-            return 0.0
-        value = snapshot.percents.get(name)
+        # Also writes mmap gauges in isolated sync children, whose parent scrapes
+        # their live values rather than reading a different process's cache.
+        if os.getenv('PROMETHEUS_MULTIPROC_DIR'):
+            _export(snapshot)
+        return _snapshot_percent(snapshot, name, env_default)
     except Exception:
         logger.warning('event=runtime_percent_read outcome=snapshot_failed served=env_default')
         return env_default
-    return env_default if value is None else value
+
+
+def _snapshot_percent(snapshot: RampSnapshot, name: str, env_default: float) -> float:
+    if snapshot.source == 'pending':
+        return 0.0
+    return snapshot.percents.get(name, env_default)
 
 
 def legacy_sync_mode(uid: str | None = None) -> LegacySyncMode:
@@ -375,3 +490,4 @@ def configure_runtime_percent() -> None:
     policy.configure_runtime_percent(
         lambda name, env_default: runtime_percent(name, env_default=env_default), legacy_sync_mode
     )
+    register_runtime_percent()

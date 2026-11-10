@@ -52,9 +52,7 @@ def enabled() -> bool:
 
 def execution_admission_configured() -> bool:
     """Host/metric setup only. Per-user work must use execution_admission_enabled."""
-    return enabled() or rollout_default_off(
-        'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', os.getenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false') == 'true'
-    )
+    return enabled()
 
 
 def _selected_lanes() -> frozenset[str] | None:

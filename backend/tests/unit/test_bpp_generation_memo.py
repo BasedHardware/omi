@@ -231,8 +231,14 @@ def test_failed_reads_never_publish_partial_decisions(monkeypatch, reads, failur
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     with batch_privacy_attempt():
-        with pytest.raises(RuntimeError, match='unavailable'):
-            check(db)
+        if failure == TOKEN_PATH:
+            # An unavailable certificate cannot authorize reuse. A successful
+            # full authority read may still ALLOW, without memoizing the result.
+            assert check(db) == 7
+            assert len(reads) == 5
+        else:
+            with pytest.raises(RuntimeError, match='unavailable'):
+                check(db)
         reads.clear()
         check(db)
         assert len(reads) == 5

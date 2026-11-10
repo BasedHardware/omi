@@ -403,6 +403,7 @@ def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
         'assignment_held': old + 10,
         'quarantine_held': old + 20,
         'held_expired': None,
+        'staged_input': None,
     }
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
@@ -465,7 +466,14 @@ def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled, 
 
     monkeypatch.setattr(_Query, 'count', counted)
     stock = TIMELINESS_BACKLOG_COUNT_LIMIT + 123
-    sample = _sample(jobs=[{**row, 'enqueued_at': EPOCH - 1}] * stock)
+    # Real held stock has a staged input; keep this count-budget fixture out of
+    # the separate incomplete/malformed staged-input age scan guard.
+    sample = _sample(
+        jobs=[
+            {**row, 'enqueued_at': EPOCH - 1, 'audio_uri': 'gs://based-hardware-batch-pipeline-staging/synthetic/audio'}
+        ]
+        * stock
+    )
     historical = [q for q in queries if any(op == '<' and value == EPOCH for _, op, value in q.filters)]
     assert len(historical) == 7
     assert all(q._limit == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else None) for q in historical)

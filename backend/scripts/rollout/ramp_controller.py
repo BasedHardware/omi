@@ -66,7 +66,7 @@ FIVE_PERCENT_MIN_COMPLETED = 150
 CONTROLLED_NAMES = ('batch-pipeline', 'first-summary')
 LEAD_NAME = 'batch-pipeline'
 # Quality guarantees, not ramp knobs: a rollback never lowers them. Every tested rollback set in the
-# workspace's infra/rollout/ramp_env.json keeps FIRST_SUMMARY_DEADLINE_PERCENT=100 (prod's live value), and
+# workspace's historical infra/rollout/ramp_env.json kept first-summary admission at 100, and
 # a rollback set that turned a recovery-quality flag off stranded 28 units in failed_held (2026-10-20).
 # The value is the floor the operator CLI refuses to write below without --allow-quality-decrease.
 QUALITY_FLOOR = {'first-summary': 100.0}

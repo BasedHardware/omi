@@ -1,12 +1,5 @@
 {
  "config": "policy_window",
- "first_summary_policy": {
-  "breaches": 0,
-  "checked": 0,
-  "recorded_enabled": [
-   false
-  ]
- },
  "schema": "pipeline_sim.trace/v1",
  "seed": 7,
  "segments": {

@@ -44,8 +44,7 @@
     "utils.sync.empty_recovery": {
       "retire_in": "C11",
       "importers": {
-        "utils/sync/empty_success_guard.py": "Empty-success guard inspects strict empty recovery via inspect_strict when its lever is on; retires with legacy empty recovery in C11.",
-        "utils/sync/minimal_redrive.py": "Operator minimal-redrive mode gates paid empty-segment recovery on the empty_recovery lever; the gate (and the mode) go when legacy redrive is deleted in C10."
+        "utils/sync/empty_success_guard.py": "Empty-success guard inspects strict empty recovery via inspect_strict when its lever is on; retires with legacy empty recovery in C11."
       }
     },
     "utils.sync.empty_recovery_intent": {
