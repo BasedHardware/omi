@@ -430,6 +430,9 @@ def columns():
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
 
 
+MARGIN_EMPTY = "No day in the last 35 has both plan cost and revenue"
+
+
 def margin_by_plan():
     """Allocated-estimate margin by plan (David 2026-10-17): paid plans as margin %
     lines (left axis); Free, which has no revenue, as negative $/day bars (right
@@ -450,6 +453,9 @@ def margin_by_plan():
 
     def centre(panel):
         panel["fieldConfig"]["defaults"]["custom"]["axisCenteredZero"] = True
+        # An empty frame is a real answer here (no day in the window has both a
+        # settled plan cost and a revenue book), not a load still in flight.
+        panel["fieldConfig"]["defaults"]["noValue"] = MARGIN_EMPTY
         disconnect_after(1.5)(panel)  # any missing day is a gap (e.g. no 09-29 book)
 
     return chart("Margin by plan",
