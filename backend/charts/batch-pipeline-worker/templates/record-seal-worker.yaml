@@ -20,7 +20,7 @@ spec:
     rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: record-seal-worker}
+      labels: {app.kubernetes.io/name: record-seal-worker, service_name: record-seal-worker}
     spec:
       serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
       automountServiceAccountToken: true
@@ -115,5 +115,8 @@ metadata:
 spec:
   selector:
     matchLabels: {app.kubernetes.io/name: record-seal-worker}
+  targetLabels:
+    fromPod:
+      - {from: service_name, to: service_name}
   endpoints: [{port: metrics, path: /metrics, interval: 15s}]
 {{- end }}

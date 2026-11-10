@@ -1,4 +1,6 @@
 enabled: true
+podLabels:
+  service_name: batch-pipeline-worker
 image:
   repository: gcr.io/based-hardware/batch-pipeline-worker
   # gcp_diarizer.yml builds the prod image and supplies its immutable digest.

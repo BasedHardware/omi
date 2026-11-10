@@ -34,6 +34,37 @@ The separate Prometheus counter is `omi_firestore_billed_reads_total`. Do not ad
 `omi_firestore_document_reads_by_site_total` to it. Those answer different
 questions and would double-count.
 
+## Export parity and service identity
+
+The tier and caller counters increment by the same amount in `_record()`.
+Both Cloud Run GMP profiles must retain both names; retaining only
+`firestore_billed_reads_by_*_total` silently removes the tier counter on sync,
+backfill and integration services. `test_firestore_attribution_export.py`
+exercises SDK responses, counter exposition and the actual keep expressions.
+Tier resolution stays local and bounded; missing ownership is `unattributed`.
+
+GKE `DD_SERVICE` names the JSON ledger, not Prometheus samples. The workload
+charts set a static `service_name` pod label. GMP PodMonitoring and the
+in-cluster Prometheus scrape jobs copy that label onto their samples. Seal
+CronJobs carry their own pod identity; their terminal log aggregates remain
+separate from the continuous worker's scrape endpoint.
+
+The checked-in production seal-worker values set `runtimeEnabled: false`.
+That worker serves its private metrics registry but performs no discovery or
+claims, so it need not expose any lazy read-counter children. Both read
+collectors are already registered there, and completed repair-child totals are
+folded into the parent. Absent read series alone do not establish a scrape bug.
+
+The probe observes snapshots consumed from the SDK, not every document the
+server might bill after a caller abandons a stream. It must not drain streams,
+enable Explain, or infer returned-document counts from a configured limit:
+those change reads or invent counts. Fully consumed stream/get/transaction,
+collection-group, limit and batch paths are covered by real SDK conversion
+tests with only the RPC replaced. A fleet coverage residual alone does not
+prove which of these paths lost documents. Processes that never install the
+probe and non-Python readers remain separate coverage boundaries; admin server
+reads, for example, emit their own log ledger rather than the Python counters.
+
 ## Kind and Cloud Monitoring type
 
 | `kind` | Cloud Monitoring `type` | What is counted |

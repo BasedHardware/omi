@@ -1,6 +1,8 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+podLabels:
+  service_name: batch-pipeline-worker
 recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
