@@ -2342,6 +2342,8 @@
     "omi_enrichment_summary_repair_new_oldest_age_seconds",
     "omi_enrichment_summary_repair_observed_at_seconds",
     "omi_enrichment_summary_repair_scan_truncated",
+    "omi_episode_f_fallback_total",
+    "omi_episode_f_gate_total",
     "omi_error_class_alert_fired_total",
     "omi_error_class_alert_firing",
     "omi_error_class_last_fired_timestamp_seconds",
