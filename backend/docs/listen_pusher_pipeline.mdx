@@ -6650,8 +6650,9 @@ instead of emitting a per-row repair error.
 
 ### Fresh enrichment queue capacity
 
-When `ENRICHMENT_FRESH_TASKS_QUEUE` is configured, new/reopened user-facing
-bindings and idle-row promotion qualify by conversation `finished_at`, falling
+When `ENRICHMENT_FRESH_TASKS_QUEUE` is configured, new/reopened bindings,
+unbound-row repair and idle-row promotion require `first_summary_pending(row)`
+and qualify by conversation `finished_at`, falling
 back to `created_at` only when absent. `ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN`
 defaults to30 minutes;0 disables new priority admission. Unknown/future clocks
 or a failed two-second metadata lookup keep work on the established queue.
@@ -6662,6 +6663,10 @@ deliveries/2 per second; staging mirrors this as `staging-enrichment-fresh`,
 provisioned by its queue bootstrap helper before deployment.
 Existing valid bindings survive rollback; leave both queues running to drain.
 See [the rollout note](listen_pusher_pipeline/changes/2026-11-04-fresh-title-priority.md).
+Recent refreshes with an already seen summary or a disabled first-summary policy
+use the primary enrichment queue; background backfill and effects retain their
+existing routing. In-flight rows keep their current binding until their next
+re-bind. See [first-summary-only admission](listen_pusher_pipeline/changes/2026-11-10-first-summary-fresh-admission.md).
 
 ### First-summary deadline and independent repair
 
