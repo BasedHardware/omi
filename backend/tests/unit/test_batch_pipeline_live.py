@@ -2,8 +2,9 @@
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
@@ -18,6 +19,8 @@ from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
+from utils.conversations import summary_delivery
+from utils.enrichment.age_gate import expired
 from utils.sync.assignment_errors import SyncAssignmentConflict
 from tests.unit.test_batch_provider_stt import Outbox, Artifacts, Vendor, stage as provider_stage
 from utils.batch_pipeline import record_provider
@@ -575,6 +578,15 @@ def test_projection_without_new_text_keeps_the_automatic_discard():
     assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
 
 
+STAMP_NOW = 1_000_000_000.0
+
+
+def stamp_row(**changes):
+    row = recording(**changes)
+    row.setdefault('created_at', datetime.fromtimestamp(STAMP_NOW - 3600, timezone.utc))
+    return row
+
+
 def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
     from config.summary_guarantee import deadline_seconds
     from utils.conversations import home_step
@@ -582,12 +594,37 @@ def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
     result, new = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
     assert new
     assert result['summary_title_provenance'] == 'server_minimum'
-    assert result['structured']['title_provenance'] == 'server_minimum'
+    # The stamp must not write structured.title_provenance: is_server_minimum
+    # gates derived effects, and a projection stamp must not suppress them.
+    assert 'title_provenance' not in result.get('structured', {})
     assert isinstance(result['summary_first_pending_at'], float)
     assert result['summary_due_at'] == result['summary_first_pending_at'] + deadline_seconds()
+    # The repair must accept every row this stamp creates.
+    assert summary_delivery.refusal(result) is None
+    assert not expired(
+        {'first_pending_at': result['summary_first_pending_at']},
+        result.get('created_at'),
+        now=result['summary_due_at'],
+    )
     # The list read omits transcript_segments; debt plus provenance is what Home reads.
     listed = {key: value for key, value in result.items() if key != 'transcript_segments'}
     assert home_step.classify(listed) == home_step.WRITING_NOTES
+
+
+def test_projection_does_not_stamp_debt_past_the_repair_age_gate():
+    from utils.conversations import home_step
+
+    old = recording(created_at=datetime.fromtimestamp(STAMP_NOW - 4 * 86400, timezone.utc))
+    result, new = replace_record(old, incoming(), {'start': 100, 'end': 102})
+    assert new
+    # Provenance is honest, but no debt means the repair never parks the row
+    # one-way and Home never presents it as Writing notes forever.
+    assert result['summary_title_provenance'] == 'server_minimum'
+    assert 'summary_due_at' not in result
+    assert 'summary_first_pending_at' not in result
+    assert summary_delivery.refusal(result) is None
+    listed = {key: value for key, value in result.items() if key != 'transcript_segments'}
+    assert home_step.classify(listed) == home_step.NOISE
 
 
 def test_projection_does_not_double_stamp_existing_debt():
@@ -601,6 +638,17 @@ def test_projection_does_not_double_stamp_existing_debt():
     assert result['summary_first_pending_at'] == 50.0
     assert result['summary_due_at'] == 170.0
     assert result['summary_title_provenance'] == 'server_minimum'
+    assert summary_delivery.refusal(result) is None
+
+
+def test_projection_does_not_move_debt_on_a_second_projection():
+    first, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+    due, pending = first['summary_due_at'], first['summary_first_pending_at']
+    second, new = replace_record(first, incoming(), {'start': 100, 'end': 102})
+    assert new
+    assert second['summary_due_at'] == due
+    assert second['summary_first_pending_at'] == pending
+    assert second['summary_title_provenance'] == 'server_minimum'
 
 
 def test_projection_leaves_titled_rows_untouched():
@@ -620,11 +668,82 @@ def test_projection_leaves_an_existing_summary_untouched():
 
 def test_projection_debt_kill_switch_off_restores_todays_behavior(monkeypatch):
     monkeypatch.setenv('SUMMARY_PROJECTION_DEBT_ENABLED', 'false')
-    result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+    original = recording()
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
     assert 'summary_due_at' not in result
     assert 'summary_first_pending_at' not in result
     assert 'summary_title_provenance' not in result
-    assert 'structured' not in result
+    assert result.get('structured') == original.get('structured')
+
+
+@pytest.mark.parametrize(
+    'changes,reason',
+    [
+        ({'is_locked': True}, 'local_only'),
+        ({'client_processing': True}, 'local_only'),
+        ({'finalization_job_id': 'synthetic-job'}, 'generation_owned'),
+        ({'finalization_status': 'blocked_byok'}, 'generation_owned'),
+        (
+            {'relevance_decision': {'verdict': 'keep', 'decided_by': 'rule', 'reason': 'content_below_floor'}},
+            'content_below_floor',
+        ),
+    ],
+)
+def test_projection_debt_stamp_skips_rows_the_repair_would_refuse(changes, reason):
+    row = stamp_row(**changes)
+    before = deepcopy(row)
+    assert not summary_delivery.stamp_projection_debt(row, now=STAMP_NOW)
+    assert row == before
+    # The stamp evaluates the row with the provenance it would add, so the
+    # refusal reason is the one the repair would see after a stamp.
+    candidate = {
+        **row,
+        'structured': {**row.get('structured', {}), 'title_provenance': 'server_minimum'},
+        'summary_title_provenance': 'server_minimum',
+    }
+    assert summary_delivery.refusal(candidate) == reason
+
+
+@pytest.mark.parametrize('reason', ['content_below_floor', 'local_only', 'blocked_byok', 'empty_output_exhausted'])
+def test_projection_debt_stamp_skips_every_non_empty_summary_block(reason):
+    row = stamp_row(summary_blocked_reason=reason)
+    before = deepcopy(row)
+    assert not summary_delivery.stamp_projection_debt(row, now=STAMP_NOW)
+    assert row == before
+
+
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'terminal_no_derived_effects': True},
+        {'deferred': True},
+        {'processing_state': 'local_pending'},
+        {'data_protection_level': 'e2ee'},
+        {'user_title': 'Synthetic title'},
+        {'user_overview': 'Synthetic overview'},
+        {'summary_completed_at': 90.0},
+        {'summary_output_present': True},
+        {'summary_due_at': 170.0},
+        {'summary_first_pending_at': 50.0},
+        {'structured': {'title': 'Synthetic title'}},
+        {'structured': {'overview': 'Synthetic overview'}},
+        {'structured': {'sections': [{'body_markdown': 'Synthetic body'}]}},
+    ],
+)
+def test_projection_debt_stamp_skips_every_guard_branch(changes):
+    row = stamp_row(**changes)
+    before = deepcopy(row)
+    assert not summary_delivery.stamp_projection_debt(row, now=STAMP_NOW)
+    assert row == before
+
+
+@pytest.mark.parametrize('structured', [['synthetic'], 'synthetic', 7])
+def test_projection_debt_stamp_preserves_non_dict_structured(structured):
+    row = stamp_row(structured=structured)
+    before = deepcopy(row)
+    assert not summary_delivery.stamp_projection_debt(row, now=STAMP_NOW)
+    assert row == before
+    assert row['structured'] == structured
 
 
 @pytest.mark.parametrize(

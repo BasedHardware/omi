@@ -20,6 +20,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
+from utils.enrichment.age_gate import expired
 
 Row = dict[str, Any]
 PROJECTION_DEBT_ENV = 'SUMMARY_PROJECTION_DEBT_ENABLED'
@@ -173,7 +174,19 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     repair refuses it as ``unknown_provenance``. The projection is the only
     write that sees the transcript land, so it stamps the same obligation the
     intake minimum would have. Rows that already carry debt or a summary,
-    curated rows, discards, below-floor clips and local-only rows are untouched.
+    curated rows, discards, below-floor clips, blocked rows and local-only rows
+    are untouched.
+
+    The stamp records the row-level ``summary_title_provenance`` only. It does
+    not write ``structured.title_provenance``: ``is_server_minimum`` gates
+    apps, goals, memories, folders and vectors, and a projection stamp must not
+    suppress those effects on a later reprocess. Home reads the row-level
+    provenance together with the debt clock.
+
+    A row whose ``created_at`` is already past the repair age gate gets the
+    provenance but no debt. That is an honest non-debt disposition: the repair
+    never sees it, so it cannot park it one-way, and Home hides it instead of
+    presenting "Writing notes" forever.
     """
     if not projection_debt_enabled():
         return False
@@ -191,27 +204,39 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
         return False
     if write.get('summary_due_at') is not None or write.get('summary_first_pending_at') is not None:
         return False
-    if write.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS:
+    blocked = write.get('summary_blocked_reason')
+    if blocked is not None:
+        # Every non-empty block is terminal for this write, including the
+        # below-floor, local-only and BYOK reasons that are not in the empty set.
         return False
     structured = write.get('structured')
-    if not isinstance(structured, dict):
+    if structured is None:
         structured = {}
-        write['structured'] = structured
+    elif not isinstance(structured, dict):
+        # Preserve non-dict structured data; only a dict can carry provenance.
+        return False
     if str(structured.get('title') or '').strip() or present(structured):
         return False
-    if intentional_short_clip_minimum(write):
-        return False
     current = time.time() if now is None else now
-    structured['title_provenance'] = 'server_minimum'
+    # Evaluate the exact eligibility the repair will use, with the provenance
+    # this stamp would add. The candidate keeps the write untouched on refusal.
+    candidate = {
+        **write,
+        'structured': {**structured, 'title_provenance': 'server_minimum'},
+        'summary_title_provenance': 'server_minimum',
+    }
+    if _refusal(candidate) is not None:
+        return False
     write['summary_title_provenance'] = 'server_minimum'
+    if expired({'first_pending_at': current}, write.get('created_at'), now=current):
+        return False
     write['summary_first_pending_at'] = current
     write['summary_due_at'] = current + deadline_seconds()
     write.setdefault('summary_lane', lane(write))
     return True
 
 
-@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
-def refusal(row: Row) -> str | None:
+def _refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
@@ -233,6 +258,11 @@ def refusal(row: Row) -> str | None:
     if row.get('finalization_job_id') or row.get('finalization_status') == 'blocked_byok':
         return 'generation_owned'
     return None
+
+
+@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
+def refusal(row: Row) -> str | None:
+    return _refusal(row)
 
 
 def finalization_pending(row: Row, uid: str, job_id: str) -> bool:

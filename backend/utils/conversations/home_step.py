@@ -109,7 +109,13 @@ def classify(row: Mapping[str, Any]) -> str | None:
         or row.get('record_upload_failed')
     ):
         return FAILED
-    provisional = structured.get('title_provenance') == 'server_minimum'
+    # The projection stamp records provenance on the row, not in structured, so
+    # it does not suppress derived effects through is_server_minimum. Home still
+    # needs to see the same provisional row the repair sees.
+    provisional = (
+        structured.get('title_provenance') == 'server_minimum'
+        or row.get('summary_title_provenance') == 'server_minimum'
+    )
     if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
         return NOISE
     if provisional:
