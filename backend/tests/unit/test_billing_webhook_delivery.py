@@ -7,9 +7,10 @@ import pytest
 from fastapi import BackgroundTasks
 
 from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
+from database import stripe_event_ledger
 from models.users import PlanType, Subscription
 from routers import payment
-from utils import product_telemetry
+from utils import product_telemetry, stripe_webhook_ledger
 from utils.observability import billing_webhook, subscription_events
 
 
@@ -311,3 +312,185 @@ def test_annual_catalog_mrr_matches_w2_round_half_up(captures):
         )
     )
     assert captures[0]['properties']['mrr_cents'] == 1666
+
+
+def _recovery_event(status='past_due', previous_status='active', previous_invoice=None):
+    subscription = _obj(status=status)
+    subscription.update(
+        {
+            'collection_method': 'charge_automatically',
+            'latest_invoice': 'in-recovery',
+            'current_period_start': 1758600000,
+        }
+    )
+    previous = {'status': previous_status}
+    if previous_invoice is not None:
+        previous['latest_invoice'] = previous_invoice
+    return {
+        'id': 'evt-recovery-push',
+        'type': 'customer.subscription.updated',
+        'created': 1758700800,
+        'data': {'object': subscription, 'previous_attributes': previous},
+    }
+
+
+@pytest.fixture
+def recovery_lane(monkeypatch):
+    state = SimpleNamespace(
+        calls=[],
+        notifications=[],
+        current=Subscription(plan=PlanType.plus, stripe_subscription_id='sub-fixture'),
+        persist_error=None,
+        invoice_error=None,
+        invoice={
+            'status': 'open',
+            'attempted': True,
+            'amount_remaining': 1799,
+            'billing_reason': 'subscription_cycle',
+        },
+    )
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def write(uid, payload):
+        if state.persist_error:
+            raise state.persist_error
+        state.calls.append(('write', uid))
+        state.current = Subscription.model_validate(payload)
+
+    def retrieve_invoice(invoice_id):
+        state.calls.append(('invoice', invoice_id))
+        if state.invoice_error:
+            raise state.invoice_error
+        return SimpleNamespace(to_dict=lambda: dict(state.invoice))
+
+    def notify(intent):
+        state.notifications.append(
+            {'uid': intent.user_id, 'title': intent.title, 'body': intent.body, 'data': intent.data}
+        )
+
+    async def no_telemetry(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(payment, 'run_blocking', run_blocking)
+    monkeypatch.setattr(payment, 'record_subscription_event', lambda **kwargs: None)
+    monkeypatch.setattr(payment, 'account_deletion_blocks_user_work', lambda uid: False)
+    monkeypatch.setattr(payment.users_db, 'get_user_profile', lambda uid: {'uid': uid})
+    monkeypatch.setattr(payment.users_db, 'get_existing_user_subscription', lambda uid: state.current)
+    monkeypatch.setattr(payment.users_db, 'update_user_subscription', write)
+    monkeypatch.setattr(payment, 'find_active_paid_subscription_for_user', lambda uid: None)
+    monkeypatch.setattr(payment, 'set_credits_invalidation_signal', lambda uid: None)
+    monkeypatch.setattr(payment, 'funded_processing_enabled', lambda uid: False)
+    monkeypatch.setattr(payment.stripe.Invoice, 'retrieve', retrieve_invoice)
+    monkeypatch.setattr(payment, 'dispatch_notification', notify)
+    monkeypatch.setattr(billing_webhook, 'schedule_billing_webhook_events', no_telemetry)
+    return state
+
+
+def test_payment_recovery_push_is_scheduled_after_persistence(recovery_lane):
+    async def run():
+        tasks = BackgroundTasks()
+        await payment._handle_stripe_event(_recovery_event(), tasks)
+        assert recovery_lane.calls == [('write', 'user-fixture'), ('invoice', 'in-recovery')]
+        assert recovery_lane.notifications == []
+
+        await tasks()
+        assert recovery_lane.notifications == [
+            {
+                'uid': 'user-fixture',
+                'title': 'Payment declined',
+                'body': 'Update your payment method to restore your subscription benefits.',
+                'data': {'type': 'payment_issue', 'navigate_to': '/conversations'},
+            }
+        ]
+
+    asyncio.run(run())
+
+
+def test_delivered_previous_invoice_avoids_stripe_lookup(recovery_lane):
+    async def run():
+        tasks = BackgroundTasks()
+        event = _recovery_event(previous_invoice=recovery_lane.invoice)
+        await payment._handle_stripe_event(event, tasks)
+        assert recovery_lane.calls == [('write', 'user-fixture')]
+        await tasks()
+        assert len(recovery_lane.notifications) == 1
+
+    asyncio.run(run())
+
+
+def test_recovery_state_update_does_not_retrieve_or_notify(recovery_lane):
+    async def run():
+        tasks = BackgroundTasks()
+        await payment._handle_stripe_event(_recovery_event(status='unpaid', previous_status='past_due'), tasks)
+        assert recovery_lane.calls == [('write', 'user-fixture')]
+        await tasks()
+        assert recovery_lane.notifications == []
+
+    asyncio.run(run())
+
+
+def test_failed_persistence_schedules_no_recovery_push(recovery_lane):
+    recovery_lane.persist_error = RuntimeError('fixture persistence failure')
+
+    async def run():
+        tasks = BackgroundTasks()
+        with pytest.raises(RuntimeError, match='fixture persistence failure'):
+            await payment._handle_stripe_event(_recovery_event(), tasks)
+        assert recovery_lane.calls == []
+        await tasks()
+        assert recovery_lane.notifications == []
+
+    asyncio.run(run())
+
+
+def test_invoice_failure_after_persistence_remains_retryable(recovery_lane):
+    recovery_lane.invoice_error = RuntimeError('fixture invoice failure')
+
+    async def run():
+        tasks = BackgroundTasks()
+        with pytest.raises(RuntimeError, match='fixture invoice failure'):
+            await payment._handle_stripe_event(_recovery_event(), tasks)
+        assert recovery_lane.calls == [('write', 'user-fixture'), ('invoice', 'in-recovery')]
+        await tasks()
+        assert recovery_lane.notifications == []
+
+    asyncio.run(run())
+
+
+def test_duplicate_transition_delivery_is_suppressed_by_existing_ledger(recovery_lane, monkeypatch):
+    event = _recovery_event()
+    acknowledged = set()
+
+    def claim(delivery, token):
+        if delivery['id'] in acknowledged:
+            return stripe_event_ledger.Claim('duplicate')
+        return stripe_event_ledger.Claim('claimed', token)
+
+    def finish(delivery, token, *, succeeded):
+        if succeeded:
+            acknowledged.add(delivery['id'])
+        return False
+
+    class Request:
+        async def body(self):
+            return b'{}'
+
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true')
+    monkeypatch.setattr(stripe_webhook_ledger, 'webhook_ledger_enabled', lambda: True)
+    monkeypatch.setattr(stripe_event_ledger, 'claim_event', claim)
+    monkeypatch.setattr(stripe_event_ledger, 'finish_event', finish)
+    monkeypatch.setattr(payment.stripe_utils, 'parse_event', lambda *args: event)
+
+    async def run():
+        first_tasks = BackgroundTasks()
+        assert await payment.stripe_webhook(Request(), 'fixture-signature', first_tasks) == {'status': 'success'}
+        await first_tasks()
+        second_tasks = BackgroundTasks()
+        assert await payment.stripe_webhook(Request(), 'fixture-signature', second_tasks) == {'status': 'success'}
+        await second_tasks()
+        assert len(recovery_lane.notifications) == 1
+        assert recovery_lane.calls.count(('write', 'user-fixture')) == 1
+
+    asyncio.run(run())
