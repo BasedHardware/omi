@@ -145,6 +145,15 @@ def module_source(module):
     return source, ast.parse(source)
 
 
+def scope_definitions(nodes):
+    """Find definitions through control flow without entering another scope."""
+    for node in nodes:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node
+        else:
+            yield from scope_definitions(ast.iter_child_nodes(node))
+
+
 @lru_cache(maxsize=None)
 def function_source(cite):
     module, _, function = cite.partition(':')
@@ -153,16 +162,23 @@ def function_source(cite):
         return source
     for part in function.split('.'):
         node = next(
-            (
-                child
-                for child in node.body
-                if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == part
-            ),
+            (child for child in scope_definitions(node.body) if child.name == part),
             None,
         )
         if node is None:
             return ''
     return ast.get_source_segment(source, node) or ''
+
+
+def test_function_source_finds_loop_nested_transaction_without_crossing_scopes(monkeypatch):
+    source = 'def outer():\n    for item in []:\n        def commit(tx):\n            return item\ndef other():\n    def hidden():\n        pass\n'
+    monkeypatch.setitem(
+        function_source.__wrapped__.__globals__, 'module_source', lambda path: (source, ast.parse(source))
+    )
+    read = function_source.__wrapped__
+    assert 'return item' in read('synthetic.py:outer.commit')
+    assert read('synthetic.py:outer.hidden') == ''
+    assert read('synthetic.py:commit') == ''
 
 
 def assigned_fields(source):
