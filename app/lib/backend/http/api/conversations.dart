@@ -27,6 +27,7 @@ import 'package:omi/utils/wal_sync_upload.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
+part 'conversation_search_decode.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -1307,19 +1308,8 @@ Future<ConversationSearchResult> searchConversationsServerResult(
   if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
     try {
-      final data = wire.GeneratedSearchConversationsResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>,
-      );
-      // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
-      // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
-      final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
-      return ConversationSearchResult(
-        items: convos,
-        currentPage: data.currentPage,
-        totalPages: data.totalPages,
-        outcome: ConversationSearchResultOutcome.success,
-        statusCode: response.statusCode,
-      );
+      return decodeConversationSearchResponse(jsonDecode(response.body) as Map<String, dynamic>,
+          statusCode: response.statusCode);
     } catch (e) {
       Logger.debug('searchConversationsServer parse error: $e');
       return ConversationSearchResult.failure(statusCode: response.statusCode);
