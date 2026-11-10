@@ -2615,6 +2615,8 @@ export interface EpisodeLookupResponse {
 export interface EpisodeMember {
   emoji?: string;
   finished_at?: string | null;
+  gist?: string;
+  home_step?: string | null;
   id: string;
   started_at: string;
   status?: string;
@@ -5630,6 +5632,7 @@ export interface Structured {
   category?: CategoryEnum;
   emoji?: string;
   events?: Array<Event>;
+  gist?: string;
   insights?: Array<Insight>;
   meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
   note_claims?: Array<NoteClaim> | null;

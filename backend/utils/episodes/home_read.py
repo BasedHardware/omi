@@ -12,6 +12,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.transcribing_hold import transcription_presentation
+from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
 from config.episodes import (
@@ -337,6 +338,8 @@ def project_episode(
         phase_shadow.observe('episode_member', row, True, episode=episode)
         from utils.conversations.home_titles import neutralize_minimum_title
 
+        # Classify on the stored read copy, before the presentation rewrite below.
+        step = home_step_projection.classify(row)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
@@ -367,6 +370,8 @@ def project_episode(
                 'id': cid,
                 'title': title,
                 'emoji': structured.get('emoji') or '',
+                'gist': str(structured.get('gist') or ''),
+                **({'home_step': step} if step else {}),
                 'started_at': started,
                 'finished_at': finished,
                 'status': status,
