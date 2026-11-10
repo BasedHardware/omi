@@ -65,13 +65,11 @@ class RecoveryStore(RecoveryFence):
         Emit only a committed, newly spent held re-drive. Staging-input repairs
         (expected_job) do not consume grants or feed production paging.
         """
-        spent = [False]
 
         def commit(tx):
-            spent[0] = False
             job, _ = self.checked(tx, segment_id)
             if expected_job is not None and job != expected_job:
-                return False
+                return None
             if dead_before is not None:
                 expired_at = job.get('held_expired_at')
                 if (
@@ -82,17 +80,15 @@ class RecoveryStore(RecoveryFence):
                     or not math.isfinite(expired_at)
                     or expired_at >= dead_before
                 ):
-                    return False
-            outcome = Scheduler.requeue_quarantined_in_transaction(tx, job, now, account=expected_job is None)
-            spent[0] = outcome == 'spent'
-            return bool(outcome)
+                    return None
+            return Scheduler.requeue_quarantined_in_transaction(tx, job, now, account=expected_job is None)
 
-        requeued = self.store.run(commit)
-        if requeued and spent[0]:
+        outcome = self.store.run(commit)
+        if outcome is not None and outcome.spent:
             from utils.backlog_metrics import record_transition
 
             record_transition('held_redrive_budget_spent')
-        return requeued
+        return outcome is not None
 
     def prepare(self, segment_id, owner_id, now):
         load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)

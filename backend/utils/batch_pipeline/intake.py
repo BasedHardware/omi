@@ -307,12 +307,12 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         if not completed:
             for index, job in enumerate(jobs):
                 outcome = Scheduler.redrive_in_transaction(tx, job, time.time(), checked=RecoveryFence(store).checked)
-                if outcome:
-                    # The recovery fence requeues a checked copy. Read our staged
-                    # write so this response reflects the same transaction's state.
-                    jobs[index] = tx.get('jobs', job['segment_id'])
-                if outcome == 'spent':
-                    spent_redrives.append(job['segment_id'])
+                if outcome is not None:
+                    # The fence requeues a checked copy. Use that written value
+                    # without another transactional read after staging writes.
+                    jobs[index] = outcome.job
+                    if outcome.spent:
+                        spent_redrives.append(job['segment_id'])
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must
             # never ACK custody of unresolved units, including after 30 minutes.

@@ -16,8 +16,9 @@ import pytest
 
 from config import backlog_state_machine as sm
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
+from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup  # noqa: F401
-from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 from utils.batch_pipeline.scheduler import Scheduler
 
 SWITCHES = (
@@ -360,6 +361,64 @@ def test_client_poll_refused_redrive_keeps_the_held_status(monkeypatch, refusal)
     assert status['poll_after_ms'] == 300000
     assert status['failed_segments'] == 1
     assert store.rows == before
+
+
+@pytest.mark.parametrize('reason', ['held_expired', 'historical'])
+@pytest.mark.parametrize('counter', ['true', 'false'])
+@pytest.mark.parametrize('prior', [0, sm.MAX_HELD_REDRIVES])
+def test_client_poll_redrive_returns_fresh_status_without_reads_after_writes(monkeypatch, reason, counter, prior):
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    class NoReadAfterWrite(MemoryTransaction):
+        wrote = False
+
+        def get(self, table, key):
+            if self.wrote:
+                raise ReadAfterWriteError(f'get after write: {table}/{key}')
+            return super().get(table, key)
+
+        def put(self, table, key, value):
+            self.wrote = True
+            super().put(table, key, value)
+
+        def patch(self, table, key, fields):
+            self.wrote = True
+            super().patch(table, key, fields)
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_test_intake'
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    held_dead(store.rows['jobs', 'segment'])
+    store.rows['jobs', 'segment'].update(dead_letter_reason=reason, held_redrives=prior)
+    before = transitions('held_redrive_budget_spent')
+
+    def strict_run(body):
+        snapshot = deepcopy(store.rows)
+        tx = NoReadAfterWrite(snapshot)
+        result = body(tx)
+        assert tx.wrote, 'the poll must actually re-drive the job'
+        store.rows = snapshot
+        return result
+
+    monkeypatch.setattr(store, 'run', strict_run)
+
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+
+    assert status['status'] == 'queued'
+    assert status['poll_after_ms'] == 3000
+    assert status['failed_segments'] == 0
+    assert 'reason_code' not in status
+    job = store.rows['jobs', 'segment']
+    assert job['state'] == 'ready'
+    assert job['held_redrives'] == prior + (reason == 'held_expired')
+    spent = reason == 'held_expired' and prior == sm.MAX_HELD_REDRIVES and counter == 'true'
+    assert transitions('held_redrive_budget_spent') == before + spent
 
 
 def operator_redrive_app(store, monkeypatch):
