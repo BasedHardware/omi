@@ -436,6 +436,10 @@ def discover_jobs(
         budget.check()
         job = doc.to_dict() or {}
         uid, cid, enqueued = job.get('owner_id'), job.get('conversation_id'), job.get('enqueued_at')
+        # Never checkpoint a malformed deadline, including at a saturated page's
+        # tail. Retain the last valid frontier (or wrap if none was seen).
+        if urgent and not valid_metric_clock(job.get(order_field)):
+            continue
         # The encrypted numeric slot carries this scan's ordered field. Urgent
         # and ordinary scans have separate frontier documents.
         cursor = (
@@ -777,14 +781,25 @@ def run(*, progress=lambda _: None):
                 jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
                 if refactor_modes.record_seal_repair_age_order():
                     urgent_frontier = RepairCursor(client, config.cursor_secret(), jobs=True, urgent=True)
-                    urgent_rows, jobs_saturated, urgent_cursor = discover_jobs(
-                        client,
-                        budget=budget,
-                        after=urgent_frontier.read(budget),
-                        max_rows=max(1, workers // 2),
-                        selected_cursors=urgent_cursors,
-                        urgent=True,
-                    )
+                    try:
+                        urgent_rows, jobs_saturated, urgent_cursor = discover_jobs(
+                            client,
+                            budget=budget,
+                            after=urgent_frontier.read(budget),
+                            max_rows=max(1, workers // 2),
+                            selected_cursors=urgent_cursors,
+                            urgent=True,
+                        )
+                    except FailedPrecondition:
+                        # Fail only the urgent leg; never emit the SDK message.
+                        record_fallback(
+                            component='firestore_read',
+                            from_mode='record_seal_age_order',
+                            to_mode='none',
+                            reason='other',
+                            outcome='degraded',
+                        )
+                        progress({'event': 'record_seal_repair_urgent', 'outcome': 'index_unavailable'})
                 jobs_cursor = jobs_frontier.read(budget)
                 remaining = max(1, workers // 2) - len(urgent_rows)
                 if remaining:

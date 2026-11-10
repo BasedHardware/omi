@@ -17,6 +17,17 @@ cap (1,024), or aggregate scan cap (10,000). The extra urgent page consumes up t
 128 of that existing scan cap, rather than adding to it. All seal, privacy,
 producer-proof and minimum-age eligibility checks remain unchanged.
 
+The ordinary-job starvation bound is **unbounded while urgency fills every
+job allocation**: if each run selects `max(1, workers // 2)` urgent rows, the
+ordinary recency leg gets zero places until a run has spare urgent capacity.
+Conversation discovery retains its reservation. No finite wall-clock guarantee
+is claimed for ordinary work under a sustained urgent backlog; reserving an
+ordinary share is a follow-up fairness decision (production-safety P2-1).
+Malformed deadlines are skipped before advancing the urgent frontier, including
+at a saturated page's tail; an all-malformed page wraps instead of persisting
+an unreadable cursor. Such a page can delay urgent progress until the corrupt
+metadata is repaired, within the existing per-run scan/time bounds.
+
 Recency scans retain a frozen horizon and wrap so sustained new inflow cannot
 strand the tail. The deadline scan can expand its upper boundary on resume:
 newly urgent jobs have later deadlines and cannot prevent progress through the
@@ -30,8 +41,11 @@ indexes for both stages, plus a newest-completed conversation-group index.
 The existing deployment readiness gate must confirm these indexes before
 shipping the new image. No index apply or production deployment was performed.
 Ordinary recency discovery retains its missing-index fallback to hash order;
-the urgent scan fails if its index is unavailable, rather than silently
-discarding deadline priority.
+an unavailable urgent index skips only the urgent leg, emits a content-free
+`index_unavailable` event and shared degraded fallback telemetry, and allows
+ordinary and conversation discovery to continue with a successful run. The
+`gcp_diarizer.yml` batch-pipeline-worker path now enforces the shared readiness
+gate against the selected source SHA before building or deploying the image.
 
 Rollback the jobs priority with `RECORD_SEAL_REPAIR_AGE_ORDER=off`: this skips the
 urgent scan and restores the original hash query. Code rollback restores the

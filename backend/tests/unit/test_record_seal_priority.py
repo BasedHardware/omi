@@ -87,7 +87,8 @@ def test_urgent_missing_index_fails_without_silently_dropping_deadline_priority(
 
 
 @pytest.mark.parametrize('mode', ['plan', 'apply'])
-def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(monkeypatch, mode):
+@pytest.mark.parametrize('urgent_index_error', [False, True])
+def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(monkeypatch, mode, urgent_index_error):
     from database import _client
     from utils.batch_pipeline import record_seal_repair_cursor, record_seal_sweeper
 
@@ -105,20 +106,37 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
             self.writes.append(value)
 
     def jobs(client, *, urgent=False, selected_cursors, max_rows, **kwargs):
-        assert max_rows == (2 if urgent else 1)
+        assert max_rows == (2 if urgent or urgent_index_error else 1)
+        if urgent and urgent_index_error:
+            raise cluster.FailedPrecondition('private query requires an index: users/private')
         path = 'urgent' if urgent else 'recent-job'
         selected_cursors[path] = {'path': path}
         return [(path, 5000 if urgent else 1000)], False, {'path': path}
 
     def conversations(client, *, max_scan, max_rows, advance_rows, selected_cursors, **kwargs):
-        assert (max_scan, max_rows, advance_rows) == (10000 - 256, 1022, 2)
+        assert (max_scan, max_rows, advance_rows) == (
+            10000 - 256,
+            1023 if urgent_index_error else 1022,
+            3 if urgent_index_error else 2,
+        )
         selected_cursors.update(
             {'urgent': {'path': 'duplicate'}, 'recent-conversation': {'path': 'recent-conversation'}}
         )
-        return [('urgent', 5000), ('recent-conversation', 500)], False, None
+        return (
+            (
+                [('recent-conversation', 500)]
+                if urgent_index_error
+                else [('urgent', 5000), ('recent-conversation', 500)]
+            ),
+            False,
+            None,
+        )
 
     def coordinate(rows, *, attempted, **kwargs):
-        assert rows == [('urgent', 5000), ('recent-job', 1000), ('recent-conversation', 500)]
+        assert rows == ([] if urgent_index_error else [('urgent', 5000)]) + [
+            ('recent-job', 1000),
+            ('recent-conversation', 500),
+        ]
         for path, _ in rows:
             attempted(path)
         return {}
@@ -135,8 +153,122 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
     monkeypatch.setattr(cluster, 'discover_jobs', jobs)
     monkeypatch.setattr(cluster, 'discover', conversations)
     monkeypatch.setattr(cluster, 'coordinate', coordinate)
-    assert cluster.run()['outcome'] == 'ok'
+    if urgent_index_error:
+        from scripts import record_seal_repair_job as entrypoint
+        from utils import record_projection_rebuild
+
+        events, fallbacks = [], []
+        monkeypatch.setattr(cluster, 'record_fallback', lambda **kw: fallbacks.append(kw))
+        monkeypatch.setattr(entrypoint, 'emit', events.append)
+        monkeypatch.setattr(entrypoint.signal, 'signal', lambda *_: None)
+        monkeypatch.setattr(entrypoint.sys, 'argv', ['record_seal_repair_job.py'])
+        monkeypatch.setattr(record_projection_rebuild, 'run_job', lambda: {'outcome': 'disabled'})
+        assert entrypoint.main() == 0
+        assert events[0] == {'event': 'record_seal_repair_urgent', 'outcome': 'index_unavailable'}
+        assert events[-1]['outcome'] == 'ok'
+        assert 'private' not in str(events) + str(fallbacks)
+        assert fallbacks[0]['outcome'] == 'degraded'
+    else:
+        assert cluster.run()['outcome'] == 'ok'
     for key, path in [((True, True), 'urgent'), ((True, False), 'recent-job'), ((False, False), 'recent-conversation')]:
         assert cursors[key].writes == (
-            [] if mode == 'plan' else [None if not key[0] else {'path': path}, {'path': path}]
+            []
+            if mode == 'plan'
+            else [None] if urgent_index_error and key[1] else [None if not key[0] else {'path': path}, {'path': path}]
         )
+
+
+@pytest.mark.parametrize('deadline', [True, None, 'soon', 0, -1, float('nan'), float('inf')])
+def test_saturated_malformed_deadlines_never_persist_an_invalid_urgent_frontier(monkeypatch, deadline):
+    docs = [pending_job(i, NOW - 5000, record_dead_letter_deadline_at=deadline) for i in range(128)]
+    client, budget = OrderedJobsClient([]), SweepBudget(60)
+    query = client.collection('batch_pipeline_prod_jobs')
+    # Supply a saturated projected page, including types the numeric fake filters
+    # out. Exercise the local guard independently of query type filtering.
+    monkeypatch.setattr(query, 'stream', lambda **_: docs)
+    monkeypatch.setattr(client, 'collection', lambda _: query)
+    rows, saturated, cursor = cluster.discover_jobs(client, budget=budget, urgent=True)
+    assert rows == [] and saturated and cursor is None
+    state = CursorClient()
+    frontier = RepairCursor(
+        SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: state)),
+        b'k' * 32,
+        jobs=True,
+        urgent=True,
+    )
+    frontier.write(cursor, budget)
+    assert frontier.read(budget) is None
+    # The next run can load the frontier and select a valid deadline.
+    docs[:] = [pending_job(129, NOW - 5000, record_dead_letter_deadline_at=NOW + 1)]
+    assert cluster.discover_jobs(client, budget=budget, urgent=True, after=frontier.read(budget))[0]
+
+
+def test_conversation_newest_first_encrypted_resume_frozen_horizon_and_wrap(monkeypatch):
+    # Discovery validates datetime instances as well as consulting now().
+    monkeypatch.setattr(cluster, 'datetime', datetime)
+    now = datetime.now(timezone.utc).timestamp()
+
+    class OrderedConversationsClient(CursorClient):
+        def collection_group(self, name):
+            assert name == 'conversations'
+            client = self
+
+            class Query:
+                def __init__(self):
+                    self.orders, self.after, self.horizon, self.cap = [], None, None, 128
+
+                def where(self, *, filter):
+                    if filter.field_path == 'finished_at':
+                        self.horizon = filter.value
+                    return self
+
+                def order_by(self, field, direction=None):
+                    self.orders.append((field, direction))
+                    return self
+
+                def select(self, _):
+                    return self
+
+                def limit(self, cap):
+                    self.cap = cap
+                    return self
+
+                def start_after(self, cursor):
+                    self.after = (cursor['finished_at'], cursor['__name__'].path)
+                    return self
+
+                def stream(self, **_):
+                    assert self.orders == [('finished_at', 'DESCENDING'), ('__name__', 'DESCENDING')]
+                    key = lambda doc: (doc.to_dict()['finished_at'], doc.reference.path)
+                    docs = sorted(client.documents, key=key, reverse=self.orders[0][1] == 'DESCENDING')
+                    return [
+                        d for d in docs if key(d)[0] <= self.horizon and (self.after is None or key(d) < self.after)
+                    ][: self.cap]
+
+            return Query()
+
+    def conversation(name, finished):
+        return SimpleNamespace(
+            reference=SimpleNamespace(path=f'users/synthetic/conversations/{name}'),
+            to_dict=lambda: {'finished_at': datetime.fromtimestamp(finished, timezone.utc)},
+        )
+
+    docs = [conversation('old', now - 7000), conversation('a', now - 5000), conversation('z', now - 5000)]
+    client, budget = OrderedConversationsClient(docs), SweepBudget(60)
+    frontier = RepairCursor(client, b'k' * 32)
+    observed = []
+    for index in range(3):
+        rows, saturated, cursor = cluster.discover(
+            client, budget=budget, after=frontier.read(budget), max_rows=1, advance_rows=1
+        )
+        assert saturated and len(rows) == 1
+        observed.append(rows[0][0].rsplit('/', 1)[-1])
+        frontier.write(cursor, budget)
+        if index == 0:
+            # A later arrival cannot move the frozen upper boundary or strand the tail.
+            client.documents.append(conversation('new-arrival', datetime.now(timezone.utc).timestamp()))
+    assert observed == ['z', 'a', 'old']
+    assert cluster.discover(client, budget=budget, after=frontier.read(budget)) == ([], False, None)
+    frontier.write(None, budget)
+    rows, _, _ = cluster.discover(client, budget=budget, after=frontier.read(budget), max_rows=1)
+    assert rows[0][0].endswith('/new-arrival')

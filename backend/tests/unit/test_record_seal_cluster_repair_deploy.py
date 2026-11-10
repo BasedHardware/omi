@@ -295,3 +295,28 @@ def test_pusher_flag_can_arrive_unshadowed_from_existing_runtime_configmap():
     container = deployment['spec']['template']['spec']['containers'][0]
     assert {'configMapRef': {'name': 'projection-debt-test-config'}} in container['envFrom']
     assert not any(item['name'] == 'PUSHER_PROJECTION_DEBT_DURABLE_ENABLED' for item in container.get('env', []))
+
+
+def test_worker_deploy_gates_selected_source_before_build_or_helm():
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[3] / '.github/workflows/gcp_diarizer.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    gate_index, gate = next(
+        (i, step) for i, step in enumerate(steps) if step.get('name') == 'Verify serving Firestore indexes'
+    )
+    assert gate['if'] == "env.SERVICE == 'batch-pipeline-worker'"
+    assert gate['uses'] == './.github/firestore-workflow/.github/actions/firestore-readiness'
+    assert not gate.get('continue-on-error', False)
+    assert gate['with']['source_sha'] == '${{ steps.vars.outputs.source_sha }}'
+    assert gate['with']['project_id'] == '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
+    controls = steps[gate_index - 1]
+    assert controls['with']['ref'] == '${{ github.workflow_sha }}'
+    assert controls['with']['path'] == '.github/firestore-workflow'
+    source = next(step for step in steps if step.get('id') == 'vars')
+    assert 'source_sha=$(git rev-parse HEAD)' in source['run']
+    mutations = [
+        i
+        for i, step in enumerate(steps)
+        if step.get('name') in {'Build and Push Docker image', 'Verify promoted worker digest'}
+        or 'upgrade --install' in step.get('run', '')
+    ]
+    assert len(mutations) == 3 and all(i > gate_index for i in mutations)
