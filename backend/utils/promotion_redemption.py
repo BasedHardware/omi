@@ -7,6 +7,7 @@ code's restrictions against the plan price itself and attaches the code's coupon
 the subscription, so the discount lands on the first invoice after the trial.
 """
 
+import hashlib
 import logging
 import time
 from typing import Optional
@@ -15,6 +16,7 @@ import stripe
 
 from database import promotion_redemptions as redemptions_db
 from database import users as users_db
+from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -34,7 +36,7 @@ def _invalid() -> RedemptionError:
 
 
 def _find_promotion_code(code: str) -> dict:
-    promos = stripe.PromotionCode.list(code=code, active=True, limit=1).data
+    promos = stripe.PromotionCode.list(code=code, active=True, limit=1, expand=['data.coupon']).data
     if not promos:
         raise _invalid()
     promo = promos[0].to_dict()
@@ -104,26 +106,84 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     coupon = stripe.Coupon.retrieve(_coupon_id(promo), expand=['applies_to']).to_dict()
     _check_eligible(promo, coupon, subscription)
 
-    if not redemptions_db.claim(promo['id'], uid=uid, subscription_id=subscription_id, coupon_id=coupon['id']):
+    attribution = stripe_utils.promotion_code_attribution(promo)
+    if not redemptions_db.claim(
+        promo['id'],
+        uid=uid,
+        subscription_id=subscription_id,
+        coupon_id=coupon['id'],
+        attribution=attribution,
+    ):
         raise RedemptionError(409, 'This code has already been used.')
 
+    previous_attempt = (promo.get('metadata') or {}).get('redemption_attempt', 0)
+    if (
+        isinstance(previous_attempt, bool)
+        or not isinstance(previous_attempt, (int, str))
+        or (isinstance(previous_attempt, int) and previous_attempt < 0)
+        or (isinstance(previous_attempt, str) and (not previous_attempt.isdigit() or len(previous_attempt) > 9))
+    ):
+        previous_attempt = 0
+    redemption_attempt = int(previous_attempt) + 1
+    # A deliberate rollback reactivates the code; Stripe would replay an older
+    # deactivation response if its key were reused. The persisted attempt makes
+    # each logical attempt deterministic without becoming immortal after rollback.
+    operation_id = hashlib.sha256(f"{promo['id']}:{redemption_attempt}".encode()).hexdigest()
+    promotion_metadata = {
+        **attribution,
+        'redeemed_by_uid': uid,
+        'redeemed_subscription_id': subscription_id,
+        'redemption_attempt': str(redemption_attempt),
+    }
     try:
+        # Stripe merges these redemption keys into the original PromotionCode
+        # metadata; repeating valid issuance values also guards that invariant.
         stripe.PromotionCode.modify(
             promo['id'],
             active=False,
-            metadata={'redeemed_by_uid': uid, 'redeemed_subscription_id': subscription_id},
+            metadata=promotion_metadata,
+            idempotency_key=f'omi-redeem-{operation_id}-promotion',
         )
+    except Exception as e:
+        committed = _committed_promotion_deactivation(promo['id'], uid, subscription_id, redemption_attempt)
+        if committed is not True:
+            logger.error(f"Promotion code deactivation failed: {sanitize(str(e))}")
+            # Release only a verified still-active code. An inactive code with
+            # another redemption marker, or an unreadable ambiguous result, must
+            # retain the claim and must never be reactivated for somebody else.
+            if committed is False:
+                _undo_claim(promo['id'], redemption_attempt)
+            if isinstance(e, stripe.StripeError):
+                raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
+            raise
+        logger.warning('Reconciled a committed promotion deactivation after an ambiguous Stripe response')
+
+    try:
+        subscription_metadata = stripe_utils.merge_promotion_attribution(
+            subscription.get('metadata') or {}, attribution
+        )
+        subscription_metadata['redeemed_promotion_code_id'] = promo['id']
         updated = stripe.Subscription.modify(
             subscription_id,
             discounts=[{'coupon': coupon['id']}],
-            metadata={'redeemed_promotion_code_id': promo['id']},
+            metadata=subscription_metadata,
+            idempotency_key=f'omi-redeem-{operation_id}-subscription',
         ).to_dict()
     except Exception as e:
-        logger.error(f"Promotion code redemption failed for {uid}: {sanitize(str(e))}")
-        _undo_claim(promo['id'])
-        if isinstance(e, stripe.StripeError):
+        try:
+            updated = _committed_redemption(subscription_id, promo['id'])
+        except Exception as reconciliation_error:
+            logger.error(f'Promotion redemption reconciliation unavailable: {sanitize(str(reconciliation_error))}')
             raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
-        raise
+        if updated is None:
+            logger.error(f"Promotion code redemption failed for {uid}: {sanitize(str(e))}")
+            # The deactivation commit is not uncertain at this point. Reactivating
+            # after a Subscription pre-commit failure preserves the legacy rollback.
+            _undo_claim(promo['id'], redemption_attempt)
+            if isinstance(e, stripe.StripeError):
+                raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
+            raise
+        logger.warning('Reconciled a committed promotion redemption after an ambiguous Stripe response')
 
     logger.info(f"Redeemed promotion code {promo['id']} onto {subscription_id} for {uid}")
     if updated.get('status') == 'trialing':
@@ -139,9 +199,39 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     }
 
 
-def _undo_claim(promotion_code_id: str) -> None:
+def _committed_promotion_deactivation(
+    promotion_code_id: str, uid: str, subscription_id: str, redemption_attempt: int
+) -> Optional[bool]:
+    """True only for my committed deactivation; False only for a verified active code."""
     try:
-        stripe.PromotionCode.modify(promotion_code_id, active=True)
+        promo = stripe.PromotionCode.retrieve(promotion_code_id).to_dict()
+    except Exception:
+        return None
+    if promo.get('active') is True:
+        return False
+    metadata = promo.get('metadata') or {}
+    committed = (
+        promo.get('active') is False
+        and metadata.get('redeemed_by_uid') == uid
+        and metadata.get('redeemed_subscription_id') == subscription_id
+        and metadata.get('redemption_attempt') == str(redemption_attempt)
+    )
+    return True if committed else None
+
+
+def _committed_redemption(subscription_id: str, promotion_code_id: str) -> Optional[dict]:
+    """Recognize a timeout-after-commit without releasing an already consumed code."""
+    subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
+    if (subscription.get('metadata') or {}).get('redeemed_promotion_code_id') != promotion_code_id:
+        return None
+    return subscription
+
+
+def _undo_claim(promotion_code_id: str, redemption_attempt: int) -> None:
+    try:
+        stripe.PromotionCode.modify(
+            promotion_code_id, active=True, metadata={'redemption_attempt': str(redemption_attempt)}
+        )
     except Exception as e:
         logger.error(f"Could not reactivate promotion code {promotion_code_id}: {sanitize(str(e))}")
         return

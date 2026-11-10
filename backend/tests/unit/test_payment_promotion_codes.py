@@ -99,6 +99,104 @@ def test_upgrade_catches_stripe_invalid_request_error():
     assert "stripe.error.InvalidRequestError" in upgrade_section
 
 
+@pytest.fixture
+def checkout_stripe_utils():
+    from utils import stripe as stripe_utils
+
+    return stripe_utils
+
+
+def _issuance(**overrides):
+    metadata = {
+        'attribution_schema': '1',
+        'attribution_source': 'shopify_bundle_code',
+        'shopify_shop': 'fixture-shop.myshopify.com',
+        'shopify_order_id': 'gid://shopify/Order/12345',
+        'bundle_order_line_item_id': 'gid://shopify/LineItem/67890',
+        'bundle_redemption_role': 'unknown',
+    }
+    metadata.update(overrides)
+    return metadata
+
+
+@pytest.mark.parametrize('role', ['self', 'gift', 'unknown'])
+def test_promotion_attribution_accepts_only_the_verified_issuer_contract(checkout_stripe_utils, role):
+    promo = {'id': 'promo_fixture', 'metadata': _issuance(bundle_redemption_role=role), 'client_order': 'ignored'}
+    attribution = checkout_stripe_utils.promotion_code_attribution(promo)
+    assert attribution == {**promo['metadata'], 'bundle_promotion_code_id': 'promo_fixture'}
+    assert 'client_order' not in attribution
+
+
+@pytest.mark.parametrize(
+    'metadata',
+    [
+        {},
+        _issuance(attribution_schema='2'),
+        _issuance(attribution_source='client'),
+        _issuance(shopify_shop='https://fixture-shop.myshopify.com'),
+        _issuance(shopify_order_id='gid://shopify/Product/12345'),
+        _issuance(bundle_order_line_item_id='not-an-id'),
+        _issuance(bundle_redemption_role='self-ish'),
+        _issuance(shopify_order_id=12345),
+    ],
+)
+def test_missing_or_malformed_promotion_attribution_fails_open(checkout_stripe_utils, metadata):
+    assert checkout_stripe_utils.promotion_code_attribution({'id': 'promo_fixture', 'metadata': metadata}) == {}
+
+
+def test_coupon_never_supplies_or_conflicts_with_unique_code_attribution(checkout_stripe_utils):
+    coupon_only = {'id': 'promo_fixture', 'metadata': {}, 'coupon': {'metadata': _issuance()}}
+    assert checkout_stripe_utils.promotion_code_attribution(coupon_only) == {}
+
+    conflict = {'id': 'promo_fixture', 'metadata': _issuance(), 'coupon': {'metadata': _issuance(shopify_shop='other')}}
+    assert checkout_stripe_utils.promotion_code_attribution(conflict) == {}
+
+    matching = {'id': 'promo_fixture', 'metadata': _issuance(), 'coupon': {'metadata': _issuance()}}
+    assert checkout_stripe_utils.promotion_code_attribution(matching)['shopify_order_id'].endswith('/12345')
+
+    shared_coupon = {'id': 'promo_fixture', 'metadata': _issuance(), 'coupon': {'id': 'coupon_shared'}}
+    assert (
+        checkout_stripe_utils.promotion_code_attribution(shared_coupon)['bundle_promotion_code_id'] == 'promo_fixture'
+    )
+
+
+def test_multiple_codes_may_share_one_verified_order(checkout_stripe_utils):
+    first = checkout_stripe_utils.promotion_code_attribution({'id': 'promo_one', 'metadata': _issuance()})
+    second = checkout_stripe_utils.promotion_code_attribution({'id': 'promo_two', 'metadata': _issuance()})
+    assert first['shopify_order_id'] == second['shopify_order_id']
+    assert first['bundle_promotion_code_id'] != second['bundle_promotion_code_id']
+
+
+def test_session_and_subscription_receive_identical_provenance_without_overriding_auth(checkout_stripe_utils):
+    attribution = checkout_stripe_utils.promotion_code_attribution({'id': 'promo_fixture', 'metadata': _issuance()})
+    captured = {}
+    checkout_stripe_utils.base_url = 'https://api.example/'
+    with (
+        patch.object(checkout_stripe_utils.stripe.Price, 'retrieve', return_value=SimpleNamespace(currency='usd')),
+        patch.object(
+            checkout_stripe_utils.stripe.checkout.Session,
+            'create',
+            side_effect=lambda **kwargs: captured.update(kwargs) or SimpleNamespace(id='cs_fixture'),
+        ),
+    ):
+        checkout_stripe_utils.create_subscription_checkout_session(
+            'authenticated_uid',
+            'price_fixture',
+            customer_id='cus_fixture',
+            promotion_code_id='promo_fixture',
+            trial_period_days=7,
+            promotion_attribution={**attribution, 'uid': 'forged', 'sub_type': 'forged', 'raw_order': 'forged'},
+        )
+
+    expected = {**attribution, 'uid': 'authenticated_uid', 'sub_type': 'unlimited'}
+    assert captured['metadata'] == expected
+    assert captured['subscription_data']['metadata'] == expected
+    assert captured['subscription_data']['trial_period_days'] == 7
+    assert captured['discounts'] == [{'promotion_code': 'promo_fixture'}]
+    assert captured['customer'] == 'cus_fixture'
+    assert 'raw_order' not in captured['metadata']
+
+
 @pytest.fixture(scope="module")
 def payment_router():
     return _setup_payment_module(include_client=False)
@@ -307,6 +405,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     stripe_utils_mod.base_url = "http://test/"
     stripe_utils_mod.TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
     stripe_utils_mod.create_subscription_checkout_session = MagicMock()
+    stripe_utils_mod.promotion_code_attribution = MagicMock(return_value={})
+    stripe_utils_mod.checkout_promotion_code_ids = MagicMock(return_value=[])
+    stripe_utils_mod.merge_promotion_attribution = MagicMock(side_effect=lambda metadata, attribution: metadata)
     stripe_utils_mod.create_connect_account = MagicMock()
     stripe_utils_mod.refresh_connect_account_link = MagicMock()
     stripe_utils_mod.is_onboarding_complete = MagicMock()
@@ -417,6 +518,36 @@ def test_checkout_valid_promo_passes_id_to_session():
     assert call_kwargs[1].get("promotion_code_id") == "promo_abc123" or (
         len(call_kwargs[0]) > 4 and call_kwargs[0][4] == "promo_abc123"
     )
+
+
+def test_native_preapplied_code_uses_server_provenance_and_ignores_forged_client_fields():
+    client, router = _setup_payment_module()
+    promo = MagicMock(id='promo_abc123')
+    attribution = {'shopify_order_id': '12345', 'bundle_promotion_code_id': 'promo_abc123'}
+    mock_session = MagicMock(url='https://checkout.stripe.com/test', id='cs_test_123')
+
+    with patch.object(router.stripe, 'PromotionCode') as mock_promo:
+        mock_promo.list.return_value = MagicMock(data=[promo])
+        router.stripe_utils.promotion_code_attribution.return_value = attribution
+        router.stripe_utils.create_subscription_checkout_session.return_value = mock_session
+        with patch.object(router, '_try_reactivate_subscription', return_value=None):
+            response = client.post(
+                '/v1/payments/checkout-session',
+                json={
+                    'price_id': 'price_123',
+                    'promotion_code': 'BUNDLE-CODE',
+                    'shopify_order_id': 'client-forged',
+                    'metadata': {'shopify_order_id': 'client-forged'},
+                },
+            )
+
+    assert response.status_code == 200
+    mock_promo.list.assert_called_once_with(code='BUNDLE-CODE', active=True, limit=1, expand=['data.coupon'])
+    router.stripe_utils.promotion_code_attribution.assert_called_once_with(promo)
+    call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args.kwargs
+    assert call_kwargs['promotion_code_id'] == 'promo_abc123'
+    assert call_kwargs['promotion_attribution'] == attribution
+    assert call_kwargs['promotion_attribution']['shopify_order_id'] == '12345'
 
 
 def test_checkout_no_promo_omits_promo_id():

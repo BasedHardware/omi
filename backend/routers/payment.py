@@ -740,11 +740,16 @@ def create_checkout_session_endpoint(
 
     # Validate promotion code early — reject invalid codes before any subscription changes
     resolved_checkout_promo_id = None
+    resolved_checkout_attribution = None
     if request.promotion_code:
-        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        promo_list = stripe.PromotionCode.list(
+            code=request.promotion_code, active=True, limit=1, expand=['data.coupon']
+        )
         if not promo_list.data:
             raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
-        resolved_checkout_promo_id = promo_list.data[0].id
+        resolved_promotion = promo_list.data[0]
+        resolved_checkout_promo_id = resolved_promotion.id
+        resolved_checkout_attribution = stripe_utils.promotion_code_attribution(resolved_promotion)
 
     # Only the exact current JPY price may reactivate; never open new Checkout.
     if management_only and currency_binding is not None:
@@ -781,13 +786,18 @@ def create_checkout_session_endpoint(
         raise HTTPException(status_code=400, detail="trial_unavailable")
     trial_period_days = request.trial_days or None
     try:
+        checkout_options = {
+            'customer_id': existing_customer_id,
+            'promotion_code_id': resolved_checkout_promo_id,
+            'trial_period_days': trial_period_days,
+        }
+        if resolved_checkout_attribution is not None:
+            checkout_options['promotion_attribution'] = resolved_checkout_attribution
         session = stripe_utils.create_subscription_checkout_session(
             uid,
             request.price_id,
             idempotency_key,
-            customer_id=existing_customer_id,
-            promotion_code_id=resolved_checkout_promo_id,
-            trial_period_days=trial_period_days,
+            **checkout_options,
         )
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
@@ -1144,6 +1154,53 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
+def _update_checkout_subscription_metadata(uid: str, session: dict, only_with_promotion: bool = False) -> None:
+    """Converge account and optional order attribution from verified Stripe objects."""
+    subscription_id = session.get('subscription')
+    if not subscription_id:
+        return
+    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+    subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
+    promotion_ids = stripe_utils.checkout_promotion_code_ids(session)
+    if not promotion_ids and (subscription_obj.get('discounts') or subscription_obj.get('discount')):
+        # Legacy or non-expanded Checkout payloads can omit total_details. Discount IDs
+        # themselves are not resolvable, so ask Stripe for the authoritative expansion.
+        stripe_sub = stripe.Subscription.retrieve(subscription_id, expand=['discounts'])
+        subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
+        promotion_ids = stripe_utils.subscription_promotion_code_ids(subscription_obj)
+    if only_with_promotion and not promotion_ids:
+        # Preserve the legacy no-op for duplicate discount-free Checkouts while still
+        # repairing a code-bearing retry even when its Session lacks a breakdown.
+        return
+
+    items = (subscription_obj.get('items') or {}).get('data') or []
+    price_id = items[0]['price']['id'] if items else None
+    sub_type = get_plan_type_from_price_id(price_id).value if price_id else 'unknown'
+
+    if len(promotion_ids) > 1:
+        logger.warning('Ignoring ambiguous Checkout promotion attribution')
+    promotion_id = promotion_ids[0] if len(promotion_ids) == 1 else None
+    attribution = {}
+    if promotion_id:
+        # The signed Session supplies only the discount reference. Fresh server-side
+        # retrieval is the sole authority for issuer-written provenance and code ID.
+        promotion = stripe.PromotionCode.retrieve(promotion_id, expand=['coupon'])
+        if promotion.get('id') == promotion_id:
+            attribution = stripe_utils.promotion_code_attribution(promotion)
+        else:
+            logger.warning('Ignoring mismatched Checkout promotion attribution')
+
+    metadata = {
+        **(subscription_obj.get('metadata') or {}),
+        'uid': uid,
+        'sub_type': sub_type,
+    }
+    if promotion_id:
+        metadata['redeemed_promotion_code_id'] = promotion_id
+    metadata = stripe_utils.merge_promotion_attribution(metadata, attribution)
+    stripe.Subscription.modify(subscription_id, metadata=metadata)
+
+
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(
     request: Request, stripe_signature: str = Header(None), background_tasks: BackgroundTasks = None
@@ -1233,6 +1290,22 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
+                    # A retry after a failed attributed metadata write can already have the
+                    # local paid row. Inspect the Subscription as well as Session discounts;
+                    # discount-free duplicate Checkouts remain a metadata no-op.
+                    try:
+                        await run_blocking(
+                            stripe_executor,
+                            _update_checkout_subscription_metadata,
+                            uid,
+                            session,
+                            True,
+                        )
+                    except ValueError as e:
+                        logger.error(f"Error updating subscription metadata: {e}")
+                    except Exception as e:
+                        logger.error(f"Retryable subscription metadata error: {sanitize(str(e))}")
+                        raise HTTPException(503, 'Subscription metadata must be retried') from e
                     # The paid plan is already stored. Stripe retries this
                     # delivery when unlock raises. Do not acknowledge it until
                     # unlock and the idempotent fair-use clear both finish:
@@ -1277,23 +1350,16 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
-                    price_id = None
-                    stripe_sub = await run_blocking(
-                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
-                    )
-                    if stripe_sub:
-                        subscription_obj = stripe_sub.to_dict()
-                        if subscription_obj and subscription_obj['items']['data']:
-                            price_id = subscription_obj['items']['data'][0]['price']['id']
-                    sub_type = get_plan_type_from_price_id(price_id).value if price_id else "unknown"
-                    await run_blocking(
-                        stripe_executor,
-                        lambda: stripe.Subscription.modify(
-                            subscription_id, metadata={"uid": uid, "sub_type": sub_type}
-                        ),
-                    )
-                except Exception as e:
+                    await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
+                except ValueError as e:
+                    # Unknown legacy prices remain best-effort exactly as before.
                     logger.error(f"Error updating subscription metadata: {e}")
+                except Exception as e:
+                    # An acknowledged Checkout must not silently lose its server-resolved
+                    # attribution. Missing/invalid metadata is a successful empty mapping;
+                    # provider/write failures instead remain retryable.
+                    logger.error(f"Retryable subscription metadata error: {sanitize(str(e))}")
+                    raise HTTPException(503, 'Subscription metadata must be retried') from e
 
                 # Send paid notification if applicable
                 try:
