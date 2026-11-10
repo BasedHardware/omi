@@ -20,9 +20,19 @@ def held_envs(node, path=()):
         yield from held_envs(value, (*path, key))
 
 
-def test_runtime_base_and_explicit_prod_overlay_bind_every_sweep_host():
-    base = yaml.safe_load((ROOT / 'backend/deploy/runtime_env/_base.yaml').read_text())
-    prod = yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())
+@pytest.fixture(scope='module')
+def runtime_env_docs():
+    # Parse the large runtime env files once, outside the measured call phase.
+    load = lambda rel: yaml.load((ROOT / rel).read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
+    return (
+        load('backend/deploy/runtime_env/_base.yaml'),
+        load('backend/deploy/runtime_env/prod.overlay.yaml'),
+        load('backend/deploy/runtime_env.yaml'),
+    )
+
+
+def test_runtime_base_and_explicit_prod_overlay_bind_every_sweep_host(runtime_env_docs):
+    base, prod, manifest = runtime_env_docs
     found = list(held_envs(base['environment_shared']))
     assert len(found) == 5
     for path, env in found:
@@ -31,7 +41,6 @@ def test_runtime_base_and_explicit_prod_overlay_bind_every_sweep_host():
         for key in path:
             overlay = overlay[key]
         assert overlay[NEW] == {'value': 'true', 'category': 'ops_kill'}
-    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
     assert list(held_envs(manifest))
     for _, env in held_envs(manifest):
         assert env[NEW] == {'value': 'true', 'category': 'ops_kill'}
