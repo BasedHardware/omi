@@ -88,7 +88,7 @@ def test_external_integration_ignores_the_word_floor():
 
 
 def test_kill_switch_off_restores_extraction(monkeypatch):
-    monkeypatch.setenv('EPISODE_COMPOSER_THRIFT', 'false')
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', 'false')
     conversation = _existing_desktop('kill-switch')
     conversation.content_kind = 'noise'
     conversation.transcript_segments = [segment('owner', 1)]

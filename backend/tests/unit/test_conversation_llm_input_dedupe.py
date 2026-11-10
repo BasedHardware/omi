@@ -274,10 +274,11 @@ def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, mon
 
 
 @pytest.mark.parametrize('route_file', ['model_config.py', 'model_constants.py', 'clients.py', 'providers.py'])
-def test_route_module_changes_do_not_invalidate_feature_fingerprints(monkeypatch, route_file):
-    """Model routing is not prompt text: a deploy that touches it must not re-buy unchanged input."""
+def test_route_module_changes_invalidate_feature_fingerprints(monkeypatch, route_file):
+    """Model routing changes alter the effective output even with identical prompts."""
     from pathlib import Path
 
+    dedupe.routing_digest.cache_clear()
     original = Path.read_bytes
     before = {feature: dedupe.fingerprint(feature, 'same input') for feature in ('notes', 'l1')}
 
@@ -286,8 +287,12 @@ def test_route_module_changes_do_not_invalidate_feature_fingerprints(monkeypatch
         return contents + b'\n# changed route' if path.name == route_file else contents
 
     monkeypatch.setattr(Path, 'read_bytes', changed_route)
-    for feature, old in before.items():
-        assert dedupe.fingerprint(feature, 'same input') == old
+    dedupe.routing_digest.cache_clear()
+    try:
+        for feature, old in before.items():
+            assert dedupe.fingerprint(feature, 'same input') != old
+    finally:
+        dedupe.routing_digest.cache_clear()
 
 
 def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch):
@@ -347,5 +352,46 @@ def test_implementation_digest_is_the_explicit_prompt_version():
     # The reuse key is a deliberate version, not a digest of the source tree.
     from config.llm_input_versions import PROMPT_VERSIONS
 
-    assert dedupe.implementation_digest('notes') == PROMPT_VERSIONS['notes']
-    assert dedupe.implementation_digest('l1') == PROMPT_VERSIONS['l1']
+    assert dedupe.implementation_digest('notes').startswith(PROMPT_VERSIONS['notes'] + ':')
+    assert dedupe.implementation_digest('l1').startswith(PROMPT_VERSIONS['l1'] + ':')
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(enabled, monkeypatch, feature):
+    from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
+    from models.structured import Structured
+
+    assert LEGACY_IMPLEMENTATIONS[feature], 'migration must include the pre-deploy main checkpoint'
+    original = dedupe.implementation_digest
+    monkeypatch.setattr(dedupe, 'implementation_digest', lambda _: LEGACY_IMPLEMENTATIONS[feature][0])
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored work'))
+    if feature == 'notes':
+        hashes = {}
+        dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes)
+        row = {**hashes, 'structured': generate.return_value.model_dump()}
+    else:
+        digest, _ = dedupe.l1_input('u', enabled, {'text': 'unchanged'})
+        row = {dedupe.L1_HASH: digest}
+    monkeypatch.setattr(dedupe, 'implementation_digest', original)
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    for flag in ('true', 'off', 'true', 'off'):
+        monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+        if feature == 'notes':
+            hashes = {}
+            assert dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes).title == 'Already paid'
+            row.update(hashes)
+            assert generate.call_count == 1
+        else:
+            digest, matched = dedupe.l1_input('u', enabled, {'text': 'unchanged'})
+            assert matched, f'{flag} re-bought a successful checkpoint'
+            row[dedupe.L1_HASH] = digest
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, feature):
+    from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
+
+    inputs = {'text': 'unchanged'}
+    old = dedupe._fingerprint(feature, inputs, LEGACY_IMPLEMENTATIONS[feature][0])
+    monkeypatch.setattr(dedupe, 'routing_digest', lambda: 'new-model-route')
+    assert not dedupe._matches(old, feature, inputs, dedupe.fingerprint(feature, inputs))

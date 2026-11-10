@@ -16,7 +16,7 @@ imported external text is not measured by words.
 Nothing is written and no L1 hash is stamped on a skip, so a later reprocess
 with more speech extracts normally. The skip is counted as
 `omi_memory_l1_skipped_total{reason}`. Kill switch:
-`EPISODE_COMPOSER_THRIFT` (default on; an explicit false word restores one
+`EPISODE_COMPOSER_REUSE` (default on; an explicit false word restores one
 call per processed conversation).
 
 The same PR replaces the notes/L1 reuse key's 35-file source digest with an
@@ -28,3 +28,7 @@ Contract: [conversation lifecycle](../../listen_pusher_pipeline.mdx#2-conversati
 Regression coverage: `tests/unit/test_l1_admission.py` and
 `tests/unit/test_llm_input_prompt_version.py`. Audio custody, transcription,
 wire payloads and deployment bindings are unchanged.
+
+## Review dispositions (L8a)
+
+The independent EPISODE_COMPOSER_REUSE kill switch restores source-derived key writes and L1 admission. Both modes accept current stable keys and compatible pre-deploy source keys, so toggles do not buy unchanged eligible work. Historical aliases are pinned from main source history with identical prompt and routing sources and locked dependencies; changed inputs and unusable outputs still miss. Routing bytes independently invalidate stable keys. No backfill or forced gist regeneration. Normal gates, then watch exact-input misses/skips and memory yield; refactor-lead owns rollback.

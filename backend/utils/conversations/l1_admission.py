@@ -15,8 +15,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from prometheus_client import Counter
-
 from utils.observability.reasons import MemoryL1Reason, ReasonFamily, reason_label
+
 from config.memory_l1_admission import L1_MIN_OWNER_WORDS, noise_skip_enabled
 from utils.conversations.minimum_derived import is_server_minimum
 from utils.conversations.owner_attribution import speaker_role_projection

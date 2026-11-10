@@ -102,13 +102,5 @@ def test_unknown_feature_fails_closed():
 def test_reuse_key_carries_the_version_not_a_file_digest():
     from utils.conversations import llm_input_dedupe
 
-    assert llm_input_dedupe.implementation_digest('notes') == PROMPT_VERSIONS['notes']
-    assert llm_input_dedupe.implementation_digest('l1') == PROMPT_VERSIONS['l1']
-
-
-def test_l8_kill_switch_restores_source_digest(monkeypatch):
-    from utils.conversations import llm_input_dedupe
-
-    monkeypatch.setenv('EPISODE_COMPOSER_THRIFT', 'off')
-    assert llm_input_dedupe.implementation_digest('notes') == llm_input_dedupe._legacy_implementation_digest('notes')
-    assert llm_input_dedupe.implementation_digest('notes') != PROMPT_VERSIONS['notes']
+    assert llm_input_dedupe.implementation_digest('notes').startswith(PROMPT_VERSIONS['notes'] + ':')
+    assert llm_input_dedupe.implementation_digest('l1').startswith(PROMPT_VERSIONS['l1'] + ':')

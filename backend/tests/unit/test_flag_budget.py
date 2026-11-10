@@ -64,6 +64,7 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
     'EPISODE_COMPOSER_THRIFT',
+    'EPISODE_COMPOSER_REUSE',
     'EPISODE_COMPOSER_NOTES_FIRST',
     'HOME_EMPTY_OUTPUT_NOISE',
 }
@@ -274,7 +275,12 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
-        elif name in {'EPISODE_COMPOSER_THRIFT', 'EPISODE_COMPOSER_NOTES_FIRST', 'HOME_EMPTY_OUTPUT_NOISE'}:
+        elif name in {
+            'EPISODE_COMPOSER_THRIFT',
+            'EPISODE_COMPOSER_NOTES_FIRST',
+            'HOME_EMPTY_OUTPUT_NOISE',
+            'EPISODE_COMPOSER_REUSE',
+        }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
         else:
