@@ -49,6 +49,7 @@
     "omi-batch-timeliness-sample-stale",
     "omi-batch-timeliness-scan-blind",
     "omi-batch-queue-safety-blind",
+    "omi-backlog-held-redrive-unit-looping",
     "omi-record-pending-dwell",
     "omi-record-pending-dwell-stale",
     "omi-record-pending-dwell-blind",
