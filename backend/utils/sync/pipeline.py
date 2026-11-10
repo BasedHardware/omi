@@ -1624,6 +1624,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 _bounded_correlation_ref(attempt_ref),
             )
 
+        def _note_served_provider(served_provider: str, served_model: str) -> None:
+            nonlocal provider, model
+            provider, model = served_provider, served_model
+
         empty_retried = False
         recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
@@ -1656,6 +1660,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return_language=True,
                 language=req_language,
                 keywords=vocabulary if vocabulary else None,
+                on_provider_served=_note_served_provider,
                 **recovery_dispatch,
             )
             if cap_enforced():

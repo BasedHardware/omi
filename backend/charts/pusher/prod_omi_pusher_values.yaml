@@ -544,6 +544,8 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,soniox"
   - name: RAPID_API_KEY

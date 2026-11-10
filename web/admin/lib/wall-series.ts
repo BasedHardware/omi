@@ -1254,7 +1254,11 @@ export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
   const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
   const known = new Set<string>(MARGIN_PLANS);
   const rows: Row[] = [];
-  for (let k = MARGIN_DAYS; k >= 1; k--) {
+  // The panel window is now − MARGIN_DAYS (`timeFrom` 35d), so the day
+  // MARGIN_DAYS back starts at 00:00Z before it and can never render. When
+  // that was the only row, Grafana said "Data outside time range" instead of
+  // the board's empty-state message (2026-11-10).
+  for (let k = MARGIN_DAYS - 1; k >= 1; k--) {
     const day = isoDay(shiftDay(utcDay(now), -k));
     const plans = legs.planCost?.plans[day];
     const book = legs.finops?.mrr[day];
