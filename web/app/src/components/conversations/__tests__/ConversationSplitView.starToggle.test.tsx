@@ -11,6 +11,8 @@ const harness = vi.hoisted(() => ({
   recaps: [] as DailySummary[],
   searchResults: [] as Conversation[],
   refresh: vi.fn(),
+  replaceConversation: vi.fn(),
+  replaceSearchConversation: vi.fn(),
   toggleStarred: vi.fn(),
   reprocessConversation: vi.fn(),
   showToast: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock('@/hooks/useConversations', () => ({
     error: null,
     hasMore: false,
     loadMore: vi.fn(),
+    replaceConversation: harness.replaceConversation,
     refresh: harness.refresh,
   }),
 }));
@@ -82,6 +85,7 @@ vi.mock('@/hooks/useSearchConversations', () => ({
     loading: false,
     search: vi.fn(),
     clear: vi.fn(),
+    replaceConversation: harness.replaceSearchConversation,
   }),
 }));
 vi.mock('@/components/layout/PageToolbar', () => ({
@@ -259,6 +263,8 @@ describe('ConversationSplitView failed tile retry', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(harness.refresh).toHaveBeenCalledOnce());
     expect(harness.reprocessConversation).toHaveBeenCalledExactlyOnceWith('team-sync');
+    expect(harness.replaceConversation).toHaveBeenCalledExactlyOnceWith(updated);
+    expect(harness.replaceSearchConversation).toHaveBeenCalledExactlyOnceWith(updated);
   });
 });
 

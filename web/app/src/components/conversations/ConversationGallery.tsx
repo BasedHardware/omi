@@ -9,6 +9,7 @@ import { ConversationTile, ConversationTileSkeleton } from './ConversationTile';
 import { RecapTile } from './RecapTile';
 
 interface ConversationGalleryProps {
+  showFailedStatus?: boolean;
   groups: TimelineDayGroup[];
   selectedId: string | null;
   onConversationClick: (conversation: Conversation) => void;
@@ -29,6 +30,7 @@ interface ConversationGalleryProps {
 const LOAD_MORE_THRESHOLD_PX = 400;
 
 export function ConversationGallery({
+  showFailedStatus = false,
   groups,
   selectedId,
   onConversationClick,
@@ -111,6 +113,7 @@ export function ConversationGallery({
                 />
               ) : (
                 <ConversationTile
+                  showFailedStatus={showFailedStatus}
                   key={`conversation-${item.id}`}
                   conversation={item.conversation}
                   isSelected={selectedId === item.id}

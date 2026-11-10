@@ -102,6 +102,7 @@ export function ConversationSplitView() {
     loading: searchLoading,
     search: performSearch,
     clear: clearSearch,
+    replaceConversation: replaceSearchConversation,
   } = useSearchConversations();
 
   // Date filter state
@@ -180,6 +181,7 @@ export function ConversationSplitView() {
     hasMore,
     loadMore,
     refresh,
+    replaceConversation,
   } = useConversations(conversationFilterParams);
 
   const {
@@ -412,6 +414,8 @@ export function ConversationSplitView() {
   // detail only if it still belongs to this conversation, then reload the feed.
   const handleRetryUpdate = useCallback(
     (updated: Conversation) => {
+      replaceConversation(updated);
+      replaceSearchConversation(updated);
       const activeSelection = selectionRef.current;
       if (activeSelection?.kind === 'conversation' && activeSelection.id === updated.id) {
         updateSelectedConversation(updated);
@@ -419,7 +423,14 @@ export function ConversationSplitView() {
       void refresh();
       if (submittedSearchQuery) void performSearch(submittedSearchQuery);
     },
-    [updateSelectedConversation, refresh, submittedSearchQuery, performSearch],
+    [
+      updateSelectedConversation,
+      refresh,
+      submittedSearchQuery,
+      performSearch,
+      replaceConversation,
+      replaceSearchConversation,
+    ],
   );
 
   // Handle star toggle
@@ -917,6 +928,9 @@ export function ConversationSplitView() {
           {dayGroups.length > 0 && (
             <div className="flex-1 overflow-hidden pt-4">
               <ConversationGallery
+                showFailedStatus={
+                  failurePlacement && selectedFolderId === FOLDER_ACTIVITY
+                }
                 groups={dayGroups}
                 selectedId={selection?.id ?? null}
                 onConversationClick={handleConversationClick}

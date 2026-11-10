@@ -66,6 +66,7 @@ interface UseConversationsReturn {
   hasMore: boolean;
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
+  replaceConversation: (conversation: Conversation) => void;
 }
 
 /**
@@ -102,6 +103,7 @@ export function useConversations(
 
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
+  const replacementGeneration = useRef(0);
   // Cache key of the filters the list belongs to. A fetch that returns after the
   // filters changed was for another list, so its response is dropped.
   const activeKeyRef = useRef(cacheKey);
@@ -148,6 +150,7 @@ export function useConversations(
         return;
       }
 
+      const generation = replacementGeneration.current;
       try {
         // Only show loading spinner if not a background refresh and no cached data
         if (!backgroundRefresh) {
@@ -167,7 +170,8 @@ export function useConversations(
         });
 
         // The filters changed while this fetch was in flight
-        if (key !== activeKeyRef.current) return;
+        if (key !== activeKeyRef.current || generation !== replacementGeneration.current)
+          return;
 
         // Sort by date descending
         const sorted = data.sort((a, b) => {
@@ -332,6 +336,27 @@ export function useConversations(
     await fetchConversations(0, false);
   }, [fetchConversations]);
 
+  // Retry's response is authoritative even if the subsequent refresh fails.
+  // Replace only known rows; a late result cannot insert into another folder.
+  const replaceConversation = useCallback(
+    (updated: Conversation) => {
+      if (activeKeyRef.current !== cacheKey) return;
+      replacementGeneration.current += 1;
+      setConversations((rows) =>
+        rows.map((row) => (row.id === updated.id ? updated : row)),
+      );
+      const cached = getFromCache(cacheKey);
+      if (cached)
+        setToCache(
+          cacheKey,
+          cached.conversations.map((row) => (row.id === updated.id ? updated : row)),
+          cached.offset,
+          cached.hasMore,
+        );
+    },
+    [cacheKey],
+  );
+
   return {
     conversations,
     groupedConversations,
@@ -340,5 +365,6 @@ export function useConversations(
     hasMore,
     loadMore,
     refresh,
+    replaceConversation,
   };
 }

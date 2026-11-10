@@ -20,9 +20,19 @@ function conversation(home_step?: string | null): Conversation {
 
 describe('ConversationTile Home projection', () => {
   it('keeps a status-only failed Activity row retryable', () => {
-    render(<ConversationTile conversation={{ ...conversation(), status: 'failed' }} />);
+    render(
+      <ConversationTile
+        showFailedStatus
+        conversation={{ ...conversation(), status: 'failed' }}
+      />,
+    );
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
     expect(screen.queryByText('Processing')).not.toBeInTheDocument();
+  });
+
+  it('retains the previous status-only Home tile when placement is off', () => {
+    render(<ConversationTile conversation={{ ...conversation(), status: 'failed' }} />);
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 
   it('labels a failed projection and keeps it openable without Processing', () => {

@@ -65,6 +65,7 @@ function Evidence() {
         />
       </div>
       <ConversationGallery
+        showFailedStatus={confirmed && tab === FOLDER_ACTIVITY}
         groups={groups}
         selectedId={null}
         onConversationClick={() => {}}

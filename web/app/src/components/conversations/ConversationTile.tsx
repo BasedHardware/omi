@@ -8,11 +8,12 @@ import { reprocessConversation } from '@/lib/api';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import { conversationDisplayTitle } from '@/lib/conversationTitle';
-import { isConversationProcessing, isFailedConversation } from '@/lib/conversationHome';
+import { isConversationProcessing } from '@/lib/conversationHome';
 import type { Conversation } from '@/types/conversation';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
 interface ConversationTileProps {
+  showFailedStatus?: boolean;
   conversation: Conversation;
   onClick?: () => void;
   // Rejects when the server did not save the change, so the tile can take it back
@@ -29,6 +30,7 @@ interface ConversationTileProps {
 }
 
 export const ConversationTile = memo(function ConversationTile({
+  showFailedStatus = false,
   conversation,
   onClick,
   onStarToggle,
@@ -45,7 +47,9 @@ export const ConversationTile = memo(function ConversationTile({
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   const retryPending = useRef(false);
-  const isFailed = isFailedConversation(conversation);
+  const isFailed =
+    conversation.home_step === 'failed' ||
+    (showFailedStatus && conversation.status === 'failed');
   // One star request at a time, so a failed one puts back the value it replaced
   const starRequestPending = useRef(false);
 

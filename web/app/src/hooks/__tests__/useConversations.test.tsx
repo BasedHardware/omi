@@ -68,6 +68,58 @@ afterEach(() => {
 });
 
 describe('useConversations', () => {
+  it('does not let a pre-retry refresh resurrect a completed Activity row', async () => {
+    const failed = { ...page(0, 1)[0], status: 'processing', home_step: 'failed' };
+    vi.mocked(getConversations).mockResolvedValueOnce([failed] as never);
+    const { result } = renderConversations({});
+    await waitFor(() =>
+      expect(result.current.conversations[0]?.home_step).toBe('failed'),
+    );
+    let finish!: (rows: never) => void;
+    vi.mocked(getConversations).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.refresh();
+    });
+    const completed = {
+      ...result.current.conversations[0],
+      status: 'completed',
+      home_step: 'done',
+    } as import('@/types/conversation').Conversation;
+    act(() => result.current.replaceConversation(completed));
+    await act(async () => {
+      finish([failed] as never);
+      await pending;
+    });
+    expect(result.current.conversations[0]).toEqual(completed);
+  });
+
+  it('applies retry completion immediately and keeps it through a failed refresh and cache remount', async () => {
+    const failed = { ...page(0, 1)[0], status: 'processing', home_step: 'failed' };
+    vi.mocked(getConversations).mockResolvedValueOnce([failed] as never);
+    const { result, unmount } = renderConversations({});
+    await waitFor(() =>
+      expect(result.current.conversations[0]?.home_step).toBe('failed'),
+    );
+    const completed = {
+      ...result.current.conversations[0],
+      status: 'completed',
+      home_step: 'done',
+    } as import('@/types/conversation').Conversation;
+    act(() => result.current.replaceConversation(completed));
+    expect(result.current.conversations[0]).toEqual(completed);
+    vi.mocked(getConversations).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => result.current.refresh());
+    expect(result.current.conversations[0]).toEqual(completed);
+    unmount();
+    const remounted = renderConversations({});
+    expect(remounted.result.current.conversations[0]).toEqual(completed);
+  });
+
   it('keeps a failed cached page openable without unsolicited pagination', async () => {
     setCache(
       cacheKeys.conversations(),

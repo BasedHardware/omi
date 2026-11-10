@@ -47,6 +47,7 @@ vi.mock('@/hooks/useConversations', () => ({
     error: null,
     hasMore: false,
     loadMore: vi.fn(),
+    replaceConversation: vi.fn(),
     refresh: harness.refresh,
   }),
 }));
@@ -70,6 +71,7 @@ vi.mock('@/hooks/useSearchConversations', () => ({
     loading: false,
     search: vi.fn(),
     clear: vi.fn(),
+    replaceConversation: vi.fn(),
   }),
 }));
 // The selection bar, with its Move button, renders in the toolbar's `below` slot.
