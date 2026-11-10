@@ -60,7 +60,6 @@ from utils.retrieval.frame_request_storage import (
 )
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
-from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
 from config.account_deletion_grace import (
     account_deletion_grace_enabled,
     account_deletion_grace_window,
@@ -407,9 +406,6 @@ def background_wipe_user_data(
         # grace admission check. Re-read Stripe at the irreversible boundary,
         # even when admission recorded an earlier successful cancellation.
         _cancel_subscription_for_account_deletion(uid)
-        current_operation = 'agent_vm'
-        heartbeat()
-        delete_agent_vm_for_account(uid)
         current_operation = 'messaging_channels'
         heartbeat()
         MessagingStore().delete_account(uid)
