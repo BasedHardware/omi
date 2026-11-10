@@ -341,6 +341,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     models_mod.Subscription = MagicMock()
     models_mod.SubscriptionStatus = MagicMock()
     models_mod.PlanLimits = MagicMock()
+    models_mod.PaymentIssue = MagicMock()
 
     users_db_mod = sys.modules["database.users"]
     users_db_mod.get_stripe_connect_account_id = MagicMock()

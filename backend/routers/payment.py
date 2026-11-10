@@ -1167,11 +1167,8 @@ async def _schedule_payment_recovery_notification(
     ):
         return
 
-    previous_invoice = (previous_attributes or {}).get('latest_invoice')
-    invoice = previous_invoice if isinstance(previous_invoice, Mapping) else None
     latest_invoice = subscription_obj.get('latest_invoice')
-    if invoice is None and isinstance(latest_invoice, Mapping):
-        invoice = latest_invoice
+    invoice = latest_invoice if isinstance(latest_invoice, Mapping) else None
     if invoice is None and isinstance(latest_invoice, str) and latest_invoice:
         invoice = await run_blocking(stripe_executor, lambda: stripe.Invoice.retrieve(latest_invoice).to_dict())
     if not billing_recovery.payment_recovery_notification_eligible(uid, subscription_obj, previous_attributes, invoice):

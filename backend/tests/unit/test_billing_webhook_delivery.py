@@ -408,12 +408,18 @@ def test_payment_recovery_push_is_scheduled_after_persistence(recovery_lane):
     asyncio.run(run())
 
 
-def test_delivered_previous_invoice_avoids_stripe_lookup(recovery_lane):
+def test_previous_paid_invoice_cannot_replace_current_failed_invoice(recovery_lane):
     async def run():
         tasks = BackgroundTasks()
-        event = _recovery_event(previous_invoice=recovery_lane.invoice)
+        previous_invoice = {
+            'status': 'paid',
+            'attempted': True,
+            'amount_remaining': 0,
+            'billing_reason': 'subscription_cycle',
+        }
+        event = _recovery_event(previous_invoice=previous_invoice)
         await payment._handle_stripe_event(event, tasks)
-        assert recovery_lane.calls == [('write', 'user-fixture')]
+        assert recovery_lane.calls == [('write', 'user-fixture'), ('invoice', 'in-recovery')]
         await tasks()
         assert len(recovery_lane.notifications) == 1
 
