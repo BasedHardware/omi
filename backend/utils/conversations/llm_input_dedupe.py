@@ -8,11 +8,16 @@ from __future__ import annotations
 
 from config.refactor_modes import serving_for
 from config.llm_input_versions import prompt_version
+from config.memory_l1_admission import noise_skip_enabled
+from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS, LEGACY_ROUTING, LEGACY_PROMPT_VERSIONS
 
 import dataclasses
 import hashlib
 import json
 import os
+from functools import lru_cache
+from importlib.metadata import version as distribution_version
+from pathlib import Path
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
@@ -69,20 +74,95 @@ def canonical(value: Any) -> Any:
     raise TypeError(f'Unsupported LLM input type: {type(value).__name__}')
 
 
-def implementation_digest(feature: str) -> str:
-    """The explicit prompt version that keys this feature's reuse.
+@lru_cache(maxsize=2)
+def _legacy_implementation_digest(feature: str) -> str:
+    # Invalidate persisted results on prompt/schema/orchestration edits as well
+    # as input changes. Read lazily: imports perform no filesystem/client IO.
+    root = Path(__file__).resolve().parents[1]
+    paths = [
+        'conversations/process_conversation.py',
+        'llm/jev_client.py',
+        'llm/model_config.py',
+        'llm/model_constants.py',
+        'llm/clients.py',
+        'llm/providers.py',
+        '../config/jev_decisions.py',
+        'llm/conversation_prompt_context.py',
+        'llm/memories.py',
+        'llm/working_observations.py',
+        'llm/conversation_processing.py',
+        'llm/conversation_notes_prompts.py',
+        'llm/notes_packet.py',
+        'llm/action_item_v2.py',
+        'llm/notes_output.py',
+        'llm/notes_lengths.py',
+        'llm/notes_effort.py',
+        'llm/notes_output_contract.py',
+        'llm/notes_identity.py',
+        'llm/output_language.py',
+        'llm/speaker_evidence_prompt.py',
+        'llm/notes_short_clip.py',
+        'llm/notes_language_inputs.py',
+        'llm/conversation_title_people.py',
+        'llm/meeting_notes_rich_prompts.py',
+        'llm/meeting_notes_presentation.py',
+        'llm/meeting_notes_validation.py',
+        'memory/rejected_memory_feedback.py',
+        'prompts.py',
+        '../models/structured.py',
+        '../models/structured_extraction.py',
+        '../models/memory_contracts.py',
+        '../models/conversation.py',
+        '../models/memories.py',
+    ]
+    dependencies = '|'.join(f'{name}:{distribution_version(name)}' for name in ('pydantic', 'langchain-core')).encode()
+    return hashlib.sha256(b''.join((root / path).read_bytes() for path in paths) + dependencies).hexdigest()
 
-    A source-file digest here voided every stored hash on any deploy that
-    touched one of ~35 files, so unchanged input was re-bought after each
-    deploy. The version is bumped deliberately; the prompt-source digest that
-    guards the bump lives in the test, not on this runtime path.
-    """
-    return prompt_version(feature)
+
+# Routing is part of the effective model input, even if the prompt did not change.
+ROUTING_SOURCES = (
+    'llm/model_config.py',
+    'llm/model_constants.py',
+    'llm/clients.py',
+    'llm/providers.py',
+    'llm/jev_client.py',
+    '../config/jev_decisions.py',
+)
+
+
+@lru_cache(maxsize=1)
+def routing_digest() -> str:
+    root = Path(__file__).resolve().parents[1]
+    return hashlib.sha256(b''.join((root / path).read_bytes() for path in ROUTING_SOURCES)).hexdigest()
+
+
+def stable_implementation(feature: str) -> str:
+    return f'{prompt_version(feature)}:{routing_digest()}'
+
+
+def implementation_digest(feature: str) -> str:
+    return stable_implementation(feature) if noise_skip_enabled() else _legacy_implementation_digest(feature)
+
+
+def _fingerprint(feature: str, inputs: Any, implementation: str) -> str:
+    value = {'feature': feature, 'implementation': implementation, 'input': canonical(inputs)}
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
 def fingerprint(feature: str, inputs: Any) -> str:
-    value = {'feature': feature, 'implementation': implementation_digest(feature), 'input': canonical(inputs)}
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    return _fingerprint(feature, inputs, implementation_digest(feature))
+
+
+def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
+    if saved == digest:
+        return True
+    # Accept both modes across a rollback. Never make a flag flip buy the same
+    # eligible work again. Historical keys are allowed only for the same routing
+    # and compatible prompt sources; exact inputs + output validation still apply.
+    implementations = {stable_implementation(feature), _legacy_implementation_digest(feature)}
+    if routing_digest() == LEGACY_ROUTING and prompt_version(feature) in LEGACY_PROMPT_VERSIONS[feature]:
+        implementations.update(LEGACY_IMPLEMENTATIONS[feature])
+    return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
 
 
 def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, Any]:
@@ -116,22 +196,20 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         kwargs['reminder_source'] = reminder_policy.source_input(conversation)
     if not dedupe_enabled() or hashes is None:
         return generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
-    digest = fingerprint(
-        'notes',
-        {
-            'prefix': prefix,
-            **({}),
-            'arguments': kwargs,
-            'notes_packet': _notes_packet_identity(uid),
-            'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
-            'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
-            'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
-            'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
-        },
-    )
+    inputs = {
+        'prefix': prefix,
+        **({}),
+        'arguments': kwargs,
+        'notes_packet': _notes_packet_identity(uid),
+        'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
+        'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
+        'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
+        'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
+    }
+    digest = fingerprint('notes', inputs)
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
-    matched_input = row.get(NOTES_HASH) == digest and not row.get('discarded')
+    matched_input = _matches(row.get(NOTES_HASH), 'notes', inputs, digest) and not row.get('discarded')
     if matched_input and row.get(NOTES_OUTPUT_HASH):
         from pydantic import ValidationError
 
@@ -192,7 +270,7 @@ def l1_input(uid: str, conversation: Any, inputs: Any, *, db_client: Any = None)
         'l1',
         (inputs),
     )
-    matched = _stored(uid, conversation, db_client=db_client).get(L1_HASH) == digest
+    matched = _matches(_stored(uid, conversation, db_client=db_client).get(L1_HASH), 'l1', inputs, digest)
     if matched:
         SKIPPED.labels(feature='l1').inc()
     else:

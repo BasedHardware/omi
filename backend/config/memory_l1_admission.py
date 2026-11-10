@@ -11,7 +11,7 @@ Two deterministic verdicts, both already computed by the server without a model:
 Unknown owner attribution is never evidence of owner absence: a row whose owner
 cannot be identified still extracts.
 
-Kill switch: ``MEMORY_L1_NOISE_SKIP_ENABLED`` (default on). An explicit false
+Kill switch: ``EPISODE_COMPOSER_REUSE`` (default on). An explicit false
 word restores one L1 call per processed conversation.
 """
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from config.refactor_modes import default_on
 
-MEMORY_L1_NOISE_SKIP_ENV = 'MEMORY_L1_NOISE_SKIP_ENABLED'
+COMPOSER_REUSE_ENV = 'EPISODE_COMPOSER_REUSE'
 
 # Owner words below this cannot carry a durable fact. 30 sits above the 12-word
 # notes floor (``NOTES_MIN_WORDS`` / ``WORD_FLOOR``), so a row that reaches L1
@@ -32,4 +32,4 @@ L1_MIN_OWNER_WORDS = 30
 
 def noise_skip_enabled() -> bool:
     """Kill switch: skip L1 for noise rows and short owner speech. On unless explicitly false."""
-    return default_on(MEMORY_L1_NOISE_SKIP_ENV)
+    return default_on(COMPOSER_REUSE_ENV)

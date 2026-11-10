@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from prometheus_client import Counter
+from utils.observability.reasons import MemoryL1Reason, ReasonFamily, reason_label
 
 from config.memory_l1_admission import L1_MIN_OWNER_WORDS, noise_skip_enabled
 from utils.conversations.minimum_derived import is_server_minimum
@@ -108,7 +109,7 @@ def skip(uid: str, conversation: Any) -> bool:
     reason = skip_reason(conversation)
     if reason is None:
         return False
-    SKIPPED.labels(reason=reason).inc()
+    SKIPPED.labels(reason=reason_label(ReasonFamily.MEMORY_L1, reason, MemoryL1Reason)).inc()
     logger.info(
         'memory extraction skipped: reason=%s uid=%s conv=%s',
         reason,
