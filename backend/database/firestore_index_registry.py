@@ -2243,6 +2243,7 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
     FieldIndexRequirement(
         'conversations_summary_due_group_ascending', 'conversations', 'summary_due_at', ('ASCENDING',)
     ),
+    FieldIndexRequirement('pipeline_ledger_admitted_group_ascending', 'pipeline_ledger', 'admitted_at', ('ASCENDING',)),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),
