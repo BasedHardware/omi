@@ -808,6 +808,9 @@ and an explicit empty literal renders as `''`.
 | `STT_ROUTING_REDIS_TIMEOUT_SECONDS` | Maximum Redis wait for live routing health state | backend | env | closed | 0.075 | 0.075 (backend-listen (chart), gke/backend-listen) | 0.075 (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
 | `STT_ROUTING_TARGETS_JSON` | Declarative live STT targets with cost capability endpoint and ramp | backend | env | closed | '' | '' (backend-listen (chart), gke/backend-listen) | '' (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
 | `STT_SHED_CONNECT_FAILURES` | Real consecutive live STT connect failures required before all-open circuit shedding | backend | env | closed | 3 | 3 (backend-listen (chart), gke/backend-listen) | 3 (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
+| `SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT` | Summary repair admission-attempt cap per global tick; default 8, clamped 1..60 | backend | env | closed | — | — | {value: '8', category: config} | — | keep | keep | — | summary-repair (cl2-fixnow) |
+| `SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` | Summary repair admission-attempt cap per owner per tick across both phases; default 3, clamped 1..10 | backend | env | closed | — | — | — | — | keep | keep | — | summary-repair (cl2-fixnow) |
+| `SUMMARY_DEBT_REPAIR_SCAN_LIMIT` | Global summary-repair document scan budget per tick; default 100, clamped 1..5000 | backend | env | closed | — | — | — | — | keep | keep | — | summary-repair (cl2-fixnow) |
 | `SYNC_BACKFILL_OWNER_CONCURRENCY` | Head plus speculative download prefix, default 2 clamped 1 through 4; never concurrent job execution | backend | env | closed | {value: '2', category: reliability} | {value: '2', category: reliability} | {value: '2', category: reliability} | — | keep | keep | — | auditfix |
 | `SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD` | Minimum pending owner backlog for download preparation, default 8 clamped 4 through 100 | backend | env | closed | {value: '8', category: reliability} | {value: '8', category: reliability} | {value: '8', category: reliability} | — | keep | keep | — | auditfix |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | true | — | keep | keep | — | backlog-refactor |
@@ -1344,6 +1347,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STT_VOCAB_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `STT_VOCAB_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
 - `STT_VOCAB_MODE_SHADOW_PERCENT` — Shadow vocabulary source-read sample percentage; default 1 (fail: closed)
+- `SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` — Summary repair admission-attempt cap per owner per tick across both phases; default 3, clamped 1..10 (fail: closed)
+- `SUMMARY_DEBT_REPAIR_SCAN_LIMIT` — Global summary-repair document scan budget per tick; default 100, clamped 1..5000 (fail: closed)
 - `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` — Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required (fail: closed)
 - `SYNC_BACKFILL_WORKER_PERCENT` — Default zero closes backfill pull-worker intake before persistence reads; existing token-fenced leases drain (fail: closed)
 - `SYNC_CLOCK_RUN_PARTITION_ENABLED` — Default-on estimated-clock run partition: offline sync audio whose recording time the app estimated merges only within its own contiguous recording run; false ignores the filename run token and restores plain temporal merging (fail: open)
