@@ -295,6 +295,8 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
     'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
     'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_backlog_state_transitions_total/',
+    'prometheus.googleapis.com/omi_capture_retry_cap_total/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_record_token_lease_',
     'prometheus.googleapis.com/omi_record_token_late_append_total/',
@@ -361,6 +363,8 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
     'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
     'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_backlog_state_transitions_total/',
+    'prometheus.googleapis.com/omi_capture_retry_cap_total/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_record_token_lease_',
     'prometheus.googleapis.com/omi_record_token_late_append_total/',
@@ -828,3 +832,63 @@ def test_record_dead_letter_alert_metrics_survive_each_ingestion_allowlist(path,
                 assert matched, (profile, name)
             elif relabel['action'] == 'drop':
                 assert not matched, (profile, name)
+
+
+BACKLOG_ALERTS = MONITORING / 'alerts' / 'backlog-state-machine.json'
+
+
+def _imported(family, prefixes):
+    for prefix in prefixes:
+        name = prefix.removeprefix('prometheus.googleapis.com/')
+        if name.endswith('/') and family == name[:-1]:
+            return True
+        if not name.endswith('/') and family.startswith(name):
+            return True
+    return False
+
+
+@pytest.mark.parametrize('env', ['prod', 'dev'])
+def test_backlog_alert_metric_families_are_imported_by_the_cloud_run_exporters(env):
+    """Alert-to-importer wiring: a family no exporter imports reads as vector(0), so its alert never fires.
+
+    Batch transitions are emitted by backend (serving maintenance, intake polls,
+    operator routes) and sync caps by the sync sequencer, so every family the
+    backlog alerts query must reach in-cluster Prometheus through both releases.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('alert_backtest', MONITORING.parents[1] / 'scripts/alert_backtest.py')
+    backtest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backtest)
+    exporters = {
+        'prod': (CLOUD_RUN_EXPORTER, CLOUD_RUN_SYNC_EXPORTER),
+        'dev': (CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER_DEV),
+    }[env]
+    rules = json.loads(BACKLOG_ALERTS.read_text(encoding='utf-8'))
+    families = set()
+    for alert in rules:
+        for node in alert['data']:
+            expr = node.get('model', {}).get('expr')
+            if expr:
+                families |= set(backtest.metric_names(expr))
+    assert families >= {'omi_backlog_state_transitions_total', 'omi_capture_retry_cap_total'}
+    for path in exporters:
+        prefixes = yaml.safe_load(path.read_text(encoding='utf-8'))['stackdriver']['metrics']['prefixes']
+        missing = sorted(family for family in families if not _imported(family, prefixes))
+        assert not missing, f'{path.name} does not import {missing}'
+
+    # Check the producer-side GMP filters too: importing a family downstream
+    # cannot recover samples discarded by the source scrape allowlist.
+    for profile in ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'):
+        relabels = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())['spec']['endpoints'][0][
+            'metricRelabeling'
+        ]
+        for family in families:
+            labels = {'__name__': family}
+            for relabel in relabels:
+                value = ';'.join(labels.get(key, '') for key in relabel['sourceLabels'])
+                matched = re.fullmatch(relabel['regex'], value)
+                if relabel['action'] == 'keep':
+                    assert matched, (profile, family)
+                elif relabel['action'] == 'drop':
+                    assert not matched, (profile, family)

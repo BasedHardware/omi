@@ -165,7 +165,14 @@ def _assert_batch_write_allowed_memo(
     # Full-row exports always stay live: the token certifies authorization, not
     # arbitrary metadata returned to a snapshots= consumer.
     attempt = current_attempt()
-    if attempt is None or transaction is None or snapshots is not None:
+    # A call with no attempt may still consult the process cache, but only inside
+    # a transaction with no snapshots export and only when the process cache lever
+    # and its kill switch are clear. Short-circuit so nontransactional and
+    # snapshots calls never poll the kill switch.
+    process_on = (
+        attempt is None and transaction is not None and snapshots is None and ttl_enabled('bpp_decision_cache', uid)
+    )
+    if (attempt is None and not process_on) or transaction is None or snapshots is not None:
         metrics.memo_result('batch', 'ineligible')
         metrics.memo_ineligible(
             'no_attempt' if attempt is None else 'no_transaction' if transaction is None else 'snapshots'
@@ -183,7 +190,8 @@ def _assert_batch_write_allowed_memo(
     # Retain the client object itself, preventing id reuse and cross-plane hits.
     key = (client, uid, ids)
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
-    process_on = ttl_enabled('bpp_decision_cache', uid)
+    if attempt is not None:
+        process_on = ttl_enabled('bpp_decision_cache', uid)
     started = PROCESS_DECISIONS.clock()
     evidence = metrics.current_evidence()
     try:
@@ -192,7 +200,8 @@ def _assert_batch_write_allowed_memo(
         try:
             snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         except Exception:
-            attempt.forget(key)
+            if attempt is not None:
+                attempt.forget(key)
             PROCESS_DECISIONS.forget(key)
             metrics.memo_result('batch', 'ineligible')
             if evidence is not None:
@@ -213,7 +222,7 @@ def _assert_batch_write_allowed_memo(
         version = token_version(snapshot)
         authority_generation = (snapshot.to_dict() or {}).get('generation', 0)
         eligible = version is not None and type(authority_generation) is int
-        generation = attempt.get(key, version) if eligible else None
+        generation = attempt.get(key, version) if eligible and attempt is not None else None
         if type(generation) is not int or generation != authority_generation:
             generation = None
         if evidence is not None:
@@ -242,7 +251,8 @@ def _assert_batch_write_allowed_memo(
                 if evidence is not None:
                     evidence.source, evidence.certification = 'ttl_hit', 'matched'
                     evidence.markers.update(cached[2])
-                attempt.put(key, version, generation)
+                if attempt is not None:
+                    attempt.put(key, version, generation)
             else:
                 metrics.ttl_result('batch', 'miss')
         if generation is not None and (expected_generation is None or generation == expected_generation):
@@ -255,7 +265,8 @@ def _assert_batch_write_allowed_memo(
                 schedule_token_mint(client, reference, uid)
             except Exception:  # best effort: scheduling must never change or block the decision
                 metrics.memo_result('batch', 'mint_error')
-        attempt.forget(key)
+        if attempt is not None:
+            attempt.forget(key)
         if evidence is not None:
             evidence.source = 'fresh_read'
         generation = _assert_batch_write_allowed_live(
@@ -268,7 +279,8 @@ def _assert_batch_write_allowed_memo(
             read_budget=read_budget,
         )
         if eligible:
-            attempt.put(key, version, generation)
+            if attempt is not None:
+                attempt.put(key, version, generation)
             if process_on and PROCESS_DECISIONS.put(
                 key, (version, generation, dict(evidence.markers) if evidence else {}), started=started
             ):
@@ -276,7 +288,8 @@ def _assert_batch_write_allowed_memo(
         return generation
     except BaseException:
         # Neither a partial authority walk nor a failed token read is reusable.
-        attempt.forget(key)
+        if attempt is not None:
+            attempt.forget(key)
         PROCESS_DECISIONS.forget(key)
         raise
 

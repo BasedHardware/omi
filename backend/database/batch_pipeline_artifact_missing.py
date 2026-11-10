@@ -12,7 +12,8 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.scheduler import owner_key
-from database.sync_ledger import batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from database.sync_ledger import LEDGER_RETENTION_DAYS
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.input_retention import input_expiring
 
 REASON_CODE = 'batch_artifact_missing'
