@@ -56,7 +56,7 @@ _SYNC_LANES = {'backfill', 'fresh'}
 # Sync pipeline startup exposes idle lanes without inventing wait observations.
 for _sync_lane in _SYNC_LANES:
     OMI_SYNC_QUEUE_WAIT_SECONDS.labels(lane=_sync_lane)
-_SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
+_SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2', 'stt-async-v5'}
 _SYNC_INTERNAL_FAILURE_REASONS = frozenset(reason.value for reason in SyncFailureReason) - {
     SyncFailureReason.NONE.value
 }

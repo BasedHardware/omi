@@ -3923,18 +3923,50 @@ for _method in ('claim', 'sweep'):
 _add(
     DriverEntry(
         'database.summary_debt_queries.due_conversations',
-        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'limit': (500, 'per-query ceiling; shared tick budget is enforced by caller'),
+        },
         domains={
+            'phase': ['near_expiry', 'newest'],
             'after': [
                 None,
                 {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
+                {
+                    'phase': 'newest',
+                    'window': 0,
+                    'pending': None,
+                    'due': T0.timestamp(),
+                    'path': 'users/synthetic/conversations/c',
+                },
                 {'due': T0.timestamp(), 'pending': T0.timestamp() - 60, 'path': 'users/synthetic/conversations/c'},
+                *[
+                    {
+                        'phase': 'newest',
+                        'window': 72 * 3600,
+                        'due': due,
+                        'pending': T0.timestamp() - 60,
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for due in (0, -10, T0, float('inf'))
+                ],
                 {
                     'due': T0.timestamp() - 300000,
                     'pending': T0.timestamp() - 300000,
                     'path': 'users/synthetic/conversations/c',
                 },
-            ]
+                *[
+                    {
+                        'phase': phase,
+                        'window': window,
+                        'due': T0.timestamp() - 1,
+                        'pending': T0.timestamp() - (window - 100 if phase == 'near_expiry' else 60),
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for phase in ('near_expiry', 'newest')
+                    for window in (72 * 3600, 0)
+                ],
+            ],
         },
         trials=2,
         patchers=(

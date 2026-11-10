@@ -478,6 +478,8 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,soniox"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID

@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-05 -->
+<!-- feature-flag-registry as-of: 2026-11-10 -->
 
 # Feature-flag authority registry
 
@@ -120,7 +120,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-05.
+None as of 2026-11-10.
 
 ## Flags
 
@@ -505,6 +505,7 @@ and an explicit empty literal renders as `''`.
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | merge-desk |
+| `HOME_EMPTY_OUTPUT_NOISE` | Default on; terminal empty-output summaries classify as Home noise regardless of title provenance when there is no overview or section body | backend | env | open | — | — | — | — | keep | keep | — | refactor-lead |
 | `HOME_HIDE_BELOW_FLOOR_ROWS` | Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `HOME_HIDE_EPISODE_MEMBERS` | Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED` | Default on; defer automatic notes for still-live episode members; recording detail alone escalates one recording | backend | env | open | — | — | — | — | keep | keep | — | home-overlap |
@@ -570,6 +571,7 @@ and an explicit empty literal renders as `''`.
 | `PHASE_SHADOW_ENABLED` | Default on; read-only conversation and episode phase disagreement and age telemetry | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
+| `PRERECORDED_SONIOX_FAILOVER_ENABLED` | Default on unless false; a pre-recorded Modulate credit/quota refusal or open breaker retries the same audio once on Soniox when its language and two-hour bounds admit the request | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, pusher (chart)) | — | keep | keep | — | refactor-lead |
 | `PROJECTION_DRAIN_CLAIM_AWARE` | Default on; read-only fleet claim admission and jittered backoff for redundant claim-busy owner-drain requests | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF` | Default on; only off disables zero-progress awaiting-live-target owner drain backoff capped at 300 seconds | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
 | `PROJECTION_DRAIN_PRIVACY_BACKOFF` | Default on; defer zero-progress privacy-blocked owner drains until TTL expiry or a head result row change | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -810,6 +812,9 @@ and an explicit empty literal renders as `''`.
 | `STT_ROUTING_REDIS_TIMEOUT_SECONDS` | Maximum Redis wait for live routing health state | backend | env | closed | 0.075 | 0.075 (backend-listen (chart), gke/backend-listen) | 0.075 (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
 | `STT_ROUTING_TARGETS_JSON` | Declarative live STT targets with cost capability endpoint and ramp | backend | env | closed | '' | '' (backend-listen (chart), gke/backend-listen) | '' (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
 | `STT_SHED_CONNECT_FAILURES` | Real consecutive live STT connect failures required before all-open circuit shedding | backend | env | closed | 3 | 3 (backend-listen (chart), gke/backend-listen) | 3 (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
+| `SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT` | Summary repair admission-attempt cap per global tick; default 8, clamped 1..60 | backend | env | closed | — | — | {value: '8', category: config} | — | keep | keep | — | summary-repair (cl2-fixnow) |
+| `SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` | Summary repair admission-attempt cap per owner per tick across both phases; default 3, clamped 1..10 | backend | env | closed | — | — | — | — | keep | keep | — | summary-repair (cl2-fixnow) |
+| `SUMMARY_DEBT_REPAIR_SCAN_LIMIT` | Global summary-repair document scan budget per tick; default 100, clamped 1..5000 | backend | env | closed | — | — | — | — | keep | keep | — | summary-repair (cl2-fixnow) |
 | `SYNC_BACKFILL_OWNER_CONCURRENCY` | Head plus speculative download prefix, default 2 clamped 1 through 4; never concurrent job execution | backend | env | closed | {value: '2', category: reliability} | {value: '2', category: reliability} | {value: '2', category: reliability} | — | keep | keep | — | auditfix |
 | `SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD` | Minimum pending owner backlog for download preparation, default 8 clamped 4 through 100 | backend | env | closed | {value: '8', category: reliability} | {value: '8', category: reliability} | {value: '8', category: reliability} | — | keep | keep | — | auditfix |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | true | — | keep | keep | — | backlog-refactor |
@@ -1179,6 +1184,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `FSR_SMART_MERGE_PARTITION` — Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan (fail: open)
 - `HELD_CONTENT_COHORT` — Fallback tokens uid:<uid>,pct:<0-100> or explicit all, used only after rollout_cohorts/held-content is confirmed absent; empty, unset, or malformed admits nobody (fail: closed)
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
+- `HOME_EMPTY_OUTPUT_NOISE` — Default on; terminal empty-output summaries classify as Home noise regardless of title provenance when there is no overview or section body (fail: open)
 - `HOME_HIDE_BELOW_FLOOR_ROWS` — Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours (fail: open)
 - `HOME_HIDE_EPISODE_MEMBERS` — Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement (fail: open)
 - `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED` — Default on; defer automatic notes for still-live episode members; recording detail alone escalates one recording (fail: open)
@@ -1350,6 +1356,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STT_VOCAB_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `STT_VOCAB_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
 - `STT_VOCAB_MODE_SHADOW_PERCENT` — Shadow vocabulary source-read sample percentage; default 1 (fail: closed)
+- `SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` — Summary repair admission-attempt cap per owner per tick across both phases; default 3, clamped 1..10 (fail: closed)
+- `SUMMARY_DEBT_REPAIR_SCAN_LIMIT` — Global summary-repair document scan budget per tick; default 100, clamped 1..5000 (fail: closed)
 - `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` — Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required (fail: closed)
 - `SYNC_BACKFILL_WORKER_PERCENT` — Default zero closes backfill pull-worker intake before persistence reads; existing token-fenced leases drain (fail: closed)
 - `SYNC_CLOCK_RUN_PARTITION_ENABLED` — Default-on estimated-clock run partition: offline sync audio whose recording time the app estimated merges only within its own contiguous recording run; false ignores the filename run token and restores plain temporal merging (fail: open)

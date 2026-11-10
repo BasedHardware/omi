@@ -46,6 +46,12 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION_GROUP',
         (_asc('summary_first_pending_at'), _asc('summary_due_at'), _asc('__name__')),
     ),
+    FirestoreIndexRequirement(
+        'conversations_summary_repair_newest',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_desc('summary_first_pending_at'), _asc('summary_due_at'), _asc('__name__')),
+    ),
     *LIFECYCLE_METRICS_INDEX_REQUIREMENTS,
     *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,

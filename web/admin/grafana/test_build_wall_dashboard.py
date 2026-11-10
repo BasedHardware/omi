@@ -280,6 +280,10 @@ class WallV2Contract(unittest.TestCase):
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertEqual(panel["fieldConfig"]["defaults"]["unit"], "percent")
         self.assertTrue(custom["axisCenteredZero"])
+        # An empty frame names its cause; "Loading…" would read as a stuck query.
+        self.assertEqual(panel["fieldConfig"]["defaults"]["noValue"],
+                         "No day in the last 35 has both plan cost and revenue")
+        self.assertEqual(panel["timeFrom"], "35d")  # MARGIN_DAYS in lib/wall-series.ts
         self.assertFalse(custom["spanNulls"])
         self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
         # Tooltip rows: drawn invisibly on their own hidden scale (Grafana 13 drops
