@@ -7,7 +7,9 @@ FIELD_SITES = {
     ],
     'database/chat_edits.py': [
         ('apply_update.apply', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('apply_update.apply', 'summary_due_at', 'due', ('summary_due_at',)),
         ('restore.apply', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('restore.apply', 'summary_due_at', 'due', ('summary_due_at',)),
     ],
     'database/cells/adapters/action_items.py': [
         (
@@ -1319,6 +1321,8 @@ FIELD_SITES = {
             ('record_audio_partial',),
         ),
         ('promote_final_pass_if_current.commit', 'status', "'resolved'", ('participant_speaker_ids', 'status')),
+        ('restore_conversation_from_discarded._restore', 'summary_due_at', 'due', ('summary_due_at',)),
+        ('restore_conversation_from_discarded._restore', 'summary_due_at', 'due', ('summary_due_at',)),
         ('transition_conversation_status', 'status', 'status', ('status',)),
         ('update_conversation_title', 'summary_due_at', 'None', ('structured.title', 'summary_due_at', 'user_title')),
         (

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 import os
+import math
 from copy import deepcopy
 from contextvars import ContextVar
 from datetime import datetime
@@ -18,6 +19,7 @@ from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds
+from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
@@ -183,6 +185,32 @@ def refusal(row: Row) -> str | None:
     return None
 
 
+def rearm_after_refusal_clear(existing: Row, restored: Row) -> float | None:
+    """Recover the original obligation inside the refusal-removal transaction.
+
+    Never restart the deadline at undo time, replace an armed due, or enroll
+    a row whose original acceptance is unknown or whose restored state refuses.
+    """
+    accepted = restored.get('summary_first_pending_at')
+    if (
+        existing.get('summary_due_at') is not None
+        or refusal(restored) is not None
+        or restored.get('summary_blocked_reason') == 'blocked_byok'
+        or restored.get('finalization_status') in {'queued', 'leased'}
+        or not isinstance(accepted, (int, float))
+        or isinstance(accepted, bool)
+        or not math.isfinite(accepted)
+    ):
+        return None
+    policy = restored.get('first_summary_policy')
+    deadline = (
+        FirstSummaryPolicy.from_dict(policy).first_summary_deadline_seconds
+        if policy is not None
+        else deadline_seconds()
+    )
+    return accepted + deadline
+
+
 def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
     """The current finalization lease may finish its own completed minimum.
 
@@ -256,11 +284,12 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     obligation_open = (
         write.get('summary_title_provenance') == 'server_minimum'
         and not write.get('summary_completed_at')
+        and not existing.get('summary_output_present')
         and existing.get('summary_blocked_reason') not in EMPTY_BLOCKED_REASONS
     )
     if not rich and not discarded and obligation_open:
         raise SummaryOutputUnavailable('kept first-summary output is empty')
-    if existing.get('summary_completed_at'):
+    if existing.get('summary_completed_at') or existing.get('summary_output_present'):
         write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused
         # the whole write to protect it, which stranded completed results in
@@ -282,9 +311,10 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
                 if existing.get('user_overview'):
                     restored['overview'] = existing['user_overview']
                 write['structured'] = restored
-            write['summary_output_present'] = bool(banked)
+            write['summary_output_present'] = bool(banked) or bool(existing.get('summary_output_present'))
             write['summary_title_provenance'] = existing.get('summary_title_provenance') or 'generated'
-            write['summary_completed_at'] = existing['summary_completed_at']
+            if existing.get('summary_completed_at') is not None:
+                write['summary_completed_at'] = existing['summary_completed_at']
             write['summary_discard_receipted'] = existing.get('summary_discard_receipted', False)
             write['summary_processing_lease_until'] = 0
         return None

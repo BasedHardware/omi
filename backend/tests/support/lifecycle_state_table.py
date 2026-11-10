@@ -125,6 +125,15 @@ SUMMARY_REFUSAL_WRITERS = (
     Writer('utils/conversations/summary_delivery.py', 'merge_result'),
 )
 
+# The inverse manual-field writes recover only an owed, unindexed obligation,
+# from its original acceptance and deadline, inside the same transaction.
+SUMMARY_MANUAL_CLEAR_WRITERS = (
+    Writer('database/chat_edits.py', 'apply_update.apply'),
+    Writer('database/chat_edits.py', 'restore.apply'),
+)
+
+SUMMARY_DISCARD_RESTORE_WRITERS = (Writer('database/conversations.py', 'restore_conversation_from_discarded._restore'),)
+
 
 FINALIZATION_MODULE = 'database/conversation_finalization_jobs.py'
 FAIR_USE_MODULE = 'utils/fair_use.py'

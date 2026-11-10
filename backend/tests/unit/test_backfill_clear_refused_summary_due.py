@@ -124,7 +124,6 @@ DURABLE = [
     ({'user_overview': ''}, 'manual'),
     ({'summary_completed_at': 1}, 'already_enriched'),
     ({'summary_output_present': True}, 'already_enriched'),
-    ({'summary_title_provenance': None}, 'unknown_provenance'),
     ({'data_protection_level': 'e2ee'}, 'privacy'),
     (
         {
@@ -158,6 +157,12 @@ def test_every_durable_class_is_classified_by_serving_refusal_and_cleared(patch,
         {'status': 'processing'},
         {'finalization_job_id': 'current'},
         {'finalization_status': 'blocked_byok'},
+        {'summary_blocked_reason': 'blocked_byok'},
+        {'deleted': True, 'summary_blocked_reason': 'blocked_byok'},
+        {'user_title': 'Manual', 'finalization_status': 'queued'},
+        {'discarded': True, 'finalization_status': 'leased'},
+        {'finalization_status': 'queued'},
+        {'finalization_status': 'leased'},
         {'is_locked': True},
         {'deferred': True},
         {'processing_state': 'local_pending'},
@@ -230,3 +235,109 @@ def test_full_batches_of_400():
     client = Client({f'{n:04d}': owed(deleted=True) for n in range(805)})
     assert backfill.run_backfill(client, apply=True, now=20)['written'] == 805
     assert client.batch_sizes == [400, 400, 5]
+
+
+@pytest.mark.parametrize('provenance', [None, 'unknown', 'generated'])
+def test_unknown_provenance_retains_legacy_debt_for_provenance_repair(provenance):
+    row = {**owed(), 'summary_title_provenance': provenance, 'summary_first_pending_at': 1}
+    client = Client({'target': row})
+    assert backfill.summary_delivery.refusal(row) == 'unknown_provenance'
+    result = backfill.run_backfill(client, apply=True, now=20)
+    assert result['classes'] == {'retained': 1}
+    assert result['eligible'] == result['written'] == 0
+    assert client.rows == {'target': row}
+
+
+@pytest.mark.parametrize(
+    'still_refused', [{}, {'user_title': 'Manual'}, {'summary_output_present': True}, {'is_locked': True}]
+)
+@pytest.mark.parametrize('existing_due', [None, 211])
+def test_backfill_cleared_discard_restore_recovers_only_owed_unarmed_debt(monkeypatch, still_refused, existing_due):
+    from config.policy import FirstSummaryPolicy
+    from database import conversations
+    from tests.support.lifecycle_state_table import FIELD_BUILDERS, SUMMARY_DISCARD_RESTORE_WRITERS
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    path = ('users', 'synthetic', 'conversations', 'target')
+    row = {
+        **owed(discarded=True),
+        'summary_first_pending_at': 1,
+        **still_refused,
+        'first_summary_policy': FirstSummaryPolicy(first_summary_deadline_seconds=60).to_dict(),
+    }
+    client = Client({'target': row})
+    backfill.run_backfill(client, apply=True, now=20)
+    # Locked/local rows are retained by the sweep; emulate the cleared legacy
+    # index too, so restore still must check the row's current eligibility.
+    cleared = {**client.rows['target'], 'summary_due_at': existing_due}
+    store = StrictFirestore({path: cleared})
+    monkeypatch.setattr(conversations, 'db', store)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *args: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *args: None)
+    restored = conversations.restore_conversation_from_discarded('synthetic', 'target', return_snapshot=True)
+    expected = existing_due if existing_due is not None else None if still_refused else 61
+    assert restored['summary_due_at'] == store.rows[path]['summary_due_at'] == expected
+    assert restored['summary_first_pending_at'] == 1
+    for writer in SUMMARY_DISCARD_RESTORE_WRITERS:
+        assert writer.function in FIELD_BUILDERS[writer.module]['summary_due_at']
+
+
+def test_checkpoint_timestamp_round_trip_preserves_type_and_nanoseconds(tmp_path):
+    import json
+    from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+
+    due = DatetimeWithNanoseconds.from_rfc3339('2026-11-10T00:00:00.123456789Z')
+    cursor = tmp_path / 'cursor.json'
+    backfill._checkpoint(cursor, {'due': due, '__name__': 'deleted-cursor'})
+    position = json.loads(cursor.read_text())
+    assert position['due'] == {'timestamp': due.rfc3339()}
+    client = Client({})
+    query = Query(client)
+    monkey_cursor = []
+    query.stream = lambda: monkey_cursor.append(query.cursor) or iter([])
+    client.collection_group = lambda _: query
+    backfill.run_backfill(client, start_after=position, now=20)
+    assert monkey_cursor[0][0].timestamp_pb() == due.timestamp_pb()
+    assert monkey_cursor[0][1] == 'deleted-cursor'
+    assert cursor.stat().st_mode & 0o777 == 0o600
+
+
+def test_resume_after_deleted_numeric_cursor():
+    client = Client({'b': owed(deleted=True)})
+    result = backfill.run_backfill(client, now=20, start_after={'due': 10, '__name__': 'a'})
+    assert result['scanned'] == result['eligible'] == 1
+
+
+@pytest.mark.parametrize(
+    'apply,project,confirmation,allowed',
+    [
+        (False, 'based-hardware', None, True),
+        (True, 'demo-summary', None, True),
+        (True, 'based-hardware', None, False),
+        (True, 'based-hardware', 'demo-summary', False),
+        (True, 'based-hardware', 'based-hardware', True),
+        (True, None, None, False),
+    ],
+)
+def test_apply_requires_explicit_production_project_confirmation(apply, project, confirmation, allowed):
+    client = SimpleNamespace(project=project)
+    if allowed:
+        backfill.guard_apply_project(client, apply, confirmation)
+    else:
+        with pytest.raises(ValueError):
+            backfill.guard_apply_project(client, apply, confirmation)
+
+
+def test_main_failure_is_counts_only(monkeypatch, capsys):
+    from database import _client
+
+    def fail():
+        raise RuntimeError('private/document/path must never appear')
+
+    monkeypatch.setattr(_client, 'get_firestore_client', fail)
+    monkeypatch.setattr(backfill.sys, 'argv', ['backfill'])
+    with pytest.raises(SystemExit, match='1'):
+        backfill.main()
+    output = capsys.readouterr()
+    assert output.out == ''
+    assert output.err == '{"failed": 1}\n'

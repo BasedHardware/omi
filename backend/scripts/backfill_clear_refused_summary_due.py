@@ -2,7 +2,9 @@
 """Clear overdue summary indexes on durably refused conversations, with a classifier-only projection.
 
 Dry-run is the default. Do not point this at production from an agent session.
-cl2-deploy runs dry-run, then a 5k apply canary, then the full apply.
+cl2-deploy deploys code first, re-runs dry-run on the serving revision, then
+runs a 5k apply canary and the full apply only on lead2's go. Production apply
+requires --confirm-production-project based-hardware.
 
 Usage (from backend/):
     python scripts/backfill_clear_refused_summary_due.py --limit 5000
@@ -25,6 +27,7 @@ import os
 import sys
 import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +35,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from google.api_core.exceptions import FailedPrecondition, NotFound
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption
 from utils.conversations import summary_delivery
 
@@ -63,12 +67,14 @@ CLASSIFIER_FIELDS = (
     'finalization_job_id',
     'finalization_status',
 )
+# These refusals retire the current obligation; explicit keep/manual undo can
+# recover owed debt. Empty-output budgets retain their existing revision re-arm.
+# Unknown provenance is missing enrollment, never authorization to clear debt.
 DURABLE_REFUSALS = frozenset(
     {
         'lifecycle',
         'manual',
         'already_enriched',
-        'unknown_provenance',
         'privacy',
         'content_below_floor',
         *summary_delivery.EMPTY_BLOCKED_REASONS,
@@ -85,7 +91,8 @@ def durable_refusal(row: dict[str, Any]) -> str | None:
     if (
         row.get('status') != 'completed'
         or row.get('finalization_job_id')
-        or row.get('finalization_status') == 'blocked_byok'
+        or row.get('finalization_status') in {'blocked_byok', 'queued', 'leased'}
+        or row.get('summary_blocked_reason') == 'blocked_byok'
     ):
         return None
     reason = summary_delivery.refusal(row)
@@ -114,6 +121,18 @@ def _commit(client: Any, snapshots: list[Any]) -> tuple[int, int]:
 
 def _checkpoint(path: Path, cursor: dict[str, Any]) -> None:
     # Resume paths can identify accounts; write privately and never print them.
+    cursor = dict(cursor)
+    due = cursor['due']
+    if isinstance(due, datetime):
+        # Preserve timestamp type and nanoseconds: a numeric cursor would seek
+        # in a different Firestore type range on resume.
+        cursor['due'] = {
+            'timestamp': DatetimeWithNanoseconds.from_timestamp_pb(
+                due.timestamp_pb()
+                if isinstance(due, DatetimeWithNanoseconds)
+                else DatetimeWithNanoseconds.fromisoformat(due.isoformat()).timestamp_pb()
+            ).rfc3339()
+        }
     temporary = path.with_name(path.name + '.tmp')
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as output:
@@ -145,7 +164,10 @@ def run_backfill(
     classified: Counter[str] = Counter()
     cursor = None
     if start_after is not None:
-        cursor = {'summary_due_at': start_after['due'], '__name__': client.document(start_after['__name__'])}
+        due = start_after['due']
+        if isinstance(due, dict):
+            due = DatetimeWithNanoseconds.from_rfc3339(due['timestamp'])
+        cursor = {'summary_due_at': due, '__name__': client.document(start_after['__name__'])}
     while limit is None or scanned < limit:
         take = page_size if limit is None else min(page_size, limit - scanned)
         query = (
@@ -192,9 +214,16 @@ def run_backfill(
     }
 
 
+def guard_apply_project(client: Any, apply: bool, confirmation: str | None) -> None:
+    """Require an explicit production-project confirmation before any scan/write."""
+    if apply and (not client.project or (client.project == 'based-hardware' and confirmation != client.project)):
+        raise ValueError('apply project confirmation required')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true', help='Clear due. Default is dry-run.')
+    parser.add_argument('--confirm-production-project', help='Required for --apply on based-hardware.')
     parser.add_argument('--page-size', type=int, default=_DEFAULT_PAGE_SIZE, help='Rows per page (max 400).')
     parser.add_argument('--limit', type=int, default=None, help='Maximum rows scanned, including retained rows.')
     parser.add_argument('--start-after', type=Path, help='Resume from a private JSON (due + __name__) cursor file.')
@@ -205,9 +234,11 @@ def main() -> None:
     try:
         from database._client import get_firestore_client
 
+        client = get_firestore_client()
+        guard_apply_project(client, args.apply, args.confirm_production_project)
         cursor = json.loads(args.start_after.read_text()) if args.start_after else None
         result = run_backfill(
-            get_firestore_client(),
+            client,
             apply=args.apply,
             page_size=args.page_size,
             start_after=cursor,

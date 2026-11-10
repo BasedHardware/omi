@@ -3263,6 +3263,9 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str, *, retur
         restored = {**current, **updates}
         stamp_terminal_decision(restored, path='user_restore')
         updates['relevance_decision'] = restored['relevance_decision']
+        due = summary_delivery.rearm_after_refusal_clear(current, restored)
+        if due is not None:
+            updates['summary_due_at'] = restored['summary_due_at'] = due
         transaction.update(conversation_ref, updates)
         return restored
 
