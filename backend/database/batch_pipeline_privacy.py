@@ -73,6 +73,7 @@ def privacy_owner_key(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
+@metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,
@@ -343,6 +344,8 @@ def _assert_batch_write_allowed_live(
     user = client.collection('users').document(uid)
     snapshot = read(user)
     data = snapshot.to_dict() or {}
+    subscription = data.get('subscription')
+    metrics.observe_batch_plan(subscription.get('plan') if isinstance(subscription, dict) else None)
     if snapshots is not None:
         snapshots['user'] = data
     if not snapshot.exists:
