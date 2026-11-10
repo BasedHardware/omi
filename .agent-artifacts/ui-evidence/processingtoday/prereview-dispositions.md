@@ -96,3 +96,12 @@ in the PR body. The PCM CPU guard remains unchanged.
 Tests and final repository gates are recorded in README.md and the PR body. The
 pre-existing PCM CPU guard, thresholds, allowlists and pusher code were not edited
 for this addition; upstream-only changes stay part of the main merge.
+
+Fresh-main completion: after the addition commit 44d470e980f19fee32992a9a31e3539b2454cf14,
+merged main 8a9f00b975f3828134bb63a3952e4afb9affb0cd as
+c6013b4b597faed1dc7e1500aaed5cbe8cb5719f, normally and without conflicts.
+The separate #25034 registry conflict had already been resolved in 0bb9d47e42.
+Addition-only non-test delta: +954/-81 (1,035 changed lines), excluding upstream
+merges, tests/e2e and UI evidence/render harness; includes source, config, docs
+and localization/generated files (+205 localization lines). The immutable
+measurement and reproduction method are in notes-addition-line-delta.json.

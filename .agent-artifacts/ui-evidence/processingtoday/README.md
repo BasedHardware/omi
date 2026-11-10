@@ -158,3 +158,12 @@ sources are covered by the existing failed-conversations-activity manual flow,
 extended with the notes-only ledger, unknown-kind, retry/error and account cases.
 The PNGs were inspected for real fonts, legibility, single placement and clipping.
 Final counts, preflight/full-hook result and non-test line delta are in the PR body.
+
+Fresh-main completion: after the addition commit 44d470e980f19fee32992a9a31e3539b2454cf14,
+merged main 8a9f00b975f3828134bb63a3952e4afb9affb0cd as
+c6013b4b597faed1dc7e1500aaed5cbe8cb5719f, normally and without conflicts.
+The separate #25034 registry conflict had already been resolved in 0bb9d47e42.
+Addition-only non-test delta: +954/-81 (1,035 changed lines), excluding upstream
+merges, tests/e2e and UI evidence/render harness; includes source, config, docs
+and localization/generated files (+205 localization lines). The immutable
+measurement and reproduction method are in notes-addition-line-delta.json.
