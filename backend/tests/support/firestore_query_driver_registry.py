@@ -4345,3 +4345,18 @@ _add(
         neutrals={'limit': _LIMIT, 'cursor': (None, 'opaque keyset; first-page query shape')},
     )
 )
+
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.iter_window',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.census_window',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000]},
+    )
+)

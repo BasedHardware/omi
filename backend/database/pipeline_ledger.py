@@ -11,12 +11,9 @@ commits and catches every error. The trade-off is explicit: the ledger is not
 atomic with the real transition, so a crash between the two loses that row; the
 independent admission counter makes the loss visible. The ledger transaction
 reads the document before writing it, so concurrent writers are serialized by
-Firestore's optimistic concurrency (a CAS fence) and a stale plan cannot
-overwrite a newer stage.
-
-The document never stores titles, transcript or overview text, audio paths,
-secrets or raw content. ``owner_key`` is a truncated hash for distinct-user
-counts only.
+Firestore's optimistic concurrency (a CAS fence). The document never stores
+titles, transcript or overview text, audio paths, secrets or raw content;
+``owner_key`` is a truncated hash for distinct-user counts only.
 """
 
 from __future__ import annotations
@@ -52,26 +49,10 @@ SPEECH_BASES = frozenset({'vad', 'transcript', 'unknown'})
 # Closed vocabulary for ``reason`` and ``terminal_reason``. Arbitrary text and
 # user errors never reach the document.
 REASONS = frozenset(
-    {
-        'capture_started',
-        'sealed',
-        'transcribed',
-        'noted',
-        'done',
-        'no_speech',
-        'noise',
-        'upload_failed',
-        'privacy',
-        'deleted',
-        'timeout',
-        'provider',
-        'empty_output',
-        'other',
-    }
+    'capture_started sealed transcribed noted done no_speech noise upload_failed privacy deleted timeout '
+    'provider empty_output other'.split()
 )
-FAILURE_REASONS = frozenset(
-    {'no_speech', 'noise', 'upload_failed', 'privacy', 'deleted', 'timeout', 'provider', 'empty_output', 'other'}
-)
+FAILURE_REASONS = frozenset('no_speech noise upload_failed privacy deleted timeout provider empty_output other'.split())
 
 
 class StageRule(NamedTuple):

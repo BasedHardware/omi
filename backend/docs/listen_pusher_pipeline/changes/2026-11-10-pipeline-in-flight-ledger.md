@@ -34,10 +34,7 @@ stage.
 
 The trade-off is explicit: the ledger is **not** atomic with the real
 transition. A crash between the real commit and the ledger write loses that
-row; the independent admission counter makes the loss visible. Same-transaction
-atomicity and fail-open cannot both be guaranteed at these sites, and the brief
-requires that an optional ledger failure never turns a successful transition
-into a user-visible failure.
+row; the independent admission counter makes the loss visible.
 
 ## Switch, rollback, metrics, read helper
 
