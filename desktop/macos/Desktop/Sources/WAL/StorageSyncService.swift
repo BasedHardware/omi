@@ -128,14 +128,14 @@ final class StorageSyncService: ObservableObject {
   }
 
   /// Stop current sync
-  func stopSync() {
+  func stopSync() async {
     syncTask?.cancel()
     syncTask = nil
     isSyncing = false
 
     // Save partial progress
     if let wal = currentWal, !downloadedFrames.isEmpty {
-      walService.updateWalWithDownloadedData(
+      await walService.updateWalWithDownloadedData(
         walId: wal.id,
         downloadedBytes: totalBytesDownloaded,
         frames: downloadedFrames
@@ -369,7 +369,7 @@ final class StorageSyncService: ObservableObject {
     guard let wal = currentWal else { return }
 
     // Save downloaded data
-    walService.updateWalWithDownloadedData(
+    await walService.updateWalWithDownloadedData(
       walId: wal.id,
       downloadedBytes: totalBytesDownloaded,
       frames: downloadedFrames
