@@ -54,6 +54,7 @@ def begin(uid, cid, session, *, firestore_client=None):
         owner = client.collection('users').document(uid).get(transaction=tx).to_dict() or {}
         if owner.get('private_cloud_sync_enabled', True) is False:
             return False
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
         row = ref.get(transaction=tx).to_dict() or {}
         if (
             not row

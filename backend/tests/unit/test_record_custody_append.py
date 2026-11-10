@@ -14,6 +14,7 @@ from database import record_token_lease_metrics as metrics, record_audio
 from config.record_audio import record_identity
 from config import record_seal_rules as lease
 from database.batch_pipeline_record_lease_recovery import recovery_segment
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from utils.sync import record_token_lease as request
 from tests.unit.test_record_token_lease import PATH, ROW, NOW
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
@@ -23,6 +24,27 @@ from utils.batch_pipeline.record_seal_repair import seal_refusal
 
 def custody_client(rows):
     return StrictFirestore({('users', 'synthetic'): {'private_cloud_sync_enabled': True}, **rows})
+
+
+@pytest.mark.parametrize('existing_token', [False, True])
+@pytest.mark.parametrize('authority', ['missing_user', 'blocked', 'purging'])
+def test_begin_refuses_missing_owner_or_active_erasure_without_writing(monkeypatch, authority, existing_token):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    session = 'custody:erasure'
+    sessions = {session: {'signal_source': 'custody_append'}} if existing_token else {}
+    client = custody_client({PATH: {**ROW, 'record_upload_sessions': sessions}})
+    if authority == 'missing_user':
+        client.rows.pop(('users', 'synthetic'))
+    else:
+        client.rows['batch_pipeline_privacy', privacy_owner_key('synthetic')] = {'generation': 1, authority: True}
+    before = deepcopy(client.rows)
+
+    with pytest.raises(BatchPrivacyBlocked):
+        database.begin('synthetic', 'record', session, firestore_client=client)
+
+    assert client.rows == before
+    assert not any(tx.has_written for tx in client.transactions)
 
 
 @pytest.mark.parametrize('status,durable', [(202, True), (409, True), (503, True), (202, False)])
