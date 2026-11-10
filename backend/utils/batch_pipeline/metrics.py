@@ -35,6 +35,20 @@ PROJECTION_DRAIN_CLAIM_HELD = Counter(
 PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS = Counter(
     'omi_batch_projection_claim_busy_backoffs_total', 'Owner drain turns deferred after losing the fleet claim race'
 )
+PROJECTION_BLOCKED_HEAD_HOLDS = Counter(
+    'omi_batch_projection_blocked_head_holds_total', 'Blocked owner-chain heads held after the head deadline lapsed'
+)
+# Sharded projection serving (projection_shards.py). Static labels only.
+PROJECTION_SHARDS_HELD = Gauge('omi_batch_projection_shards_held', 'Projection shards this process holds')
+PROJECTION_SHARDS_UNHELD = Gauge(
+    'omi_batch_projection_shards_unheld', 'Projection shards no member held at the last lease pass'
+)
+PROJECTION_SHARD_WAKES = Counter(
+    'omi_batch_projection_shard_wakes_total', 'Projection owner wakes by lane and outcome', ['lane', 'outcome']
+)
+PROJECTION_SHARD_WAKE_DEPTH = Gauge(
+    'omi_batch_projection_shard_wake_depth', 'Owner wakes waiting in this process\'s held shards', ['lane']
+)
 
 PROJECTION_DRAIN_PRIVACY_STOPS = Counter(
     'omi_batch_projection_privacy_blocked_stops_total',

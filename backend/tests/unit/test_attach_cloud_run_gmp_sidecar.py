@@ -1411,6 +1411,11 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert kept('omi_batch_projection_privacy_resumes_succeeded_total')
     assert kept('omi_batch_projection_privacy_fallthroughs_total')
     assert kept('omi_batch_projection_privacy_still_refused_total')
+    assert kept('omi_batch_projection_blocked_head_holds_total')
+    assert kept('omi_batch_projection_shards_held')
+    assert kept('omi_batch_projection_shards_unheld')
+    assert kept('omi_batch_projection_shard_wakes_total')
+    assert kept('omi_batch_projection_shard_wake_depth')
     # Direct GMP consumers: sentinel batch_metrics.py/completion_telemetry.py.
     # fleet_gate/david_gate use logs, durable state and native request_count.
     for name in (

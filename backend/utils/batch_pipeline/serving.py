@@ -9,6 +9,8 @@ import time
 
 from config.batch_pipeline import (
     held_partial_enabled,
+    projection_shard_member,
+    projection_shards_enabled,
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
     recovery_owner_only_enabled,
@@ -29,12 +31,14 @@ from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
-from utils.executors import run_blocking, start_background_task, sync_executor
+from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.projection_shard_pump import TICK_SECONDS as SHARD_TICK_SECONDS, ShardPump
+from utils.batch_pipeline.projection_shards import PROJECTION_SHARD_COUNT, ProjectionShards
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
@@ -73,8 +77,11 @@ class Serving:
         enrichment_sweep=None,
         recovery=None,
         leader=None,
+        shard_pump=None,
     ):
         self.store = store
+        # Sharded projection serving (projection_shard_pump.ShardPump), or None.
+        self.shard_pump = shard_pump
         self.metrics = metrics
         self.projector = projector
         self.cleanup = cleanup
@@ -123,9 +130,22 @@ class Serving:
         release = (
             self.merge.release_set(recovered) if recovered is not None and recovered_merge_release_enabled() else None
         )
+        committed = []
         for _ in range(100):
-            if self.merge.commit_next(owner_id, time.time(), release=release) is None:
+            entry = self.merge.commit_next(owner_id, time.time(), release=release)
+            if entry is None:
                 break
+            committed.append(entry)
+        if committed and self.shard_pump is not None:
+            # Push wake: the owner's shard holder drains it without waiting
+            # for discovery. Fail-open; the backstop re-finds lost wakes.
+            try:
+                self.shard_pump.committed(owner_id, committed)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_projection_shards action=commit_wake outcome=error exception_type=%s',
+                    type(error).__name__,
+                )
 
     @with_batch_privacy_attempt
     async def reconcile_async(
@@ -186,7 +206,8 @@ class Serving:
             if owner_id is None or recovered is None:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
-        if self._leads(periodic):
+        leads = self._leads(periodic)
+        if leads:
             self._maintain(recover_quarantine=recover_quarantine)
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
@@ -196,8 +217,25 @@ class Serving:
             priority = self._reconcile_owner(owner_id, recovered)
         # Projection is throughput, ordered and fenced in its own transactions.
         # Metrics elect their own queue sampler; local samplers stay per instance.
-        if self.projector and serving_projection_sweep_enabled():
-            self.projector.sweep()
+        if self.projector:
+            pump = self.shard_pump
+            if pump is not None and pump.engaged:
+                # Sharded: shard holders drain their owners from wakes. Only the
+                # maintenance leader pages the durable log, discovery-only, to
+                # re-push wakes and to finish synchronous-policy rows.
+                if leads and serving_projection_sweep_enabled():
+                    try:
+                        pump.backstop()
+                    except Exception as error:
+                        logging.getLogger(__name__).error(
+                            'event=batch_projection_shards action=backstop outcome=retry exception_type=%s',
+                            error_type(error),
+                        )
+                    self.projector.sweep_finish_only()
+                # Follow-up discovery keeps its own per-process page as before.
+                self.projector.has_async_followups = True
+            elif serving_projection_sweep_enabled():
+                self.projector.sweep()
         # Catch-up rows this instance held for projection depth may now fit.
         for held_owner in list(self.merge.held_owners):
             try:
@@ -370,8 +408,18 @@ def serving_for_stage(stage: str) -> Serving:
     # maintenance pass cannot strand metrics ownership. Default serving cadence
     # is 40s (30s reservation + 20s ticks); 20s TTL hands over within 60s.
     metrics.oldest_leader = LeaderLease(store, QUEUE_METRICS, ttl_seconds=20)
+    shard_pump = None
+    if projection_shards_enabled():
+        shards = ProjectionShards(
+            getattr(store, 'namespace', f'batch_pipeline_{stage}'),
+            count=PROJECTION_SHARD_COUNT,
+            member=projection_shard_member(),
+        )
+        shard_pump = ShardPump(projector, shards)
+        projector.router = shard_pump.route
     return Serving(
         store,
+        shard_pump=shard_pump,
         recovery=QuarantineRecovery(store, artifacts),
         metrics=metrics,
         projector=projector,
@@ -497,6 +545,45 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    async def shard_pump():
+        # Sharded projection: feed this holder's owner drains from its wakes.
+
+        service = None
+        while not stop.is_set() and service is None:
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_projection_shards action=start outcome=retry exception_type=%s', type(error).__name__
+                )
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=20)
+                except asyncio.TimeoutError:
+                    pass
+        pump = service.shard_pump if service is not None else None
+        if pump is None:
+            return
+        depth_due = 0.0
+        try:
+            while not stop.is_set():
+                try:
+                    await pump.tick()
+                    if time.monotonic() >= depth_due:
+                        depth_due = time.monotonic() + 60
+                        await pump.depth()
+                except Exception as error:
+                    logging.getLogger(__name__).error(
+                        'event=batch_projection_shards action=tick outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=SHARD_TICK_SECONDS)
+                except asyncio.TimeoutError:
+                    pass
+        finally:
+            # Hand shards back so the next holder starts at once on a roll.
+            await run_blocking(db_executor, pump.shards.release)
+
     async def run():
         from utils.batch_pipeline.projection_drain import set_recurring_sweep
 
@@ -507,7 +594,10 @@ def start_serving_from_env():
             if pump_enabled:
                 await projection_pump()
             else:
-                await asyncio.gather(supervise(), drain(), dispatch_recovery())
+                loops = [supervise(), drain(), dispatch_recovery()]
+                if projection_shards_enabled():
+                    loops.append(shard_pump())
+                await asyncio.gather(*loops)
         finally:
             set_recurring_sweep(None)
 

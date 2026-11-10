@@ -1265,6 +1265,22 @@ below have their own switches; all three off is the pre-drain behaviour):
   advanced= more= elapsed_ms=` per turn, and `action=owner_chain
   outcome=claim_busy`.
 
+### Owner shards and push wakes (dark, 2026-11-05)
+
+`BATCH_PROJECTION_SHARDS_ENABLED` (default off) replaces the per-instance
+sweep's owner discovery with owner-hash shard leases. Each owner has one
+drain writer fleet-wide, and that writer is woken by merge commits rather than
+by a polling keyset.
+
+Only the maintenance leader pages the durable log, discovery-only, as a
+backstop. Follower instances skip the sweep and keep their async follow-up
+discovery. Holders fill drain slots fresh first, keeping
+`BATCH_PROJECTION_BACKLOG_RESERVE` slots for backlog.
+
+Any Redis failure returns that instance to the sweep. The contract, env
+bounds, cutover order and rollback are in
+[Batch projection owner shards](listen_pusher_pipeline.mdx#batch-projection-owner-shards).
+
 ### Follow-up desync (2026-11-05)
 
 Every serving process runs its own async follow-up discovery over the same

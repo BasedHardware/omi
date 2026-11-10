@@ -390,6 +390,11 @@ class FirestoreStore:
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return projection_successor(self.client, self.namespace, owner_key, previous)
 
+    def projection_page_owners(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+    ) -> tuple[list[tuple[str, str, float, float | None]], Any]:
+        return projection_page_owners(self.client, self.namespace, limit, after=after, states=states)
+
 
 def projection_pending(client: Any, namespace: str, limit: int = 100) -> list[str]:
     return projection_page(client, namespace, limit)[0]
@@ -425,6 +430,45 @@ def projection_page(
     # revisited on the next cycle; no durable obligation is skipped or mutated.
     cursor = (docs[-1].to_dict()['committed_at'], docs[-1].id) if len(docs) == size else None
     return [doc.id for doc in docs], cursor
+
+
+def projection_page_owners(
+    client: Any,
+    namespace: str,
+    limit: int = 100,
+    *,
+    after=None,
+    states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+) -> tuple[list[tuple[str, str, float, float | None]], Any]:
+    """``projection_page`` returning ``(segment_id, owner_id, committed_at, capture_at)`` per row.
+
+    ``capture_at`` is None when the row lacks a numeric one.
+
+    The same query, index and cursor as ``projection_page``; the owner comes
+    from the committed result row itself, so routing a wake costs no extra read.
+    """
+    if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
+        raise ValueError('projection discovery states must be drain states')
+    collection = client.collection(f'{namespace}_results')
+    query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
+    if after is not None and after[1] == '':
+        query = query.start_at({'committed_at': after[0]})
+    elif after is not None:
+        query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
+    size = max(1, min(limit, 100))
+    docs = list(query.limit(size).stream())
+    rows = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        owner_id = data.get('owner_id')
+        if isinstance(owner_id, str) and owner_id:
+            capture_at = data.get('capture_at')
+            if not isinstance(capture_at, (int, float)) or isinstance(capture_at, bool):
+                capture_at = None
+            rows.append((doc.id, owner_id, float(data.get('committed_at') or 0.0), capture_at))
+    # Same wrap rule as projection_page: a short page restarts at the head.
+    cursor = (docs[-1].to_dict()['committed_at'], docs[-1].id) if len(docs) == size else None
+    return rows, cursor
 
 
 def projection_successor(client: Any, namespace: str, owner_key: str, previous: str | None) -> str | None:

@@ -977,3 +977,65 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+# Owner-hash projection shards (utils/batch_pipeline/projection_shards.py).
+PROJECTION_BACKLOG_RESERVE_DEFAULT = 2
+PROJECTION_BACKLOG_RESERVE_MAX = 16  # max_owner_drains() caps slots at 16
+PROJECTION_HEAD_DEADLINE_DEFAULT = 24 * 3600
+PROJECTION_HEAD_DEADLINE_MIN = 3600
+PROJECTION_HEAD_DEADLINE_MAX = 7 * 24 * 3600
+
+
+def _bounded_int(raw: str, default: int, low: int, high: int) -> int:
+    """Malformed or out-of-range values keep the default."""
+    raw = raw.strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if low <= value <= high else default
+
+
+def projection_shards_enabled() -> bool:
+    """Default off: one shard holder drains each owner; off restores the per-instance sweep."""
+    return rollout_default_off(
+        'BATCH_PROJECTION_SHARDS_ENABLED',
+        os.getenv('BATCH_PROJECTION_SHARDS_ENABLED', 'false').strip().lower() in {'true', '1', 'on', 'yes'},
+    )
+
+
+def projection_shard_member() -> bool:
+    """Whether this process holds shards when shards are on. ``false`` makes it serve only."""
+    return os.getenv('BATCH_PROJECTION_SHARD_MEMBER', 'true').strip().lower() != 'false'
+
+
+def projection_backlog_reserve() -> int:
+    """Drain slots a shard holder keeps for backlog wakes while fresh wakes wait."""
+    return _bounded_int(
+        os.getenv('BATCH_PROJECTION_BACKLOG_RESERVE', ''),
+        PROJECTION_BACKLOG_RESERVE_DEFAULT,
+        0,
+        PROJECTION_BACKLOG_RESERVE_MAX,
+    )
+
+
+def projection_head_deadline_seconds() -> int:
+    """How long a failing or blocked chain head may retry before it is held (default 24h)."""
+    return _bounded_int(
+        os.getenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', ''),
+        PROJECTION_HEAD_DEADLINE_DEFAULT,
+        PROJECTION_HEAD_DEADLINE_MIN,
+        PROJECTION_HEAD_DEADLINE_MAX,
+    )
+
+
+def projection_blocked_head_deadline_enabled() -> bool:
+    """Default off: a chain head blocked past the deadline is held (audio kept, redrivable)."""
+    return rollout_default_off(
+        'BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED',
+        os.getenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'false').strip().lower()
+        in {'true', '1', 'on', 'yes'},
+    )

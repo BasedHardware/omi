@@ -65,6 +65,13 @@
     },
     {
       "path": "utils/batch_pipeline/projection.py",
+      "function": "Projector.request_drain",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Recoverable advisory notification only: accepted results are already committed in the durable result log before a drain is requested. This short Redis routing handoff performs no projection, paid work, receipt mutation or owner claim. SIGKILL before routing (including loss of the local fallback request) leaves pending rows for the leader's resuming tail/whole-log backstop, or the legacy sweep when shards are disabled/unhealthy. test_batch_projection_shard_drain.py::test_lost_router_notification_is_recovered_from_durable_results cancels the queued dispatch, replaces the pump, and proves the same durable rows drain in order without the lost notification."
+    },
+    {
+      "path": "utils/batch_pipeline/projection.py",
       "function": "Projector._start_candidate",
       "kind": "executor.submit",
       "count": 1,

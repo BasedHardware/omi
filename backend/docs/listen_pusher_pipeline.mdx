@@ -9471,7 +9471,6 @@ Claim-busy re-requests through `again` back off 5–15 seconds; productive
 `more=True` continuations retain immediate FIFO progress without the peek.
 The advisory claim and transactional ordering fences remain unchanged.
 
-
 ### Durable playback projection rebuild debt
 
 `PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
@@ -9567,3 +9566,155 @@ in completed bounded age samples and existing held sweep pages, including
 missing clocks excluded by age ordering. Neither clock usable in an age sample also sets
 `omi_batch_timeliness_scan_truncated{leg="staged_input"}` to 1 for the existing
 scan-blind warning. These observations are not a distinct-row fleet census.
+
+## Batch projection owner shards
+
+Contract for `utils/batch_pipeline/projection_shards.py` and
+`utils/batch_pipeline/projection_shard_pump.py`. Every switch below is read by
+backend-integration serving processes only. None of them is an ordering
+fence. The assignment transaction's predecessor, privacy, binding and receipt
+fences, and the advisory Redis owner claim around each drain step, decide
+every row exactly as before.
+
+| Env | Default | Bounds and fallback |
+| --- | --- | --- |
+| `BATCH_PROJECTION_SHARDS_ENABLED` | off | Only `true`/`1`/`on`/`yes` enables it (trimmed, case-insensitive). Unset, blank, off or unknown stays off: the per-instance sweep. |
+| `BATCH_PROJECTION_SHARD_MEMBER` | true | `false` keeps the process out of shard leases. It still routes and pushes wakes. |
+| `BATCH_PROJECTION_BACKLOG_RESERVE` | 2 | 0..16, never more than the drain slots (`BATCH_PIPELINE_MAX_OWNER_DRAINS`). Malformed values keep 2. |
+| `BATCH_PROJECTION_HEAD_DEADLINE_SECONDS` | 86400 | 3600..604800. Malformed or out-of-range values keep 86400, the previous constant. |
+| `BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED` | off | Only `true`/`1`/`on`/`yes` enables it (trimmed, case-insensitive). Unset, blank, off or unknown stays off. Prod enablement needs David's approval. |
+
+**Shards and leases.** An owner's shard is `int(owner_key[:12], 16) % 64`, and
+`owner_key` is the sha256 of the owner id. Each shard has a 30 s Redis lease,
+`batch_projection_shard:{namespace}:64:{shard}`, held by one random
+per-process holder id. Every process with shards on runs a lease pass every
+10 s:
+- It heartbeats into the members zset and prunes members idle for 30 s.
+- It renews its own leases and releases everything above
+  `ceil(64 / live members)`.
+- It takes free shards up to that share.
+
+A free shard means some member is below its share, so a free shard is taken
+on the next pass. Shutdown releases leases and leaves the members zset at
+once. The count is in every key, so a different count never shares a lease.
+
+**Wakes.** Two lanes per shard: `fresh` and `backlog`.
+- `fresh` holds owners with a newly committed capture under 6 h old. Its score
+  is the newest capture time, and it is taken newest first.
+- `backlog` holds everything else. Its score is the oldest commit time, and it
+  is taken oldest first.
+
+A push is one Lua call. It keeps the best score and increments a per-owner
+sequence. A drain that walks to the chain end settles each wake it took, but
+only if no push landed since the take. So a commit during a drain always gets
+another drain.
+
+A drain that stops short (blocked, error, turn or step budget, hold not
+landed) cools the owner for about 120 s in process memory. It also moves the
+wake to `backlog` at its retry time, so stuck owners never fill the take page
+ahead of due owners. A claim-busy stop cools the owner for about 15 s and
+keeps its lane position. Wake keys expire 7 days after their last push.
+
+**Push sources.**
+1. Merge commit. `Serving.drain_owner` pushes one wake per owner per commit
+   batch to the owner's shard lane, from whichever process served the worker
+   RPC. An owner on an unheld shard, or a failed push, drains locally.
+2. Routed drain requests. When the owner's shard has a holder, a
+   `Projector.request_drain` (recovery wake, follow-up, continuation) becomes
+   a `backlog` wake.
+3. Leader tail. The GPU worker's own merge commits run without Redis, so
+   they push no wake. Each 20 s supervisor tick, the maintenance leader pages
+   `pending` rows committed since its last pass, at most 5 pages of 100 rows.
+   - A caught-up pass restarts 10 s before the newest row it saw, and never
+     earlier than 60 s ago. A full page resumes at its cursor.
+   - Each owner is routed by its freshest `capture_at`, so fresh GPU commits
+     reach the fresh lane within one tick.
+4. Leader backstop. After the tail, the leader pages the whole pending log,
+   discovery-only.
+   - At most 30 pages of 100 rows in 10 s, from a resuming cursor that wraps.
+   - It routes owners to shard holders and runs the sweep's finish page.
+   - Captures are aggregated within each page before routing. Any fresh
+     capture selects the fresh lane; the oldest commit orders backlog owners.
+     Discovery promotes an existing backlog wake atomically, invalidating stale
+     backlog takes without touching leases or shortening future retry deadlines.
+     Replays preserve fresh wakes and never demote them.
+     A later page re-routes an owner only when it finds a fresher capture.
+     Routing remains inside the scan budget; a later read failure preserves
+     wakes already routed from earlier pages.
+
+Followers skip the sweep. Every process keeps its own async follow-up
+discovery.
+
+**Pump.** Each process's 1 s pump fills free drain slots:
+- Fresh wakes come first.
+- `BATCH_PROJECTION_BACKLOG_RESERVE` slots are kept for backlog whenever
+  backlog waits.
+- Reserved slots return to fresh when no backlog waits.
+- An owner present in both lanes drains once and settles both wakes.
+
+Redis calls run on `db_executor`, never on the event loop.
+
+**Fail-open.** A process is inactive, and runs the legacy per-instance sweep
+with local drain requests kept local, when any of these holds:
+- Its lease pass failed.
+- It has had no lease pass for 30 s.
+- A wake take failed. It stays inactive until the next lease pass succeeds.
+- `BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED`,
+  `BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED`,
+  `BATCH_PIPELINE_OWNER_DRAIN_ENABLED` or
+  `BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED` is off, so each existing
+  kill switch still restores its old path. A process switched off this way also
+  releases its shard leases and leaves the members set, so engaged members
+  take its shards on their next lease pass instead of routing wakes to lanes
+  nobody reads.
+
+An owner whose shard nobody held at the last pass drains
+wherever it is found. A failed push keeps the request local.
+
+**Blocked-head deadline** (`BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED`,
+default off). This applies only to an exact `ProjectionBlocked` chain head
+whose reason is one of `intake_binding_mismatch`, `invalid_recording_clock`,
+`invalid_recording_identity`, `invalid_recording_interval`,
+`invalid_upload_filenames` or `lineage_identity_missing`, or whose message is
+one of:
+- terminal empty recovery evidence required
+- recovery result requires recovery handoff
+- validated VAD speech accounting required
+- repair requires authenticated lineage manifest
+- repair requires active proven lineage fence
+- repair requires proven generation disposition
+
+The first refusal stamps `projection_blocked_since`, with
+`projection_block_type` set to `ProjectionBlocked:<reason>`. A stamp left by
+any other failure restarts the clock, so the deadline measures time spent
+refused the same way. Once `BATCH_PROJECTION_HEAD_DEADLINE_SECONDS` lapses,
+the head takes the existing
+held disposition (`quarantine_held` receipt, watermark advance, job
+`recovery_state=held`) and the walk continues only if the watermark moved.
+
+Audio and result stay. The release scan and the reviewed redrive own the
+unit. Claim, shadow, privacy, predecessor-pending, generation-ambiguous and
+deployment-wiring refusals never qualify.
+
+Metrics:
+- `omi_batch_projection_shards_held` and `omi_batch_projection_shards_unheld`
+  (gauges).
+- `omi_batch_projection_shard_wakes_total{lane,outcome}`, where `outcome` is
+  `pushed`, `push_failed`, `taken`, `settled`, `repushed` or `cooled`.
+- `omi_batch_projection_shard_wake_depth{lane}` (held shards, every 60 s).
+- `omi_batch_projection_blocked_head_holds_total`.
+
+Logs: `event=batch_projection_shards action=refresh|push|take|settle|defer|backstop|tick`.
+
+**Cutover.** Turn it on for staging backend-integration first. Then turn it on
+for every prod backend-integration serving process in one config train.
+During the roll, processes still on the sweep are fenced by the claim.
+
+Clean metrics, all over 60 min:
+- `omi_batch_projection_shards_unheld` is 0 after the roll.
+- Owner-drain rows advanced per second are at or above the pre-switch hour.
+- Claim-busy turns are under 10%.
+- Firestore reads per second are below the pre-switch hour.
+
+**Rollback.** Set `BATCH_PROJECTION_SHARDS_ENABLED=false`. The sweep returns
+on the next tick. Leftover wake keys are inert and expire.

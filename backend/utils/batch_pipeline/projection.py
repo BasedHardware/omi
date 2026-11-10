@@ -6,6 +6,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy, kill_switch
+import asyncio
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
@@ -20,6 +21,8 @@ from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 
 from config.batch_pipeline import (
     owner_drain_enabled,
+    projection_blocked_head_deadline_enabled,
+    projection_head_deadline_seconds,
     projection_index_deferred_enabled,
     projection_pending_page_enabled,
     projection_predecessor_replay_enabled,
@@ -165,7 +168,55 @@ def projection_block_reason(error: BaseException) -> str:
 # fresh awaiting-writer conflicts may keep a head waiting, but not forever:
 # once a head has failed for this long it takes the held disposition so the
 # chain can advance (audio retained; a reviewed redrive owns the unit).
+# The default of BATCH_PROJECTION_HEAD_DEADLINE_SECONDS (config.batch_pipeline),
+# which is the live bound.
 PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
+
+# ProjectionBlocked heads the blocked-head deadline may hold once it lapses
+# (BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED, default off). Only refusals
+# that the same committed bytes and binding can never pass on retry, or that
+# wait on a handoff/fence that has not appeared within the deadline. Claim,
+# shadow, privacy, predecessor and deployment-wiring refusals never qualify:
+# they keep waiting exactly as before.
+BLOCKED_HEAD_DEADLINE_MESSAGES = frozenset(
+    {
+        'terminal empty recovery evidence required',
+        'recovery result requires recovery handoff',
+        'validated VAD speech accounting required',
+        'repair requires authenticated lineage manifest',
+        'repair requires active proven lineage fence',
+        'repair requires proven generation disposition',
+    }
+)
+BLOCKED_HEAD_DEADLINE_REASONS = frozenset(
+    {
+        'intake_binding_mismatch',
+        'invalid_recording_clock',
+        'invalid_recording_identity',
+        'invalid_recording_interval',
+        'invalid_upload_filenames',
+        'lineage_identity_missing',
+    }
+)
+
+
+def blocked_head_deadline_eligible(error: BaseException) -> bool:
+    """Whether a ProjectionBlocked chain head may be held once its deadline lapses."""
+    if type(error) is not ProjectionBlocked:
+        return False  # Predecessor-pending and generation-ambiguous keep their own rules.
+    if projection_block_reason(error) in BLOCKED_HEAD_DEADLINE_REASONS:
+        return True
+    return str(error) in BLOCKED_HEAD_DEADLINE_MESSAGES
+
+
+def blocked_head_type(error: BaseException) -> str:
+    """Bounded, log-safe episode token for a deadline-eligible refusal."""
+    reason = projection_block_reason(error)
+    message = str(error)
+    if message in BLOCKED_HEAD_DEADLINE_MESSAGES:
+        return f'ProjectionBlocked:{reason}:message:{message.replace(" ", "_")}'
+    return f'ProjectionBlocked:{reason}'
+
 
 # Result-row fields stamping a bounded-retry head's first failure. Written
 # once per failure episode; the release redrive clears them with the receipt.
@@ -244,7 +295,11 @@ def head_holds_without_retry(error: BaseException, job: dict | None, *, now: flo
 
 def head_retry_bound_exceeded(entry: dict, now: float) -> bool:
     since = entry.get(PROJECTION_HEAD_BLOCKED_SINCE)
-    return isinstance(since, (int, float)) and now - since > PROJECTION_HEAD_RETRY_SECONDS
+    return (
+        isinstance(since, (int, float))
+        and not isinstance(since, bool)
+        and now - since > projection_head_deadline_seconds()
+    )
 
 
 @contextmanager
@@ -441,6 +496,13 @@ class Projector:
         self.drain_requests: dict[str, None] = {}
         self.draining: set[str] = set()
         self.drains = None
+        # Sharded serving: ``router(owner_id) -> bool`` keeps a drain request
+        # local (True) or has already routed it to the shard holder (False).
+        self.router: Callable[[str], bool] | None = None
+        # Resume point of the sharded discovery backstop.
+        self.backstop_after = None
+        # Start of the sharded tail discovery (rows committed since the last pass).
+        self.tail_after = None
         # Sweeps and wakes hand off from sync-pool threads while overlapping
         # reconcile passes and drains swap or extend on the event loop.
         self.handoff = threading.Lock()
@@ -453,8 +515,130 @@ class Projector:
         self.release_after: str | None = None
 
     def request_drain(self, owner_id: str) -> None:
+        # Sharded serving: an owner whose shard another member holds is routed
+        # there as a wake instead of draining here (see projection_shards).
+        router = self.router
+        if router is None:
+            self.request_local_drain(owner_id)
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self._route_drain(owner_id, router)
+        else:
+            # Routing may do bounded Redis I/O. This short handoff must not
+            # freeze an async caller, and its worker retains the local fallback.
+            from utils.executors import db_executor, submit_with_context
+
+            submit_with_context(db_executor, self._route_drain, owner_id, router)
+
+    def _route_drain(self, owner_id: str, router: Callable[[str], bool]) -> None:
+        if router(owner_id):
+            self.request_local_drain(owner_id)
+
+    def request_local_drain(self, owner_id: str) -> None:
+        """Queue a drain in this process, bypassing the shard router."""
         with self.handoff:
             self.drain_requests[owner_id] = None
+
+    def ensure_drains(self):
+        """This process's owner drain, created on first use. Event-loop thread only."""
+        from utils.batch_pipeline.projection_drain import OwnerDrains
+
+        if self.drains is None:
+            self.drains = OwnerDrains(self)
+        return self.drains
+
+    def discover_tail(
+        self,
+        route: Callable[[str, float, float | None], None],
+        *,
+        pages: int,
+        overlap_seconds: float,
+        slack_seconds: float,
+    ) -> dict:
+        """Discovery of newly committed rows for sharded serving (maintenance leader only).
+
+        Every commit path pushes a wake except the GPU worker's own merge,
+        which has no Redis. This pages pending rows committed since the last
+        pass, oldest first, and hands each owner to ``route`` once per call
+        with its oldest ``committed_at`` and freshest known ``capture_at``
+        across the bounded pages. A short page
+        restarts the next pass ``slack_seconds`` before its newest row (commit
+        stamps precede their transaction), never earlier than
+        ``overlap_seconds`` ago; a full page resumes at its cursor.
+        """
+        now = self.clock()
+        floor = (now - overlap_seconds, '')
+        start = self.tail_after or floor
+        counts = {'pages': 0, 'rows': 0, 'owners': 0}
+        owners: dict[str, tuple[float, float | None]] = {}
+        newest = None
+        for _ in range(max(1, pages)):
+            rows, after = self.store.store.projection_page_owners(limit=100, after=start, states=('pending',))
+            counts['pages'] += 1
+            counts['rows'] += len(rows)
+            for _segment_id, owner_id, committed_at, capture_at in rows:
+                newest = committed_at if newest is None else max(newest, committed_at)
+                oldest, freshest = owners.get(owner_id, (committed_at, None))
+                if capture_at is not None and capture_at <= now and (freshest is None or capture_at > freshest):
+                    freshest = capture_at
+                owners[owner_id] = (min(oldest, committed_at), freshest)
+            if after is None:
+                start = None
+                break
+            start = after
+        if start is None:
+            # Caught up: restart near the newest row seen, bounded below.
+            restart = floor[0] if newest is None else max(floor[0], newest - slack_seconds)
+            start = (max(restart, (self.tail_after or floor)[0]), '')
+        self.tail_after = start
+        for owner_id, (committed_at, capture_at) in owners.items():
+            route(owner_id, committed_at, capture_at)
+        counts['owners'] = len(owners)
+        return counts
+
+    def discover_owners(
+        self, route: Callable[[str, float, float | None], None], *, pages: int, budget_seconds: float
+    ) -> dict:
+        """Discovery-only backstop for sharded serving (maintenance leader only).
+
+        Pages the durable pending log and hands owners to ``route``, oldest
+        commit first, repeating an owner only for a fresher capture on a later page.
+        No assignment, claim or per-row
+        read: owners come from the page rows. The cursor resumes across calls
+        and wraps at a short page, so every pending row is revisited. Aggregate
+        captures before routing so a later fresh row wins over older backlog.
+        """
+        deadline = time.monotonic() + budget_seconds
+        now = self.clock()
+        counts = {'pages': 0, 'rows': 0, 'owners': 0, 'wrapped': 0}
+        seen: dict[str, float | None] = {}
+        for _ in range(max(1, pages)):
+            if counts['pages'] and time.monotonic() >= deadline:
+                break
+            rows, after = self.store.store.projection_page_owners(
+                limit=100, after=self.backstop_after, states=PROJECTION_ASSIGNMENT_STATES
+            )
+            self.backstop_after = after
+            counts['pages'] += 1
+            counts['rows'] += len(rows)
+            owners: dict[str, tuple[float, float | None]] = {}
+            for _segment_id, owner_id, committed_at, capture_at in rows:
+                oldest, freshest = owners.get(owner_id, (committed_at, None))
+                if capture_at is not None and capture_at <= now and (freshest is None or capture_at > freshest):
+                    freshest = capture_at
+                owners[owner_id] = (min(oldest, committed_at), freshest)
+            for owner_id, (committed_at, capture_at) in owners.items():
+                previous = seen.get(owner_id)
+                if owner_id not in seen or (capture_at is not None and (previous is None or capture_at > previous)):
+                    route(owner_id, committed_at, capture_at)
+                    seen[owner_id] = capture_at
+            if after is None:
+                counts['wrapped'] = 1
+                break
+        counts['owners'] = len(seen)
+        return counts
 
     def owe_followups(self, segment_ids) -> None:
         with self.handoff:
@@ -475,14 +659,10 @@ class Projector:
 
     def start_drains(self) -> None:
         """Hand discovered owners to this process's drain. Event-loop thread only."""
-        # Imported lazily: the synchronous worker seam remains lightweight.
-        from utils.batch_pipeline.projection_drain import OwnerDrains
-
-        if self.drains is None:
-            self.drains = OwnerDrains(self)
+        drains = self.ensure_drains()
         with self.handoff:
             requests, self.drain_requests = self.drain_requests, {}
-        self.drains.request(requests)
+        drains.request(requests)
 
     def schedule_index_flush(self, owner_id: str | None = None) -> None:
         """Converge owed search work off-chain, optionally for one owner."""
@@ -857,20 +1037,26 @@ class Projector:
     def _mirror_assignment(self, session) -> None:
         mirror_assignment(self.store, session)
 
-    def _note_head_blocked(self, segment_id: str, error: BaseException) -> None:
-        """Stamp a bounded-retry head's first failure time; one write per episode."""
+    def _note_head_blocked(self, segment_id: str, error: BaseException, *, block_type: str | None = None) -> None:
+        """Stamp a bounded-retry head's first failure time; one write per episode.
+
+        With ``block_type`` (the blocked-head deadline) the episode is that
+        refusal alone: a stamp left by a different failure restarts the clock,
+        so the deadline always measures time spent refused the same way.
+        """
+        stamp_type = block_type or error_type(error)
 
         def commit(transaction):
             row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
-            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
-                'pending',
-                'persisted',
-                'ready',
+            if row.get('projection_state') not in ('pending', 'persisted', 'ready'):
+                return False
+            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None and (
+                block_type is None or row.get(PROJECTION_HEAD_BLOCK_TYPE) == block_type
             ):
                 return False
             transaction.update(
                 self.store.ref('results', segment_id),
-                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: error_type(error)},
+                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: stamp_type},
             )
             return True
 
@@ -908,6 +1094,29 @@ class Projector:
         if head_holds_without_retry(error, job, now=self.clock()) or head_retry_bound_exceeded(entry, self.clock()):
             return self._hold_failing_head(segment_id, job, binding)
         self._note_head_blocked(segment_id, error)
+        return False
+
+    def resolve_blocked_head(self, segment_id, job, entry, binding, error: BaseException) -> bool:
+        """Deadline for an eligible ProjectionBlocked chain head (default off).
+
+        The first refusal of this kind stamps the episode start (a stamp left
+        by any other failure or refusal restarts it); once the head deadline
+        lapses the unit takes the same held disposition as a poison head
+        (quarantine_held receipt, audio and result kept, release scan and
+        reviewed redrive own it) and the chain advances. True only when the
+        hold was attempted and reported success.
+        """
+        block_type = blocked_head_type(error)
+        entry = entry or {}
+        if entry.get(PROJECTION_HEAD_BLOCK_TYPE) == block_type and head_retry_bound_exceeded(entry, self.clock()):
+            held = self._hold_failing_head(segment_id, job, binding)
+            if held:
+                from utils.batch_pipeline.metrics import PROJECTION_BLOCKED_HEAD_HOLDS
+
+                PROJECTION_BLOCKED_HEAD_HOLDS.inc()
+                logger.info('event=batch_projection action=blocked_head outcome=held')
+            return held
+        self._note_head_blocked(segment_id, error, block_type=block_type)
         return False
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None):
@@ -1484,7 +1693,28 @@ class Projector:
                 stop = walk_block_stop(error, projection_block_reason(error))
                 if stop.startswith('blocked_privacy_'):
                     blocked_head = (segment_id, getattr(snapshot, 'update_time', None))
-                break
+                if not (
+                    binding is not None
+                    and job is not None
+                    and projection_blocked_head_deadline_enabled()
+                    and blocked_head_deadline_eligible(error)
+                    and self.resolve_blocked_head(segment_id, job, entry, binding, error)
+                ):
+                    break
+                # The deadline lapsed and the hold landed: continue iff the chain advanced.
+                try:
+                    watermark = self.store.projection_watermark(key)
+                except Exception as watermark_error:
+                    failed(watermark_error)
+                    stop = 'watermark_error'
+                    break
+                if watermark != segment_id:
+                    stop = 'hold_not_landed'
+                    break
+                previous = segment_id
+                advanced.append(segment_id)
+                stop = 'end'  # The hold moved the chain on; the next row decides.
+                continue
             except Exception as error:
                 failed(error)
                 if binding is None or not self.resolve_failing_head(segment_id, job, entry, binding, error):
@@ -1686,6 +1916,13 @@ class Projector:
                 len(walked),
                 len(chained),
             )
+        return counts
+
+    def sweep_finish_only(self, limit: int = 100) -> dict[str, int]:
+        """The sweep's finish page alone (sharded serving's leader backstop)."""
+        counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+        if projection_pending_page_enabled():
+            self._sweep_finish(max(1, min(limit, 100)), counts, set())
         return counts
 
     def _sweep_finish(self, size: int, counts: dict[str, int], touched: set[str]) -> bool:

@@ -15,7 +15,7 @@ from collections import deque
 import logging
 import random
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from config.batch_pipeline import (
     max_owner_drains,
@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
 
 logger = logging.getLogger(__name__)
-# Owners draining at once in one process.
+# Owners draining at once in one process (BATCH_PIPELINE_MAX_OWNER_DRAINS, read at import).
 MAX_OWNER_DRAINS = max_owner_drains()
 # One owner's turn; with more rows it re-queues behind every waiting owner.
 DRAIN_TURN_SECONDS = 120.0
@@ -90,7 +90,32 @@ class OwnerDrains:
         # Active-turn observations, then at most one per capped delayed owner.
         self.stopped_heads: dict[str, tuple[str, object] | None] = {}
         self.privacy_heads: dict[str, tuple[str, object] | None] = {}
+        # The last turn's stop token per owner, for the idle hook.
+        self.turn_stops: dict[str, str] = {}
         self.closed = False
+        # Called as ``on_idle(owner, stop)`` once an owner leaves this drain
+        # entirely or enters a delayed retry. Shard pumps settle or cool their
+        # wakes here; the local delay/timer remains in place, but must never
+        # retain a shard inflight admission while no turn is running.
+        self.on_idle: Callable[[str, str], None] | None = None
+        # Optional shard admission policy; legacy productive turns keep their FIFO.
+        self.yield_continuation: Callable[[str], bool] | None = None
+
+    @property
+    def limit(self) -> int:
+        return MAX_OWNER_DRAINS
+
+    @property
+    def free_slots(self) -> int:
+        return max(0, self.limit - len(self.tasks) - len(self.queue))
+
+    def busy(self, owner: str) -> bool:
+        return owner in self.tasks or owner in self.queue or owner in self.delayed
+
+    def retry_delay(self, owner: str) -> float:
+        """Remaining local hold, measured on the timer's event-loop clock."""
+        handle = self.delayed.get(owner)
+        return max(0.0, handle.when() - asyncio.get_running_loop().time()) if handle is not None else 0.0
 
     def request(self, owners) -> None:
         if self.closed:
@@ -105,7 +130,7 @@ class OwnerDrains:
         self.launch()
 
     def launch(self) -> None:
-        while self.queue and len(self.tasks) < MAX_OWNER_DRAINS and not self.closed:
+        while self.queue and len(self.tasks) < self.limit and not self.closed:
             owner = self.queue.popleft()
             self.projector.draining.add(owner)
             continuation = owner in self.continuations
@@ -174,7 +199,8 @@ class OwnerDrains:
             # Return overflow intent to the next serving pass; no extra timers,
             # immediate busy loop, or delay for productive FIFO continuations.
             if wake:
-                self.projector.request_drain(owner)
+                # Local on purpose: the shard router would push to Redis on the loop.
+                getattr(self.projector, 'request_local_drain', self.projector.request_drain)(owner)
             return False
 
         handle = None
@@ -217,12 +243,17 @@ class OwnerDrains:
             return
         stop = self.stops.pop(owner, None)
         head = self.stopped_heads.pop(owner, None)
+        passive_live_target = False
         if self.closed:
             return
         if stop != 'head_awaiting_live_target':
             self.live_target_attempts.pop(owner, None)
         more = task.exception() is None and task.result() is True
-        if more:
+        if more and self.yield_continuation is not None and self.yield_continuation(owner):
+            # Return the durable wake to shard admission before another turn.
+            # Even a concurrent local request must not bypass this yield.
+            stop = 'yielded'
+        elif more:
             self.continuations.add(owner)
             self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
         elif stop == 'privacy_unchanged':
@@ -241,7 +272,7 @@ class OwnerDrains:
             and projection_drain_live_target_backoff_enabled()
             and self.defer_live_target(owner)
         ):
-            pass
+            passive_live_target = recurring_sweep_active()
         elif owner in self.again and owner not in self.queue:
             if projection_drain_claim_aware_enabled() and stop == 'claim_busy':
                 PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS.inc()
@@ -249,6 +280,18 @@ class OwnerDrains:
             else:
                 self.queue.append(owner)
         self.again.discard(owner)
+        last = self.turn_stops.pop(owner, None)
+        if task.exception() is not None:
+            last = 'error'
+        if self.on_idle is not None and (not self.busy(owner) or owner in self.delayed or passive_live_target):
+            try:
+                # Only a turn that walked to the chain end reports 'end'.
+                self.on_idle(owner, stop or last or 'unknown')
+            except Exception as error:
+                logger.warning(
+                    'event=batch_projection action=owner_drain_idle outcome=error exception_type=%s',
+                    type(error).__name__,
+                )
         self.launch()
 
     def defer_live_target(self, owner: str) -> bool:
@@ -314,6 +357,7 @@ class OwnerDrains:
             if advanced == 0:
                 self.stops[owner] = stop
                 self.stopped_heads[owner] = walk.blocked_head if walk is not None else None
+        self.turn_stops[owner] = stop
         if advanced == 0 and stop == 'head_awaiting_live_target':
             self.stops[owner] = stop
         else:
