@@ -1,4 +1,5 @@
 import asyncio
+from threading import Lock
 from types import SimpleNamespace
 from uuid import UUID
 from unittest.mock import Mock
@@ -7,7 +8,7 @@ import pytest
 from fastapi import BackgroundTasks
 
 from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
-from database import stripe_event_ledger
+from database import redis_db, stripe_event_ledger
 from models.users import PlanType, Subscription
 from routers import payment
 from utils import product_telemetry, stripe_webhook_ledger
@@ -343,6 +344,9 @@ def recovery_lane(monkeypatch):
         current=Subscription(plan=PlanType.plus, stripe_subscription_id='sub-fixture'),
         persist_error=None,
         invoice_error=None,
+        claim_error=None,
+        claims=set(),
+        claim_lock=Lock(),
         invoice={
             'status': 'open',
             'attempted': True,
@@ -366,6 +370,17 @@ def recovery_lane(monkeypatch):
             raise state.invoice_error
         return SimpleNamespace(to_dict=lambda: dict(state.invoice))
 
+    def claim(uid, invoice_id):
+        state.calls.append(('claim', uid, invoice_id))
+        if state.claim_error:
+            raise state.claim_error
+        marker = (uid, invoice_id)
+        with state.claim_lock:
+            if marker in state.claims:
+                return False
+            state.claims.add(marker)
+            return True
+
     def notify(intent):
         state.notifications.append(
             {'uid': intent.user_id, 'title': intent.title, 'body': intent.body, 'data': intent.data}
@@ -384,6 +399,7 @@ def recovery_lane(monkeypatch):
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', lambda uid: None)
     monkeypatch.setattr(payment, 'funded_processing_enabled', lambda uid: False)
     monkeypatch.setattr(payment.stripe.Invoice, 'retrieve', retrieve_invoice)
+    monkeypatch.setattr(payment, 'claim_payment_recovery_notification', claim)
     monkeypatch.setattr(payment, 'dispatch_notification', notify)
     monkeypatch.setattr(billing_webhook, 'schedule_billing_webhook_events', no_telemetry)
     return state
@@ -393,7 +409,11 @@ def test_payment_recovery_push_defaults_on_and_is_scheduled_after_persistence(re
     async def run():
         tasks = BackgroundTasks()
         await payment._handle_stripe_event(_recovery_event(), tasks)
-        assert recovery_lane.calls == [('write', 'user-fixture'), ('invoice', 'in-recovery')]
+        assert recovery_lane.calls == [
+            ('write', 'user-fixture'),
+            ('invoice', 'in-recovery'),
+            ('claim', 'user-fixture', 'in-recovery'),
+        ]
         assert recovery_lane.notifications == []
 
         await tasks()
@@ -437,7 +457,11 @@ def test_previous_paid_invoice_cannot_replace_current_failed_invoice(recovery_la
         }
         event = _recovery_event(previous_invoice=previous_invoice)
         await payment._handle_stripe_event(event, tasks)
-        assert recovery_lane.calls == [('write', 'user-fixture'), ('invoice', 'in-recovery')]
+        assert recovery_lane.calls == [
+            ('write', 'user-fixture'),
+            ('invoice', 'in-recovery'),
+            ('claim', 'user-fixture', 'in-recovery'),
+        ]
         await tasks()
         assert len(recovery_lane.notifications) == 1
 
@@ -483,6 +507,148 @@ def test_invoice_failure_after_persistence_remains_retryable(recovery_lane):
     asyncio.run(run())
 
 
+def test_payment_recovery_claim_uses_atomic_bounded_redis_marker(monkeypatch):
+    client = Mock()
+    client.set.side_effect = [True, None]
+    monkeypatch.setattr(redis_db, 'r', client)
+
+    assert payment.claim_payment_recovery_notification('user-fixture', 'in-recovery') is True
+    assert payment.claim_payment_recovery_notification('user-fixture', 'in-recovery') is False
+    assert len(client.set.call_args_list) == 2
+    for invocation in client.set.call_args_list:
+        assert invocation.args == ('users:user-fixture:payment_recovery_notification:in-recovery', '1')
+        assert invocation.kwargs == {
+            'nx': True,
+            'ex': redis_db.PAYMENT_RECOVERY_NOTIFICATION_TTL_SECONDS,
+        }
+    assert redis_db.PAYMENT_RECOVERY_NOTIFICATION_TTL_SECONDS == 90 * 24 * 60 * 60
+
+
+def test_duplicate_current_invoice_is_suppressed_with_webhook_ledger_off(recovery_lane, monkeypatch):
+    event = _recovery_event()
+
+    class Request:
+        async def body(self):
+            return b'{}'
+
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'false')
+    monkeypatch.setattr(payment.stripe_utils, 'parse_event', lambda *args: event)
+
+    async def run():
+        for _ in range(2):
+            tasks = BackgroundTasks()
+            assert await payment.stripe_webhook(Request(), 'fixture-signature', tasks) == {'status': 'success'}
+            await tasks()
+
+        assert len(recovery_lane.notifications) == 1
+        assert recovery_lane.claims == {('user-fixture', 'in-recovery')}
+        assert recovery_lane.calls.count(('write', 'user-fixture')) == 2
+        assert recovery_lane.calls.count(('invoice', 'in-recovery')) == 2
+        assert recovery_lane.calls.count(('claim', 'user-fixture', 'in-recovery')) == 2
+
+    asyncio.run(run())
+
+
+def test_concurrent_duplicate_invoice_claims_schedule_once(recovery_lane, monkeypatch):
+    event = _recovery_event()
+    subscription_obj = event['data']['object']
+    previous_attributes = event['data']['previous_attributes']
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        await asyncio.sleep(0)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(payment, 'run_blocking', run_blocking)
+
+    async def schedule():
+        tasks = BackgroundTasks()
+        await payment._schedule_payment_recovery_notification(
+            tasks,
+            'user-fixture',
+            subscription_obj,
+            previous_attributes,
+            recovery_lane.current,
+            True,
+        )
+        return tasks
+
+    async def run():
+        scheduled = await asyncio.gather(schedule(), schedule())
+        for tasks in scheduled:
+            await tasks()
+        assert len(recovery_lane.notifications) == 1
+        assert recovery_lane.claims == {('user-fixture', 'in-recovery')}
+        assert recovery_lane.calls.count(('invoice', 'in-recovery')) == 2
+        assert recovery_lane.calls.count(('claim', 'user-fixture', 'in-recovery')) == 2
+
+    asyncio.run(run())
+
+
+def test_different_current_invoice_can_notify(recovery_lane):
+    first = _recovery_event()
+    second = _recovery_event()
+    second['id'] = 'evt-recovery-push-next'
+    second['data']['object']['latest_invoice'] = 'in-recovery-next'
+
+    async def run():
+        for event in (first, second):
+            tasks = BackgroundTasks()
+            await payment._handle_stripe_event(event, tasks)
+            await tasks()
+
+        assert len(recovery_lane.notifications) == 2
+        assert recovery_lane.claims == {
+            ('user-fixture', 'in-recovery'),
+            ('user-fixture', 'in-recovery-next'),
+        }
+
+    asyncio.run(run())
+
+
+def test_missing_current_invoice_id_notifies_zero_and_remains_retryable(recovery_lane):
+    event = _recovery_event()
+    event['data']['object']['latest_invoice'] = dict(recovery_lane.invoice)
+
+    async def run():
+        first_tasks = BackgroundTasks()
+        with pytest.raises(ValueError, match='requires a current invoice id'):
+            await payment._handle_stripe_event(event, first_tasks)
+        await first_tasks()
+        assert recovery_lane.calls == [('write', 'user-fixture')]
+        assert recovery_lane.notifications == []
+        assert recovery_lane.claims == set()
+
+        event['data']['object']['latest_invoice']['id'] = 'in-recovery'
+        retry_tasks = BackgroundTasks()
+        await payment._handle_stripe_event(event, retry_tasks)
+        await retry_tasks()
+        assert len(recovery_lane.notifications) == 1
+        assert recovery_lane.claims == {('user-fixture', 'in-recovery')}
+
+    asyncio.run(run())
+
+
+def test_claim_failure_notifies_zero_and_remains_retryable(recovery_lane):
+    recovery_lane.claim_error = RuntimeError('fixture claim failure')
+
+    async def run():
+        first_tasks = BackgroundTasks()
+        with pytest.raises(RuntimeError, match='fixture claim failure'):
+            await payment._handle_stripe_event(_recovery_event(), first_tasks)
+        await first_tasks()
+        assert recovery_lane.notifications == []
+        assert recovery_lane.claims == set()
+
+        recovery_lane.claim_error = None
+        retry_tasks = BackgroundTasks()
+        await payment._handle_stripe_event(_recovery_event(), retry_tasks)
+        await retry_tasks()
+        assert len(recovery_lane.notifications) == 1
+        assert recovery_lane.claims == {('user-fixture', 'in-recovery')}
+
+    asyncio.run(run())
+
+
 def test_duplicate_transition_delivery_is_suppressed_by_existing_ledger(recovery_lane, monkeypatch):
     event = _recovery_event()
     acknowledged = set()
@@ -515,6 +681,8 @@ def test_duplicate_transition_delivery_is_suppressed_by_existing_ledger(recovery
         assert await payment.stripe_webhook(Request(), 'fixture-signature', second_tasks) == {'status': 'success'}
         await second_tasks()
         assert len(recovery_lane.notifications) == 1
+        assert recovery_lane.claims == {('user-fixture', 'in-recovery')}
+        assert recovery_lane.calls.count(('claim', 'user-fixture', 'in-recovery')) == 1
         assert recovery_lane.calls.count(('write', 'user-fixture')) == 1
 
     asyncio.run(run())

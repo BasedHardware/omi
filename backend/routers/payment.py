@@ -29,7 +29,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.locked_content import has_recoverable_locked_content
-from database.redis_db import set_credits_invalidation_signal
+from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
@@ -1159,7 +1159,7 @@ async def _schedule_payment_recovery_notification(
     persisted_subscription: Subscription,
     billing_owner_confirmed: bool,
 ) -> None:
-    """Schedule only after persistence; provider lookup failures remain webhook-retryable."""
+    """Claim and schedule only after persistence; pre-claim failures remain webhook-retryable."""
     if (
         not payment_recovery_notification_enabled()
         or not billing_owner_confirmed
@@ -1172,7 +1172,15 @@ async def _schedule_payment_recovery_notification(
     invoice = latest_invoice if isinstance(latest_invoice, Mapping) else None
     if invoice is None and isinstance(latest_invoice, str) and latest_invoice:
         invoice = await run_blocking(stripe_executor, lambda: stripe.Invoice.retrieve(latest_invoice).to_dict())
+    invoice_id = invoice.get('id') if invoice is not None else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        invoice_id = latest_invoice if isinstance(latest_invoice, str) else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        raise ValueError('Payment recovery notification requires a current invoice id')
     if not billing_recovery.payment_recovery_notification_eligible(uid, subscription_obj, previous_attributes, invoice):
+        return
+    claimed = await run_blocking(db_executor, claim_payment_recovery_notification, uid, invoice_id.strip())
+    if not claimed:
         return
 
     intent = NotificationIntent(
