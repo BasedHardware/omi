@@ -21,7 +21,7 @@ from config.summary_guarantee import (
 )
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_blocks_user_work
-from database.summary_debt_queries import due_conversations, Phase
+from database.summary_debt_queries import due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
@@ -144,7 +144,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             break
         limit = REPAIR_SCAN_LIMIT - counts['scanned']
         page = due_conversations(
-            now=current, phase=cast(Phase, phase), limit=limit, after=progress.get(phase), firestore_client=client
+            now=current, phase=phase, limit=limit, after=progress.get(phase), firestore_client=client
         )
         counts['scanned'] += len(page)
         last = None
