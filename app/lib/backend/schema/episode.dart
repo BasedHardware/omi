@@ -186,6 +186,7 @@ class Episode {
   Episode copyWith({
     List<EpisodeItem>? items,
     bool? live,
+    bool? composeDeferred,
     List<ServerConversation>? members,
     List<String>? conversationIds,
     DateTime? startedAt,
@@ -202,7 +203,7 @@ class Episode {
         members: members ?? this.members,
         bullets: bullets,
         lede: lede,
-        composeDeferred: composeDeferred,
+        composeDeferred: composeDeferred ?? this.composeDeferred,
         followUps: followUps,
         people: people,
         items: items ?? this.items,
