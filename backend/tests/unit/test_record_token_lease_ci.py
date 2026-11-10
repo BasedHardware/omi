@@ -22,6 +22,9 @@ def test_transaction_and_lifecycle_proofs_are_in_the_emulator_ci_lane():
             assert path in events[event]['paths']
     assert '"$PYTHON" -m testing.lifecycle_sim.run' in runner
     assert '--extra-test-module testing/lifecycle_properties/test_properties.py' in runner
+    # These proofs must execute before the long legacy corpus consumes the
+    # existing advisory job's deadline; keep its runner and timeout unchanged.
+    assert runner.index('"$PYTHON" -m testing.lifecycle_sim.run') < runner.index('run_proof "sync/live overlap')
     assert all(
         'backend/testing/lifecycle_properties/**' in events[event]['paths'] for event in ('push', 'pull_request')
     )

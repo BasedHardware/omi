@@ -55,6 +55,17 @@ run_proof() {
   echo "::endgroup::"
 }
 
+# These require real transaction retries and the lifecycle network guard;
+# ordinary unit shards intentionally do not stand up emulator services.
+run_proof "record custody append (committed reply loss, retries, privacy)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
+run_proof "record nojob seal (synthetic cleanup ownership)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
+run_proof "lifecycle properties (real Firestore, named producer exits)" \
+  "$PYTHON" -m testing.lifecycle_sim.run \
+  --extra-test-module testing/lifecycle_properties/test_properties.py
+
+
 run_proof "sync/live overlap admission race (coarse hint, contention retry, no twin)" \
   "$PYTHON" scripts/sync_live_overlap_contention_emulator_test.py
 run_proof "canonical apply-control read retry (transient / exhausted / wipe race)" \
@@ -149,15 +160,6 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
-# These require real transaction retries and the lifecycle network guard;
-# ordinary unit shards intentionally do not stand up emulator services.
-run_proof "record custody append (committed reply loss, retries, privacy)" \
-  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
-run_proof "record nojob seal (synthetic cleanup ownership)" \
-  "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
-run_proof "lifecycle properties (real Firestore, named producer exits)" \
-  "$PYTHON" -m testing.lifecycle_sim.run \
-  --extra-test-module testing/lifecycle_properties/test_properties.py
 
 if (( ${#failures[@]} )); then
   echo
