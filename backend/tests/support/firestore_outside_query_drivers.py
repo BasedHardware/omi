@@ -77,6 +77,23 @@ _driver(
 )
 
 
+_driver(
+    'utils.batch_pipeline.no_speech.discover',
+    domains={
+        'after': [
+            None,
+            {'created_at': T0.isoformat(), 'path': f'users/{UID}/conversations/record'},
+        ]
+    },
+    neutrals={
+        'limit': (128, 'bounds the operator discovery page only'),
+        'now': (T0, 'clock changes only the representative range operand'),
+    },
+    profile='operational-no-speech-terminal',
+    serving=False,
+)
+
+
 def _feedback_rows(client, combo, trial):
     session = 'session-1' if trial == 1 else None
     client.queue_results(

@@ -1,9 +1,9 @@
 {
   "backend/database/_client.py:delete_collection_recursive": "020f43fc0e4d148051db3469545adc5b04a13653c4daa3a0acf57f3501f6f0b9",
-  "backend/database/chat_edits.py:apply_update": "bca47670489842cd09a545553630f2587a39c3ac8776ec9642d186af797857c7",
-  "backend/database/chat_edits.py:apply_update.apply": "171d40fbe346a445bbc179bf6457c61921c8c8fa434574e26c8cd0e3838e5c05",
-  "backend/database/chat_edits.py:restore": "176e0486e5f7c21a3cc105b41cd3e5c369b59817d579ca029898dd12525a2856",
-  "backend/database/chat_edits.py:restore.apply": "5fdf32961bb04b56021e0565a3657205cc2fd2baad47e78e8dc578900f5814e9",
+  "backend/database/chat_edits.py:apply_update": "c6ab806ba45c5d36e806b1a2a69cdf4fae8410aab733e52ed6b40b1b5873eca8",
+  "backend/database/chat_edits.py:apply_update.apply": "0b4e18d1c76af32beb6b4a82d3537eeb9dece8876bbae205c78f41546d1be9c6",
+  "backend/database/chat_edits.py:restore": "df2d867c25eb5d432254f5863a3d19f36cd6cffd4c08e88bb93fae55a7729ac5",
+  "backend/database/chat_edits.py:restore.apply": "65b3062ce0d800e66408574d38d1086f2e1530ae9a3331867fc980ba2d72e8ac",
   "backend/database/notes_identity.py:stage_notes_identity": "afe1b3e1fa7752d35fe15630d66d05a727194cb27031f952b787171b3fdc9d13",
   "backend/database/people.py:FirestorePeople.__init__": "79d88b21d261b62849fa84089fcb3c84156b6b0c54cc5f4576db7599ffc941cd",
   "backend/database/people.py:FirestorePeople._get_or_create_raw": "d33f6d3f8986df2690ce32670608d17fe8bc1c279ba4f74d64f18254dad0142a",

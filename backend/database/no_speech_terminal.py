@@ -57,6 +57,7 @@ def _close_txn(
     speech_seconds: float,
     audio_seconds: float,
     now: datetime,
+    expected_privacy_generation: int | None = None,
 ) -> None:
     user = client.collection('users').document(uid)
     ref = user.collection('conversations').document(cid)
@@ -83,6 +84,21 @@ def _close_txn(
         or not owner.get('private_cloud_sync_enabled', True)
     ):
         raise NoSpeechConflict('privacy_changed')
+    if expected_privacy_generation is not None:
+        # Enroll the authority in this transaction's conflict set. Checking only
+        # consent would miss a revoke/re-enable after the operator's reproof.
+        # Keep this import off the secret-free restore path.
+        from database.batch_pipeline_privacy import PRIVACY_COLLECTION, privacy_owner_key
+
+        privacy = (
+            client.collection(PRIVACY_COLLECTION)
+            .document(privacy_owner_key(uid))
+            .get(transaction=transaction)
+            .to_dict()
+            or {}
+        )
+        if int(privacy.get('generation', 0)) != expected_privacy_generation:
+            raise NoSpeechConflict('privacy_changed')
     transaction.update(
         ref,
         {
@@ -112,11 +128,14 @@ def close_no_speech(
     speech_seconds: float,
     audio_seconds: float,
     firestore_client: Any = None,
+    expected_privacy_generation: int | None = None,
 ) -> str:
     """Hide one unchanged in-progress capture as the reversible no-speech terminal.
 
     Returns the committed revision, or COMMITTED_REVISION_UNKNOWN when the SDK
     omits it. The ledger can record either without raising after the hide.
+    An approved privacy generation, when supplied, is fenced in the write
+    transaction; None preserves the direct caller consent-only contract.
     """
     if not run_id or not 0 <= speech_seconds < 10 or not 0 <= audio_seconds <= 7200:
         raise NoSpeechConflict('unbound_plan')
@@ -132,6 +151,7 @@ def close_no_speech(
         speech_seconds,
         audio_seconds,
         datetime.now(timezone.utc),
+        expected_privacy_generation,
     )
     # No post-commit IO: the existing quiet evaluator retires terminal owners
     # idempotently. Keeping its state intact also preserves a live undo.

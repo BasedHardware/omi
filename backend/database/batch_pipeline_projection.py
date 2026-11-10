@@ -22,9 +22,9 @@ from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
-    batch_projection_ledger_owner_matches,
     complete_batch_partial_in_transaction,
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,

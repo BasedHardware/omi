@@ -495,7 +495,7 @@ def external_write_fence(
             or (firestore_client is not None and active[2] is not firestore_client)
         ):
             raise DestructiveOperationInProgress("nested external write changed transaction identity")
-        metrics.decision('external')
+        metrics.decision('external', uid=uid)
         yield None
         return
     client = account_deletion_firestore_client(firestore_client=firestore_client)
@@ -505,7 +505,7 @@ def external_write_fence(
     def live():
         nonlocal reusable
         account_payload = _snapshot_payload(
-            metrics.read_snapshot('external', _document(client, f"account_deletions/{uid}"), **kwargs),
+            metrics.read_snapshot('external', _document(client, f"account_deletions/{uid}"), uid=uid, **kwargs),
             label="account deletion authority",
         )
         account_status = normalize_account_deletion_status(
@@ -516,7 +516,7 @@ def external_write_fence(
             raise DestructiveOperationInProgress("external data write blocked by account deletion")
         gate = _validated_gate(
             metrics.read_snapshot(
-                'external', _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}"), **kwargs
+                'external', _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}"), uid=uid, **kwargs
             )
         )
         if _gate_blocks(gate, datetime.now(timezone.utc)):
@@ -531,12 +531,12 @@ def external_write_fence(
         try:
             live()
         except DestructiveOperationInProgress:
-            metrics.decision('external', 'destructive_operation')
+            metrics.decision('external', 'destructive_operation', uid=uid)
             raise
         except Exception:
-            metrics.decision('external', 'authority_unavailable')
+            metrics.decision('external', 'authority_unavailable', uid=uid)
             raise
-        metrics.decision('external')
+        metrics.decision('external', uid=uid)
     else:
         decide(
             'external',
