@@ -123,7 +123,7 @@ class ShardPump:
 
         Audio captured within ``FRESH_CAPTURE_SECONDS`` takes the fresh lane,
         scored by capture time; future or older captures use backlog, scored by commit.
-        Discovery creates only a missing wake; existing lanes and retry scores stay put.
+        Discovery creates or promotes a wake; existing fresh wakes and retry deadlines stay put.
         False (not engaged, shard unheld, push failed) means drain it locally.
         """
         if not self.engaged:

@@ -457,8 +457,10 @@ async def test_legacy_productive_continuations_do_not_yield(claims, monkeypatch,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('commit_at', ['before_defer', 'after_defer'])
-@pytest.mark.parametrize('capture_at', [990.0, None])
-async def test_real_commit_survives_discovery_and_deferral(claims, monkeypatch, commit_at, capture_at):
+@pytest.mark.parametrize('capture_at, discovered_capture', [(990.0, 990.0), (None, None), (None, 990.0)])
+async def test_real_commit_survives_discovery_and_deferral(
+    claims, monkeypatch, commit_at, capture_at, discovered_capture
+):
     monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: 1.0)
     now = [1000.0]
     client = fakeredis.FakeRedis()
@@ -469,7 +471,7 @@ async def test_real_commit_survives_discovery_and_deferral(claims, monkeypatch, 
 
     def pages(**kwargs):
         rows = [
-            (sid, log.bindings[sid].owner_id, row['committed_at'], 990.0)
+            (sid, log.bindings[sid].owner_id, row['committed_at'], discovered_capture)
             for sid, row in log.results.items()
             if row['projection_state'] == 'pending'
         ]
@@ -486,7 +488,7 @@ async def test_real_commit_survives_discovery_and_deferral(claims, monkeypatch, 
         nonlocal stopped
         if not stopped:
             stopped = True
-            pump.backstop()  # Both real passes replay the owner while its wake is taken.
+            pump.backstop()  # Replay or discover fresh work while the owner claim is held.
             return projection.Walk([], [], stop='blocked_other')
         return real_step(*args, **kwargs)
 
@@ -499,7 +501,12 @@ async def test_real_commit_survives_discovery_and_deferral(claims, monkeypatch, 
         assert pump.deferring and log.persist_order == []
         if commit_at == 'after_defer':
             assert await pump.tick() == 0
-            assert client.zscore(shards._lane_key(BACKLOG, 0), 'owner') == 1120.0
+            if capture_at is None and discovered_capture is not None:
+                # Promotion is newer intent: the old backlog take cannot defer it.
+                assert client.zscore(shards._lane_key(FRESH, 0), 'owner') == 990.0
+                assert client.zscore(shards._lane_key(BACKLOG, 0), 'owner') is None
+            else:
+                assert client.zscore(shards._lane_key(BACKLOG, 0), 'owner') == 1120.0
         new = chain(log, 'owner', 'new', 1)
         # Equal capture/unchanged backlog ordering still represents genuinely new work.
         pump.committed('owner', [{'capture_at': capture_at, 'committed_at': 996.0}])
