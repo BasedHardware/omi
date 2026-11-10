@@ -390,3 +390,160 @@ def test_existing_membership_gains_deadline_atomically_without_reset(timeline_st
     store.rows[('users', 'owner', 'episodes', result['id'])]['close_reason'] = reason
     assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
     assert store.rows[path]['episode_transcription_deadline_at']
+
+
+def admitted(**changes):
+    """A capture at admission: owned, consented, no committed audio bounds yet."""
+    return capture(
+        server_batch_audio_closed=False,
+        server_batch_audio_start=1000,
+        server_batch_audio_end=None,
+        has_content=False,
+        episode_id=None,
+        **changes,
+    )
+
+
+def test_admission_attaches_a_provisional_member_before_audio_close(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = admitted()
+    entered = datetime.now(timezone.utc)
+    c = service.Collaborators(firestore_client=store, now=lambda: entered)
+    assert attachment.attach_admitted_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    member = store.rows[path]
+    assert member['episode_id']
+    assert member['episode_transcription_pending_at'] == entered
+    assert member['episode_transcription_deadline_at'] == entered + timedelta(hours=2)
+    episode = store.rows[('users', 'owner', 'episodes', member['episode_id'])]
+    assert episode['conversation_ids'] == ['capture']
+    assert episode['last_activity_at'] == datetime.fromtimestamp(1001, timezone.utc)
+    wire = home_read.project_episode('owner', episode, members={'capture': member})
+    assert wire['members'][0]['title'] == 'Transcribing…'
+    assert wire['members'][0]['status'] == 'processing'
+
+
+def test_audio_close_finalizes_the_admitted_end_without_renewing_the_deadline(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = admitted()
+    entered = datetime.now(timezone.utc)
+    c = service.Collaborators(firestore_client=store, now=lambda: entered)
+    assert attachment.attach_admitted_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    episode_id = store.rows[path]['episode_id']
+    deadline = store.rows[path]['episode_transcription_deadline_at']
+    store.rows[path].update(server_batch_audio_closed=True, server_batch_audio_end=1120, has_content=True)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    member = store.rows[path]
+    assert member['episode_id'] == episode_id, 'the close keeps the admission owner'
+    assert member['episode_transcription_deadline_at'] == deadline, 'the close never renews the pending deadline'
+    episode = store.rows[('users', 'owner', 'episodes', episode_id)]
+    assert episode['last_activity_at'] == datetime.fromtimestamp(1120, timezone.utc)
+    assert episode['conversation_ids'] == ['capture']
+
+
+def test_boundary_move_detaches_the_provisional_member_before_the_close_attach(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    entered = datetime(2026, 11, 3, tzinfo=timezone.utc)
+    store.rows[path] = capture(
+        episode_id='e1',
+        episode_transcription_pending_at=entered,
+        episode_transcription_deadline_at=entered + timedelta(hours=2),
+        server_batch_audio_start=2000,
+        server_batch_audio_end=2100,
+    )
+    store.rows[('users', 'owner', 'episode_links', 'capture')] = {'episode_id': 'e1', 'episode_ids': ['e1']}
+    store.rows[('users', 'owner', 'episodes', 'e1')] = {
+        'id': 'e1',
+        'status': 'live',
+        'started_at': datetime.fromtimestamp(1000, timezone.utc),
+        'last_activity_at': datetime.fromtimestamp(1001, timezone.utc),
+        'conversation_ids': ['capture', 'other'],
+        'member_activity': {
+            'capture': datetime.fromtimestamp(1001, timezone.utc),
+            'other': datetime.fromtimestamp(1001, timezone.utc),
+        },
+        'recorded_members': {
+            'capture': {
+                'start': datetime.fromtimestamp(1000, timezone.utc),
+                'end': datetime.fromtimestamp(1001, timezone.utc),
+                'source': 'desktop',
+            },
+            'other': {
+                'start': datetime.fromtimestamp(1000, timezone.utc),
+                'end': datetime.fromtimestamp(1001, timezone.utc),
+                'source': 'desktop',
+            },
+        },
+        'state_version': 1,
+    }
+    store.rows[('users', 'owner', 'episodes', 'e2')] = {
+        'id': 'e2',
+        'status': 'live',
+        'started_at': datetime.fromtimestamp(2000, timezone.utc),
+        'last_activity_at': datetime.fromtimestamp(2100, timezone.utc),
+        'conversation_ids': ['other2'],
+        'member_activity': {'other2': datetime.fromtimestamp(2100, timezone.utc)},
+        'recorded_members': {
+            'other2': {
+                'start': datetime.fromtimestamp(2000, timezone.utc),
+                'end': datetime.fromtimestamp(2100, timezone.utc),
+                'source': 'desktop',
+            }
+        },
+        'state_version': 1,
+    }
+    c = service.Collaborators(firestore_client=store)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    assert 'capture' not in store.rows[('users', 'owner', 'episodes', 'e1')]['conversation_ids']
+    assert store.rows[('users', 'owner', 'episodes', 'e1')]['conversation_ids'] == ['other']
+    assert store.rows[path]['episode_id'] == 'e2'
+    assert 'capture' in store.rows[('users', 'owner', 'episodes', 'e2')]['conversation_ids']
+
+
+def test_detach_refuses_a_transcribed_member(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = capture(episode_id='e1', record_projection_revision=1, structured={'title': 'Transcribed'})
+    store.rows[('users', 'owner', 'episode_links', 'capture')] = {'episode_id': 'e1', 'episode_ids': ['e1']}
+    store.rows[('users', 'owner', 'episodes', 'e1')] = {
+        'id': 'e1',
+        'status': 'live',
+        'started_at': datetime.fromtimestamp(1000, timezone.utc),
+        'last_activity_at': datetime.fromtimestamp(1120, timezone.utc),
+        'conversation_ids': ['capture', 'other'],
+        'member_activity': {},
+        'recorded_members': {},
+        'state_version': 1,
+    }
+    assert episode_timeline.detach_recorded('owner', 'capture', episode_id='e1', firestore_client=store) is False
+    assert store.rows[path]['episode_id'] == 'e1'
+
+
+def test_admission_kill_switch_off_restores_the_audio_close_attach(timeline_store, monkeypatch):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = admitted()
+    monkeypatch.setenv('EPISODE_BATCH_ADMISSION_ATTACH_ENABLED', 'off')
+    c = service.Collaborators(firestore_client=store)
+    assert attachment.attach_admitted_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'disabled'
+    assert store.rows[path]['episode_id'] is None
+    store.rows[path].update(server_batch_audio_closed=True, server_batch_audio_end=1120, has_content=True)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    assert store.rows[path]['episode_id']
+
+
+def test_admission_retry_does_not_attach_twice(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = admitted()
+    entered = datetime.now(timezone.utc)
+    c = service.Collaborators(firestore_client=store, now=lambda: entered)
+    assert attachment.attach_admitted_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    episode_id = store.rows[path]['episode_id']
+    version = store.rows[('users', 'owner', 'episodes', episode_id)]['state_version']
+    assert attachment.attach_admitted_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    assert store.rows[path]['episode_id'] == episode_id
+    assert store.rows[('users', 'owner', 'episodes', episode_id)]['state_version'] == version
+    assert store.rows[('users', 'owner', 'episodes', episode_id)]['conversation_ids'] == ['capture']

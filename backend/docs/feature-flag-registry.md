@@ -485,6 +485,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_ATTACH_OWNER_REUSE_ENABLED` | Default on; reuse the placed owner and omit unused recorded owner reads | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` | Default on; use the supplied row for the attach visibility precheck | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `EPISODE_BATCH_ADMISSION_ATTACH_ENABLED` | Default on; attach a batch capture to its live/adjacent episode when it is admitted, with a provisional end and pending transcription | backend | env | open | — | — | — | — | keep | keep | — | refactor-lead |
 | `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` | Default on; attach retained batch audio to its recorded episode at audio close | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1150,6 +1151,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_ATTACH_OWNER_REUSE_ENABLED` — Default on; reuse the placed owner and omit unused recorded owner reads (fail: open)
 - `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` — Default on; use the supplied row for the attach visibility precheck (fail: open)
 - `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` — Default on; reuse walk owner and visibility with transactional validation (fail: open)
+- `EPISODE_BATCH_ADMISSION_ATTACH_ENABLED` — Default on; attach a batch capture to its live/adjacent episode when it is admitted, with a provisional end and pending transcription (fail: open)
 - `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` — Default on; attach retained batch audio to its recorded episode at audio close (fail: open)
 - `EPISODE_BOUNDARIES_MODE` — Hard meeting evidence for episodes and occasion conversations; off|shadow|serve, default shadow (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)

@@ -196,8 +196,12 @@ def attach(
                 span = conversation_span(member) if member and pending_at is None else None
                 # Before transcription, committed archive bounds are the only
                 # audio clock. Legacy started_at/finished_at can be arrival time.
+                # An admission attach has no committed bounds yet: its stored
+                # provisional fact already matched above, so a replay of the same
+                # window is the same span and must not bump the episode.
                 same_span = (
                     episode_batch_pending.matches_closed_audio(member, start, end)
+                    or member.get('server_batch_audio_closed') is not True
                     if pending_at is not None
                     else span is not None and span.recorded_start == start and span.recorded_end == end
                 )

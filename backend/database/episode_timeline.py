@@ -361,6 +361,87 @@ def attach_recorded(
     return transcript_pointer.run_preloaded_transactional(client, attach, transient=True)
 
 
+def detach_recorded(
+    uid: str,
+    conversation_id: str,
+    *,
+    episode_id: str,
+    firestore_client: Any = None,
+) -> bool:
+    """Remove an admission-time provisional member from the episode it joined.
+
+    Only the admission attach's provisional membership may be detached: the
+    member must still be pending transcription with no projected transcript, and
+    the episode must keep at least one other member. A transcribed member never
+    moves, and an episode is never left empty. The recorded-timeline fence
+    serializes this with every other membership writer, so a concurrent attach
+    either wins the link first (and this returns False) or sees the removal.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+
+    @firestore.transactional
+    def detach(transaction):
+        root = client.collection('users').document(uid)
+        links = root.collection('episode_links')
+        fence = links.document('recorded_timeline')
+        revision = fence.get(transaction=transaction).to_dict() or {}
+        member = links.document(conversation_id).get(transaction=transaction).to_dict() or {}
+        if member.get('episode_id') != episode_id:
+            return False
+        ref = root.collection('episodes').document(episode_id)
+        owner = episodes.unseal(uid, ref.get(transaction=transaction).to_dict())
+        if owner is None or conversation_id not in (owner.get('conversation_ids') or []):
+            return False
+        row = root.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict() or {}
+        if (
+            not row.get('episode_transcription_pending_at')
+            or row.get('record_projection_revision')
+            or row.get('transcript_segments')
+        ):
+            return False
+        remaining = [cid for cid in owner.get('conversation_ids') or [] if cid != conversation_id]
+        if not remaining:
+            return False
+        facts = {cid: fact for cid, fact in (owner.get('recorded_members') or {}).items() if cid != conversation_id}
+        result = {
+            **owner,
+            'conversation_ids': remaining,
+            'member_activity': {
+                cid: at for cid, at in (owner.get('member_activity') or {}).items() if cid != conversation_id
+            },
+            'recorded_members': facts,
+            'recovered_conversation_ids': [
+                cid for cid in owner.get('recovered_conversation_ids') or [] if cid != conversation_id
+            ],
+            'discarded_conversation_ids': [
+                cid for cid in owner.get('discarded_conversation_ids') or [] if cid != conversation_id
+            ],
+            'parallel_content_spans': {
+                cid: at for cid, at in (owner.get('parallel_content_spans') or {}).items() if cid != conversation_id
+            },
+            'state_version': int(owner.get('state_version') or 0) + 1,
+        }
+        if facts:
+            result['started_at'] = min(fact['start'] for fact in facts.values())
+            result['last_activity_at'] = max(fact['end'] for fact in facts.values())
+        if result.get('primary_conversation_id') == conversation_id:
+            result['primary_conversation_id'] = remaining[0]
+        transaction.set(ref, episodes.seal(uid, result))
+        transaction.update(root.collection('conversations').document(conversation_id), {'episode_id': None})
+        transaction.set(
+            links.document(conversation_id),
+            {
+                'episode_id': None,
+                'episode_ids': [eid for eid in member.get('episode_ids') or [] if eid != episode_id],
+                'updated_at': datetime.now(timezone.utc),
+            },
+        )
+        transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
+        return True
+
+    return run_transactional(client, detach, transient=True)
+
+
 def member_episodes(uid: str, conversation_id: str, *, firestore_client: Any = None) -> list[dict[str, Any]]:
     """Only the canonical owner; a capture crossing a cap never gains another membership."""
     owner = episodes.get_episode_for_conversation(uid, conversation_id, firestore_client=firestore_client)
