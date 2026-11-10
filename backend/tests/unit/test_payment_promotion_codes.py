@@ -19,6 +19,10 @@ def restore_module_stubs():
     modules = dict(sys.modules)
     routers_module = modules.get("routers")
     router_payment = getattr(routers_module, "payment", _MISSING) if routers_module else _MISSING
+    utils_module = modules.get("utils")
+    utils_stripe = getattr(utils_module, "stripe", _MISSING) if utils_module else _MISSING
+    stripe_module = modules.get("utils.stripe")
+    stripe_module_state = dict(stripe_module.__dict__) if stripe_module is not None else None
     yield
     for module_name in tuple(sys.modules):
         if module_name not in modules:
@@ -29,6 +33,17 @@ def restore_module_stubs():
             routers_module.__dict__.pop("payment", None)
         else:
             routers_module.payment = router_payment
+    # Parent attributes and the original module's own namespace both need repair:
+    # later files imported production utils.stripe during collection, so installing
+    # MagicMocks on that shared object otherwise survives a sys.modules reset.
+    if utils_module:
+        if utils_stripe is _MISSING:
+            utils_module.__dict__.pop("stripe", None)
+        else:
+            utils_module.stripe = utils_stripe
+    if stripe_module is not None and stripe_module_state is not None:
+        stripe_module.__dict__.clear()
+        stripe_module.__dict__.update(stripe_module_state)
 
 
 def _read_source(path: Path) -> str:
@@ -234,7 +249,8 @@ def test_session_and_subscription_receive_identical_provenance_without_overridin
     assert 'raw_order' not in captured['metadata']
 
 
-@pytest.fixture(scope="module")
+# Function scope keeps router stub installation inside the restoration fixture.
+@pytest.fixture
 def payment_router():
     return _setup_payment_module(include_client=False)
 
