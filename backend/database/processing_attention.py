@@ -15,9 +15,9 @@ from utils.conversations import phase_shadow
 from database._client import db, run_transactional
 
 LIMIT = 100
-# Expiry cleanup runs inside the read path, so one request must never walk a
-# user's whole active collection. Bound the scan and let callers page with
-# ``start_after`` when they need the next window.
+# Expiry cleanup runs inside the read path, so each query is bounded to
+# SCAN_LIMIT rows. A full read pages internally on the last scanned document,
+# not the last returned one, so filtering cannot truncate the active set.
 SCAN_LIMIT = 500
 NON_RETRYABLE_ITEM_TTL = timedelta(days=7)
 PERMANENTLY_NON_RETRYABLE_FAILURE_CODES = frozenset({'recovery_structure_unavailable'})
@@ -136,6 +136,21 @@ def unresolved(row: dict[str, Any] | None) -> bool:
     return not bool(structured.get('overview'))
 
 
+def _scan_pages(uid: str, start_after: Any | None):
+    """Yield active items in bounded pages, advancing on the last scanned document."""
+    cursor = start_after
+    while True:
+        query = items_ref(uid).where(filter=FieldFilter('active', '==', True))
+        if cursor is not None:
+            query = query.start_after(cursor)
+        query = query.limit(SCAN_LIMIT)
+        page = list(query.stream())
+        yield from page
+        if len(page) < SCAN_LIMIT:
+            return
+        cursor = page[-1]
+
+
 def list_items(
     uid: str,
     limit: int | None = None,
@@ -146,11 +161,7 @@ def list_items(
     result: list[dict[str, Any]] = []
     expiry_enabled = non_retryable_expiry_enabled()
     now = now_utc()
-    query = items_ref(uid).where(filter=FieldFilter('active', '==', True))
-    if start_after is not None:
-        query = query.start_after(start_after)
-    query = query.limit(SCAN_LIMIT)
-    for snapshot in query.stream():
+    for snapshot in _scan_pages(uid, start_after):
         item = snapshot.to_dict() or {}
         conv_ref = db.collection('users').document(uid).collection('conversations').document(item['conversation_id'])
         conv = conv_ref.get()
@@ -175,7 +186,7 @@ def list_items(
         item.pop('active', None)
         result.append(item)
         if limit is not None and len(result) >= limit:
-            break
+            return result
     return result
 
 

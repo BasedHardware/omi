@@ -404,6 +404,87 @@ def test_attention_scan_is_bounded_and_paginates(database, monkeypatch):
     query.start_after.assert_called_once_with(cursor)
 
 
+class _PagingRef:
+    def __init__(self, database, path):
+        self._database = database
+        self.path = path
+        self.id = path[-1]
+
+    def update(self, patch):
+        self._database.rows[self.path].update(patch)
+
+
+class _PagingQuery:
+    """Ordered-by-id query double that honors ``start_after`` and ``limit``."""
+
+    def __init__(self, database, path):
+        self._database = database
+        self._path = path
+        self._after = None
+        self._limit = None
+        self._filters = []
+
+    def where(self, *, filter):
+        self._filters.append((filter.field_path, filter.value))
+        return self
+
+    def start_after(self, cursor):
+        self._after = cursor.id
+        return self
+
+    def limit(self, count):
+        self._limit = count
+        return self
+
+    def stream(self):
+        rows = []
+        for path, value in sorted(self._database.rows.items()):
+            if path[:-1] != self._path:
+                continue
+            if self._after is not None and path[-1] <= self._after:
+                continue
+            if not all(value.get(field) == expected for field, expected in self._filters):
+                continue
+            rows.append(
+                SimpleNamespace(
+                    id=path[-1],
+                    to_dict=lambda value=value: dict(value),
+                    reference=_PagingRef(self._database, path),
+                )
+            )
+        return iter(rows[: self._limit])
+
+
+def test_attention_pages_past_scan_limit_without_skipping(database, monkeypatch):
+    expected = []
+    for index in range(620):
+        cid = f'c{index:04d}'
+        resolved = index % 6 == 0
+        database.rows[('users', UID, 'conversations', cid)] = dict(
+            ROW, structured={'title': 't', 'overview': 'done' if resolved else ''}
+        )
+        item_id = f'item-{index:04d}'
+        database.rows[('users', UID, 'processing_attention_items', item_id)] = {
+            'id': item_id,
+            'conversation_id': cid,
+            'generation': store.generation(ROW),
+            'active': True,
+            'seen': False,
+            'retry': {'state': 'none', 'operation_id': None},
+        }
+        if not resolved:
+            expected.append(item_id)
+    monkeypatch.setattr(
+        store, 'items_ref', lambda uid: _PagingQuery(database, ('users', UID, 'processing_attention_items'))
+    )
+    monkeypatch.setattr(store, 'now_utc', lambda: NOW)
+    monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
+    ids = [item['id'] for item in store.list_items(UID)]
+    assert len(expected) > store.SCAN_LIMIT
+    assert ids == expected
+    assert len(ids) == len(set(ids))
+
+
 def test_pending_sync_excludes_terminal_missing_and_foreign(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     from database import sync_jobs

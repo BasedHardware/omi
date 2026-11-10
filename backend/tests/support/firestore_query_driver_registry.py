@@ -395,6 +395,13 @@ _add(
         domains={'limit': [None, 100], 'start_after': [None, 'doc-1']},
     )
 )
+_add(
+    CoveredByEntry(
+        'database.processing_attention._scan_pages',
+        covered_by=('database.processing_attention.list_items',),
+        reason='bounded page generator; list_items drives every query it builds',
+    )
+)
 
 
 def _pending_owned_page(client, combo, trial):
