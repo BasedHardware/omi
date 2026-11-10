@@ -305,6 +305,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             }
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
+            # FirestoreTransaction buffers every put until this callback returns;
+            # later units may still read their fences before the shared flush.
             for index, job in enumerate(jobs):
                 outcome = Scheduler.redrive_in_transaction(tx, job, time.time(), checked=RecoveryFence(store).checked)
                 if outcome is not None:

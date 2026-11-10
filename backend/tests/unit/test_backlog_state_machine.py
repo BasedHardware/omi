@@ -16,9 +16,11 @@ import pytest
 
 from config import backlog_state_machine as sm
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError
+from database.batch_pipeline_store import FirestoreTransaction
+from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError, StrictFirestoreTransaction
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
+from utils.batch_pipeline.intake import durable_status
 from utils.batch_pipeline.scheduler import Scheduler
 
 SWITCHES = (
@@ -366,7 +368,9 @@ def test_client_poll_refused_redrive_keeps_the_held_status(monkeypatch, refusal)
 @pytest.mark.parametrize('reason', ['held_expired', 'historical'])
 @pytest.mark.parametrize('counter', ['true', 'false'])
 @pytest.mark.parametrize('prior', [0, sm.MAX_HELD_REDRIVES])
-def test_client_poll_redrive_returns_fresh_status_without_reads_after_writes(monkeypatch, reason, counter, prior):
+def test_client_poll_redrive_returns_fresh_status_without_additional_wrapper_reads(monkeypatch, reason, counter, prior):
+    # This pins the returned-job API, a stronger local constraint than Firestore:
+    # the production wrapper buffers puts, so they are not raw transaction writes.
     from tests.unit.test_batch_pipeline_intake import proposal, submit
     from utils.batch_pipeline.intake import durable_status
 
@@ -419,6 +423,101 @@ def test_client_poll_redrive_returns_fresh_status_without_reads_after_writes(mon
     assert job['held_redrives'] == prior + (reason == 'held_expired')
     spent = reason == 'held_expired' and prior == sm.MAX_HELD_REDRIVES and counter == 'true'
     assert transitions('held_redrive_budget_spent') == before + spent
+
+
+@pytest.mark.parametrize('count', [2, 3])
+@pytest.mark.parametrize('refusal', [None, 'active_token', 'receipt'])
+@pytest.mark.parametrize('counter', ['true', 'false'])
+def test_client_poll_multiple_redrives_buffer_writes_until_all_raw_reads_finish(
+    setup, monkeypatch, count, refusal, counter
+):
+    client, store, binding, _, _, _ = setup
+    control_for(client)  # Warm shard: this test exercises documents, not frontier query hints.
+    monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
+    segments = ['bad', *(f'held-{index}' for index in range(1, count))]
+    ledger = client.rows['users', binding.owner_id, 'sync_content_ledger', binding.content_id]
+    ledger['batch_pipeline']['segment_ids'] = segments
+    template = deepcopy(bad(client))
+    for segment in segments:
+        job = deepcopy(template)
+        job['segment_id'] = segment
+        job['projection_binding']['segment_ids'] = segments
+        held_dead(job)
+        job['held_redrives'] = sm.MAX_HELD_REDRIVES
+        client.rows['batch_pipeline_prod_jobs', segment] = job
+    refused = segments[1] if refusal else None
+    if refusal == 'active_token':
+        client.rows['batch_pipeline_prod_jobs', refused]['token'] = 'active-recovery'
+    elif refusal == 'receipt':
+        client.rows['batch_pipeline_prod_results', refused] = {'projection': {'state': 'persisted'}}
+    refused_before = deepcopy(client.rows.get(('batch_pipeline_prod_jobs', refused)))
+    client.rows['batch_pipeline_prod_intakes', binding.job_id] = {
+        'owner_id': binding.owner_id,
+        'content_id': binding.content_id,
+        'segment_ids': segments,
+        'lane': 'backfill',
+        'total_files': 1,
+    }
+    eligible = [segment for segment in segments if segment != refused]
+    before = transitions('held_redrive_budget_spent')
+    staged = []
+    raw_reads_after_staging = []
+    flush_reads = []
+    flushing = False
+    original_put = FirestoreTransaction.put
+    original_flush = FirestoreTransaction.flush
+    original_read = StrictFirestoreTransaction._assert_read_allowed
+
+    def put(view, table, key, value):
+        # Call the real buffering primitive; do not substitute MemoryTransaction.
+        original_put(view, table, key, value)
+        assert not view.transaction.has_written
+        staged.append((table, key))
+
+    def raw_read(transaction):
+        original_read(transaction)  # Raises on ANY raw get after a raw set/update.
+        if staged:
+            (flush_reads if flushing else raw_reads_after_staging).append(len(staged))
+
+    def flush(view):
+        nonlocal flushing
+        assert not view.transaction.has_written
+        assert all(('jobs', segment) in view.writes for segment in eligible)
+        flushing = True
+        return original_flush(view)  # Includes the real commit-boundary privacy reads.
+
+    monkeypatch.setattr(FirestoreTransaction, 'put', put)
+    monkeypatch.setattr(FirestoreTransaction, 'flush', flush)
+    monkeypatch.setattr(StrictFirestoreTransaction, '_assert_read_allowed', raw_read)
+
+    status = durable_status(store, binding.owner_id, binding.job_id)
+
+    assert len(client.transactions) == 1
+    raw = client.transactions[0]
+    assert raw.has_written and raw.sets
+    assert raw_reads_after_staging, 'later candidates must actually read after earlier buffered puts'
+    assert flush_reads, 'the commit fence must still read before the first raw write'
+    assert status['total_segments'] == count
+    assert status['failed_segments'] == bool(refused)
+    assert status['status'] == ('processing' if refused else 'queued')
+    # Ready siblings still make progress, even when another unit remains held.
+    assert status['poll_after_ms'] == 3000
+    assert 'reason_code' not in status
+    for index, segment in enumerate(eligible):
+        job = client.rows['batch_pipeline_prod_jobs', segment]
+        assert job['state'] == 'ready'
+        assert job['held_redrives'] == sm.MAX_HELD_REDRIVES + 1
+        assert job['next'] == (eligible[index + 1] if index + 1 < len(eligible) else '')
+    queue_key = f"{template['priority']}_{template['owner_key']}"
+    queue = client.rows['batch_pipeline_prod_queues', queue_key]
+    assert (queue['head'], queue['tail']) == (eligible[0], eligible[-1])
+    if refused:
+        assert client.rows['batch_pipeline_prod_jobs', refused] == refused_before
+        assert all(path != ('batch_pipeline_prod_jobs', refused) for path, _ in raw.sets)
+    assert transitions('held_redrive_budget_spent') == before + (len(eligible) if counter == 'true' else 0)
+    # Negative control: the raw double really rejects reads once flush has written.
+    with pytest.raises(ReadAfterWriteError):
+        client.collection('batch_pipeline_prod_jobs').document(segments[-1]).get(transaction=raw)
 
 
 def operator_redrive_app(store, monkeypatch):
