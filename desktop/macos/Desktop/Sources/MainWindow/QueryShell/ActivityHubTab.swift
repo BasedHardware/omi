@@ -90,7 +90,14 @@ struct ActivityHubTab: View {
       .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .task { await loadScreenCount() }
-    .task(id: placementAuth.userId) { await failurePlacement.refresh() }
+    .task(id: placementAuth.userId) {
+      let owner = placementAuth.userId
+      await failurePlacement.refresh()
+      failurePlacement.remember(appState.conversations, for: owner)
+    }
+    .onReceive(appState.$conversations) { rows in
+      failurePlacement.remember(rows, for: placementAuth.userId)
+    }
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       failurePlacement.reset()
       Task { await failurePlacement.refresh() }

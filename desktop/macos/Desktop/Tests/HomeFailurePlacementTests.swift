@@ -61,7 +61,7 @@ final class HomeFailurePlacementTests: XCTestCase {
     XCTAssertFalse(store.enabled)
   }
 
-  func testSearchOnlyFailureRemainsReachableAndCompletionAndAccountResetRemoveIt() async {
+  func testLoadedFailureSurvivesFiltersAndCompletionAndAccountResetRemoveIt() async {
     let store = HomeFailurePlacementStore(load: { true }, owner: { "fixture" })
     await store.refresh()
     store.remember([conversation("search", step: "failed")], for: "fixture")
@@ -70,6 +70,9 @@ final class HomeFailurePlacementTests: XCTestCase {
     store.remember([conversation("foreign", step: "failed")], for: "other-owner")
     XCTAssertEqual(store.activity([]).map(\.id), ["search"])
     store.remember([conversation("search", step: "done")], for: "fixture")
+    XCTAssertTrue(store.activity([]).isEmpty)
+    store.remember([conversation("search", step: "failed")], for: "fixture")
+    store.forget("search")
     XCTAssertTrue(store.activity([]).isEmpty)
     store.remember([conversation("search", step: "failed")], for: "fixture")
     store.reset()

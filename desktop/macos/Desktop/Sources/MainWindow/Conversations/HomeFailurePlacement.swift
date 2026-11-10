@@ -8,6 +8,7 @@ final class HomeFailurePlacementStore: ObservableObject {
   static let shared = HomeFailurePlacementStore()
   @Published private(set) var enabled = false
   @Published private var discovered: [String: ServerConversation] = [:]
+  private var removed = Set<String>()
   private let load: () async throws -> Bool
   private let owner: () -> String?
   private let onReadFailure: () -> Void
@@ -33,14 +34,20 @@ final class HomeFailurePlacementStore: ObservableObject {
     enabled = false
     previousOwner = nil
     discovered = [:]
+    removed = []
   }
 
-  /// Search can discover failures outside the loaded Home page. Preserve their
+  func forget(_ id: String) {
+    removed.insert(id)
+    discovered.removeValue(forKey: id)
+  }
+
+  /// Home filters and search can discover failures outside the current page. Preserve their
   /// Activity links without inserting them into the Home repository's list.
   func remember(_ rows: [ServerConversation], for identity: String?) {
     guard identity != nil, identity == owner() else { return }
     for row in rows {
-      if ConversationFailurePlacement.isFailed(row) {
+      if ConversationFailurePlacement.isFailed(row) && !removed.contains(row.id) {
         discovered[row.id] = row
       } else {
         discovered.removeValue(forKey: row.id)
@@ -50,7 +57,7 @@ final class HomeFailurePlacementStore: ObservableObject {
 
   func activity(_ loaded: [ServerConversation]) -> [ServerConversation] {
     var all = discovered
-    for row in loaded { all[row.id] = row }
+    for row in loaded where !removed.contains(row.id) { all[row.id] = row }
     return ConversationFailurePlacement.activity(Array(all.values), confirmed: enabled)
       .sorted { ($0.startedAt ?? $0.createdAt) > ($1.startedAt ?? $1.createdAt) }
   }
@@ -62,6 +69,7 @@ final class HomeFailurePlacementStore: ObservableObject {
     if identity != previousOwner {
       enabled = false
       discovered = [:]
+      removed = []
     }
     previousOwner = identity
     guard identity != nil else {

@@ -7,6 +7,7 @@ import { CalendarDays, CheckSquare, Search as SearchIcon, X } from 'lucide-react
 import { cn } from '@/lib/utils';
 import { conversationsForSurface } from '@/lib/conversationHome';
 import { useConversations } from '@/hooks/useConversations';
+import { useActivityFailures } from '@/hooks/useActivityFailures';
 import { useConversation } from '@/hooks/useConversation';
 import { useRecaps } from '@/hooks/useRecaps';
 import { useSearchConversations } from '@/hooks/useSearchConversations';
@@ -312,11 +313,25 @@ export function ConversationSplitView() {
     };
   }, [user?.uid]);
 
+  const { failures: knownFailures, forget: forgetFailures } = useActivityFailures(
+    conversations,
+    searchResults,
+    user?.uid,
+  );
+
   // The Starred list is fetched starred-only, but search results (and the previous
   // tab's page while that fetch is in flight) are not, so keep filtering here.
   const visibleConversations = useMemo(() => {
+    const loaded =
+      selectedFolderId === FOLDER_ACTIVITY
+        ? knownFailures.filter(
+            (row) => !isSearching || searchResults.some((match) => match.id === row.id),
+          )
+        : isSearching
+        ? searchResults
+        : conversations;
     const source = conversationsForSurface(
-      isSearching ? searchResults : conversations,
+      loaded,
       selectedFolderId === FOLDER_ACTIVITY,
       failurePlacement,
     );
@@ -324,7 +339,14 @@ export function ConversationSplitView() {
       return source.filter((c) => c.starred);
     }
     return source;
-  }, [isSearching, searchResults, conversations, selectedFolderId, failurePlacement]);
+  }, [
+    isSearching,
+    searchResults,
+    conversations,
+    selectedFolderId,
+    failurePlacement,
+    knownFailures,
+  ]);
 
   // Recaps only belong in the unfiltered gallery: a search, a date filter or a
   // folder is a question about conversations, and a day summary cannot answer it.
@@ -608,7 +630,10 @@ export function ConversationSplitView() {
     setDeleteLoading(true);
     try {
       // Delete each selected conversation
-      const deletePromises = Array.from(selectedIds).map((id) => deleteConversation(id));
+      const deletePromises = Array.from(selectedIds).map(async (id) => {
+        await deleteConversation(id);
+        forgetFailures([id]);
+      });
       await Promise.all(deletePromises);
 
       // Exit selection mode and close dialog
@@ -629,7 +654,7 @@ export function ConversationSplitView() {
     } finally {
       setDeleteLoading(false);
     }
-  }, [selectedIds, selectedConversationId, refresh, showToast]);
+  }, [selectedIds, selectedConversationId, refresh, showToast, forgetFailures]);
 
   // ============================================================================
   // Folder handlers
