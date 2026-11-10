@@ -1201,7 +1201,7 @@ def _record_moment_once(
             updates=updates,
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
-            **({'recovery_conversation_id': moment.conversation_id} if walk is not None else {}),
+            recovery_conversation_id=moment.conversation_id if walk is not None else None,
         )
     else:
         stored = episodes_db.commit_moment(

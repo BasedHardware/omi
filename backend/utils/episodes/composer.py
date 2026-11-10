@@ -792,11 +792,7 @@ def _write(
                 expected_version=int(current.get('state_version') or 0),
                 updates=payload,
                 firestore_client=c.firestore_client,
-                **(
-                    {'expected_member_revisions': expected_member_revisions}
-                    if expected_member_revisions is not None
-                    else {}
-                ),
+                expected_member_revisions=expected_member_revisions,
             )
             return 'written'
         except episodes_db.EpisodeConflict as error:
