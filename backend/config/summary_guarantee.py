@@ -29,6 +29,10 @@ def deadline_seconds() -> int:
 REPAIR_INTERVAL_SECONDS = 120
 REPAIR_SCAN_LIMIT = 100
 REPAIR_ADMISSION_LIMIT = 10
+# Five ticks (10 minutes): up to 5 * REPAIR_ADMISSION_LIMIT = 50 attempts
+# before expiry at the configured cadence. This is headroom, not a throughput
+# guarantee when urgent arrivals exceed capacity or admissions are blocked.
+REPAIR_NEAR_EXPIRY_SECONDS = 5 * REPAIR_INTERVAL_SECONDS
 
 
 def preserves_admitted(row: Mapping[str, Any]) -> bool:

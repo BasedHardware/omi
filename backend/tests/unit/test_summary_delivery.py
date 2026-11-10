@@ -231,11 +231,12 @@ def test_discard_receipt_does_not_hide_a_later_first_summary(enabled):
     assert receipt['present'] and receipt['latency'] == 50
 
 
-def test_expired_seen_gauge_is_declared_for_production_scraping():
+@pytest.mark.parametrize('gauge', [delivery.EXPIRED_SEEN, delivery.NEAR_EXPIRY_ADMITTED])
+def test_repair_gauge_is_declared_for_production_scraping(gauge):
     import json
     from pathlib import Path
 
-    metric = next(iter(delivery.EXPIRED_SEEN.collect()))
+    metric = next(iter(gauge.collect()))
     assert metric.type == 'gauge'
     assert metric.samples[0].labels == {}
     inventory = json.loads(
@@ -245,29 +246,48 @@ def test_expired_seen_gauge_is_declared_for_production_scraping():
 
 
 @pytest.mark.parametrize('hours', ['72', '1', '0'])
-@pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'current'])
-def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, cursor_kind):
+@pytest.mark.parametrize('phase', ['near_expiry', 'newest'])
+@pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'current', 'wrong_phase', 'wrong_window'])
+def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase, cursor_kind):
     from database.summary_debt_queries import due_conversations
     from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
     from utils.enrichment.age_gate import max_age_seconds
 
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', hours)
     now = 1_800_000_000.0
-    after = {'due': now - 1, 'path': 'users/synthetic/conversations/c'}
+    window = max_age_seconds()
+    pending = now - window + 1 if phase == 'near_expiry' else now - 1
+    after = {'due': now - 1, 'path': 'users/synthetic/conversations/c', 'pending': pending}
     if cursor_kind != 'legacy':
-        after['pending'] = now - 1 if cursor_kind == 'current' else now - 73 * 3600
+        after.update(phase=phase, window=window)
+    if cursor_kind == 'expired':
+        after['pending'] = now - 73 * 3600
+    if cursor_kind == 'wrong_phase':
+        after['phase'] = 'newest' if phase == 'near_expiry' else 'near_expiry'
+    if cursor_kind == 'wrong_window':
+        after['window'] = -1
     client = RecordingFirestore()
     with install_recorder(client), client.recording_context('database.summary_debt_queries.due_conversations', {}):
-        due_conversations(now=now, limit=1000, after=after, firestore_client=client)
+        due_conversations(now=now, phase=phase, limit=1000, after=after, firestore_client=client)
+    if not window and phase == 'near_expiry':
+        assert not client.shapes
+        return
     shape = client.shapes[0]
     assert shape.limit == 100
     filters = {(f.field, f.operator, f.value) for f in shape.filters}
     assert ('summary_due_at', '<=', now) in filters
-    if hours != '0':
-        assert ('summary_first_pending_at', '>=', now - max_age_seconds()) in filters
-        assert shape.orders[0] == ('summary_first_pending_at', 'ASCENDING')
-        assert shape.uses_cursors is (cursor_kind == 'current')
+    assert shape.orders == (
+        ('summary_first_pending_at', 'ASCENDING' if phase == 'near_expiry' else 'DESCENDING'),
+        ('summary_due_at', 'ASCENDING'),
+        ('__name__', 'ASCENDING'),
+    )
+    if window:
+        assert ('summary_first_pending_at', '>=', now - window) in filters
+        assert (
+            'summary_first_pending_at',
+            '<=' if phase == 'near_expiry' else '>',
+            now - window + flags.REPAIR_NEAR_EXPIRY_SECONDS,
+        ) in filters
     else:
         assert len(filters) == 1
-        assert shape.orders[0] == ('summary_due_at', 'ASCENDING')
-        assert shape.uses_cursors is (cursor_kind == 'legacy')
+    assert shape.uses_cursors is (cursor_kind == 'current' or (not window and cursor_kind == 'expired'))

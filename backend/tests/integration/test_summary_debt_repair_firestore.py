@@ -138,8 +138,14 @@ def test_null_settled_due_is_excluded_from_numeric_sweep(debt_store):
 def test_repair_tick_global_lease_and_bounded_cursor(debt_store):
     client, uid, tasks, ref, row = debt_store
     first = repair.tick(now=220, client=client)
-    assert first == {'scanned': 1, 'admitted': 1, 'errors': 0, 'expired_seen': 0}
-    assert repair.tick(now=221, client=client) == {'scanned': 0, 'admitted': 0, 'errors': 0, 'expired_seen': 0}
+    assert first == {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0}
+    assert repair.tick(now=221, client=client) == {
+        'scanned': 0,
+        'admitted': 0,
+        'near_expiry_admitted': 0,
+        'errors': 0,
+        'expired_seen': 0,
+    }
     assert len(tasks) == 1
 
 
@@ -194,9 +200,10 @@ def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_
             'admitted': 1,
             'errors': 0,
             'expired_seen': 1,
+            'near_expiry_admitted': 0,
         }
         assert commit_attempts == ([2, 1] if retry_transaction == 0 else [1, 2])
-        query.assert_called_once()
+        assert query.call_count == 2
         gauge.set.assert_called_once_with(1)
         assert gauge._mock_wraps._value.get() == 1
         assert len(tasks) == 1
@@ -392,6 +399,7 @@ def test_window_reaches_fresh_debt_behind_expired_history_in_one_tick(debt_store
             'admitted': 1,
             'errors': 0,
             'expired_seen': 1,
+            'near_expiry_admitted': 1,
         }
         redrive.assert_called_once_with(client, uid, 'c', now=now)
         assert delivery.DEBT._value.get() == 1
@@ -428,7 +436,11 @@ def test_window_preserves_every_non_expired_row_and_disabled_gate(debt_store, mo
     try:
         for added, candidate in zip(refs, candidates):
             added.set(candidate)
-        page = repair.due_conversations(now=now, firestore_client=client)
+        page = [
+            s
+            for phase in ('near_expiry', 'newest')
+            for s in repair.due_conversations(now=now, phase=phase, firestore_client=client)
+        ]
         paths = {snapshot.reference.path for snapshot in page}
         expected = {
             added.path
@@ -449,7 +461,7 @@ def test_window_cursor_paginates_equal_timestamps_and_resets_on_mode_changes(deb
         added.set(row)
     try:
         first = repair.due_conversations(now=220, limit=1, firestore_client=client)[0]
-        cursor = {'due': 220, 'pending': 100, 'path': first.reference.path}
+        cursor = {'phase': 'newest', 'window': 72 * 3600, 'due': 220, 'pending': 100, 'path': first.reference.path}
         second = repair.due_conversations(now=220, limit=1, after=cursor, firestore_client=client)[0]
         assert second.reference.path != first.reference.path
         monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
@@ -461,13 +473,125 @@ def test_window_cursor_paginates_equal_timestamps_and_resets_on_mode_changes(deb
         legacy = {'due': 220, 'path': first.reference.path}
         assert (
             repair.due_conversations(now=220, limit=1, after=legacy, firestore_client=client)[0].reference
-            == second.reference
+            == first.reference
         )
         monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
         assert (
             repair.due_conversations(now=220, limit=1, after=legacy, firestore_client=client)[0].reference
             == first.reference
         )
+    finally:
+        for added in refs:
+            added.delete()
+
+
+def test_newest_phase_orders_pending_desc_then_due_and_name(debt_store, monkeypatch):
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    refs = [ref.parent.document(name) for name in ('a', 'b', 'd', 'e')]
+    ref.update({'summary_due_at': None})
+    try:
+        for added, pending, due in zip(refs, (now - 10, now - 10, now - 10, now - 100), (3, 2, 2, 1)):
+            added.set({**row, 'summary_first_pending_at': pending, 'summary_due_at': now - 10 + due})
+        page = repair.due_conversations(now=now, firestore_client=client)
+        assert [s.id for s in page] == ['b', 'd', 'a', 'e']
+        first = page[0]
+        cursor = {
+            'phase': 'newest',
+            'window': 72 * 3600,
+            'pending': first.to_dict()['summary_first_pending_at'],
+            'due': first.to_dict()['summary_due_at'],
+            'path': first.reference.path,
+        }
+        assert [s.id for s in repair.due_conversations(now=now, after=cursor, firestore_client=client)] == [
+            'd',
+            'a',
+            'e',
+        ]
+    finally:
+        for added in refs:
+            added.delete()
+
+
+@pytest.mark.parametrize('legacy', [True, False])
+def test_near_expiry_is_not_starved_by_large_newer_pile_and_retains_unattempted_tail(debt_store, monkeypatch, legacy):
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    cutoff = now - max_age_seconds()
+    urgent = [ref.parent.document(f'urgent-{i:02}') for i in range(12)]
+    newer = [ref.parent.document(f'newer-{i:03}') for i in range(150)]
+    ref.update({'summary_due_at': None})
+    admitted = []
+
+    def redrive(client, owner, conversation_id, *, now):
+        admitted.append(conversation_id)
+        # Synthetic settlement keeps the second tick focused on remaining debt.
+        ref.parent.document(conversation_id).update({'summary_due_at': None})
+        return True
+
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        batch = client.batch()
+        for i, added in enumerate(urgent):
+            batch.set(added, {**row, 'summary_first_pending_at': cutoff + 300 + i, 'summary_due_at': now - 1})
+        for i, added in enumerate(newer):
+            batch.set(added, {**row, 'summary_first_pending_at': now - 100 - i, 'summary_due_at': now - 1})
+        batch.commit()
+        stale = {'pending': now - 200, 'due': now - 1, 'path': newer[100].path}
+        cursor = (
+            stale
+            if legacy
+            else {'version': 2, 'phases': {'newest': {**stale, 'phase': 'newest', 'window': max_age_seconds()}}}
+        )
+        client.document(repair.CURSOR).set(cursor)
+        first = repair.tick(now=now, client=client)
+        assert first['near_expiry_admitted'] == first['admitted'] == 10
+        assert delivery.NEAR_EXPIRY_ADMITTED._value.get() == 10
+        assert first['scanned'] == 12  # No newest query after urgent exhausts admissions.
+        assert admitted == [s.id for s in urgent[:10]]
+        progress = client.document(repair.CURSOR).get().to_dict()
+        assert progress['version'] == 2 and progress['path'] is None
+        assert progress['phases']['near_expiry']['path'] == urgent[9].path
+        if not legacy:
+            assert progress['phases']['newest'] == cursor['phases']['newest']
+        second = repair.tick(now=now + repair.REPAIR_INTERVAL_SECONDS, client=client)
+        assert second['near_expiry_admitted'] == 2 and second['admitted'] == 10
+        assert delivery.NEAR_EXPIRY_ADMITTED._value.get() == 2
+        assert second['scanned'] <= repair.REPAIR_SCAN_LIMIT
+        assert admitted[:12] == [s.id for s in urgent]
+        if legacy:
+            assert admitted[12:] == [s.id for s in newer[:8]]
+    finally:
+        batch = client.batch()
+        for added in urgent + newer:
+            batch.delete(added)
+        batch.commit()
+
+
+def test_expiry_band_boundary_goes_first_and_remaining_budget_goes_newest(debt_store, monkeypatch):
+    from config.summary_guarantee import REPAIR_NEAR_EXPIRY_SECONDS
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    cutoff = now - max_age_seconds()
+    pending = [cutoff, cutoff + REPAIR_NEAR_EXPIRY_SECONDS, cutoff + REPAIR_NEAR_EXPIRY_SECONDS + 1, now - 1]
+    refs = [ref.parent.document(f'band-{i}') for i in range(4)]
+    ref.update({'summary_due_at': None})
+    admitted = []
+    monkeypatch.setattr(repair, 'redrive', lambda _, uid, cid, **kwargs: admitted.append(cid) or True)
+    try:
+        for added, at in zip(refs, pending):
+            added.set({**row, 'summary_first_pending_at': at, 'summary_due_at': now - 1})
+        counts = repair.tick(now=now, client=client)
+        assert admitted == ['band-0', 'band-1', 'band-3', 'band-2']
+        assert counts['near_expiry_admitted'] == 2
+        assert counts['admitted'] == counts['scanned'] == 4
     finally:
         for added in refs:
             added.delete()

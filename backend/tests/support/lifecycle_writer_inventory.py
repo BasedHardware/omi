@@ -2060,9 +2060,14 @@ FIELD_SITES = {
         ('_close_txn', 'status', "'completed'", ('discarded', 'status', 'stuck_noise_close'))
     ],
     'database/summary_debt_queries.py': [
-        ('due_conversations', 'summary_due_at', "after['due']", ('__name__', 'summary_due_at')),
         # Query cursor only: this map is passed to start_after, never a storage write.
-        ('due_conversations', 'summary_first_pending_at', 'pending', ('summary_first_pending_at',)),
+        ('due_conversations', 'summary_due_at', 'due', ('__name__', 'summary_due_at', 'summary_first_pending_at')),
+        (
+            'due_conversations',
+            'summary_first_pending_at',
+            'pending',
+            ('__name__', 'summary_due_at', 'summary_first_pending_at'),
+        ),
     ],
     'database/summary_processing.py': [
         (

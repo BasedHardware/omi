@@ -73,9 +73,29 @@ rows. Enabling the new flag alone is not a historical backlog drain.
 
 Only the existing scheduled two-minute sequencer sweep scans indexed overdue `summary_due_at` rows,
 including completed kept minimums. A global Firestore cursor/lease permits one
-page per 120 seconds, at most 100 documents and **10 admission attempts** per
-winning tick. Cursor rotation passes blocked rows instead of permanently
-starving later debt. Admission transaction rechecks manual/lifecycle/privacy,
+scan per 120 seconds, at most 100 fetched documents and **10 admission attempts**
+per winning tick shared across two phases. First scan pending times in
+`[now - max_age_seconds(), now - max_age_seconds() + REPAIR_NEAR_EXPIRY_SECONDS]`
+oldest-first; then scan the rest of the window newest-first. The named margin is
+five intervals (600 seconds), allowing up to 50 admission attempts before expiry
+at the configured cadence. This is headroom, not a guarantee under overload or
+blocked admissions. With the age gate disabled there is only the newest phase.
+Both order by due time then document name to break pending-time ties.
+
+Version 2 of the same cursor document stores independent `near_expiry` and
+`newest` cursors under `phases`. Legacy flat cursors rewind safely, preserving
+the existing lease/next-tick fence; flat fields are cleared so older readers also
+rewind on rollback. Each phase wraps at exhaustion and passes blocked rows.
+A phase stopped by the attempt cap resumes at the last examined row, never the
+unattempted fetched tail. Near-expiry admissions consume capacity first; only
+remaining reads and attempts go to newest-first. A large newer pile cannot
+consume the expiry band's budget. Urgent overload can consume all capacity.
+
+Existing eligibility excludes deleted, discarded and local-only rows. There is
+no reliable denormalized Home-today or active-user rank on the debt row. That
+preference is deferred; repair adds no per-row user reads for ranking.
+
+Admission transaction rechecks manual/lifecycle/privacy,
 account deletion, BYOK, active outbox lease and generation ownership; it reuses
 the same outbox key and transcript generation. The eventual lifecycle write
 rechecks repair eligibility and transcript revision. No new finalization job or
@@ -107,7 +127,14 @@ first durable minimum acceptance / server processing admission to durable summar
 It is not capture-duration, ASR-latency or full-upload queue latency.
 
 `omi_summary_debt_overdue` and `omi_summary_debt_oldest_age_seconds` describe the
-**current bounded repair window**, not a fleet census.
+**current bounded repair sample**, not a fleet census. `expired_seen` remains
+sampled without consuming admission attempts. Tick counts include
+`near_expiry_admitted` (successful urgent redrives), including zero on unclaimed
+or disabled ticks. Both sweep responses expose this count as
+`summary_debt_near_expiry_admitted`; `omi_summary_debt_near_expiry_admitted` is
+the corresponding gauge for the last claimed tick. Unclaimed/disabled ticks
+leave gauges and the sample timestamp unchanged. Both phases retain the existing
+overdue/oldest/sample/expired gauges.
 `omi_summary_debt_sample_timestamp_seconds` identifies the winning sampler;
 ignore replica samples older than 300 seconds, then alert on oldest age >120s
 for ten minutes or sustained overdue debt >0. Use max across fresh replicas;
@@ -116,6 +143,11 @@ A healthy window does not establish fleet completeness. These are gauges of
 server-provenance debt only; unmarked historical rows are outside the numerator.
 No recurring COUNT scan was added. Process death after commit but before metric
 emission can lose a Prometheus observation; the durable metadata remains truth.
+
+The ASC `(summary_first_pending_at, summary_due_at, __name__)` composite remains
+for the expiry phase. The additional DESC/ASC/ASC collection-group composite
+must be **READY before deploying** this query change. Declare and provision it
+through the existing index lane; this code change does not apply indexes.
 
 ## Production policy and rollback
 
