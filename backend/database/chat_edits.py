@@ -113,7 +113,8 @@ def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=No
         tx.update(ref, patch)
         if kind == 'person':
             bump_people_generation(tx, ref)
-        prior.update(updates)
+        # Internal debt retirement is outside the reversible user-field snapshot.
+        prior.update({key: value for key, value in updates.items() if key in FIELDS[kind]})
         return encode(prior)
 
     with fenced_action_item_commit(uid) if kind == 'task' else nullcontext():

@@ -1,7 +1,7 @@
 {
   "backend/database/_client.py:delete_collection_recursive": "020f43fc0e4d148051db3469545adc5b04a13653c4daa3a0acf57f3501f6f0b9",
-  "backend/database/chat_edits.py:apply_update": "f90355f2a17204ab396d3a4aa4f5456144b26aef919aa7a552a5caf93d49c0a1",
-  "backend/database/chat_edits.py:apply_update.apply": "cce9237e5a401c7008432f23e69794e4c083ae3929530599fa63e9221491067e",
+  "backend/database/chat_edits.py:apply_update": "26c13c3c52640bcd05d250ed71ef11df0ef10f3c7928087d4a11e5f463f72e69",
+  "backend/database/chat_edits.py:apply_update.apply": "ce12f9f26ed43c037e83fbcd7806225a6cd59f271a0dd12f20641089304d9d6a",
   "backend/database/chat_edits.py:restore": "d71bab8a20757a940d3773900ee611e89a0094878743397ab28140501507ba5e",
   "backend/database/chat_edits.py:restore.apply": "d5fdcf4dfa553ca6a82c504315e5b5da39180a334caf8e7992c99d070464e05e",
   "backend/database/notes_identity.py:stage_notes_identity": "afe1b3e1fa7752d35fe15630d66d05a727194cb27031f952b787171b3fdc9d13",
