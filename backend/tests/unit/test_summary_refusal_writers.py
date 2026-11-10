@@ -139,6 +139,26 @@ def test_already_enriched_return_retires_legacy_due(owners, rich, discarded):
     assert write['summary_completed_at'] == 150
 
 
+@pytest.mark.parametrize('field', ['user_title', 'user_overview'])
+def test_manual_chat_write_survives_real_codec_without_reenrolling_debt(owners, monkeypatch, field):
+    store = StrictFirestore()
+    path = ('users', 'synthetic', 'conversations', 'target')
+    row = debt()
+    row['structured'].update(title_provenance='server_minimum', overview='')
+    row['data_protection_level'] = 'standard'
+    store.rows[path] = deepcopy(row)
+    monkeypatch.setattr(owners.conversations, 'get_conversation_raw_snapshot', lambda *args: deepcopy(row))
+    monkeypatch.setattr(owners.chat_edits, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(owners.conversations, 'refresh_conversation_after_chat_edit', lambda *args: None)
+    expected = {'structured': row['structured']}
+    result = owners.conversations.update_conversation_chat(
+        'synthetic', 'target', expected, {field: 'Edited', 'structured': row['structured'], 'summary_due_at': None}
+    )
+    assert result[field] == 'Edited'
+    assert_retired(row, store.rows[path])
+    assert 'summary_output_present' not in store.rows[path]
+
+
 def test_table_and_behavior_cases_cover_same_owners():
     assert set(SUMMARY_REFUSAL_WRITERS) == {
         Writer('utils/sync/assignment.py', '_donor_redirect_patch'),

@@ -2396,6 +2396,12 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
     prepared = _prepare_conversation_for_write(
         update_data, uid, raw.get('data_protection_level', 'standard'), conversation_id=conversation_id
     )
+    # The general codec also prepares summary enrollment metadata. A manual
+    # chat edit owns only its requested fields and correction encoding; carrying
+    # those derived fields would fail the chat allowlist (or re-enroll debt).
+    prepared = {
+        key: value for key, value in prepared.items() if key in update_data or key == 'user_corrections_compressed'
+    }
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
     refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
