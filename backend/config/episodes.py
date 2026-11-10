@@ -52,6 +52,7 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_COMPOSE_SWEEP_ENABLED_ENV = 'EPISODE_COMPOSE_SWEEP_ENABLED'
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -159,6 +160,11 @@ def episode_composer_enabled() -> bool:
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_compose_sweep_enabled() -> bool:
+    """Default-on scheduled recovery; false disables discovery without stopping existing triggers."""
+    return modes_default_on(EPISODE_COMPOSE_SWEEP_ENABLED_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -310,9 +316,14 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 # The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
 # per throttle window, per process.
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
+# Existing two-minute enrichment maintenance: one leased, newest-first page and a separate paid-work budget.
+COMPOSER_SWEEP_SCAN_LIMIT = 32
+COMPOSER_SWEEP_SCHEDULE_LIMIT = 4
+COMPOSER_SWEEP_INTERVAL_SECONDS = 120
 # One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
 COMPOSER_LEASE_SECONDS = 240
 COMPOSER_SETTLE_SECONDS = 10 * 60
+COMPOSER_SWEEP_MIN_CLOSED_AGE_SECONDS = COMPOSER_SETTLE_SECONDS
 COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).

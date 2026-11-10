@@ -246,7 +246,7 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   out-of-span chapters are dropped. Member ends move `member_activity`, so a late
   member extends the episode's end. `lede` and `follow_ups` live in the encrypted
   `content` blob with the other notes.
-- `composer_version` changes recompose an episode once on read.
+- `composer_version` changes recompose an episode once on maintenance or read.
 - `composed_fingerprint` covers retained members, every member's transcript text
   and timing, and its own summary and action items. This full fingerprint remains
   the paid-call lease and composed-state stamp. With the default-on
@@ -272,8 +272,9 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   minutes from the first pending arrival. `compose_pending_since` and
   `compose_activity_at` track arrival time without changing recorded boundaries.
   A tracked async task requeues process-local due work without occupying composer
-  workers; shutdown cancels it. Finalizes and reads recover pending work after
-  restart using the persisted window (no new durable queue or sweeper). A paid
+  workers; shutdown cancels it. Finalizes, reads and the bounded maintenance
+  sweep recover pending work after restart using the persisted window (no new
+  durable execution queue). A paid
   background `stale`/`superseded` result starts a fresh quiet window before retry,
   including when the previous window reached its cap. Read-side schedules
   (`throttle=True`) promote pending work immediately. Foreground retries, direct
@@ -300,7 +301,16 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   read-side safety net in `home_read.project_episodes` for a closed episode that
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
+  Default-on `EPISODE_COMPOSE_SWEEP_ENABLED` also recovers closed episodes from
+  the existing enrichment maintenance route: one shared, newest-first 32-row
+  page and at most four admissions per two-minute tick. Its durable keyset
+  cursor rotates through all closed rows; fresh rows and newer activity retain
+  the settle window, merge donors and deleting accounts are skipped, and
+  `composer.schedule` applies the read throttle without foreground promotion.
+  Its deferred workers recheck account deletion (exit `deleted`) and retain all
+  paid-call fences. `false` disables only this discovery.
   Runs on a small background pool, one run per episode at a time; never raises.
+  Sweep telemetry: `omi_episode_compose_sweep_total{outcome}`.
 - `project_episodes` and the conversation list leave out completed below-floor
   rows permanently, regardless of capture duration, age or lane, unless the user
   curated them. Only unsettled provisional rows have a two-hour hold deadline. Lookups and

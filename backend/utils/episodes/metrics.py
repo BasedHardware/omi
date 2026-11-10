@@ -14,8 +14,8 @@
   whether the user's client was seen (``omi_episode_live_sessions_total``)
 - episodes API calls by client channel and admission outcome
   (``omi_episode_client_requests_total``)
-- closed-episode composer runs by outcome and their latency
-  (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
+- closed-episode composer runs by outcome and their latency, plus scheduled-sweep admissions
+  (``omi_episode_compose_total``, ``omi_episode_compose_seconds``, ``omi_episode_compose_sweep_total``)
 - Home attach-gap read observations (``omi_episode_home_attach_gap_total``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
@@ -249,6 +249,7 @@ COMPOSE_OUTCOMES = frozenset(
         'backoff',
         'conflict',
         'disabled',
+        'deleted',
         'error',
     }
 )
@@ -271,6 +272,13 @@ EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
     'omi_episode_compose_trigger_skipped_total',
     'Composer triggers skipped before scheduling or paying, by bounded reason. Never labeled by uid.',
     ['reason'],
+)
+COMPOSE_SWEEP_OUTCOMES = frozenset({'scheduled', 'skipped_composed', 'skipped_inflight', 'budget_exhausted', 'error'})
+EPISODE_COMPOSE_SWEEP_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_sweep_total',
+    'Scheduled closed-episode compose-sweep decisions by outcome. Never labeled by uid.',
+    ['outcome'],
 )
 HOME_MEMBER_OUTCOMES = frozenset({'shown', 'hidden_below_floor'})
 EPISODE_HOME_MEMBERS_TOTAL = reuse_or_create(
@@ -334,6 +342,8 @@ def _prime() -> None:
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
         for reason in COMPOSE_SKIP_REASONS:
             EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
+        for outcome in COMPOSE_SWEEP_OUTCOMES:
+            EPISODE_COMPOSE_SWEEP_TOTAL.labels(outcome=_label(outcome, COMPOSE_SWEEP_OUTCOMES))
         for outcome in HOME_MEMBER_OUTCOMES:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label(outcome, HOME_MEMBER_OUTCOMES))
         for channel in CLIENT_CHANNELS:
@@ -467,6 +477,13 @@ def record_compose(outcome: str, seconds: float) -> None:
     try:
         EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
         EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
+    except Exception:
+        pass
+
+
+def record_compose_sweep(outcome: str) -> None:
+    try:
+        EPISODE_COMPOSE_SWEEP_TOTAL.labels(outcome=_label(outcome, COMPOSE_SWEEP_OUTCOMES)).inc()
     except Exception:
         pass
 

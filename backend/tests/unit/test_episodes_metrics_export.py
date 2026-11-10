@@ -82,3 +82,14 @@ def test_f_fallback_counter_is_primed_bounded_and_reload_safe():
     exported = bytes(metrics_response().body).decode()
     assert _sample_value(exported, 'omi_episode_f_fallback_total', 'site', 'other') == before + 1
     assert 'unmapped-sensitive-site' not in exported
+
+
+def test_compose_sweep_outcomes_are_primed_without_identity_labels():
+    from utils.episodes.metrics import COMPOSE_SWEEP_OUTCOMES, record_compose_sweep
+
+    record_compose_sweep('scheduled')
+    exported = bytes(metrics_response().body).decode()
+    assert '# HELP omi_episode_compose_sweep_total ' in exported
+    for outcome in COMPOSE_SWEEP_OUTCOMES:
+        assert f'omi_episode_compose_sweep_total{{outcome="{outcome}"}}' in exported
+    assert 'uid=' not in exported

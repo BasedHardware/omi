@@ -3945,6 +3945,20 @@ _add(
 
 _add(
     DriverEntry(
+        'database.episode_compose_sweep_queries.closed_episodes_for_compose_sweep',
+        neutrals={'limit': _LIMIT},
+        domains={
+            'after': [
+                None,
+                {'closed_at': T0, 'path': 'users/synthetic/episodes/e'},
+                {'closed_at': None, 'path': ''},
+            ]
+        },
+    )
+)
+
+_add(
+    DriverEntry(
         'utils.processing_backlog_worker._page',
         base={'uid': UID},
         # The malformed cursor domain proves the defensive rewind builds the

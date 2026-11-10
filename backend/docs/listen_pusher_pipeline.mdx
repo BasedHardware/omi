@@ -9380,6 +9380,17 @@ repair triggers. Summaries and speaker labels remain prompt inputs, and the full
 fingerprint still owns leases and composed-state validation. See the
 [change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).
 
+`EPISODE_COMPOSE_SWEEP_ENABLED` defaults on (unset or blank); `false`, `0`,
+`off` or `no` stops scheduled discovery while preserving all existing composer
+triggers. The existing enrichment maintenance tick scans at most 32 closed
+episodes newest-first and admits at most four per two-minute pass under a shared
+cursor lease. Sweep scheduling uses the read throttle without foreground
+promotion, so fresh rows and newer activity retain their normal settle window;
+every worker rechecks account deletion before member or model reads. The index
+and rollback contract are in the
+[sweep change note](listen_pusher_pipeline/changes/2026-11-10-episode-compose-sweep.md);
+the new composite must be READY before runtime deploy.
+
 ### Provisional identities from meeting notes
 
 The rich notes call receives approved screenshots (at most four), screen moments,

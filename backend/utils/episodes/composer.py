@@ -54,6 +54,7 @@ from config.episodes import (
 )
 from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.conversations.recorded_time import conversation_span
 from utils.episodes import metrics, policy
 from utils.episodes.state import is_placeholder_heading, trim_text
@@ -477,7 +478,13 @@ def _usage(reply: Any) -> tuple[int, int]:
 
 
 def compose(
-    uid: str, episode_id: str, *, collaborators: Any = None, force: bool = False, background: bool = False
+    uid: str,
+    episode_id: str,
+    *,
+    collaborators: Any = None,
+    force: bool = False,
+    background: bool = False,
+    deletion_fence: bool = False,
 ) -> str:
     """Compose a closed episode once its members are done. Returns an outcome label; never raises."""
     if not episode_composer_enabled():
@@ -488,7 +495,9 @@ def compose(
     c = collaborators or service.Collaborators()
     started = time.monotonic()
     try:
-        outcome = _compose(uid, episode_id, c, force=force, background=background, service=service)
+        outcome = _compose(
+            uid, episode_id, c, force=force, background=background, deletion_fence=deletion_fence, service=service
+        )
     except Exception as error:  # Never break finalization or reads.
         logger.warning('event=episode_compose outcome=error exception_type=%s', type(error).__name__)
         outcome = 'error'
@@ -597,7 +606,11 @@ def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> boo
     return bool(failed_at and datetime.now(timezone.utc) - failed_at < backoff)
 
 
-def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any) -> str:
+def _compose(
+    uid: str, episode_id: str, c: Any, *, force: bool, background: bool, deletion_fence: bool, service: Any
+) -> str:
+    if deletion_fence and account_deletion_blocks_user_work(uid, firestore_client=c.firestore_client):
+        return 'deleted'
     episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
     if not episode:
         return 'no_episode'
@@ -655,7 +668,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
             episode = observed
             delay = settle_delay(episode)
             if delay > 0:
-                if _defer(uid, episode_id, c, delay):
+                if _defer(uid, episode_id, c, delay, deletion_fence=deletion_fence):
                     return 'settling'
                 # Pending evidence is already persisted. Preserve progress when the queue is full
                 # by using the normal immediate compose path, including its paid-once lease.
@@ -879,15 +892,17 @@ def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: O
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='episode-compose')
 _inflight: set[tuple[str, str]] = set()
+_inflight_deletion_fenced: set[tuple[str, str]] = set()
 _recent: dict[tuple[str, str], float] = {}
 _rerun: set[tuple[str, str]] = set()
 _inflight_lock = threading.Lock()
 # Due work holds no executor slot. The tracked backend task drains it and is cancelled at shutdown.
 _deferred: dict[tuple[str, str], tuple[float, Any]] = {}
+_deferred_deletion_fenced: set[tuple[str, str]] = set()
 _foreground: set[tuple[str, str]] = set()
 
 
-def _defer(uid: str, episode_id: str, c: Any, delay: float) -> bool:
+def _defer(uid: str, episode_id: str, c: Any, delay: float, *, deletion_fence: bool = False) -> bool:
     """Return whether work was retained; a full queue must leave the caller free to compose now."""
     key = (uid, str(episode_id))
     with _inflight_lock:
@@ -898,6 +913,10 @@ def _defer(uid: str, episode_id: str, c: Any, delay: float) -> bool:
         if key not in _deferred and len(_deferred) >= 10_000:
             return False
         _deferred[key] = (due, c)
+        if deletion_fence:
+            _deferred_deletion_fenced.add(key)
+        else:
+            _deferred_deletion_fenced.discard(key)
         return True
 
 
@@ -905,9 +924,11 @@ def _schedule_due() -> None:
     now = time.monotonic()
     with _inflight_lock:
         due = [key for key, (at, _) in _deferred.items() if at <= now and key not in _inflight]
-        work = [(key, _deferred.pop(key)[1]) for key in due]
-    for (uid, episode_id), c in work:
-        schedule(uid, episode_id, collaborators=c)
+        work = [(key, _deferred.pop(key)[1], key in _deferred_deletion_fenced) for key in due]
+        for key, _, _ in work:
+            _deferred_deletion_fenced.discard(key)
+    for (uid, episode_id), c, deletion_fence in work:
+        schedule(uid, episode_id, collaborators=c, deletion_fence=deletion_fence)
 
 
 async def retry_settled_composes() -> None:
@@ -919,32 +940,51 @@ async def retry_settled_composes() -> None:
     finally:
         with _inflight_lock:
             _deferred.clear()
+            _deferred_deletion_fenced.clear()
 
 
-def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: bool = False) -> bool:
-    """Compose in the background once per (uid, episode) at a time. Returns whether it was queued.
+def schedule(
+    uid: str,
+    episode_id: str,
+    *,
+    collaborators: Any = None,
+    throttle: bool = False,
+    foreground: Optional[bool] = None,
+    deletion_fence: bool = False,
+) -> bool:
+    """Compose once per (uid, episode) at a time. Returns whether it was queued.
 
-    ``throttle`` (read-side callers) skips an episode this process queued in the last few minutes,
-    so an episode still waiting on a member is not re-read on every list request.
+    ``throttle`` skips an episode this process queued recently. Read callers leave
+    ``foreground`` unset to promote deferred work; maintenance passes it as false
+    to retain that same throttle without bypassing the background settle window.
+    ``deletion_fence`` rechecks account deletion in the worker before each run.
     """
     if not episode_composer_enabled() or not episode_id:
         return False
     key = (uid, str(episode_id))
     now = time.monotonic()
+    promote = throttle if foreground is None else foreground
+    fenced = deletion_fence
     with _inflight_lock:
         enabled = episode_compose_settle_enabled()
         deferred = key in _deferred
-        if enabled and throttle:
+        fenced = fenced or key in _deferred_deletion_fenced
+        if enabled and promote:
             _deferred.pop(key, None)
+            _deferred_deletion_fenced.discard(key)
             if key in _inflight:
                 _foreground.add(key)
                 _rerun.add(key)
                 return False
         if key in _inflight:
+            if fenced:
+                # A due fenced handoff may lose to an ordinary trigger. Promote
+                # the active worker's next attempt instead of dropping the fence.
+                _inflight_deletion_fenced.add(key)
             if not throttle:
                 _rerun.add(key)  # Evidence may have changed under the running compose.
             return False
-        if deferred and enabled and not throttle:
+        if deferred and enabled and not promote:
             return False
         if throttle and not (enabled and deferred) and now - _recent.get(key, -1e9) < COMPOSER_READ_THROTTLE_SECONDS:
             return False
@@ -952,15 +992,25 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
             _recent.clear()
         _recent[key] = now
         _inflight.add(key)
+        if fenced:
+            _inflight_deletion_fenced.add(key)
 
     def run() -> None:
-        foreground = throttle
+        nonlocal fenced
+        foreground = promote
         try:
             for _attempt in range(3):
+                fenced = fenced or key in _inflight_deletion_fenced
                 if episode_compose_settle_enabled():
-                    outcome = compose(uid, str(episode_id), collaborators=collaborators, background=not foreground)
+                    outcome = compose(
+                        uid,
+                        str(episode_id),
+                        collaborators=collaborators,
+                        background=not foreground,
+                        deletion_fence=fenced,
+                    )
                 else:
-                    outcome = compose(uid, str(episode_id), collaborators=collaborators)
+                    outcome = compose(uid, str(episode_id), collaborators=collaborators, deletion_fence=fenced)
                 if outcome in {'stale', 'superseded'} and not foreground and episode_compose_settle_enabled():
                     # The cap allows one attempt during a long upload, not three paid retries in a burst.
                     now_at = datetime.now(timezone.utc)
@@ -980,6 +1030,7 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
                     _foreground.discard(key)
                     if outcome != 'settling':
                         _deferred.pop(key, None)
+                        _deferred_deletion_fenced.discard(key)
                 if outcome == 'settling' and not foreground:
                     break
                 if not again:
@@ -989,15 +1040,26 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
                 # A read/finalize can arrive after the loop decides to stop but before it releases
                 # inflight ownership. Hand it off instead of dropping its promotion until the timer.
                 enabled = episode_compose_settle_enabled()
-                promote = enabled and (key in _foreground or (foreground and key in _deferred))
-                reschedule = enabled and (key in _rerun or promote)
-                if promote:
+                handoff = enabled and (key in _foreground or (foreground and key in _deferred))
+                reschedule = enabled and (key in _rerun or handoff)
+                if handoff:
                     _deferred[key] = (time.monotonic(), collaborators)
+                    if fenced:
+                        _deferred_deletion_fenced.add(key)
+                fenced = fenced or key in _inflight_deletion_fenced
                 _inflight.discard(key)
+                _inflight_deletion_fenced.discard(key)
                 _rerun.discard(key)
                 _foreground.discard(key)
             if reschedule:
-                schedule(uid, str(episode_id), collaborators=collaborators, throttle=promote)
+                schedule(
+                    uid,
+                    str(episode_id),
+                    collaborators=collaborators,
+                    throttle=handoff,
+                    foreground=handoff,
+                    deletion_fence=fenced,
+                )
 
     try:
         _executor.submit(run)
@@ -1005,6 +1067,7 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
     except RuntimeError:
         with _inflight_lock:
             _inflight.discard(key)
+            _inflight_deletion_fenced.discard(key)
         return False
 
 
