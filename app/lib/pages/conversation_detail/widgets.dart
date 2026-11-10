@@ -466,8 +466,7 @@ class GetAppsWidgets extends StatelessWidget {
             if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
             // A failed processing pass can be retried the same way as a failed summary.
-            if (conversation.homeStep == 'failed' ||
-                conversation.showsSummaryRetry ||
+            if (conversation.showsSummaryRetry ||
                 (conversation.status == ConversationStatus.failed &&
                     !conversation.discarded &&
                     !conversation.isLocked)) {

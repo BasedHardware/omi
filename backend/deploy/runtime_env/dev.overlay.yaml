@@ -228,6 +228,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          value: 'true'
+          category: rollout
         STT_SERVICE_MODELS:
           value: modulate-velma-2,soniox
           category: stt_policy
@@ -305,6 +308,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          source: literal
+          value: 'true'
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:

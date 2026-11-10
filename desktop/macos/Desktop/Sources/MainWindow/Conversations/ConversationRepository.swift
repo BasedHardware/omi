@@ -349,7 +349,6 @@ final class ConversationRepository {
 
   func load(query: ConversationListQuery, includeCache: Bool = true) async {
     let session = cacheWriteScope.capture()
-    let previous = conversations
     requestGeneration += 1
     let generation = requestGeneration
     let queryChanged = currentQuery != query
@@ -379,14 +378,9 @@ final class ConversationRepository {
           // that races a pending star/title/folder edit (e.g. the user toggles a
           // filter mid-mutation) paints the bare cached rows and visually reverts
           // the edit until the remote call lands.
-          conversations = cached.map { cachedRow in
-            // Local storage predates Home projections. Its omitted field must
-            // not restart a known failed row while the server is unavailable.
-            let projected = ConversationReconciliationPolicy.retainingHomeFailure(
-              server: confirmedRestores[cachedRow.id] ?? cachedRow,
-              current: previous.first { $0.id == cachedRow.id })
-            return ConversationReconciliationPolicy.apply(
-              mutation: pendingMutations[cachedRow.id], to: projected)
+          conversations = cached.map {
+            ConversationReconciliationPolicy.apply(
+              mutation: pendingMutations[$0.id], to: confirmedRestores[$0.id] ?? $0)
           }
           count = cachedCount
           emit(.cache)
@@ -524,21 +518,17 @@ final class ConversationRepository {
     onCached: ((ServerConversation) -> Void)?
   ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
-    let projection = conversations.first { $0.id == id } ?? seed
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
       onCached?(
         ConversationReconciliationPolicy.retainingLoadedTranscript(
-          server: ConversationReconciliationPolicy.retainingHomeFailure(
-            server: confirmedRestores[id] ?? cached, current: projection), current: cached))
+          server: confirmedRestores[id] ?? cached, current: cached))
     }
 
     do {
       let received = try await remote.detail(id: id)
       try ensureCurrentSession(session)
-      let server = ConversationReconciliationPolicy.retainingHomeFailure(
-        server: applyingConfirmedRestore(received),
-        current: conversations.first { $0.id == id } ?? projection)
+      let server = applyingConfirmedRestore(received)
       try? await local.store(server, scope: cacheWriteScope, generation: session)
       try ensureCurrentSession(session)
       if pendingMutations[id] != nil {
@@ -555,15 +545,11 @@ final class ConversationRepository {
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
         return ConversationReconciliationPolicy.retainingLoadedTranscript(
-          server: ConversationReconciliationPolicy.retainingHomeFailure(
-            server: confirmedRestores[id] ?? cached, current: conversations.first { $0.id == id } ?? projection),
-          current: cached)
+          server: confirmedRestores[id] ?? cached, current: cached)
       }
       try ensureCurrentSession(session)
-      guard let current = conversations.first(where: { $0.id == id }) ?? confirmedRestores[id] ?? seed else {
-        throw error
-      }
-      return current
+      guard let seed else { throw error }
+      return confirmedRestores[id] ?? seed
     }
   }
 
@@ -607,8 +593,6 @@ final class ConversationRepository {
   /// `structured` payload (not just title), which matters when reprocess
   /// transitions a `.failed` conversation back to `.completed`.
   func replace(_ conversation: ServerConversation) {
-    let conversation = ConversationReconciliationPolicy.retainingHomeFailure(
-      server: conversation, current: conversations.first { $0.id == conversation.id })
     let session = cacheWriteScope.capture()
     replaceVisible(conversation)
     emit(.server)
@@ -858,8 +842,7 @@ final class ConversationRepository {
     {
       return
     }
-    conversations[index] = ConversationReconciliationPolicy.retainingHomeFailure(
-      server: conversation, current: existing)
+    conversations[index] = conversation
   }
 
   private func matchesCurrentQuery(_ conversation: ServerConversation) -> Bool {

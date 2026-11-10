@@ -16,7 +16,7 @@ const _ages = [0, 10, 20, 240];
 enum _Member { transcribing, writingNotes, ready, noise, failed, locked, discarded, deleted }
 
 /// Members a Home row must show somewhere (nothing a user should lose from Home).
-const _shownStates = {_Member.transcribing, _Member.writingNotes, _Member.ready, _Member.failed, _Member.locked};
+const _shownStates = {_Member.transcribing, _Member.writingNotes, _Member.ready, _Member.locked};
 
 ServerConversation _conversation(String id, _Member state, int minute) {
   final at = _start.add(Duration(minutes: minute));
@@ -123,16 +123,12 @@ List<_Scenario> _scenarios() {
 
 /// The member's own server-side state says it is still in progress.
 bool _serverUnfinished(ServerConversation m) =>
-    m.homeStep != 'failed' && (m.clientProcessing != null || m.processingDeferred || homeStepOf(m) != null);
+    m.clientProcessing != null || m.processingDeferred || homeStepOf(m) != null;
 
-bool _covers(HomeRow row, ServerConversation member) {
-  // Full episode IDs remain available for Delete, but cannot stand in for a failed
-  // member's own openable terminal row.
-  if (member.homeStep == 'failed') return row.episode == null && row.conversation.id == member.id;
-  return row.conversation.id == member.id ||
-      row.episodeConversationIds.contains(member.id) ||
-      (row.episode?.members.any((m) => m.id == member.id) ?? false);
-}
+bool _covers(HomeRow row, String id) =>
+    row.conversation.id == id ||
+    row.episodeConversationIds.contains(id) ||
+    (row.episode?.members.any((m) => m.id == id) ?? false);
 
 List<String> _violations(_Scenario s, List<ServerConversation> members, Episode episode,
     List<ServerConversation> processing, List<HomeRow> rows) {
@@ -153,12 +149,8 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     }
     if (row.episode == null &&
         !row.isProcessing &&
-        (isHomeNoise(row.conversation) ||
-            (homeStepOf(row.conversation) == HomeStep.failed && row.conversation.homeStep != 'failed'))) {
-      out.add('standalone-noise-or-legacy-failure-shown');
-    }
-    if (row.conversation.homeStep == 'failed' && (row.isProcessing || row.episode != null || row.step != null)) {
-      out.add('projected-failure-not-standalone-terminal');
+        (isHomeNoise(row.conversation) || homeStepOf(row.conversation) == HomeStep.failed)) {
+      out.add('standalone-noise-or-failed-shown');
     }
     final episodeMembers = row.episode?.members ?? const <ServerConversation>[];
     if (row.episode != null &&
@@ -177,7 +169,7 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
   for (var i = 0; i < members.length; i++) {
     final state = s.states[i];
     if (!_shownStates.contains(state)) continue;
-    final covering = rows.where((r) => _covers(r, members[i])).length;
+    final covering = rows.where((r) => _covers(r, members[i].id)).length;
     if (covering == 0) out.add('recording-dropped-from-home');
     if (covering > 1) out.add('recording-shown-more-than-once');
   }

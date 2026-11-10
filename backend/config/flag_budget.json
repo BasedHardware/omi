@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 268,
+  "count": 269,
   "names": {
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
@@ -253,6 +253,7 @@
     "STT_PRERECORDED_LANGUAGE_GATE_SHADOW": {"seeded": "2026-10-25"},
     "STT_PRERECORDED_LANGUAGE_GUARD_ENABLED": {"seeded": "2026-10-25"},
     "STT_PRERECORDED_SHORT_LID_GUARD_ENABLED": {"seeded": "2026-10-25"},
+    "PRERECORDED_SONIOX_FAILOVER_ENABLED": {"owner": "refactor-lead", "review_by": "2026-11-24"},
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {"seeded": "2026-10-25"},
     "STT_RESILIENT_RECONNECT": {"seeded": "2026-10-25"},
     "STT_ROUTING_DISRUPTION_GATE": {"seeded": "2026-10-25"},

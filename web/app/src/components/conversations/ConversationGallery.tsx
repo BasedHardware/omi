@@ -14,7 +14,6 @@ interface ConversationGalleryProps {
   onConversationClick: (conversation: Conversation) => void;
   onRecapClick: (recap: DailySummary) => void;
   onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
-  onConversationUpdate?: (conversation: Conversation) => void;
   isSelectionMode?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
@@ -34,7 +33,6 @@ export function ConversationGallery({
   onConversationClick,
   onRecapClick,
   onStarToggle,
-  onConversationUpdate,
   isSelectionMode = false,
   selectedIds,
   onSelect,
@@ -88,14 +86,14 @@ export function ConversationGallery({
     >
       {groups.map((group) => (
         <section key={group.key} className="mb-8">
-          <div className="sticky top-0 z-10 -mx-5 mb-4 border-b border-stroke bg-bg-primary/90 px-5 py-2.5 backdrop-blur-sm">
+          <div className="sticky top-0 z-10 -mx-5 px-5 py-2.5 bg-bg-primary/90 backdrop-blur-sm border-b border-stroke mb-4">
             <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-text-tertiary">
               {group.label}
             </h2>
           </div>
 
           <div
-            className="grid auto-rows-auto items-stretch gap-3"
+            className="grid gap-3 items-stretch auto-rows-auto"
             style={{
               gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))',
             }}
@@ -116,7 +114,6 @@ export function ConversationGallery({
                   isSelected={selectedId === item.id}
                   onClick={() => onConversationClick(item.conversation)}
                   onStarToggle={onStarToggle}
-                  onConversationUpdate={onConversationUpdate}
                   isSelectionMode={isSelectionMode}
                   isChecked={selectedIds?.has(item.id) ?? false}
                   onSelect={onSelect}
@@ -131,7 +128,7 @@ export function ConversationGallery({
 
       {loading && groups.length > 0 && (
         <div className="flex justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
+          <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
         </div>
       )}
     </div>
@@ -143,7 +140,7 @@ export function ConversationGallerySkeleton() {
     <div className="px-5 pb-8">
       {[0, 1].map((section) => (
         <div key={section} className="mb-8">
-          <div className="mb-4 h-3 w-24 animate-pulse rounded bg-bg-tertiary" />
+          <div className="h-3 w-24 rounded bg-bg-tertiary animate-pulse mb-4" />
           <div
             className="grid gap-3"
             style={{
