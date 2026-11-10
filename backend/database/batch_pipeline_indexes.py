@@ -78,6 +78,16 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
+    # Current replacement-object clock; legacy objects reuse the enqueue index.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_staged_input_age',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('recovery_state'), _asc('audio_staged_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
     # Additive expiry markers retain the legacy quarantine_held state.
     *(
         FirestoreIndexRequirement(

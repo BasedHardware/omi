@@ -940,7 +940,11 @@ class Scheduler:
     @staticmethod
     def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
         """Dormant worker holds only; never reopen an active paid/operator intent."""
-        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        held_dead = (
+            allow_dead
+            and job.get('state') == 'dead'
+            and job.get('dead_letter_reason') in {'held_expired', 'input_expiring'}
+        )
         state_ok = job.get('state') == 'quarantined' or held_dead
         lease_until = job.get('lease_until', 0)
         if (
@@ -990,7 +994,10 @@ class Scheduler:
         return True
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def redrive_in_transaction(tx: Transaction, job: dict, now: float, *, operator=False) -> bool:
+        # Status polling must not silently undo an input-expiring terminal.
+        if job.get('dead_letter_reason') == 'input_expiring' and not operator:
+            return False
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False
         control = read_control(tx, scheduler_control_key(job['owner_key']))
@@ -1008,7 +1015,9 @@ class Scheduler:
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        return self.store.run(
+            lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now, operator=True)
+        )
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
