@@ -35,6 +35,7 @@ from utils.batch_pipeline.metrics import (
 from utils.batch_pipeline.projection_shards import BACKLOG, FRESH, ProjectionShards, Wake
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
@@ -251,6 +252,21 @@ class ShardPump:
         if self.deferring:
             deferring, self.deferring = self.deferring, []
             await run_blocking(db_executor, lambda: [shards.defer(w, score) for w, score in deferring])
+            if not shards.healthy:
+                # Keep the batch's order and deadlines across Redis errors.
+                # Sequence checks make replay (including lost replies) safe;
+                # stale takes return False without making shards unhealthy.
+                self.deferring[:0] = deferring
+                await run_blocking(db_executor, shards.release)
+                PROJECTION_SHARDS_HELD.set(0)
+                record_fallback(
+                    component='other',
+                    from_mode='projection_shards',
+                    to_mode='legacy_sweep',
+                    reason='unavailable',
+                    outcome='degraded',
+                    log=logger,
+                )
         projector = self.projector
         if projector.owes_drains:
             # Local requests: unheld-shard fallback and Redis failures.

@@ -589,6 +589,100 @@ def test_defer_keeps_a_wake_that_was_pushed_since_the_take(server):
     assert [(w.owner_id, w.score) for w in shards.take(BACKLOG, 10)] == [('a', 9999.0)]
 
 
+@pytest.mark.parametrize('lanes', [(FRESH,), (BACKLOG,), (BACKLOG, FRESH)])
+@pytest.mark.parametrize('reply_lost', [False, True])
+def test_defer_error_fails_open_and_retries_after_redis_recovers(
+    server, blocking_inline, monkeypatch, lanes, reply_lost
+):
+    pump, shards, drains = pump_for(server, limit=1)
+    now = [1000.0]
+    shards.clock = shards.monotonic = pump.monotonic = lambda: now[0]
+    for lane in lanes:
+        assert shards.push('stuck', owner_key('stuck'), lane, 5.0)
+    assert asyncio.run(pump.tick()) == 1
+    drains.finish('stuck', 'blocked_other')
+    pending = list(pump.deferring)
+    retry_at = pending[0][1]
+    client = shards._client()
+    real_eval = client.eval
+    unavailable = True
+
+    def eval_with_outage(script, *args):
+        if script == projection_shards._DEFER_LUA and unavailable:
+            # Also cover a write committed by Redis whose reply was lost.
+            if reply_lost:
+                real_eval(script, *args)
+            raise ConnectionError('deferral unavailable')
+        return real_eval(script, *args)
+
+    monkeypatch.setattr(client, 'eval', eval_with_outage)
+    assert asyncio.run(pump.tick()) == 0
+    assert not pump.engaged and not shards.healthy
+    assert shards.held == set() and client.get(shards._lease_key(0)) is None
+    assert pump.deferring == pending
+    assert pump.route('local-fallback') is True
+    service = serving_with(pump, leads=False)
+    service.reconcile(periodic=True)
+    service.projector.sweep.assert_called_once()
+
+    # Even a successful lease pass must not mask a continuing defer outage.
+    now[0] = retry_at - 1
+    assert asyncio.run(pump.tick()) == 0
+    assert not pump.engaged and not shards.healthy and shards.held == set()
+    assert pump.deferring == pending and drains.requested == ['stuck']
+    unavailable = False
+    assert asyncio.run(pump.tick()) == 0
+    assert pump.engaged and pump.deferring == []
+    assert client.zscore(shards._lane_key(BACKLOG, 0), 'stuck') == retry_at
+
+    # A replacement has no local cooldown. Redis alone keeps it out until due.
+    shards.release()
+    replacement = make(server, count=1, clock=lambda: now[0])
+    next_drains = FakeDrains(limit=1)
+    next_pump = ShardPump(FakeProjector(next_drains), replacement, monotonic=lambda: now[0])
+    assert asyncio.run(next_pump.tick()) == 0
+    now[0] = retry_at
+    assert asyncio.run(next_pump.tick()) == 1
+    assert next_drains.requested == ['stuck']
+
+
+def test_stale_deferral_is_not_an_outage_or_retained_retry(server, blocking_inline):
+    pump, shards, drains = pump_for(server, limit=1)
+    assert shards.push('a', owner_key('a'), FRESH, 5.0)
+    assert asyncio.run(pump.tick()) == 1
+    assert shards.push('a', owner_key('a'), FRESH, 6.0)
+    drains.finish('a', 'blocked_other')
+    assert asyncio.run(pump.tick()) == 0
+    assert pump.engaged and pump.deferring == []
+    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('a', 6.0)]
+
+
+def test_deferral_survives_full_redis_outage_and_a_new_notification(server, blocking_inline, monkeypatch):
+    pump, shards, drains = pump_for(server, limit=1)
+    assert shards.push('a', owner_key('a'), FRESH, 5.0)
+    assert asyncio.run(pump.tick()) == 1
+    drains.finish('a', 'blocked_other')
+    pending = list(pump.deferring)
+    client = shards._client()
+
+    def unavailable():
+        raise ConnectionError('down')
+
+    monkeypatch.setattr(shards, '_client', unavailable)
+    assert asyncio.run(pump.tick()) == 0
+    assert not pump.engaged and not shards.held and pump.deferring == pending
+    # Lease refresh and release also fail during a full outage; retry intent stays.
+    assert asyncio.run(pump.tick()) == 0
+    assert not pump.engaged and not shards.held and pump.deferring == pending
+    monkeypatch.setattr(shards, '_client', lambda: client)
+    assert shards.push('a', owner_key('a'), FRESH, 6.0)
+    assert asyncio.run(pump.tick()) == 0
+    assert pump.engaged and pump.deferring == []
+    # The old retry must not move or erase this newer notification.
+    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('a', 6.0)]
+    assert shards.take(BACKLOG, 10) == []
+
+
 def test_a_wake_pushed_during_the_drain_survives_the_settle(server, blocking_inline):
     pump, shards, drains = pump_for(server, limit=1)
     shards.push('a', owner_key('a'), FRESH, 1.0)

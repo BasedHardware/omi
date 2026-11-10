@@ -443,7 +443,9 @@ class ProjectionShards:
         A stuck owner would otherwise keep its place at the head of its lane,
         and enough of them would fill every take page. Unless a push landed
         since the take, the wake moves behind every owner due sooner. Fails
-        open (False): the wake stays where it was.
+        open (False): the wake stays where it was and the coordinator becomes
+        inactive so the pump retries the deferral and falls back to the sweep.
+        A superseded sequence also returns False, without changing health.
 
         When deferring both taken lanes for an owner, defer backlog first:
         moving fresh into backlog increments the backlog sequence.
@@ -464,6 +466,7 @@ class ProjectionShards:
                 )
             )
         except Exception as error:
+            self.healthy = False
             logger.warning(
                 'event=batch_projection_shards action=defer outcome=unavailable exception_type=%s',
                 type(error).__name__,
