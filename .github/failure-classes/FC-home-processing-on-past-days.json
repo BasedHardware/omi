@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-home-processing-on-past-days",
+  "violated_contract": "Home processing rows belong only to the viewer's current local day. Older pending work must stay reachable from Activity, and completion must restore the normal row on its recorded day.",
+  "canonical_prevention": "Keep server classification independent of timezone. Apply a local-day boundary to both grouped Home rows and local processing insertions, and use the same projection to populate Activity from filter-independent pending work and loaded conversations. Finished rows override stale pending snapshots. Contract tests exercise midnight, rollback, episode waits, completion and conversation links.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/processing_today_test.dart",
+    "app/test/widgets/processing_today_render_test.dart",
+    "backend/tests/unit/test_pending_work.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversations/home_rows.dart",
+    "app/lib/pages/activity/",
+    "backend/database/processing_attention.py"
+  ],
+  "status": "open"
+}

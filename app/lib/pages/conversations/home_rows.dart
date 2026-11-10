@@ -91,6 +91,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     String? finishingTitle,
     String? processingTitle,
     bool groupAwaitingTranscript = false,
+    bool processingTodayOnly = false,
     DateTime? now}) {
   if (!enabled && !groupAwaitingTranscript) return [for (final c in conversations) HomeRow(c)];
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
@@ -207,7 +208,17 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   // Failed rows duplicate Activity's Needs attention section, so Home hides them too.
   rows.removeWhere((row) =>
       row.episode == null && (isHomeNoise(row.conversation) || homeStepOf(row.conversation) == HomeStep.failed));
-  return foldProcessingRuns(rows, processingTitle: processingTitle ?? '');
+  final folded = foldProcessingRuns(rows, processingTitle: processingTitle ?? '');
+  if (processingTodayOnly) {
+    final today = localHomeDay(now ?? DateTime.now());
+    folded.removeWhere((row) => row.isProcessing && row.day != today);
+  }
+  return folded;
+}
+
+DateTime localHomeDay(DateTime at) {
+  final local = at.toLocal();
+  return DateTime(local.year, local.month, local.day);
 }
 
 /// Home shows finished conversations, and every unbroken run of unfinished ones as a

@@ -284,12 +284,11 @@ void main() {
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Yesterday'), findsOneWidget);
     // Today: one run of three unfinished rows, then the two finished rows.
-    expect(find.byKey(_processingKey), findsNWidgets(3));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.textContaining('$_transcribing · 3 recordings'), findsOneWidget);
-    // Yesterday: the five-row run, then two finished rows, then a single-recording run.
-    expect(find.textContaining('$_transcribing · 5 recordings'), findsOneWidget);
-    // A lone unfinished recording shows no count (the row says a count only above one).
-    expect(find.textContaining(_transcribing), findsNWidgets(3));
+    // Yesterday keeps its finished rows; the older processing runs live in Activity.
+    expect(find.textContaining('$_transcribing · 5 recordings'), findsNothing);
+    expect(find.textContaining(_transcribing), findsOneWidget);
     expect(find.text('Building Company Brains With AI'), findsOneWidget);
     expect(find.text('Check-In and Timer Search'), findsOneWidget);
     expect(find.text('Family Tensions and AI Consulting'), findsOneWidget);

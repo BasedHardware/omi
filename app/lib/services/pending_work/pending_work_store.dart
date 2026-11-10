@@ -41,6 +41,9 @@ class PendingWorkStore extends ChangeNotifier {
   /// event).
   List<PendingWorkItem> get pending => _pending;
 
+  /// Server-driven Home placement kill switch, shared by Home and Activity.
+  bool homeProcessingToday = true;
+
   List<AttentionItem> _attention = const [];
 
   /// Unresolved work the server gave up on, newest first.
@@ -66,6 +69,7 @@ class PendingWorkStore extends ChangeNotifier {
     switch (pending) {
       case ApiSuccess(:final data):
         _pending = data.enabled ? data.items : const [];
+        homeProcessingToday = data.homeProcessingToday;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _pending = const [];
       case ApiFailure():

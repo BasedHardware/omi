@@ -2,6 +2,20 @@
 
 The Omi App is a Flutter-based mobile application that serves as the companion app for Omi devices. This app enables users to interact with their Omi device, manage apps, and customize their experience.
 
+## Home processing placement
+
+Processing rows appear on Home only on the user's current local day. Older pending
+recordings appear under Processing in Activity (the Home bell); tapping a row opens
+its conversation. Finished recordings return to their recorded day on Home and leave
+the pending list. Search and folder results retain their exact matches.
+
+The server classifies `home_step` without choosing a timezone. The existing
+default-on `HOME_STEP_PROJECTION` switch also controls `home_processing_today` in
+`GET /v1/pending-work`; setting it off restores all-day Home processing placement
+without an app release. No processing jobs or stored conversations are changed.
+Contract coverage: `test/unit/processing_today_test.dart` and
+`test/widgets/processing_today_render_test.dart`.
+
 ## 📚 **[View Full App setup instructions in the documentation](https://docs.omi.me/doc/developer/AppSetup)**
 
 ### Quick Setup

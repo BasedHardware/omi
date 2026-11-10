@@ -57,11 +57,16 @@ class PendingWorkItem {
 }
 
 class PendingWorkSnapshot {
-  const PendingWorkSnapshot({required this.enabled, required this.items, required this.attentionUnseenCount});
+  const PendingWorkSnapshot(
+      {required this.enabled,
+      required this.items,
+      required this.attentionUnseenCount,
+      this.homeProcessingToday = true});
 
   static const disabled = PendingWorkSnapshot(enabled: false, items: [], attentionUnseenCount: 0);
 
   final bool enabled;
+  final bool homeProcessingToday;
   final List<PendingWorkItem> items;
   final int attentionUnseenCount;
 
@@ -72,6 +77,7 @@ class PendingWorkSnapshot {
     final rows = json['items'];
     return PendingWorkSnapshot(
       enabled: json['enabled'] == true,
+      homeProcessingToday: json['home_processing_today'] != false,
       items: rows is List
           ? [
               for (final r in rows)

@@ -53,11 +53,13 @@ class GeneratedPendingWorkItem {
 class GeneratedPendingWorkSnapshot {
   final int attentionUnseenCount;
   final bool enabled;
+  final bool homeProcessingToday;
   final List<GeneratedPendingWorkItem> items;
 
   const GeneratedPendingWorkSnapshot({
     required this.attentionUnseenCount,
     required this.enabled,
+    this.homeProcessingToday = true,
     required this.items,
   });
 
@@ -65,6 +67,7 @@ class GeneratedPendingWorkSnapshot {
     return GeneratedPendingWorkSnapshot(
       attentionUnseenCount: _required(_readFieldValue<int>(_readField(json, const ["attention_unseen_count"]), "attention_unseen_count", _readInt, requiredField: true, nullable: false), "attention_unseen_count"),
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      homeProcessingToday: _required(_readFieldValue<bool>(_readField(json, const ["home_processing_today"]), "home_processing_today", _readBool, requiredField: false, nullable: false, defaultValue: true), "home_processing_today"),
       items: _required(_readFieldValue<List<GeneratedPendingWorkItem>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedPendingWorkItem.fromJson), requiredField: true, nullable: false), "items"),
     );
   }
@@ -73,6 +76,7 @@ class GeneratedPendingWorkSnapshot {
     return {
       'attention_unseen_count': attentionUnseenCount,
       'enabled': enabled,
+      'home_processing_today': homeProcessingToday,
       'items': items.map((value) => value.toJson()).toList(),
     };
   }

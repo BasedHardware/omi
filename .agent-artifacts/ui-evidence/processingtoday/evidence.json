@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-today-before.png",
+      "platform": "mobile-ios",
+      "description": "home today before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-today-after.png",
+      "platform": "mobile-ios",
+      "description": "home today after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-past-before.png",
+      "platform": "mobile-ios",
+      "description": "home past before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-past-after.png",
+      "platform": "mobile-ios",
+      "description": "home past after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-activity-processing-before.png",
+      "platform": "mobile-ios",
+      "description": "activity processing before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-activity-processing-after.png",
+      "platform": "mobile-ios",
+      "description": "activity processing after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-activity-empty-before.png",
+      "platform": "mobile-ios",
+      "description": "activity empty before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-activity-empty-after.png",
+      "platform": "mobile-ios",
+      "description": "activity empty after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -153,6 +153,7 @@ def test_seen_dismiss_and_unknown(database, http_client, monkeypatch):
 
 
 def test_pending_exclusions_and_bound(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
     rows = [
         dict(ROW, status='processing'),
         dict(ROW, status='processing', deleted=True),
@@ -300,7 +301,12 @@ def test_enabled_http_get_shapes(monkeypatch, http_client):
     assert response.json()['unseen_count'] == 1
     assert datetime.fromisoformat(response.json()['items'][0]['started_at']) == NOW
     assert response.json()['items'][0]['retry'] == {'state': 'none', 'operation_id': None}
-    assert http_client.get('/v1/pending-work').json() == {'enabled': True, 'items': [], 'attention_unseen_count': 1}
+    assert http_client.get('/v1/pending-work').json() == {
+        'enabled': True,
+        'home_processing_today': True,
+        'items': [],
+        'attention_unseen_count': 1,
+    }
 
 
 def test_not_retryable_and_completed_claim_replay(database, http_client, monkeypatch):
@@ -599,6 +605,7 @@ def test_home_kill_switches_are_independent_and_keep_optional_cohort(monkeypatch
 
 
 def test_pending_work_endpoint_dedupes_live_and_listed_owners(http_client, monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
     from database import sync_jobs
     from utils.episodes import home_processing
 
@@ -680,6 +687,7 @@ def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, en
 
 
 def test_pending_conversations_fills_visible_page_after_owned_page(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
     query = Mock()
     query.where.return_value = query
     query.limit.return_value = query
@@ -767,3 +775,75 @@ def test_chunk_jobs_count_unique_recordings_without_hiding_raw_writers(
     # Three known recordings plus one job whose recording is not known yet.
     assert sum(item.get('recording_count', 1) for item in items) == (4 if deduped or not enabled else 6)
     redis.zrem.assert_not_called()
+
+
+def test_home_pending_projection_uses_steps_and_drops_completed_items(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'on')
+    now = datetime.now(timezone.utc)
+    rows = {
+        'transcribing': {'status': 'processing', 'structured': {}},
+        'merging': {'status': 'merging', 'structured': {'title': 'Draft'}},
+        'debt': {
+            'status': 'completed',
+            'summary_due_at': now.timestamp(),
+            'structured': {'title': 'Recording', 'title_provenance': 'server_minimum'},
+        },
+        'batch': {
+            'status': 'completed',
+            'record_lane_owner': 'batch_sync_v1',
+            'home_transcription_deadline_at': now + timedelta(hours=1),
+            'structured': {},
+        },
+        'done': {
+            'status': 'completed',
+            'summary_due_at': now.timestamp(),
+            'structured': {'title': 'Ready', 'overview': 'Notes'},
+        },
+        'deleted': {'status': 'processing', 'deleted': True, 'structured': {}},
+    }
+    for row in rows.values():
+        row.update(started_at=now - timedelta(hours=1), finished_at=now, created_at=now)
+    filters = []
+
+    def query_for(*, filter):
+        filters.append(filter)
+
+        def matches(row):
+            value = row.get(filter.field_path)
+            if value is None:
+                return False
+            return value in filter.value if filter.op_string == 'in' else value > filter.value
+
+        query = Mock()
+        query.limit.return_value = query
+        query.stream.side_effect = lambda: [
+            SimpleNamespace(id=cid, to_dict=lambda row=row: row) for cid, row in rows.items() if matches(row)
+        ]
+        return query
+
+    collection = Mock()
+    collection.where.side_effect = query_for
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value = collection
+    monkeypatch.setattr(store, 'db', client)
+    result = store.pending_conversations(UID)
+    assert {item['id']: item['state'] for item in result} == {
+        'conv:transcribing': 'transcribing',
+        'conv:merging': 'summarizing',
+        'conv:debt': 'summarizing',
+        'conv:batch': 'transcribing',
+    }
+    assert [f.field_path for f in filters] == ['status', 'home_transcription_deadline_at', 'summary_due_at']
+    rows['debt']['summary_completed_at'] = now.timestamp()
+    rows['debt']['summary_output_present'] = True
+    rows['transcribing'].update(status='completed', structured={'title': 'Done', 'overview': 'Notes'})
+    assert {item['id'] for item in store.pending_conversations(UID)} == {'conv:merging', 'conv:batch'}
+
+
+@pytest.mark.parametrize('setting,expected', [('on', True), ('off', False)])
+def test_pending_exposes_existing_home_kill_switch(http_client, monkeypatch, setting, expected):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', setting)
+    monkeypatch.setattr(store, 'list_items', lambda *a, **k: [])
+    monkeypatch.setattr(store, 'pending_conversations', lambda *a, **k: [])
+    monkeypatch.setattr(routes.sync_jobs, 'pending_sync_jobs', lambda *a, **k: [])
+    assert http_client.get('/v1/pending-work').json()['home_processing_today'] is expected

@@ -25755,6 +25755,11 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "home_processing_today": {
+            "default": true,
+            "title": "Home Processing Today",
+            "type": "boolean"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/PendingWorkItem"

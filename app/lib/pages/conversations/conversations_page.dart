@@ -361,6 +361,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
     if (state == AppLifecycleState.resumed && _wasBackgrounded) {
       _wasBackgrounded = false;
+      _scheduleDayRollover();
       if (mounted) setState(_releaseHomeLayout);
     }
   }
@@ -372,6 +373,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   Timer? _dayTimer;
 
   void _scheduleDayRollover() {
+    _dayTimer?.cancel();
     final now = DateTime.now();
     final next = DateTime(now.year, now.month, now.day + 1);
     _dayTimer = Timer(next.difference(now) + const Duration(seconds: 1), () {
@@ -724,6 +726,18 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
+        if (!defaultHome && showRecordings && _pendingWork.homeProcessingToday) {
+          final today = localHomeDay(DateTime.now());
+          conversationsByDate = {
+            for (final entry in conversationsByDate.entries)
+              entry.key: [
+                for (final c in entry.value)
+                  if (localHomeDay(c.startedAt ?? c.createdAt) == today ||
+                      !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c)))
+                    c,
+              ],
+          };
+        }
         final projectedEpisodes = <String, HomeRow>{};
         final projectedMemberIds = <String>{...hiddenByLive};
         final projectedProcessingIds = <String>{};
@@ -766,6 +780,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             paintEpisodes,
             enabled: episodesOn,
             groupAwaitingTranscript: true,
+            processingTodayOnly: _pendingWork.homeProcessingToday,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
@@ -825,7 +840,10 @@ class _ConversationsPageState extends State<ConversationsPage>
                 withLive,
                 [
                   for (final c in snapshot.processingConversations)
-                    if (!projectedMemberIds.contains(c.id)) c,
+                    if (!projectedMemberIds.contains(c.id) &&
+                        (!_pendingWork.homeProcessingToday ||
+                            localHomeDay(c.startedAt ?? c.createdAt) == localHomeDay(DateTime.now())))
+                      c,
                 ],
                 DateTime.now())
             : withLive;

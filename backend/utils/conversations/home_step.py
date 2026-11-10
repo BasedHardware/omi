@@ -15,6 +15,8 @@ list wire as ``home_step`` so clients stop inferring it from titles.
 Presentation only: nothing is stored, search and direct links are unaffected,
 and a completed curated row (user title, star, folder, photos) is always ``ready``.
 Processing rows, including curated ones, have a bounded presentation wait.
+The step is independent of the viewer's day: clients show processing on Home
+only on the current local day and place older work in Activity instead.
 """
 
 from __future__ import annotations
