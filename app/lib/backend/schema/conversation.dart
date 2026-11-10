@@ -495,7 +495,12 @@ class ServerConversation {
   }
 
   /// This conversation with [segments] as its transcript; every other field is carried over.
-  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => ServerConversation(
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => _copy(transcriptSegments: segments);
+
+  /// Carry Home's list-only presentation through a detail refresh without losing its content.
+  ServerConversation withHomeStep(String step) => _copy(homeStep: step)..transcriptCarried = transcriptCarried;
+
+  ServerConversation _copy({List<TranscriptSegment>? transcriptSegments, String? homeStep}) => ServerConversation(
         id: id,
         createdAt: createdAt,
         onDeviceProvenance: onDeviceProvenance,
@@ -503,7 +508,7 @@ class ServerConversation {
         structured: structured,
         startedAt: startedAt,
         finishedAt: finishedAt,
-        transcriptSegments: segments,
+        transcriptSegments: transcriptSegments ?? this.transcriptSegments,
         appResults: appResults,
         suggestedSummarizationApps: suggestedSummarizationApps,
         geolocation: geolocation,
@@ -530,7 +535,7 @@ class ServerConversation {
         summaryRetryable: summaryRetryable,
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
-        homeStep: homeStep,
+        homeStep: homeStep ?? this.homeStep,
       )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
