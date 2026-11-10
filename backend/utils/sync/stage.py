@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import HTTPException
-
 from utils.env_loader import VALID_STAGES
 
 logger = logging.getLogger(__name__)
@@ -43,6 +41,11 @@ def collection_name(name: str) -> str:
 
 
 def require_http_stage() -> None:
+    # Imported here, not at module scope: this module is reachable from the
+    # record-seal row process (database.batch_pipeline_store), which must not
+    # pay the fastapi/pydantic import. Only the HTTP dependency needs it.
+    from fastapi import HTTPException
+
     try:
         current_stage()
     except InvalidSyncStage as error:

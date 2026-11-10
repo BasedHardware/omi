@@ -56,6 +56,60 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert pod['containers'][0]['securityContext']['readOnlyRootFilesystem']
 
 
+def test_repair_pod_runs_on_batch_pipeline_pool_with_four_guaranteed_cores():
+    pod = documents()[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+    terms = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
+    assert terms == [
+        {
+            'matchExpressions': [
+                {
+                    'key': 'cloud.google.com/gke-nodepool',
+                    'operator': 'In',
+                    'values': ['batch-pipeline-pool'],
+                }
+            ]
+        }
+    ]
+    # The pool is tainted; without these the pod never schedules there.
+    assert {(t['key'], t['value'], t['effect']) for t in pod['tolerations']} == {
+        ('omi.ai/batch-pipeline', 'true', 'NoSchedule'),
+        ('nvidia.com/gpu', 'present', 'NoSchedule'),
+    }
+    resources = pod['containers'][0]['resources']
+    # Request == limit: 16 row workers must not be starved to the ~2 cores the
+    # saturated monitoring pool gave them.
+    assert resources['requests']['cpu'] == '4'
+    assert resources['limits']['cpu'] == '4'
+    assert 'nvidia.com/gpu' not in resources['limits']
+
+
+def test_repair_placement_rolls_back_to_the_old_exclusion_from_values_only():
+    pod = documents('--set', 'recordSealRepair.nodePool=', '--set-json', 'recordSealRepair.tolerations=[]')[
+        ('CronJob', 'record-seal-repair')
+    ]['spec']['jobTemplate']['spec']['template']['spec']
+    terms = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
+    assert terms == [
+        {
+            'matchExpressions': [
+                {'key': 'cloud.google.com/gke-accelerator', 'operator': 'DoesNotExist'},
+                {
+                    'key': 'cloud.google.com/gke-nodepool',
+                    'operator': 'NotIn',
+                    'values': ['batch-pipeline-pool', 'batch-pipeline-pool-spot', 'parakeet-pool'],
+                },
+            ]
+        }
+    ]
+    assert 'tolerations' not in pod
+
+
+def test_repair_row_process_may_read_precompiled_bytecode():
+    pod = documents()[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+    env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
+    # The image precompiles .pyc at build; the row must be allowed to use it.
+    assert 'PYTHONDONTWRITEBYTECODE' not in env
+
+
 def test_seal_rules_have_independent_chart_rollback_switches():
     docs = documents(
         '--set', 'recordSealRules.overlapTrimEnabled=false', '--set', 'recordSealRules.uploadFailedRepairEnabled=false'
