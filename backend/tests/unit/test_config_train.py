@@ -225,14 +225,23 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     assert provider.fields['max_attempts'] == -1
 
 
-def test_staging_mirrors_prod_except_names():
+def test_staging_mirrors_prod_except_names_and_prod_repair_spend_cap():
     prod, staging = ops_train.load_ops('prod'), ops_train.load_ops('staging')
     staging_services = {s.name: s for s in staging.services}
     for svc in prod.services:
         twin = staging_services[f'{svc.name}-staging']
-        assert set(twin.env) == set(svc.env)
-        # Queue names carry the staging- prefix; every other ops value is identical.
-        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in svc.env.items())
+        shared_env = dict(svc.env)
+        # lead2 8b9c8f: only the production sweep owner has the 8/tick cap.
+        # Staging keeps the code default; all other env parity remains strict.
+        cap = 'SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT'
+        assert cap not in twin.env
+        if svc.name == 'backend-integration':
+            assert shared_env.pop(cap) == '8'
+        else:
+            assert cap not in shared_env
+        assert set(twin.env) == set(shared_env)
+        # Queue names carry the staging- prefix; every shared ops value is identical.
+        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in shared_env.items())
         # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
     staging_queues = {q.name: q for q in staging.queues}
     for queue in prod.queues:
