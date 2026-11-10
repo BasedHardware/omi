@@ -57,8 +57,6 @@ EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 
 
-EPISODE_COMPOSER_NOTES_FIRST_ENV = 'EPISODE_COMPOSER_NOTES_FIRST'
-
 EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV = 'EPISODE_LATE_COMPOSE_AFTER_HOURS'
 EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV = 'EPISODE_LATE_COMPOSE_GRACE_HOURS'
 # A recording repaired or synced more than this long after capture is "late": it
@@ -200,31 +198,6 @@ def episode_single_member_compose_enabled() -> bool:
     calls a model, so it has no lease, backoff or settle window.
     """
     return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
-
-
-# Notes-first compose (Fable LLM-efficiency #3, David 2026-11-10). Off by default:
-# today's compose sends every member's full transcript. On, the composer reads each
-# member's notes (title, overview, sections, action items, timestamps) and may call
-# ``get_transcript_excerpt`` for a bounded raw excerpt when it needs exact detail.
-# The same env is the independent L9 approval/kill switch: off/false/0/no (or an unknown value) restores the full-transcript path.
-# Bounds for the on-demand excerpt tool. One call returns at most 4,000 characters
-# from at most 15 minutes of one recording; one compose may make at most 4 calls and
-# read at most 12,000 excerpt characters in total. The model gets at most 5 turns
-# (the first answer plus one per excerpt call), so a compose cannot loop.
-COMPOSER_EXCERPT_MAX_CHARS = 4_000
-COMPOSER_EXCERPT_MAX_CALLS = 4
-COMPOSER_EXCERPT_MAX_TOTAL_CHARS = 12_000
-COMPOSER_EXCERPT_MAX_SECONDS = 15 * 60
-COMPOSER_NOTES_FIRST_MAX_TURNS = 5
-
-
-def composer_notes_first_enabled(uid: str | None = None) -> bool:
-    """Default off (today's full-transcript compose); on requires the recorded side-by-side approval."""
-    if not modes_default_off(EPISODE_COMPOSER_NOTES_FIRST_ENV):
-        return False
-    if not uid:
-        return False
-    return True
 
 
 def episode_late_compose_enabled() -> bool:

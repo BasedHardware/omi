@@ -65,7 +65,6 @@ HELPER_KILL_SWITCHES = {
     'HOME_HIDE_BELOW_FLOOR_ROWS',
     'EPISODE_COMPOSER_THRIFT',
     'EPISODE_COMPOSER_REUSE',
-    'EPISODE_COMPOSER_NOTES_FIRST',
     'HOME_EMPTY_OUTPUT_NOISE',
 }
 
@@ -277,7 +276,6 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert entry['review_by'] == '2026-12-08'
         elif name in {
             'EPISODE_COMPOSER_THRIFT',
-            'EPISODE_COMPOSER_NOTES_FIRST',
             'HOME_EMPTY_OUTPUT_NOISE',
             'EPISODE_COMPOSER_REUSE',
         }:
@@ -288,12 +286,6 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
             assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
         assert flag['kind'] == 'env'
-        if name == 'EPISODE_COMPOSER_NOTES_FIRST':
-            assert flag['lifecycle'] == 'rollout'
-            assert flag['fail'] == 'closed'
-            assert flag['summary'].startswith('Default off')
-            assert flag['ramp']['expander'] == 'David verdict; refactor-lead executes'
-            continue
         assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']
         assert flag['fail'] == 'open'

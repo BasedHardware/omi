@@ -9417,24 +9417,6 @@ and the four-failure cap. `omi_episode_compose_total` and
 each paid call including `repair`. See the
 [change note](listen_pusher_pipeline/changes/2026-11-10-episode-compose-keep-paid.md).
 
-### Notes-first closed episode compose
-
-`EPISODE_COMPOSER_NOTES_FIRST` defaults off (unset, blank, `off`, `false`, `0`,
-`no`, or an unknown value). Off keeps today's prompt: every member's full
-transcript, bounded by `COMPOSER_MAX_TRANSCRIPT_CHARS`. On, the composer reads
-each member's notes (title, overview, note sections, action items and clock
-times) and may call the `get_transcript_excerpt` tool for a bounded raw excerpt
-when it needs exact detail. A member with no notes still gets its transcript.
-L9 remains off until David records the side-by-side verdict. The mode applies to the next paid compose and does not
-bump `COMPOSER_VERSION`, so turning it on does not force a recompose wave.
-
-Excerpt bounds: at most 4,000 characters and 15 minutes per call, at most 4
-calls and 12,000 excerpt characters per compose, and at most 5 model turns (the
-last turn is sent without tools). Telemetry:
-`omi_episode_compose_input_tokens_total{mode}` and
-`omi_episode_compose_tool_calls{mode}`. See the
-[change note](listen_pusher_pipeline/changes/2026-11-10-episode-composer-notes-first.md).
-
 ### Provisional identities from meeting notes
 
 The rich notes call receives approved screenshots (at most four), screen moments,

@@ -318,15 +318,6 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   retry over the bad output alone, a title-and-lede compose for short episodes,
   superseded results stored and marked pending, and a two-paid-failure cap. Off
   restores discard-and-retry and the four-failure cap.
-- Notes-first mode (`EPISODE_COMPOSER_NOTES_FIRST`, default off until David approves the side-by-side): the prompt reads each member's notes
-  (title, overview, sections, action items, clock times) and may call
-  `get_transcript_excerpt` for a bounded raw excerpt. A member with no notes
-  still gets its transcript. Bounds: 4,000 characters and 15 minutes per call,
-  4 calls and 12,000 excerpt characters per compose, 5 model turns. The mode
-  applies to the next paid compose; it does not bump `COMPOSER_VERSION`.
-  Telemetry: `omi_episode_compose_input_tokens_total{mode}` and
-  `omi_episode_compose_tool_calls{mode}`; usage adds `composer_tool_calls`.
-  Side-by-side: `backend/scripts/episode_composer_notes_first_diff.py`.
 
 ## Kill switch, cohort and client capability
 
