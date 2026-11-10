@@ -21,6 +21,10 @@ from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 from utils.batch_pipeline.record_seal_repair import seal_refusal
 
 
+def custody_client(rows):
+    return StrictFirestore({('users', 'synthetic'): {'private_cloud_sync_enabled': True}, **rows})
+
+
 @pytest.mark.parametrize('status,durable', [(202, True), (409, True), (503, True), (202, False)])
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mode):
@@ -28,7 +32,7 @@ async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mo
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
-    client = StrictFirestore({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
+    client = custody_client({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
     counter = metrics.LATE_APPEND._value.get()
@@ -77,7 +81,7 @@ async def test_memoized_wait_before_begin_has_zero_metadata_io(monkeypatch):
 async def test_storage_exception_clears_only_own_fence_without_revision_or_counter(monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = StrictFirestore({PATH: ROW})
+    client = custody_client({PATH: ROW})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     before = deepcopy(client.rows)
     counter = metrics.LATE_APPEND._value.get()
@@ -97,7 +101,7 @@ async def test_storage_exception_clears_only_own_fence_without_revision_or_count
 async def test_failed_job_202_is_a_refusal_without_bump_or_late_count(monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = StrictFirestore({PATH: ROW})
+    client = custody_client({PATH: ROW})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     before = deepcopy(client.rows)
     counter = metrics.LATE_APPEND._value.get()
@@ -122,7 +126,7 @@ async def test_captured_input_recovery_survives_status_and_rollback(monkeypatch,
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
     content, segment = record_identity('synthetic', 'record')
-    client = StrictFirestore(
+    client = custody_client(
         {
             PATH: {**ROW, 'status': status, 'record_audio_closed': False, 'record_upload_sessions': {}},
             ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
@@ -149,7 +153,7 @@ async def test_captured_input_recovery_survives_status_and_rollback(monkeypatch,
     assert (await upload()).status_code == 202
     assert client.rows[PATH]['record_upload_revision'] == 8
     recovery = client.rows['batch_pipeline_dev_jobs', recovery_segment('synthetic', 'record')]
-    assert recovery['partial_coordinator'] and recovery['state'] == 'record_pending'
+    assert recovery['partial_coordinator'] and recovery['state'] == 'record_recovery_waiting'
     assert client.rows[PATH]['record_audio_partial']['upload_revision'] == 8
     assert client.rows[PATH]['status'] == status
     assert metrics.LATE_APPEND._value.get() == counter + 1
@@ -159,7 +163,7 @@ async def test_captured_input_recovery_survives_status_and_rollback(monkeypatch,
 async def test_disabled_archive_preserves_original_response_without_append(monkeypatch, disabled_at_begin):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = StrictFirestore({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': not disabled_at_begin}})
+    client = custody_client({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': not disabled_at_begin}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     before = deepcopy(client.rows[PATH])
     counter = metrics.LATE_APPEND._value.get()
@@ -190,7 +194,7 @@ async def test_durable_archive_outlives_old_lease_and_recovers_a_lost_fence(monk
     clock = [NOW]
     monkeypatch.setattr(database.time, 'time', lambda: clock[0])
     content, original = record_identity('synthetic', 'record')
-    client = StrictFirestore(
+    client = custody_client(
         {
             PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': False},
             ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
@@ -242,7 +246,7 @@ async def test_durable_archive_outlives_old_lease_and_recovers_a_lost_fence(monk
     assert not row['record_audio_closed'] and not row['record_upload_sessions']
     assert row['record_audio_partial']['upload_revision'] == 8
     recovery = client.rows['batch_pipeline_dev_jobs', recovery_segment('synthetic', 'record')]
-    assert recovery['partial_coordinator'] and recovery['state'] == 'record_pending'
+    assert recovery['partial_coordinator'] and recovery['state'] == 'record_recovery_waiting'
     assert committed == {'object': b'new interior audio'}
     assert metrics.LATE_APPEND._value.get() == counter + 1
     if lose_fence:
@@ -263,7 +267,7 @@ async def test_session_only_upload_fences_resolved_target_for_the_whole_archive(
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     clock = [NOW]
     monkeypatch.setattr(database.time, 'time', lambda: clock[0])
-    client = StrictFirestore(
+    client = custody_client(
         {PATH: ROW, ('users', 'synthetic', 'recording_sessions', 'capture'): {'conversation_id': 'record'}}
     )
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
@@ -298,7 +302,7 @@ async def test_session_only_upload_fences_resolved_target_for_the_whole_archive(
 async def test_unresolved_session_keeps_original_response_without_custody_append(monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = StrictFirestore({PATH: ROW})
+    client = custody_client({PATH: ROW})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     forbidden = Mock(side_effect=AssertionError('unresolved target acquired custody'))
     monkeypatch.setattr(database, 'begin', forbidden)
@@ -323,7 +327,7 @@ def test_finish_receipt_makes_repeated_completion_read_only(monkeypatch, late):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     row = {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': late}
-    client = StrictFirestore({PATH: row, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
+    client = custody_client({PATH: row, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
     session = 'custody:repeat'
     assert database.begin('synthetic', 'record', session, firestore_client=client)
     counter = metrics.LATE_APPEND._value.get()
@@ -348,7 +352,7 @@ async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(
     row = {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': seal == 'closed' and not transition_after_begin}
     if seal == 'partial' and not transition_after_begin:
         row['record_audio_partial'] = {'version': 1, 'upload_revision': 7}
-    client = StrictFirestore({PATH: row, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
+    client = custody_client({PATH: row, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     recovery = Mock(side_effect=AssertionError('committed finish was misclassified as lost custody'))
     monkeypatch.setattr(database, 'recover_committed', recovery)
@@ -398,7 +402,7 @@ def test_recovery_receipt_counts_once_after_a_committed_reply_is_lost(monkeypatc
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    client = StrictFirestore(
+    client = custody_client(
         {
             PATH: {**ROW, 'record_audio_closed': True, 'record_upload_sessions': {}},
             ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
@@ -437,7 +441,7 @@ async def test_post_storage_late_observation_survives_repair_and_renewal_reply_l
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
-    client = StrictFirestore(
+    client = custody_client(
         {
             PATH: {**ROW, 'record_audio_closed': False, 'record_upload_sessions': {}},
             ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
@@ -499,14 +503,18 @@ async def test_post_storage_observation_never_counts_failed_or_refused_append(mo
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
-    client = StrictFirestore({PATH: {**ROW, 'record_audio_closed': False, 'record_upload_sessions': {}}})
+    client = custody_client({PATH: {**ROW, 'record_audio_closed': False, 'record_upload_sessions': {}}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
     counter = metrics.LATE_APPEND._value.get()
 
+    committed = []
+
     def archive(uid, paths, metadata):
         client.rows[PATH]['record_audio_closed'] = True
-        if failure == 'archive' or (failure == 'partial_archive' and paths[0] == 'local-b'):
+        if failure == 'partial_archive' and 'local-a' in paths:
+            committed.append('archive:local-a')
+        if failure == 'archive' or (failure == 'partial_archive' and 'local-b' in paths):
             raise OSError('synthetic durable commit failed')
         return ['archive:local-a'] if failure == 'partial_archive' else ['archive:' + path for path in paths]
 
@@ -518,13 +526,15 @@ async def test_post_storage_observation_never_counts_failed_or_refused_append(mo
         request.stored(paths, archived)
         return JSONResponse(status_code=202, content={'status': 'failed' if failure == 'refused' else 'queued'})
 
-    if failure == 'archive' or (failure == 'partial_archive' and mode == 'serve' and percent == '100'):
+    if failure in {'archive', 'partial_archive'}:
         with pytest.raises(OSError):
             await upload()
     else:
         assert (await upload()).status_code == 202
     assert client.rows[PATH]['record_upload_revision'] == 7
     assert metrics.LATE_APPEND._value.get() == counter
+    if failure == 'partial_archive':
+        assert committed == ['archive:local-a']
 
 
 def test_finish_observes_its_own_lapsed_lease_after_durable_acceptance(monkeypatch):
@@ -532,7 +542,7 @@ def test_finish_observes_its_own_lapsed_lease_after_durable_acceptance(monkeypat
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
-    client = StrictFirestore({PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': False}})
+    client = custody_client({PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': False}})
     assert database.begin('synthetic', 'record', 'custody:late', firestore_client=client)
     client.rows[PATH]['record_upload_sessions']['custody:late'].update(
         last_signal_at=NOW - 7200, lease_expires_at=NOW - 1

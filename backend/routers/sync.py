@@ -306,7 +306,7 @@ router.include_router(coverage_router)
 
 
 async def _renew_custody_lease(uid, conversation_id):
-    if record_lease.token_lease_mode() == 'off':
+    if not record_lease.token_lease_serving(uid):
         return
     try:
         await run_blocking(

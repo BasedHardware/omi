@@ -450,6 +450,8 @@ STATES = (
             'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
             'only after durable acceptance in finish, including after rollback. A lost accepted fence recovers via '
             'record_custody_append.recover_committed with an exact-request durable receipt and partial continuation. '
+            'Separate recovery is parked as record_recovery_waiting until record_recovery_gate.promote '
+            'transactionally observes the original publication complete; promotion runs off/shadow/serve. '
             'Recovery is independent of '
             'conversation status; uncaptured input reopens for normal admission of the newer revision. Never deletes audio.',
         ),

@@ -111,6 +111,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
+  RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
+  RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
+  RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
   # retries instead of hanging 7-10 min until the TCP reset (#22890).
   GIT_HTTP_LOW_SPEED_LIMIT: "1000"

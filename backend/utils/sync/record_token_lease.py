@@ -126,7 +126,9 @@ def stored(paths: Sequence[str], archives: Sequence[str]) -> None:
     state = _upload.get()
     if state is not None and paths and not archives:
         state['no_append'] = True
-    if state is not None and paths and len(paths) == len(archives):
+    # A nonempty selected subset is a real durable append. Deliberately
+    # unselected files retain the route's original admission semantics.
+    if state is not None and archives:
         state['durable'] = True
 
 
@@ -160,7 +162,7 @@ async def archive(fn: Archive, uid: str, paths: list[str], metadata: dict[str, A
         committed = await run_blocking(sync_executor, fn, uid, [path], metadata)
         archived.extend(committed)
         # Only a completed durable file append is a signal. The transactional
-        # heartbeat helper coalesces all open producers to lease/2; no timer.
+        # heartbeat helper coalesces open custody tokens to lease/2; no timer.
         if committed:
             await _renew_after_append(uid, cid, state)
     return archived

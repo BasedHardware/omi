@@ -120,6 +120,7 @@ def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypat
 
 @pytest.mark.parametrize('source', ['frames', 'custody_append'])
 def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled, source):
+    enabled.rows[PATH]['record_upload_sessions']['s']['signal_source'] = source
     before = deepcopy(enabled.rows[PATH])
     assert record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
     row = enabled.rows[PATH]
@@ -137,17 +138,19 @@ def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled,
     assert row['record_upload_revision'] == (8 if source == 'frames' else 7)
 
 
-def test_custody_renews_all_identified_tokens_but_frames_are_exact(enabled):
-    enabled.rows[PATH]['record_upload_sessions']['other'] = {**TOKEN, 'pod': 'other'}
+def test_custody_renews_only_custody_tokens_and_frames_are_exact(enabled):
+    enabled.rows[PATH]['record_upload_sessions']['other'] = {**TOKEN, 'pod': 'other', 'signal_source': 'custody_append'}
     enabled.rows[PATH]['record_upload_sessions']['legacy'] = True
     record_audio.renew_record_token_lease('synthetic', 'record', source='frames', session='s', firestore_client=enabled)
     assert enabled.rows[PATH]['record_upload_sessions']['other']['last_signal_at'] == TOKEN['last_signal_at']
     record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
     assert enabled.rows[PATH]['record_upload_sessions']['other']['last_signal_at'] == NOW
     assert enabled.rows[PATH]['record_upload_sessions']['legacy'] is True
+    assert enabled.rows[PATH]['record_upload_sessions']['s']['signal_source'] == 'frames'
 
 
-def test_upload_survives_original_pusher_abandon_or_pod_death(enabled):
+def test_custody_upload_survives_abandon_or_pod_death(enabled):
+    enabled.rows[PATH]['record_upload_sessions']['s']['signal_source'] = 'custody_append'
     enabled.rows[PATH]['record_upload_sessions']['s']['abandoned_at'] = NOW - 4000
     record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
     tokens = enabled.rows[PATH]['record_upload_sessions']
@@ -272,12 +275,19 @@ def test_stock_seed_preserves_original_pod_and_abandon_authorities(enabled, monk
     assert producer_tokens_dead({'s': {**POD, 'abandoned_at': NOW - 10}}, None, uid='synthetic', row=ROW)
 
 
-def test_legacy_custody_reactivation_shares_repair_deployment_epoch(enabled, monkeypatch):
+def test_manifest_cannot_resurrect_a_legacy_frame_token(enabled, monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 7200))
     enabled.rows[PATH]['record_upload_sessions'] = {'s': POD}
     assert producer_tokens_dead({'s': POD}, None, uid='synthetic', row=enabled.rows[PATH])
-    record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
+    assert not record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', firestore_client=enabled
+    )
     assert enabled.rows[PATH]['record_upload_revision'] == 7  # heartbeat is not a stored append
+    assert producer_tokens_dead(
+        enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic', row=enabled.rows[PATH]
+    )
+
+    assert record_custody_append.begin('synthetic', 'record', 'custody:real-upload', firestore_client=enabled)
     assert not producer_tokens_dead(
         enabled.rows[PATH]['record_upload_sessions'], None, uid='synthetic', row=enabled.rows[PATH]
     )
@@ -286,7 +296,7 @@ def test_legacy_custody_reactivation_shares_repair_deployment_epoch(enabled, mon
 def test_unclaimed_owner_keeps_its_token_live_until_batch_owner_resolution(enabled):
     enabled.rows[PATH]['record_lane_owner'] = None
     assert record_audio.renew_record_token_lease(
-        'synthetic', 'record', source='custody_append', firestore_client=enabled
+        'synthetic', 'record', source='frames', session='s', firestore_client=enabled
     )
     assert enabled.rows[PATH]['record_upload_sessions']['s']['last_signal_at'] == NOW
     enabled.rows[PATH]['record_lane_owner'] = 'batch_live_v1'
@@ -348,16 +358,17 @@ def test_custody_exact_clear_and_late_counter_follow_acceptance(enabled, accepte
 
 
 def test_custody_heartbeat_writes_at_most_once_per_half_lease(enabled, monkeypatch):
+    enabled.rows[PATH]['record_upload_sessions'] = {'custody': {**TOKEN, 'pod': '', 'signal_source': 'custody_append'}}
     assert record_audio.renew_record_token_lease(
         'synthetic', 'record', source='custody_append', firestore_client=enabled
     )
-    for seconds in (0, 1, 60, 1799):
+    for seconds in (0, 1, 60, 1949):
         monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + seconds)
         assert not record_audio.renew_record_token_lease(
             'synthetic', 'record', source='custody_append', firestore_client=enabled
         )
         assert not enabled.transactions[-1].updates
-    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + 1800)
+    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + 1950)
     assert record_audio.renew_record_token_lease(
         'synthetic', 'record', source='custody_append', firestore_client=enabled
     )

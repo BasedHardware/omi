@@ -1010,7 +1010,7 @@ def test_renewal_before_partial_transaction_keeps_live_uploader_fenced(source, m
             'signal_source': 'frames',
         }
     }
-    renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=source[1])
+    renew_record_token_lease('synthetic', 'record', source='frames', session='s', firestore_client=source[1])
     assert finish(source) == 'upload_pending'
 
 

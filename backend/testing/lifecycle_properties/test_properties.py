@@ -238,8 +238,9 @@ async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, ex
         assert sim.row()['record_upload_revision'] == revision
         sim.sweep(live_producer=True)
         assert 'custody:lifecycle' in sim.row()['record_upload_sessions']
-        # A completed durable archive append is a heartbeat, never an early
-        # revision bump. It refreshes the pusher clocks like the real route.
+        # A completed durable archive append refreshes only its own custody
+        # fence. The original frame token stays lapsed until that socket sends
+        # another durable frame batch.
         record_audio.renew_record_token_lease(
             sim.uid, sim.cid, source='custody_append', firestore_client=sim.stack.firestore
         )
@@ -248,6 +249,15 @@ async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, ex
             sim.uid, sim.cid, 'custody:lifecycle', accepted=True, firestore_client=sim.stack.firestore
         )
         assert sim.row()['record_upload_revision'] == revision + 1
+        record_audio.renew_record_token_lease(
+            sim.uid,
+            sim.cid,
+            source='frames',
+            session='lease',
+            producer=token,
+            firestore_client=sim.stack.firestore,
+        )
+        assert sim.row()['record_upload_revision'] == revision + 2
         sim.sweep(live_producer=True)
         assert sim.row()['record_upload_sessions']
         assert not sim.row()['record_audio_closed']

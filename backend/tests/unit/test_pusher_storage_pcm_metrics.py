@@ -168,6 +168,7 @@ async def test_late_append_counts_only_after_durable_commit(monkeypatch, writer,
         await barrier.begin_recording('record')
     else:
         barrier.upload_sessions['record'] = 's'
+        barrier.registered_sessions.add('record')  # This fixture models a committed registration.
         await barrier.renew_recording('record')
     assert 'record' in barrier.late_appends
     assert record_token_lease_metrics.LATE_APPEND._value.get() == baseline

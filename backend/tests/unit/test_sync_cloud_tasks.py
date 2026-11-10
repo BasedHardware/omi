@@ -5989,23 +5989,42 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
         },
     )
 
-    async def _pipeline_that_never_finishes(*args, **kwargs):
-        await asyncio.sleep(30)
+    pipeline = _pipeline_expiring_the_handler_budget(module)
+    passthrough = module.run_blocking
+    captured = []
+    parent_asyncio = module.asyncio
+
+    class EnqueueBudgetAsyncio:
+        def __getattr__(self, name):
+            return getattr(parent_asyncio, name)
+
+        def timeout_at(self, deadline):
+            context = asyncio.timeout_at(deadline)
+            captured.append(context)
+            return context
+
+    async def enqueue(*args, **kwargs):
+        # Expire the real shared context only after marker completion and
+        # entry into enqueue. Host scheduling cannot move expiry to setup.
+        captured[-1].reschedule(asyncio.get_running_loop().time())
+        await asyncio.Event().wait()
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        result = await passthrough(executor, fn, *args, **kwargs)
+        return await result if asyncio.iscoroutine(result) else result
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
-        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
-        module.run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.asyncio = EnqueueBudgetAsyncio()
+        module.run_full_pipeline_background_async = pipeline
+        module.run_blocking = run_blocking
         module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
-        # The shared post-budget deadline firing mid-enqueue surfaces as
-        # TimeoutError from the timeout_at context: the handler stopped
-        # waiting while the underlying create may still have landed.
-        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=TimeoutError('post-budget deadline'))
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=enqueue)
 
         response = await module.run_sync_job(request, task_retry_count=0)
 
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
         assert module.update_sync_job.call_count == 1
         assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
     finally:

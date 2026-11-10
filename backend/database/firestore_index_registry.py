@@ -2230,6 +2230,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('record_custody_receipt_expiry', 'record_custody_recoveries', 'recorded_at', ('ASCENDING',)),
     FieldIndexRequirement('lifecycle_pair_finalization_status', 'conversations', 'finalization_status', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),

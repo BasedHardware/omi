@@ -42,7 +42,7 @@ Late signals before seal bump upload revision and re-fence; apply transactions
 re-read the exact token map. Live custody leases override stale pod/abandon proof
 because uploaders can outlive the pusher. Tail/partial/privacy gates still apply;
 late bytes after seal remain retained and are counted for gap-fill/revert.
-Part B discovery and indexes are unchanged. Land after #24866 rebase/merge.
+Part B discovery and indexes are unchanged. Landing order updated 2026-11-10: #25018 first; then #24866 merges resulting main and reconciles both transaction intents.
 
 Lead resolution (2026-11-09): moving repair/defer metadata cannot postpone stock
 lapse. Historical anchors are capped at serve enable; post-enable metadata alone

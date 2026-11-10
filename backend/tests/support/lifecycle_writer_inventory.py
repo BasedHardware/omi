@@ -1902,7 +1902,7 @@ FIELD_SITES = {
         (
             'prepare_recovery',
             'state',
-            "'record_pending'",
+            "'record_pending' if ready else WAITING_STATE",
             (
                 'available_at',
                 'conversation_id',

@@ -11,6 +11,8 @@ from database._client import get_firestore_client, run_transactional
 from database import record_token_lease_metrics as metrics
 from database.record_audio import RecordUploadCapacityExceeded
 from database.batch_pipeline_record_lease_recovery import prepare_recovery
+from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.record_custody_receipts import expires_at
 
 
 class RecordCustodyFenceLost(RuntimeError):
@@ -106,6 +108,7 @@ def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestor
         if previous.exists:
             recorded = previous.to_dict() or {}
             return bool(recorded.get('late')), recorded.get('finish_attempt') == attempt
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
         row = ref.get(transaction=tx).to_dict() or {}
         sessions = dict(row.get('record_upload_sessions') or {})
         token = sessions.get(session)
@@ -139,6 +142,7 @@ def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestor
             {
                 'upload_revision': patch.get('record_upload_revision', row.get('record_upload_revision', 0)),
                 'recorded_at': time.time(),
+                'expires_at': expires_at(time.time()),
                 'accepted': accepted and eligible,
                 'late': accepted and late and eligible,
                 'finish_attempt': attempt,
@@ -171,6 +175,7 @@ def recover_committed(uid, cid, session, *, firestore_client=None):
             recorded = previous.to_dict() or {}
             own_attempt = recorded.get('finish_attempt') == attempt
             return own_attempt, own_attempt and bool(recorded.get('late'))
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
         row = ref.get(transaction=tx).to_dict() or {}
         if (
             not row
@@ -194,6 +199,7 @@ def recover_committed(uid, cid, session, *, firestore_client=None):
             {
                 'upload_revision': revision,
                 'recorded_at': now,
+                'expires_at': expires_at(now),
                 'accepted': True,
                 'late': True,
                 'finish_attempt': attempt,

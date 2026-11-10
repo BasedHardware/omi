@@ -192,6 +192,12 @@ without changing seal decisions. Serve honors `RECORD_TOKEN_LEASE_MODE_SERVE_PER
 (default 0) with salt `record-token-lease`. Only observed custody appends and
 frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` inside
 the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
+Registration also persists `append_late`, so a committed registration whose reply
+is lost returns the same late observation. Manifest admission renews custody-source
+tokens only in the serve cohort; it cannot extend frame-producer leases or fail
+shadow requests. A failed pusher registration remains an abandonment candidate,
+not a committed registration eligible for renewal. Metadata renewal failures do
+not interrupt frame storage or close the live socket.
 Exact custody tokens additionally cover the backend-sync request timeout from
 `config/cloud_run_request_timeouts.json` plus `CUSTODY_REQUEST_MARGIN_SECONDS`
 (300s), giving a 3900s minimum; frame leases keep the configured duration. The
@@ -212,7 +218,14 @@ remain authoritative. Normal finish writes the same terminal per-upload receipt
 inside the revision transaction, so an ambiguous committed finish retries without
 a second bump or continuation. The receipt retains the late decision and winning
 completion attempt: a lost commit reply still counts once, while a separate finish
-replay stays read-only and adds no late-append count. Before staging, an upload with
+replay stays read-only and adds no late-append count. Before creating any new receipt,
+finish and committed-fence recovery enroll the account/privacy authority in the
+same transaction, including refused uploads and paths that need no continuation.
+Receipts expire after 24h through the active repair CronJob, using their existing
+server `recorded_at`; only receipt metadata is deleted. A nonempty deliberately
+selected archive subset is durable acceptance, while an archive exception is a
+refusal. Closed/partial WAL retention validates both datetime bounds before IO;
+an unfinished row preserves the upload route's ordinary response. Before staging, an upload with
 only `recording_session_id` resolves its user-scoped conversation through the same
 resolver as record admission and fences that target. If the session does not
 resolve, the original archive/admission response remains unchanged and there is
@@ -220,7 +233,16 @@ no custody append for an unknown target. Captured native input pins
 `record_input_upload_revision` on its jobs while lease observation is enabled.
 A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.
+Separate continuation jobs enter `record_recovery_waiting` until the original
+ledger/publication is complete. Old worker images cannot schedule that state.
+Current workers CAS-promote it to `record_pending` independent of lease mode,
+checking privacy again; old-image rollback retains the obligation until a current
+worker returns. Original work and projection bindings are not rewritten.
 Frame late-append counting follows successful durable window/object commit.
+Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that
+ConfigMap render the same protected-environment `RECORD_TOKEN_LEASE_*` input
+vector with off defaults. Roll every producer before setting the separately typed
+repair vector to serve; the first serve-enable epoch stays pinned.
 Custody late-append accounting observes the post-storage renewal/finish transaction
 in shadow, non-cohort and serve requests, including throttled renewals. Each
 request retains every durable-file observation through transaction retries and

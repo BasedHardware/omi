@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 
 from config.record_audio import record_identity
+from database.record_recovery_gate import publication_ready, WAITING_STATE
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_policy import policy_in_transaction
 from database.batch_pipeline_store import FirestoreTransaction
@@ -51,6 +52,7 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
         else jobs.document(recovery_segment(uid, cid))
     )
     job = original_job if ref == original_ref else ref.get(transaction=tx).to_dict() or {}
+    ready = ref == original_ref or publication_ready(client, tx, namespace, uid, cid, original_job)
     generation = assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
     snapshot = {
         key: row.get(key)
@@ -85,7 +87,7 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
         'conversation_id': cid,
         'privacy_generation': generation,
         'priority': 0,
-        'state': 'record_pending',
+        'state': 'record_pending' if ready else WAITING_STATE,
         'available_at': now,
         'enqueued_at': job.get('enqueued_at', now),
         'record_content_id': content,

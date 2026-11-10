@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import runpy
 import sys
+import subprocess
 import urllib.request
 
 import pytest
@@ -44,6 +45,9 @@ def production_render_inputs(monkeypatch):
                 bind_synthetic_inputs(child)
 
     bind_synthetic_inputs(parsed['environments']['prod'])
+    for key, entry in parsed['environments']['prod']['gke']['config_map']['entries'].items():
+        if entry.get('source') == 'environment':
+            monkeypatch.setenv(key, str(entry.get('default', 'synthetic-gke-value')))
     return root, manifest, renderer
 
 
@@ -176,3 +180,58 @@ def test_prod_active_repair_scrapes_age_and_release_counters_without_enabling_id
     assert (
         'last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:])' in rules[1]['data'][0]['model']['expr']
     )
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, production_render_inputs, mode):
+    root, manifest, renderer = production_render_inputs
+    expected = {
+        'RECORD_TOKEN_LEASE_MODE': mode,
+        'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '10',
+        'RECORD_TOKEN_LEASE_SECONDS': '3600',
+        'RECORD_TOKEN_LEASE_DEPLOYED_AT': '2000000000',
+    }
+    for key, value in expected.items():
+        monkeypatch.setenv(key, value)
+    parsed = renderer['_load_yaml'](manifest)
+    state = renderer['_render_cloud_run_state'](parsed['environments']['prod'])
+    sync_env = {entry['name']: entry.get('value') for entry in state['services']['backend-sync']['env']}
+    assert {key: sync_env[key] for key in expected} == expected
+    config_renderer = runpy.run_path(str(root / 'backend/scripts/render_gke_backend_config.py'))
+    monkeypatch.setitem(config_renderer['config_map_entries'].__globals__, '_load_yaml', lambda path: parsed)
+    name, config = config_renderer['config_map_entries']('prod', manifest)
+    assert {key: config[key] for key in expected} == expected
+    for chart, values in [
+        ('pusher', 'prod_omi_pusher_values.yaml'),
+        ('backend-listen', 'prod_omi_backend_listen_values.yaml'),
+    ]:
+        result = subprocess.run(
+            [
+                'helm',
+                'template',
+                'prod-omi-' + chart,
+                str(root / 'backend/charts' / chart),
+                '-f',
+                str(root / 'backend/charts' / chart / values),
+                '--set-string',
+                'image.digest=sha256:' + 'a' * 64,
+                '--set-string',
+                'image.tag=',
+            ],
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 0, result.stderr
+        deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+        env = {item['name']: item for item in deployment['spec']['template']['spec']['containers'][0]['env']}
+        for key in expected:
+            assert env[key]['valueFrom']['configMapKeyRef'] == {'name': name, 'key': key}
+            assert 'value' not in env[key]
+    # Repair deliberately has separately typed values. The release procedure
+    # supplies the same vector only after every producer has rolled.
+    docs = documents(
+        '--set', f'recordTokenLease.mode={mode},recordTokenLease.servePercent=10,recordTokenLease.deployedAt=2000000000'
+    )
+    for container in containers(docs):
+        env = {entry['name']: entry.get('value') for entry in container['env']}
+        assert {key: env[key] for key in expected} == expected

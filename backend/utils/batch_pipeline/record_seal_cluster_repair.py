@@ -28,6 +28,7 @@ from config import record_seal_repair as config
 from config import record_partial as partial_config
 from config.record_audio import record_identity
 from config import record_seal_rules as lease
+from database import record_custody_receipts
 from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
@@ -758,7 +759,7 @@ def run(*, progress=lambda _: None):
     config.require_runtime()
     with silent_dependencies():
         from database._client import get_firestore_client
-        from utils.batch_pipeline.record_seal_budget import SweepBudget
+        from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
         from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
         from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, require_fresh_proof
 
@@ -805,6 +806,23 @@ def run(*, progress=lambda _: None):
     # Reuse discovery's bounded, content-free age sample. No additional query
     # and no activation of the idle seal worker's scanner are needed.
     REPAIR_OLDEST.set(max(metric_ages, default=0))
+    if mode == 'apply':
+        try:
+            with silent_dependencies():
+                expiry_budget = SweepBudget(30)
+                with expiry_budget.interrupt_io():
+                    expired = record_custody_receipts.prune(client, now=time.time(), budget=expiry_budget)
+            progress(
+                {
+                    'event': 'record_custody_receipts_expiry',
+                    'outcome': 'saturated' if expired >= record_custody_receipts.MAX_PER_RUN else 'completed',
+                    'deleted': expired,
+                }
+            )
+        except BudgetExhausted:
+            progress({'event': 'record_custody_receipts_expiry', 'outcome': 'budget_exhausted'})
+        except Exception:
+            progress({'event': 'record_custody_receipts_expiry', 'outcome': 'error'})
     last_attempted, last_job_attempted = None, None
 
     def attempted(path):

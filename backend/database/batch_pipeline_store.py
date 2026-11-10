@@ -20,6 +20,7 @@ from config.firestore_read_levers import lever_enabled
 from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
+from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
@@ -547,14 +548,18 @@ def ready_predecessor(
 
 
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
-    if state not in {'leased', 'retry', 'result_ready', 'record_pending'}:
+    if state not in {'leased', 'retry', 'result_ready', 'record_pending', record_recovery_gate.WAITING_STATE}:
         raise ValueError('only recoverable states may be scanned')
     field = {
         'leased': 'lease_until',
         'retry': 'available_at',
         'result_ready': 'enqueued_at',
         'record_pending': 'available_at',
+        record_recovery_gate.WAITING_STATE: 'available_at',
     }[state]
+    if state == 'record_pending':
+        for segment in due(client, namespace, record_recovery_gate.WAITING_STATE, now, limit):
+            record_recovery_gate.promote(client, namespace, segment, now)
     docs = (
         client.collection(f'{namespace}_jobs')
         .where('state', '==', state)

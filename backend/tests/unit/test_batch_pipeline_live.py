@@ -8,11 +8,13 @@ import hashlib
 import io
 import json
 import wave
+from unittest.mock import Mock, call
 
 import pytest
 
 from config.batch_pipeline import live_record_enabled_for
 from database.batch_pipeline_intake import AdmissionDisabled, admit
+from database.batch_pipeline_store import due
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
@@ -190,12 +192,15 @@ def test_record_drain_settings_are_bounded(monkeypatch, raw, batch, concurrency)
 
 
 @pytest.mark.parametrize(
-    'state,limit,expected', [('record_pending', 500, 500), ('record_pending', 999, 500), ('retry', 500, 100)]
+    'state,limit,expected',
+    [
+        ('record_pending', 500, 500),
+        ('record_pending', 999, 500),
+        ('retry', 500, 100),
+        ('record_recovery_waiting', 500, 100),
+    ],
 )
 def test_due_record_page_keeps_available_at_order_and_accepts_larger_batch(state, limit, expected):
-    from unittest.mock import Mock
-    from database.batch_pipeline_store import due
-
     query = Mock()
     query.collection.return_value = query
     query.where.return_value = query
@@ -203,8 +208,16 @@ def test_due_record_page_keeps_available_at_order_and_accepts_larger_batch(state
     query.limit.return_value = query
     query.stream.return_value = []
     assert due(query, 'batch_pipeline_test_live', state, 1000, limit) == []
-    query.order_by.assert_called_once_with('available_at')
-    query.limit.assert_called_once_with(expected)
+    states = ['record_recovery_waiting', state] if state == 'record_pending' else [state]
+    limits = [100, expected] if state == 'record_pending' else [expected]
+    assert query.where.call_args_list == [
+        request
+        for candidate in states
+        for request in (call('state', '==', candidate), call('available_at', '<=', 1000))
+    ]
+    assert query.order_by.call_args_list == [call('available_at')] * len(states)
+    assert query.limit.call_args_list == [call(size) for size in limits]
+    assert query.stream.call_count == len(states)
 
 
 @pytest.mark.asyncio

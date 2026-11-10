@@ -24,6 +24,16 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.record_custody_receipts.expired_page',
+            neutrals={
+                'now': (2000000000.0, 'expiry cutoff only'),
+                'budget': (
+                    SimpleNamespace(check=lambda: None, timeout=lambda maximum=10: maximum),
+                    'RPC deadline only',
+                ),
+            },
+        ),
+        DriverEntry(
             'database.batch_pipeline_record_dead_letter.record_dead_letter_stock',
             domains={'namespace': namespaces},
         ),
@@ -452,7 +462,7 @@ def entries():
             'database.batch_pipeline_store.due',
             domains={
                 'namespace': namespaces,
-                'state': ['leased', 'retry', 'result_ready', 'record_pending'],
+                'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},

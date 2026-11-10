@@ -5,6 +5,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 from google.api_core.exceptions import ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
@@ -15,6 +16,11 @@ from starlette.responses import JSONResponse
 from config.record_audio import record_identity
 from database import record_custody_append as custody, record_token_lease_metrics as metrics, record_audio
 from database.batch_pipeline_record_lease_recovery import recovery_segment
+from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
+from database import record_recovery_gate, record_custody_receipts as receipts
+from utils.batch_pipeline.record_seal_budget import SweepBudget
+from utils.sync.stage import collection_name
 from utils.sync import record_token_lease as request
 
 pytestmark = [
@@ -186,4 +192,190 @@ async def test_shadow_observes_post_storage_state_through_real_renewal_reply_los
         monkeypatch.setattr(client._firestore_api, 'commit', original_commit)
         row.delete()
         user.delete()
+        client.close()
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('has_intake', [False, True])
+def test_old_worker_cannot_run_recovery_before_original_publication(monkeypatch, mode, has_intake):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    uid, cid = 'synthetic-gate-' + uuid.uuid4().hex, 'record'
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    content, original = record_identity(uid, cid)
+    original_ref = client.collection('batch_pipeline_dev_jobs').document(original)
+    recovery_ref = client.collection('batch_pipeline_dev_jobs').document(recovery_segment(uid, cid))
+    intake = client.collection('batch_pipeline_dev_intakes').document('bp_' + content)
+    ledger = user.collection(collection_name('sync_content_ledger')).document(content)
+    receipt = row.collection('record_custody_recoveries').document(hashlib.sha256(b'custody:gate').hexdigest())
+    now = 2_000_000_000.0
+    monkeypatch.setattr(custody, 'time', SimpleNamespace(time=lambda: now))
+    user.set({'private_cloud_sync_enabled': True})
+    row.set(
+        {
+            'status': 'processing',
+            'record_lane_owner': 'batch_live_v1',
+            'private_cloud_sync_enabled': True,
+            'finished_at': datetime.now(timezone.utc),
+            'record_audio_closed': False,
+            'record_upload_revision': 7,
+            'record_upload_sessions': {},
+        }
+    )
+    original_ref.set({'state': 'committed' if has_intake else 'ready', 'record_input_upload_revision': 7})
+    if has_intake:
+        intake.set({'content_id': content})
+        ledger.set({'status': 'processing'})
+    try:
+        assert custody.begin(uid, cid, 'custody:gate', firestore_client=client)
+        custody.finish(uid, cid, 'custody:gate', accepted=True, firestore_client=client)
+        assert recovery_ref.get().to_dict()['state'] == record_recovery_gate.WAITING_STATE
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+        store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
+        assert recovery_ref.id not in store.due('record_pending', now + 1, 10)
+        # Literal old-worker query: it has no lease_recovery check and sees no
+        # runnable obligation, even if the current worker image rolls back.
+        old_due = client.collection('batch_pipeline_dev_jobs').where('state', '==', 'record_pending').stream()
+        assert recovery_ref.id not in [doc.id for doc in old_due]
+        if has_intake:
+            ledger.update({'status': 'completed'})
+        else:
+            original_ref.update({'state': 'committed'})
+        assert recovery_ref.id in store.due('record_pending', now + 62, 10)
+        assert recovery_ref.get().to_dict()['state'] == 'record_pending'
+    finally:
+        for ref in (receipt, recovery_ref, original_ref, intake, ledger, row, user):
+            ref.delete()
+        client.close()
+
+
+@pytest.mark.parametrize('operation', ['finish_refused', 'finish_accepted', 'recover_committed'])
+def test_finish_after_erasure_enumeration_cannot_create_an_orphan_receipt(monkeypatch, operation):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    uid, cid, session = 'synthetic-erase-' + uuid.uuid4().hex, 'record', 'custody:erasure'
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    receipt = row.collection('record_custody_recoveries').document(hashlib.sha256(session.encode()).hexdigest())
+    privacy = client.collection('batch_pipeline_privacy').document(privacy_owner_key(uid))
+    user.set({'private_cloud_sync_enabled': True})
+    # No finished_at: prepare_recovery returns before its own privacy walk.
+    row.set(
+        {
+            'record_lane_owner': 'batch_live_v1',
+            'private_cloud_sync_enabled': True,
+            'record_upload_revision': 7,
+            'record_upload_sessions': {},
+        }
+    )
+    assert custody.begin(uid, cid, session, firestore_client=client)
+    # Real erasure fences the owner BEFORE enumerating/deleting children. An
+    # already-begun upload may finish after that enumeration, while the parent
+    # still exists; it must not create an unseen receipt beneath that parent.
+    privacy.set({'generation': 1, 'blocked': True, 'purging': True})
+    assert list(row.collections()) == []
+    try:
+        with pytest.raises(BatchPrivacyBlocked):
+            if operation == 'recover_committed':
+                row.update({'record_upload_sessions': {}})
+                custody.recover_committed(uid, cid, session, firestore_client=client)
+            else:
+                custody.finish(uid, cid, session, accepted=operation == 'finish_accepted', firestore_client=client)
+        assert row.get().to_dict()['record_upload_revision'] == 7
+        row.delete()
+        user.delete()
+        assert not receipt.get().exists
+    finally:
+        for ref in (receipt, row, user, privacy):
+            ref.delete()
+        client.close()
+
+
+def test_frame_registration_committed_reply_loss_preserves_append_late(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    uid, cid = 'synthetic-register-' + uuid.uuid4().hex, 'record'
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    now = datetime.now(timezone.utc).timestamp()
+    user.set({'private_cloud_sync_enabled': True})
+    row.set(
+        {
+            'record_lane_owner': 'batch_live_v1',
+            'record_upload_revision': 7,
+            'record_upload_sessions': {
+                'old': {
+                    'pod': 'old',
+                    'process_started_at': now - 8000,
+                    'last_signal_at': now - 7200,
+                    'lease_expires_at': now - 3600,
+                    'signal_source': 'frames',
+                }
+            },
+        }
+    )
+    commit = client._firestore_api.commit
+    lost = []
+
+    def lose_reply(*args, **kwargs):
+        result = commit(*args, **kwargs)
+        if not lost:
+            lost.append(True)
+            raise ServiceUnavailable('committed frame registration response lost')
+        return result
+
+    monkeypatch.setattr(client._firestore_api, 'commit', lose_reply)
+    observed = {}
+    try:
+        assert record_audio.set_record_upload_pending(
+            uid,
+            cid,
+            'new',
+            True,
+            producer={'pod': 'new', 'process_started_at': now},
+            late_observation=observed,
+            firestore_client=client,
+        )
+        assert lost == [True] and observed == {'late': True}
+        assert row.get().to_dict()['record_upload_revision'] == 8
+        assert row.get().to_dict()['record_upload_sessions']['new']['append_late']
+    finally:
+        monkeypatch.setattr(client._firestore_api, 'commit', commit)
+        row.delete()
+        user.delete()
+        client.close()
+
+
+def test_expiry_prunes_only_receipts_and_keeps_audio_and_recovery(monkeypatch, tmp_path):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')  # Rollback does not disable expiry.
+    client = firestore.Client(project='demo-tokenlease-expiry', credentials=AnonymousCredentials())
+    uid, cid = 'synthetic-expiry-' + uuid.uuid4().hex, 'record'
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    expired = row.collection('record_custody_recoveries').document('expired')
+    live_receipt = row.collection('record_custody_recoveries').document('active')
+    recovery = client.collection('batch_pipeline_dev_jobs').document(recovery_segment(uid, cid))
+    audio = tmp_path / 'raw-audio'
+    audio.write_bytes(b'synthetic retained audio')
+    now = datetime.now(timezone.utc).timestamp()
+    row.set({'raw_audio': str(audio), 'record_upload_revision': 8})
+    expired.set({'recorded_at': now - receipts.RETENTION_SECONDS - 1, 'accepted': True})
+    live_receipt.set({'recorded_at': now, 'expires_at': receipts.expires_at(now), 'accepted': True})
+    recovery.set({'state': 'record_recovery_waiting', 'owner_id': uid})
+    before = row.get().to_dict(), recovery.get().to_dict()
+    try:
+        assert receipts.prune(client, now=now, budget=SweepBudget(30)) == 1
+        assert not expired.get().exists and live_receipt.get().exists
+        assert (row.get().to_dict(), recovery.get().to_dict()) == before
+        assert audio.read_bytes() == b'synthetic retained audio'
+    finally:
+        for ref in (expired, live_receipt, recovery, row, user):
+            ref.delete()
         client.close()

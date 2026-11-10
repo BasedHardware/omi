@@ -85,6 +85,8 @@ def set_record_upload_pending(
         sessions = dict(row.get('record_upload_sessions') or {})
         if pending:
             if session in sessions:
+                token = sessions[session]
+                observed['late'] = isinstance(token, dict) and bool(token.get('append_late'))
                 return True
             if len(sessions) >= 128:
                 raise RecordUploadCapacityExceeded('record upload session budget exceeded')
@@ -118,6 +120,10 @@ def set_record_upload_pending(
                 observed['late'] |= bool(recovery)
                 if recovery:
                     tx.set(*recovery)
+            if isinstance(value, dict) and record_seal_rules.token_lease_mode() != 'off':
+                # The same registration after a committed-but-lost response
+                # must return the original late observation.
+                sessions[session]['append_late'] = bool(observed['late'])
             tx.update(ref, patch)
         elif session in sessions:
             if isinstance(sessions[session], dict) and 'abandoned_at' in sessions[session]:
@@ -223,6 +229,13 @@ def renew_record_token_lease(
         if closed_frame and not serving:
             return False, True, []  # Shadow observes a seal; it never mutates it.
         identified = [token for token in sessions.values() if isinstance(token, dict)]
+        targets = [
+            token
+            for key, token in sessions.items()
+            if isinstance(token, dict)
+            and (session is None or key == session)
+            and (source != 'custody_append' or token.get('signal_source') == 'custody_append')
+        ]
         if source == 'custody_append':
             late |= any(record_seal_rules.token_lease_lapsed(token, now, row=row) for token in identified)
             # Publish only after renewal succeeds, but retain post-storage
@@ -230,11 +243,11 @@ def renew_record_token_lease(
             observed_late |= late
         if (
             source == 'custody_append'
-            and identified
+            and targets
             and all(
                 (signal := record_seal_rules.lease_timestamp(token.get('last_signal_at')))
                 and now - signal < record_seal_rules.producer_token_lease_seconds(token) / 2
-                for token in identified
+                for token in targets
             )
         ):
             return False, late, []
@@ -259,6 +272,8 @@ def renew_record_token_lease(
             if session is not None and key != session:
                 continue
             if not isinstance(token, dict):
+                continue
+            if source == 'custody_append' and token.get('signal_source') != 'custody_append':
                 continue
             clocks = record_seal_rules.token_lease_clocks(token, row=row)
             lapsed = record_seal_rules.token_lease_lapsed(token, now, row=row)
