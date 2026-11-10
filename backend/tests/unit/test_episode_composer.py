@@ -1523,6 +1523,7 @@ def test_paid_result_never_reintroduces_a_member_hidden_during_the_call(store):
 
 
 def test_l8_off_drains_a_persisted_late_deferral(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
     episode = {
         'id': 'late',
