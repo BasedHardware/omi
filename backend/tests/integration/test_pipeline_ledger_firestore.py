@@ -53,6 +53,17 @@ def test_census_window_reads_the_committed_rows(client, monkeypatch):
     uid, capture_id = 'u-window', 'c-window'
     assert pipeline_ledger.advance(uid, capture_id, pipeline_ledger.SEALED, now=100, firestore_client=client)
 
-    rows = pipeline_ledger.census_window(0, 10**12, firestore_client=client)
-    assert [row['capture_id'] for row in rows] == [capture_id]
+    rows = pipeline_ledger.census_window(0, 10**12, uid=uid, firestore_client=client)
+    assert len(rows) == 1
     assert rows[0]['stage'] == pipeline_ledger.SEALED
+    assert rows[0]['owner_key'] == pipeline_ledger.owner_key(uid)
+    assert 'capture_id' not in rows[0]
+
+
+def test_census_window_never_reads_another_owner(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    assert pipeline_ledger.advance('u-a', 'c-a', pipeline_ledger.SEALED, now=100, firestore_client=client)
+    assert pipeline_ledger.advance('u-b', 'c-b', pipeline_ledger.SEALED, now=100, firestore_client=client)
+
+    rows = pipeline_ledger.census_window(0, 10**12, uid='u-a', firestore_client=client)
+    assert [row['owner_key'] for row in rows] == [pipeline_ledger.owner_key('u-a')]

@@ -26,7 +26,7 @@ def test_forward_transitions_are_legal_and_ranked():
         doc = plan.doc
     assert doc['stage'] == ledger.DONE
     assert doc['deadline_at'] is None
-    assert doc['expires_at'] == 500 + ledger.terminal_ttl_seconds()
+    assert ledger._epoch(doc['expires_at']) == 500 + ledger.terminal_ttl_seconds()
 
 
 def test_forward_skip_is_legal_so_uninstrumented_stages_do_not_block():
@@ -161,9 +161,25 @@ def test_terminal_ttl_is_at_least_twenty_six_hours(monkeypatch):
 def test_terminal_ttl_and_no_deadline():
     doc = ledger.plan_advance(None, ledger.failed_stage('provider'), now=100).doc
     assert doc['deadline_at'] is None
-    assert doc['expires_at'] == 100 + ledger.terminal_ttl_seconds()
+    assert ledger._epoch(doc['expires_at']) == 100 + ledger.terminal_ttl_seconds()
     assert doc['terminal'] is True
     assert doc['terminal_reason'] == 'failed:provider'
+
+
+def test_expires_at_is_a_utc_timestamp_not_an_epoch():
+    from datetime import datetime, timezone
+
+    doc = ledger.plan_advance(None, ledger.NO_SPEECH, now=100).doc
+    assert isinstance(doc['expires_at'], datetime)
+    assert doc['expires_at'].tzinfo == timezone.utc
+    assert ledger.plan_advance(None, ledger.SEALED, now=100).doc['expires_at'] is None
+
+
+def test_arbitrary_failed_reason_collapses_to_the_closed_enum():
+    doc = ledger.plan_advance(None, 'failed:a-user-supplied-string', now=100).doc
+    assert doc['stage'] == 'failed:other'
+    assert doc['terminal_reason'] == 'failed:other'
+    assert ledger.plan_advance(None, 'failed:upload_failed', now=100).doc['stage'] == 'failed:upload_failed'
 
 
 def test_schema_fields_are_present_and_content_free():
@@ -177,8 +193,6 @@ def test_schema_fields_are_present_and_content_free():
     ).doc
     for field in (
         'schema_version',
-        'capture_id',
-        'conversation_id',
         'owner_key',
         'stage',
         'entered_at',
@@ -206,7 +220,17 @@ def test_schema_fields_are_present_and_content_free():
     assert doc['speech_seconds'] == 12.5
     assert doc['speech_basis'] == 'vad'
     assert doc['home_ready_at'] == 100
-    for forbidden in ('title', 'overview', 'transcript', 'audio_path', 'email', 'device_id'):
+    for forbidden in (
+        'title',
+        'overview',
+        'transcript',
+        'audio_path',
+        'email',
+        'device_id',
+        'uid',
+        'capture_id',
+        'conversation_id',
+    ):
         assert forbidden not in doc
 
 
@@ -300,9 +324,9 @@ def test_advance_writes_the_planned_document(monkeypatch):
     assert ledger.advance('uid', 'capture', ledger.SEALED, now=100, firestore_client=client) is True
     doc = client.store['users/uid/pipeline_ledger/capture']
     assert doc['stage'] == ledger.SEALED
-    assert doc['capture_id'] == 'capture'
-    assert doc['conversation_id'] == 'capture'
     assert doc['owner_key'] == ledger.owner_key('uid')
+    assert 'capture_id' not in doc
+    assert 'conversation_id' not in doc
 
 
 def test_advance_duplicate_does_not_double_count(monkeypatch):
@@ -363,45 +387,74 @@ class _FakeQuery:
         return [_FakeSnapshot(row) for row in rows]
 
 
+class _FakeWindowRef:
+    def __init__(self, rows, path=()):
+        self.rows = rows
+        self.path = path
+
+    def document(self, name):
+        return _FakeWindowRef(self.rows, self.path + (name,))
+
+    def collection(self, name):
+        assert name == ledger.COLLECTION
+        assert self.path[0] == 'users' and len(self.path) == 2, self.path
+        return _FakeQuery(self.rows)
+
+
 class _FakeWindowClient:
     def __init__(self, rows):
         self.rows = rows
 
-    def collection_group(self, name):
-        assert name == ledger.COLLECTION
-        return _FakeQuery(self.rows)
+    def collection(self, name):
+        assert name == 'users'
+        return _FakeWindowRef(self.rows, (name,))
 
 
-def test_census_window_is_bounded_and_read_only():
+def test_census_window_is_bounded_owner_scoped_and_read_only():
     rows = [
-        {'admitted_at': 10, 'stage': ledger.SEALED},
-        {'admitted_at': 20, 'stage': ledger.NOTED},
-        {'admitted_at': 30, 'stage': ledger.DONE},
+        {'admitted_at': 10, 'stage': ledger.SEALED, 'owner_key': 'owner-a'},
+        {'admitted_at': 20, 'stage': ledger.NOTED, 'owner_key': 'owner-a'},
+        {'admitted_at': 30, 'stage': ledger.DONE, 'owner_key': 'owner-a'},
     ]
     client = _FakeWindowClient(rows)
-    assert [row['stage'] for row in ledger.census_window(15, 25, firestore_client=client)] == [ledger.NOTED]
-    assert [row['stage'] for row in ledger.iter_window(0, 100, firestore_client=client)] == [
+    assert [row['stage'] for row in ledger.census_window(15, 25, uid='u', firestore_client=client)] == [ledger.NOTED]
+    assert [row['stage'] for row in ledger.iter_window(0, 100, uid='u', firestore_client=client)] == [
         ledger.SEALED,
         ledger.NOTED,
         ledger.DONE,
     ]
+    assert 'capture_id' not in ledger.census_window(0, 100, uid='u', firestore_client=client)[0]
 
 
 def test_census_window_fails_closed_when_truncated():
     rows = [{'admitted_at': 10}, {'admitted_at': 20}]
     client = _FakeWindowClient(rows)
     try:
-        ledger.census_window(0, 100, limit=1, firestore_client=client)
+        ledger.census_window(0, 100, uid='u', limit=1, firestore_client=client)
     except ledger.LedgerWindowTruncated:
         pass
     else:  # pragma: no cover - the assertion is the contract
         raise AssertionError('truncated window must fail closed')
 
 
+def test_iter_window_yields_no_prefix_before_truncation():
+    rows = [{'admitted_at': 10}, {'admitted_at': 20}]
+    client = _FakeWindowClient(rows)
+    seen = []
+    try:
+        for row in ledger.iter_window(0, 100, uid='u', limit=1, firestore_client=client):
+            seen.append(row)
+    except ledger.LedgerWindowTruncated:
+        pass
+    else:  # pragma: no cover - the assertion is the contract
+        raise AssertionError('truncated window must fail closed')
+    assert seen == []
+
+
 def test_census_window_rejects_an_inverted_window():
     client = _FakeWindowClient([])
     try:
-        ledger.census_window(20, 10, firestore_client=client)
+        ledger.census_window(20, 10, uid='u', firestore_client=client)
     except ValueError:
         pass
     else:  # pragma: no cover - the assertion is the contract

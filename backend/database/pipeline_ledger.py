@@ -129,7 +129,9 @@ def failed_stage(reason: str | None) -> str:
 
 def stage_label(stage: str) -> str:
     """Metric label: failure reasons never become their own series."""
-    return 'failed' if stage.startswith(FAILED_PREFIX) else stage
+    if stage.startswith(FAILED_PREFIX):
+        return 'failed'
+    return stage if stage in STAGE_RANK or stage in TERMINAL_STAGES or stage == 'none' else 'other'
 
 
 def bounded_reason(reason: Any) -> str:
@@ -206,6 +208,10 @@ def plan_advance(
     again without an explicit, higher-revision re-open.
     """
     current = time.time() if now is None else now
+    if stage.startswith(FAILED_PREFIX):
+        # A caller cannot mint an arbitrary terminal reason: only the closed
+        # failure vocabulary is stored, everything else collapses to ``other``.
+        stage = failed_stage(stage[len(FAILED_PREFIX) :])
     if stage not in STAGE_TABLE and not is_terminal(stage):
         return Plan(None, 'illegal')
     previous = (existing or {}).get('stage')
@@ -253,8 +259,6 @@ def plan_advance(
     rule = STAGE_TABLE.get(stage)
     doc: dict[str, Any] = {
         'schema_version': SCHEMA_VERSION,
-        'capture_id': _pick(None, existing, 'capture_id'),
-        'conversation_id': _pick(None, existing, 'conversation_id'),
         'owner_key': _pick(None, existing, 'owner_key'),
         'stage': stage,
         'entered_at': current,
@@ -277,7 +281,8 @@ def plan_advance(
         'home_ready_at': _epoch(_pick(home_ready_at, existing, 'home_ready_at')),
         'episode_done_at': _epoch(_pick(episode_done_at, existing, 'episode_done_at')),
         'transitions': transitions,
-        'expires_at': current + terminal_ttl_seconds() if terminal else None,
+        # Firestore TTL policies require a timestamp field, not a numeric epoch.
+        'expires_at': datetime.fromtimestamp(current + terminal_ttl_seconds(), tz=timezone.utc) if terminal else None,
     }
     return Plan(doc, 'written')
 
@@ -324,7 +329,7 @@ def ledger_ref(client: Any, uid: str, capture_id: str) -> Any:
     return client.collection('users').document(uid).collection(COLLECTION).document(capture_id)
 
 
-def _commit(client: Any, ref: Any, uid: str, capture_id: str, stage: str, **kwargs: Any) -> str:
+def _commit(client: Any, ref: Any, uid: str, stage: str, **kwargs: Any) -> str:
     observed: dict[str, Any] = {}
 
     @firestore.transactional
@@ -335,8 +340,6 @@ def _commit(client: Any, ref: Any, uid: str, capture_id: str, stage: str, **kwar
         if plan.doc is None:
             observed['outcome'] = plan.outcome
             return plan.outcome
-        plan.doc['capture_id'] = capture_id
-        plan.doc['conversation_id'] = capture_id
         plan.doc['owner_key'] = owner_key(uid)
         transaction.set(ref, plan.doc)
         observed.update(
@@ -381,7 +384,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
         return False
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()
-        outcome = _commit(client, ledger_ref(client, uid, capture_id), uid, capture_id, stage, **fields)
+        outcome = _commit(client, ledger_ref(client, uid, capture_id), uid, stage, **fields)
         _observe_write('ok' if outcome == 'written' else outcome)
         return outcome == 'written'
     except Exception as error:  # Fail open: the real transition is authoritative.
@@ -395,33 +398,65 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
         return False
 
 
-def iter_window(
-    start: Any, end: Any, *, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
-) -> Iterator[dict[str, Any]]:
-    """Yield ledger rows with ``admitted_at`` in ``[start, end)``.
+CENSUS_FIELDS = (
+    'owner_key',
+    'stage',
+    'entered_at',
+    'deadline_at',
+    'attempt',
+    'reason',
+    'end_type',
+    'end_at',
+    'admitted_at',
+    'created_at',
+    'updated_at',
+    'revision',
+    'terminal',
+    'terminal_reason',
+    'speech_seconds',
+    'has_speech',
+    'speech_basis',
+    'home_ready_at',
+    'episode_done_at',
+    'expires_at',
+)
 
-    Read-only and bounded. Raises :class:`LedgerWindowTruncated` when the
-    window exceeds ``limit`` so a caller can fail closed instead of silently
-    sampling. C2 must read through this helper, never the private store.
+
+def iter_window(
+    start: Any, end: Any, *, uid: str, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
+) -> Iterator[dict[str, Any]]:
+    """Yield one owner's ledger rows with ``admitted_at`` in ``[start, end)``.
+
+    Read-only, owner-scoped and bounded. The query is scoped to
+    ``users/{uid}/pipeline_ledger`` so a caller can never read another owner's
+    rows. Rows are projected to :data:`CENSUS_FIELDS`; raw capture/conversation
+    ids and the transition history never leave the store. The whole window is
+    materialized before the first yield, so a truncated window raises
+    :class:`LedgerWindowTruncated` without handing the caller a prefix. C2 must
+    read through this helper, never the private store.
     """
     start_epoch, end_epoch = _epoch(start), _epoch(end)
     if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
         raise ValueError('invalid ledger window')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = (
-        client.collection_group(COLLECTION)
+        client.collection('users')
+        .document(uid)
+        .collection(COLLECTION)
         .where(filter=firestore.FieldFilter('admitted_at', '>=', start_epoch))
         .where(filter=firestore.FieldFilter('admitted_at', '<', end_epoch))
         .limit(limit + 1)
     )
-    for count, snapshot in enumerate(query.stream(), start=1):
-        if count > limit:
-            raise LedgerWindowTruncated(f'ledger window exceeded {limit} rows')
-        yield snapshot.to_dict() or {}
+    snapshots = list(query.stream())
+    if len(snapshots) > limit:
+        raise LedgerWindowTruncated(f'ledger window exceeded {limit} rows')
+    for snapshot in snapshots:
+        doc = snapshot.to_dict() or {}
+        yield {key: doc.get(key) for key in CENSUS_FIELDS}
 
 
 def census_window(
-    start: Any, end: Any, *, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
+    start: Any, end: Any, *, uid: str, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
 ) -> list[dict[str, Any]]:
     """Materialized :func:`iter_window`; raises on truncation."""
-    return list(iter_window(start, end, limit=limit, firestore_client=firestore_client))
+    return list(iter_window(start, end, uid=uid, limit=limit, firestore_client=firestore_client))
