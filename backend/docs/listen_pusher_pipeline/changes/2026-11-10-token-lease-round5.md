@@ -37,7 +37,7 @@ Recorded at 2026-11-10T02:30:49+00:00. All commands used the current worktree an
 - Real PromQL backtests: **7 scenarios passed**, exit 0, 1.37s launcher wall.
 - Changed-production-file pyright with repository config: **0 errors, 789 warnings**, exit 0, 2.92s.
 - Exact enforced hook lane, `PYRIGHT_PYTHON=.venv/bin/python bash scripts/typecheck.sh` from backend: **0 errors, 78,181 warnings**, exit 0, 105.53s. Pyright 1.1.403, the hook pin; existing warning policy is unchanged. This runs the full repository include/exclude selection and the stricter `utils/sync` execution environment.
-- Expanded preflight: scheduled after the implementation commit; its final result will be recorded in the receipt.
+- Expanded preflight: **67 checks passed**, exit 0; 475.50s reported / **477.02s launcher wall**, on implementation commit `ff202e8cf36d221fa64e514392d9a62d4efbe47a`.
 
 ## Commands
 
@@ -89,4 +89,6 @@ R5 changes these paths (including this note):
 - `backend/utils/sync/record_token_lease.py`
 - `backend/docs/listen_pusher_pipeline/changes/2026-11-10-token-lease-round5.md`
 
-Implementation commit: recorded in the final receipt. Final receipt commit is reported in the handoff; it contains documentation only.
+Implementation commit: `ff202e8cf36d221fa64e514392d9a62d4efbe47a` — `fix: count late producer appends and type custody paths`. Final receipt commit is reported in the handoff; it contains documentation only.
+
+Final verification receipt recorded 2026-11-10T02:41:24+00:00. The final commit changes this receipt only; all production and test source remains identical to the verified implementation commit.
