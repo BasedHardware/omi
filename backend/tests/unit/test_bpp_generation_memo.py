@@ -418,7 +418,7 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
         store = SimpleNamespace(client=db)
         reads.clear()
         reads_before = sum(
-            metrics.READS.labels('batch', 'live', result, 'unknown')._value.get() for result in ('hit', 'miss')
+            metrics.READS.labels('batch', 'live', result, 'unattributed')._value.get() for result in ('hit', 'miss')
         )
         with batch_privacy_attempt():
             outputs = []
@@ -430,7 +430,7 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
                     assert snapshots['conversations']['source']['title'] == f'live-{i}'
         counts.append(len(reads))
         reads_after = sum(
-            metrics.READS.labels('batch', 'live', result, 'unknown')._value.get() for result in ('hit', 'miss')
+            metrics.READS.labels('batch', 'live', result, 'unattributed')._value.get() for result in ('hit', 'miss')
         )
         assert reads_after - reads_before == len(reads)
         results.append(outputs)

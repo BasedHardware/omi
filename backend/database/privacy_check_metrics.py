@@ -13,7 +13,7 @@ import threading
 import time
 
 from prometheus_client import Counter, Gauge, Histogram
-from config.plan_catalog import PAID_PLAN_TYPES, PlanType
+from config.plan_catalog import PlanType
 from database.batch_privacy_attempt import PrivacyAttempt, token_version
 from database.firestore_tier_context import current_tier
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
@@ -118,21 +118,27 @@ _LOG_LOCK = threading.Lock()
 _LOG_AT = {}
 
 
-def plan_group(plan):
-    """Closed grouping from config.plan_catalog's generated PAID_PLAN_TYPES/PlanType.
+# Margin meter: margin_core.segment_rollup / margin-basis.json split.segments.
+_PLAN_SEGMENTS: dict[str, str] = {
+    PlanType.basic: 'free',
+    PlanType.architect: 'paid',
+    PlanType.operator: 'paid',
+    PlanType.plus: 'paid',
+    PlanType.unlimited: 'paid',
+    PlanType.unlimited_v2: 'unlimited_v2',
+}
 
-    The paid set includes unlimited_v2 and all retained paid plans; 'free' is
-    the legacy basic identifier normalized by database.users.
-    """
+
+def plan_group(plan):
+    """Explicit meter allowlist; legacy 'free' follows database.users normalization."""
     if not isinstance(plan, str):
-        return 'unknown'
-    if plan in PAID_PLAN_TYPES:
-        return 'paid'
-    return 'basic_free' if plan in {PlanType.basic, 'free'} else 'unknown'
+        return 'unattributed'
+    return _PLAN_SEGMENTS.get(plan, 'free' if plan == 'free' else 'unattributed')
 
 
 @dataclass
 class _BatchPlan:
+    uid: str | None  # Scope identity only; never a metric label.
     group: str
     reads: Counts = field(default_factory=Counts)
 
@@ -149,29 +155,29 @@ def observe_batch_plan(plan):
 
 def with_batch_plan(function):
     @wraps(function)
-    def wrapped(client, transaction, uid, *args, **kwargs):
-        holder = _BatchPlan(plan_group(current_tier(uid)))
+    def wrapped(*args, **kwargs):
+        uid = kwargs.get('uid', args[2] if len(args) > 2 else None)
+        holder = _BatchPlan(uid, plan_group(current_tier(uid)) if uid is not None else 'unattributed')
         token = _BATCH_PLAN.set(holder)
         try:
-            return function(client, transaction, uid, *args, **kwargs)
+            return function(*args, **kwargs)
         finally:
-            _BATCH_PLAN.reset(token)
-            # At most six counters (live/shadow x hit/miss/error), no snapshots
-            # or identifiers. Attribute even the reads before the user snapshot.
-            for (mode, result), count in holder.reads.items():
-                try:
+            try:
+                _BATCH_PLAN.reset(token)
+                # At most six counters; a hard kill before exit drops this check's reads.
+                for (mode, result), count in holder.reads.items():
                     READS.labels('batch', mode, result, holder.group).inc(count)
-                except Exception:
-                    pass
+            except Exception:
+                pass  # Including iteration faults: metrics never alter authority.
 
     return wrapped
 
 
 def _plan_label(family, uid):
-    holder = _BATCH_PLAN.get() if family == 'batch' else None
+    holder = _BATCH_PLAN.get() if _family(family) == 'batch' else None
     if holder is not None:
-        return holder.group
-    return plan_group(current_tier(uid)) if uid is not None else 'unknown'
+        return holder.group if uid is None or uid == holder.uid else 'unattributed'
+    return plan_group(current_tier(uid)) if uid is not None else 'unattributed'
 
 
 @dataclass
@@ -400,8 +406,8 @@ def current_read_caller():
 
 def _read_result(family, result, *, uid=None):
     try:
-        holder = _BATCH_PLAN.get() if family == 'batch' else None
-        if holder is not None:
+        holder = _BATCH_PLAN.get() if _family(family) == 'batch' else None
+        if holder is not None and (uid is None or uid == holder.uid):
             holder.reads[(_MODE.get(), result)] += 1
         else:
             READS.labels(_family(family), _MODE.get(), result, _plan_label(family, uid)).inc()

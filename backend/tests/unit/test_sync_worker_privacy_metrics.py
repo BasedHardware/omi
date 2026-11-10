@@ -75,7 +75,7 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 before[
                     (
                         'privacy_check_reads_total',
-                        (('family', 'batch'), ('mode', 'live'), ('plan_group', 'unknown'), ('result', 'hit')),
+                        (('family', 'batch'), ('mode', 'live'), ('plan_group', 'unattributed'), ('result', 'hit')),
                     )
                 ]
                 == attempt
@@ -84,7 +84,7 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 before[
                     (
                         'privacy_check_reads_total',
-                        (('family', 'batch'), ('mode', 'shadow'), ('plan_group', 'unknown'), ('result', 'miss')),
+                        (('family', 'batch'), ('mode', 'shadow'), ('plan_group', 'unattributed'), ('result', 'miss')),
                     )
                 ]
                 == attempt

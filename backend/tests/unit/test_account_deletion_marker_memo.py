@@ -19,7 +19,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from tests.unit.test_fsr_s4_caches import Store
 
 
-@pytest.mark.parametrize('plan,group', [('unlimited_v2', 'paid'), ('basic', 'basic_free'), (None, 'unknown')])
+@pytest.mark.parametrize('plan,group', [('unlimited_v2', 'unlimited_v2'), ('basic', 'free'), (None, 'unattributed')])
 def test_deletion_marker_metrics_use_existing_request_plan_without_extra_reads(env, plan, group):
     store, redis = env
     token = tier._request_owner.set(tier._RequestOwner('u', plan, time.monotonic() + 60))

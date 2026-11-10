@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from config.plan_catalog import PAID_PLAN_TYPES, PlanType
+from config.plan_catalog import PlanType
 from database import _client, batch_pipeline_privacy as privacy, firestore_tier_context as tier
 from database import conversation_tombstones, fsr_read_cache, legal_holds, privacy_check_metrics as metrics
 from database.batch_privacy_attempt import batch_privacy_attempt
@@ -26,19 +26,36 @@ def isolated(monkeypatch):
     tier._request_owner.reset(token)
 
 
-@pytest.mark.parametrize('plan', [*PAID_PLAN_TYPES, *(p.value for p in PAID_PLAN_TYPES)])
-def test_paid_catalog_constants(plan):
-    assert metrics.plan_group(plan) == 'paid'
+EXPECTED_SEGMENTS = {
+    PlanType.basic: 'free',
+    PlanType.architect: 'paid',
+    PlanType.operator: 'paid',
+    PlanType.plus: 'paid',
+    PlanType.unlimited: 'paid',
+    PlanType.unlimited_v2: 'unlimited_v2',
+}
+
+
+def test_every_catalog_plan_has_an_explicit_meter_segment():
+    assert set(PlanType) == set(EXPECTED_SEGMENTS) == set(metrics._PLAN_SEGMENTS)
+
+
+@pytest.mark.parametrize(
+    'plan,segment',
+    [(p, s) for p, s in EXPECTED_SEGMENTS.items()] + [(p.value, s) for p, s in EXPECTED_SEGMENTS.items()],
+)
+def test_catalog_segments(plan, segment):
+    assert metrics.plan_group(plan) == segment
 
 
 @pytest.mark.parametrize('plan', [PlanType.basic, 'basic', 'free'])
 def test_basic_and_legacy_free(plan):
-    assert metrics.plan_group(plan) == 'basic_free'
+    assert metrics.plan_group(plan) == 'free'
 
 
 @pytest.mark.parametrize('plan', [None, '', 'pro', 'enterprise', 'uid-secret', [], {}, 1])
 def test_unknown_plan_is_bounded(plan):
-    assert metrics.plan_group(plan) == 'unknown'
+    assert metrics.plan_group(plan) == 'unattributed'
 
 
 def test_labeling_has_zero_firestore_or_redis_calls(monkeypatch):
@@ -103,7 +120,14 @@ def read_value(family, mode, result, group):
 
 @pytest.mark.parametrize(
     'plan,group',
-    [('plus', 'paid'), ('basic', 'basic_free'), ('free', 'basic_free'), (None, 'unknown'), ('bad', 'unknown')],
+    [
+        ('plus', 'paid'),
+        ('unlimited_v2', 'unlimited_v2'),
+        ('basic', 'free'),
+        ('free', 'free'),
+        (None, 'unattributed'),
+        ('bad', 'unattributed'),
+    ],
 )
 @pytest.mark.parametrize('path', ['transaction', 'preflight', 'snapshots', 'shadow', 'memo_miss'])
 def test_batch_labels_all_existing_reads_and_decision(world, monkeypatch, plan, group, path):
@@ -138,7 +162,7 @@ def test_batch_labels_all_existing_reads_and_decision(world, monkeypatch, plan, 
         assert read_value('batch', 'shadow', 'miss', group) == shadow_before['miss'] + 1
 
 
-@pytest.mark.parametrize('request_plan,group', [(None, 'unknown'), ('plus', 'paid')])
+@pytest.mark.parametrize('request_plan,group', [(None, 'unattributed'), ('plus', 'paid')])
 def test_memo_hit_uses_only_matching_request_plan(world, monkeypatch, request_plan, group):
     db, reads = world
     monkeypatch.setattr(privacy, 'lever_enabled', lambda name, uid: name == 'bpp_generation_memo')
@@ -160,10 +184,10 @@ def test_process_memo_does_not_reuse_prior_plan_observation(world, monkeypatch):
     try:
         assert privacy.assert_batch_write_allowed(db, db.transaction(), UID) == 7
         reads.clear()
-        before = read_value('batch', 'live', 'hit', 'unknown')
+        before = read_value('batch', 'live', 'hit', 'unattributed')
         assert privacy.assert_batch_write_allowed(db, db.transaction(), UID) == 7
         assert reads == [TOKEN]
-        assert read_value('batch', 'live', 'hit', 'unknown') == before + 1
+        assert read_value('batch', 'live', 'hit', 'unattributed') == before + 1
     finally:
         privacy.PROCESS_DECISIONS.clear()
 
@@ -176,6 +200,82 @@ def test_metric_flush_failure_preserves_authority_and_read_sequence(world, monke
     assert metrics._BATCH_PLAN.get() is None
 
 
+@pytest.mark.parametrize('raises', [False, True])
+def test_flush_iteration_fault_never_changes_return_or_exception(raises):
+    class BrokenReads:
+        def items(self):
+            yield ('live', 'hit'), 1
+            raise RuntimeError('synthetic iteration fault')
+
+    original = ValueError('synthetic authority failure')
+    result = object()
+
+    @metrics.with_batch_plan
+    def check(client, transaction, uid):
+        metrics._BATCH_PLAN.get().reads = BrokenReads()
+        if raises:
+            raise original
+        return result
+
+    if raises:
+        with pytest.raises(ValueError) as caught:
+            check(None, None, UID)
+        assert caught.value is original
+    else:
+        assert check(None, None, UID) is result
+    assert metrics._BATCH_PLAN.get() is None
+
+
+@pytest.mark.parametrize('style', ['positional', 'keyword_uid', 'all_keywords'])
+def test_batch_decorator_accepts_keyword_uid(world, style):
+    db, reads = world
+    before = read_value('batch', 'live', 'hit', 'unlimited_v2')
+    if style == 'positional':
+        result = privacy.assert_batch_write_allowed(db, db.transaction(), UID)
+    elif style == 'keyword_uid':
+        result = privacy.assert_batch_write_allowed(db, db.transaction(), uid=UID)
+    else:
+        result = privacy.assert_batch_write_allowed(client=db, transaction=db.transaction(), uid=UID)
+    assert result == 7
+    assert reads == [('account_deletions', UID), ('users', UID), TOKEN]
+    assert read_value('batch', 'live', 'hit', 'unlimited_v2') == before + 2
+
+
+@pytest.mark.parametrize('family', ['batch', 'not-a-family'])
+def test_batch_holder_is_normalized_and_never_attributes_foreign_uid(world, family):
+    db, reads = world
+    paid = read_value('batch', 'live', 'miss', 'paid')
+    unattributed = read_value('batch', 'live', 'miss', 'unattributed')
+
+    @metrics.with_batch_plan
+    def check(client, transaction, uid):
+        metrics.observe_batch_plan('plus')
+        for owner in (None, uid, 'other'):
+            metrics.read_snapshot(family, db.collection('account_deletions').document(uid), uid=owner)
+        assert metrics._plan_label(family, uid) == 'paid'
+        assert metrics._plan_label(family, 'other') == 'unattributed'
+
+    # Even a known paid request for the other UID cannot override the holder boundary.
+    with tier_owner('plus', uid='other'):
+        check(db, None, UID)
+    assert reads == [('account_deletions', UID)] * 3
+    assert read_value('batch', 'live', 'miss', 'paid') == paid + 2
+    assert read_value('batch', 'live', 'miss', 'unattributed') == unattributed + 1
+
+
+def test_work_with_no_plan_in_memory_emits_only_unattributed(world):
+    db, reads = world
+    db.rows[('users', UID)] = {}
+    before = {
+        group: read_value('batch', 'live', 'hit', group) for group in ('free', 'paid', 'unlimited_v2', 'unattributed')
+    }
+    assert privacy.assert_batch_write_allowed(db, db.transaction(), UID) == 7
+    assert reads == [('account_deletions', UID), ('users', UID), TOKEN]
+    for group in ('free', 'paid', 'unlimited_v2'):
+        assert read_value('batch', 'live', 'hit', group) == before[group]
+    assert read_value('batch', 'live', 'hit', 'unattributed') == before['unattributed'] + 2
+
+
 @pytest.mark.parametrize('failure', ['deleted', 'error'])
 def test_before_user_read_and_errors_flush_unknown_without_leaking(world, monkeypatch, failure):
     db, reads = world
@@ -185,10 +285,10 @@ def test_before_user_read_and_errors_flush_unknown_without_leaking(world, monkey
         monkeypatch.setattr(StrictFirestoreDocument, 'get', MagicMock(side_effect=RuntimeError('synthetic')))
     # Deleted marker exists, so its single read is a hit.
     result = 'hit' if failure == 'deleted' else 'error'
-    before = read_value('batch', 'live', result, 'unknown')
+    before = read_value('batch', 'live', result, 'unattributed')
     with pytest.raises(privacy.BatchPrivacyBlocked if failure == 'deleted' else RuntimeError):
         privacy.assert_batch_write_allowed(db, db.transaction(), UID)
-    assert read_value('batch', 'live', result, 'unknown') == before + 1
+    assert read_value('batch', 'live', result, 'unattributed') == before + 1
     assert metrics._BATCH_PLAN.get() is None
     assert reads == ([('account_deletions', UID)] if failure == 'deleted' else [])
 
@@ -196,7 +296,13 @@ def test_before_user_read_and_errors_flush_unknown_without_leaking(world, monkey
 @pytest.mark.parametrize('family', ['external', 'tombstone'])
 @pytest.mark.parametrize(
     'owner,group',
-    [('matching', 'paid'), ('cold', 'unknown'), ('foreign', 'unknown'), ('closed', 'unknown'), ('expired', 'unknown')],
+    [
+        ('matching', 'paid'),
+        ('cold', 'unattributed'),
+        ('foreign', 'unattributed'),
+        ('closed', 'unattributed'),
+        ('expired', 'unattributed'),
+    ],
 )
 def test_nonbatch_paths_use_only_live_matching_request_context(world, family, owner, group):
     db, reads = world
@@ -224,7 +330,7 @@ def test_nonbatch_shadow_certificate_reads_keep_request_group(world, monkeypatch
     db, reads = world
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_checks_shadow":100}')
     with tier_owner('basic'):
-        before = read_value(family, 'shadow', 'hit', 'basic_free')
+        before = read_value(family, 'shadow', 'hit', 'free')
         if family == 'external':
             with legal_holds.external_write_fence(UID, firestore_client=db):
                 pass
@@ -240,4 +346,4 @@ def test_nonbatch_shadow_certificate_reads_keep_request_group(world, monkeypatch
             assert not conversation_tombstones.is_deleted(UID, 'source')
             tombstone = ('users', UID, 'deleted_conversations', 'source')
             assert reads == [TOKEN, tombstone, TOKEN, tombstone]
-        assert read_value(family, 'shadow', 'hit', 'basic_free') == before + 1
+        assert read_value(family, 'shadow', 'hit', 'free') == before + 1

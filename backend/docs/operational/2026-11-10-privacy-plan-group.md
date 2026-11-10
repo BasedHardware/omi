@@ -10,15 +10,16 @@ records have no subscription field. `firestore_tier_context.current_tier`
 provides an existing process-local request observation, with no loader or I/O;
 privacy call sites now require its UID to match the checked owner.
 
-`plan_group` uses `PAID_PLAN_TYPES` and `PlanType.basic` from
-`backend/config/plan_catalog.py`, generated from `config/plan_catalog.json`.
-The paid set includes `unlimited_v2`, `unlimited`, `plus`, `operator`, `architect`.
-The legacy `free` spelling follows `database/users.py` normalization to basic.
-This measures stored plan identity, not a new entitlement decision.
+`plan_group` explicitly projects the existing meter's `split.segments` mapping
+(`omi-workspace/infra/finops/margin/margin_core.py:segment_rollup`, backed by
+`omi-knowledge-base/projects/admin-omi-tv-dashboard/margin-basis.json`): basic
+(and legacy free) → free; architect/operator/plus/unlimited → paid;
+unlimited_v2 → unlimited_v2; anything else → unattributed. It uses the backend
+`PlanType` constants. This is telemetry only, with no privacy behavior change.
 
-Code-based unknown estimates (not measured production percentages):
+Code-based unattributed estimates (not measured production percentages):
 
-| Path | Plan source; unknown share |
+| Path | Plan source; unattributed share |
 | --- | --- |
 | Batch live/preflight/snapshot export/memo miss/shadow walk | Existing user snapshot; 0% when recognized, 100% when absent/unrecognized. Earlier reads are counted at check exit using that snapshot. |
 | Batch attempt/process memo hit | Matching request tier; 100% without it (background job records have no plan). Prior cached decisions never carry a plan forward. |
@@ -30,9 +31,8 @@ Both GMP keep regexes (`cloud_run_gmp_sidecar.yaml`, `cloud_run_gmp_sync.yaml`)
 match the unchanged metric names. `metric-inventory.prod.json` records names,
 not labels; both names already exist. No inventory/sidecar change is required.
 
-Zero added Firestore or Redis reads: tests assert the exact original physical
-read sequences and that label-only operations leave the client mocks untouched.
-
-Validation through `bin/omi-heavy`: the file-isolated `backend/test.sh` privacy,
-worker-metric and request-context selection passed 263 tests in ten files.
-`OMI_PR_BODY_FILE=<body> make preflight` passed all 38 selected checks.
+Zero added reads: `test_batch_labels_all_existing_reads_and_decision`,
+`test_memo_hit_uses_only_matching_request_plan`, and
+`test_nonbatch_paths_use_only_live_matching_request_context` assert exact read
+sequences. Batch counters flush at check exit; a hard kill mid-check drops that
+check's buffered reads. Unit output and CI verdicts are recorded in PR #25076.
