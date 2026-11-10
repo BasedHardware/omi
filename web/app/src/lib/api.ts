@@ -187,6 +187,23 @@ export async function getHomeFailurePlacement(): Promise<boolean> {
   return snapshot.enabled === true && snapshot.home_processing_today === true;
 }
 
+export async function getAttentionItems(): Promise<{
+  enabled?: boolean;
+  items: import('./attentionItems').AttentionItem[];
+}> {
+  return fetchWithAuth('/v1/attention-items');
+}
+
+export async function retryAttentionItem(
+  id: string,
+  key: string,
+): Promise<{ operation_id: string; state: string }> {
+  return fetchWithAuth(`/v1/attention-items/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+  });
+}
+
 export async function getClientFlags(): Promise<ClientFlagsResponse> {
   return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }

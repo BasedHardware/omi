@@ -149,6 +149,159 @@ final class HomeFailurePlacementTests: XCTestCase {
       }, to: output, name: "018-desktop-macos-activity-failed-after.png")
   }
 
+  private func ledger(_ id: String = "notes", kind: String = "conversation_notes_failed_with_outputs")
+    -> AttentionLedgerItem
+  {
+    AttentionLedgerItem(
+      id: id, kind: kind, conversationId: "conversation", retryable: true,
+      retry: AttentionLedgerRetry(state: "none"), title: "Planning follow-up")
+  }
+
+  func testNoiseStaysOffHomeWithoutBecomingAttentionAndSwitchOffRestoresIt() {
+    let noise = conversation("noise", step: "noise")
+    XCTAssertTrue(ConversationFailurePlacement.home([noise], confirmed: true).isEmpty)
+    XCTAssertTrue(ConversationFailurePlacement.activity([noise], confirmed: true).isEmpty)
+    XCTAssertEqual(ConversationFailurePlacement.home([noise], confirmed: false).map(\.id), ["noise"])
+  }
+
+  func testLedgerMinimalContractAndUnknownKindAreSafe() throws {
+    let json = """
+      {"items":[{"id":"notes","kind":"conversation_notes_failed_with_outputs","conversation_id":"c",
+      "retryable":true,"retry":{"state":"none","operation_id":null}},
+      {"id":"future","kind":"future","conversation_id":"future","retryable":true,"retry":{"state":"none"}}]}
+      """
+    let page = try JSONDecoder().decode(AttentionLedgerPage.self, from: Data(json.utf8))
+    XCTAssertTrue(page.items[0].canRetry)
+    XCTAssertFalse(page.items[1].canRetry)
+  }
+
+  func testNotesRetryUsesLedgerItemAndDeduplicatesLegacyAndProjectedFailuresAfterSuccess() async {
+    let notes = ledger()
+    let unknown = AttentionLedgerItem(
+      id: "future", kind: "future", conversationId: "future", retryable: true,
+      retry: AttentionLedgerRetry(state: "none"))
+    var calls: [String] = []
+    let store = AttentionLedgerStore(
+      load: {
+        AttentionLedgerPage(
+          enabled: true,
+          items: [self.ledger("summary", kind: "conversation_summary_failed"), notes, unknown])
+      },
+      retry: { id in
+        calls.append(id)
+        return AttentionLedgerRetry(state: "in_progress", operationId: "op")
+      },
+      owner: { "fixture" })
+    await store.refresh()
+    XCTAssertEqual(store.rows.map(\.id), ["notes", "future"])
+    await store.retry(unknown)
+    XCTAssertTrue(calls.isEmpty)
+    await store.retry(notes)
+    XCTAssertEqual(calls, ["notes"])
+    XCTAssertEqual(store.rows.map(\.id), ["future"])
+    XCTAssertTrue(store.conversationIds.contains("conversation"))
+    await store.refresh()
+    XCTAssertEqual(store.rows.map(\.id), ["future"], "stale ledger must not resurrect accepted retries")
+  }
+
+  func testLedgerRetryFailuresRetainErrorAndUnknownResponseStateIsNotSuccess() async {
+    for failure in [0, 1, 2] {
+      let store = AttentionLedgerStore(
+        load: { AttentionLedgerPage(items: [self.ledger()]) },
+        retry: { _ in
+          if failure == 0 { throw RetryError.offline }
+          if failure == 1 { throw APIError.httpError(statusCode: 409, detail: "not_retryable") }
+          return AttentionLedgerRetry(state: "not_retryable")
+        }, owner: { "fixture" })
+      await store.refresh()
+      await store.retry(store.rows[0])
+      XCTAssertEqual(store.rows.count, 1)
+      XCTAssertTrue(store.errors.contains("notes"))
+      XCTAssertTrue(store.rows[0].canRetry)
+      XCTAssertTrue(store.retrying.isEmpty)
+    }
+  }
+
+  func testLedgerOldReadCannotResurrectNotesAndNewGenerationCanSurface() async {
+    var completion: CheckedContinuation<AttentionLedgerPage, Never>?
+    let (started, continuation) = AsyncStream<Void>.makeStream()
+    var reads = 0
+    let notes = ledger()
+    let fresh = ledger("new-generation")
+    let store = AttentionLedgerStore(
+      load: {
+        reads += 1
+        if reads == 2 {
+          return await withCheckedContinuation {
+            completion = $0
+            continuation.yield(())
+          }
+        }
+        return AttentionLedgerPage(items: [reads > 2 ? fresh : notes])
+      }, retry: { _ in AttentionLedgerRetry(state: "in_progress", operationId: "op") }, owner: { "fixture" })
+    await store.refresh()
+    let refresh = Task { await store.refresh() }
+    for await _ in started { break }
+    continuation.finish()
+    await store.retry(notes)
+    completion?.resume(returning: AttentionLedgerPage(items: [ledger("old-generation")]))
+    await refresh.value
+    XCTAssertTrue(store.rows.isEmpty)
+    XCTAssertTrue(store.conversationIds.contains("conversation"))
+    await store.refresh()
+    XCTAssertEqual(store.rows.map(\.id), ["new-generation"])
+  }
+
+  func testLedgerDoubleTapAndAccountResetFenceLateRetry() async {
+    let notes = ledger()
+    var completion: CheckedContinuation<AttentionLedgerRetry, Error>?
+    let (started, continuation) = AsyncStream<Void>.makeStream()
+    var calls = 0
+    var owner = "first"
+    let store = AttentionLedgerStore(
+      load: { AttentionLedgerPage(items: [notes]) },
+      retry: { _ in
+        calls += 1
+        return try await withCheckedThrowingContinuation {
+          completion = $0
+          continuation.yield(())
+        }
+      }, owner: { owner })
+    await store.refresh()
+    let first = Task { await store.retry(notes) }
+    for await _ in started { break }
+    continuation.finish()
+    await store.retry(notes)
+    XCTAssertEqual(calls, 1)
+    owner = "second"
+    store.reset()
+    completion?.resume(returning: AttentionLedgerRetry(state: "succeeded", operationId: "op"))
+    await first.value
+    XCTAssertTrue(store.rows.isEmpty)
+    XCTAssertTrue(store.conversationIds.isEmpty)
+  }
+
+  func testRenderNotesAttentionCases010011012() async throws {
+    guard let output = ProcessInfo.processInfo.environment["PROCESSING_TODAY_RENDER_OUTPUT"] else {
+      throw XCTSkip("Set PROCESSING_TODAY_RENDER_OUTPUT for PNG evidence")
+    }
+    _ = NSApplication.shared
+    NSApp.appearance = NSAppearance(named: .aqua)
+    for (index, title) in ["Planning follow-up", "Actions captured", "Meeting scheduled"].enumerated() {
+      var item = ledger("case-0\(10 + index)")
+      item.title = title
+      let fixture = item
+      let store = AttentionLedgerStore(load: { AttentionLedgerPage(items: [fixture]) }, owner: { "fixture" })
+      await store.refresh()
+      try capture(
+        VStack(alignment: .leading, spacing: 20) {
+          Text("Activity").font(.title2).foregroundStyle(Ink.primary)
+          AttentionLedgerSection(store: store, onOpen: { _ in })
+          Spacer()
+        }, to: output, name: "0\(25 + index)-desktop-macos-notes-case-0\(10 + index).png")
+    }
+  }
+
   private func capture<V: View>(_ view: V, to output: String, name: String) throws {
     let content = view.padding(24).frame(width: 720, height: 420, alignment: .topLeading)
       .background(Ink.surface).environment(\.colorScheme, .light)

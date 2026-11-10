@@ -13739,6 +13739,9 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Δημιουργία σημειώσεων ξανά';
+
+  @override
   String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
 
   @override

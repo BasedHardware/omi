@@ -25,7 +25,9 @@ const result = await Bun.build({
         builder.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({
           loader: 'js',
           contents: path.endsWith('/api')
-            ? `export async function reprocessConversation(id) { return {id, home_step:'done', status:'completed', created_at:'2026-11-10T13:00:00Z', transcript_segments:[], structured:{title:'Unfinished planning',overview:'',action_items:[],events:[]}}; }`
+            ? `export async function reprocessConversation(id) { return {id, home_step:'done', status:'completed', created_at:'2026-11-10T13:00:00Z', transcript_segments:[], structured:{title:'Unfinished planning',overview:'',action_items:[],events:[]}}; }
+export async function getAttentionItems() { const value=new URLSearchParams(location.search).get('notes'); return {items: value ? [{id:'notes-case-'+value,kind:'conversation_notes_failed_with_outputs',conversation_id:'kept-outputs',title:['Planning follow-up','Actions captured','Meeting scheduled'][Number(value)-10],retryable:true,retry:{state:'none',operation_id:null}}] : []}; }
+export async function retryAttentionItem(id,key) { if(!id.startsWith('notes-case-') || !key) throw new Error('Wrong retry contract'); return {operation_id:'op',state:'in_progress'}; }`
             : 'export const PostHogManager = {track() {}};',
         }));
       },
@@ -96,8 +98,32 @@ try {
   await page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
   if (await page.getByRole('button', { name: 'Activity', exact: true }).count())
     throw new Error('Rollback left Activity enabled');
+  for (let index = 0; index < 3; index++) {
+    const caseNumber = `0${10 + index}`;
+    const title = ['Planning follow-up', 'Actions captured', 'Meeting scheduled'][index];
+    await page.goto(`${origin}?notes=${caseNumber}`);
+    await page.addStyleTag({
+      content: '*,*::before,*::after{transition:none!important;animation:none!important}',
+    });
+    await page.getByText('Coffee with Alex', { exact: true }).waitFor();
+    if (await page.getByText(title, { exact: true }).count())
+      throw new Error('Notes failure leaked onto Home');
+    const before = await page.evaluate(() => (window as any).savedOutputs);
+    await page.getByRole('button', { name: 'Activity', exact: true }).click();
+    await page.getByRole('button', { name: 'Re-run notes', exact: true }).waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    if ((await page.getByText(title, { exact: true }).count()) !== 1)
+      throw new Error('Duplicate attention row');
+    await page.screenshot({
+      path: `${output}/0${22 + index}-web-notes-case-${caseNumber}.png`,
+    });
+    await page.getByRole('button', { name: 'Re-run notes', exact: true }).click();
+    await page.getByText(title, { exact: true }).waitFor({ state: 'detached' });
+    if ((await page.evaluate(() => (window as any).savedOutputs)) !== before)
+      throw new Error('Saved outputs changed');
+  }
   console.log(
-    'Web renders and Home/Activity/retry/rollback assertions passed; external requests blocked.',
+    'Web Home/Activity/retry/rollback and notes 010/011/012 assertions passed; external requests blocked.',
   );
 } finally {
   await browser?.close();

@@ -18,6 +18,8 @@ const harness = vi.hoisted(() => ({
   showToast: vi.fn(),
   setContext: vi.fn(),
   getHomeFailurePlacement: vi.fn(),
+  getAttentionItems: vi.fn(),
+  retryAttentionItem: vi.fn(),
   getFolders: vi.fn(),
   getRecapDetail: vi.fn(),
 }));
@@ -115,6 +117,8 @@ vi.mock('@/components/conversations/MoveFolderDialog', () => ({
 vi.mock('@/components/ui/ResizeHandle', () => ({ ResizeHandle: () => null }));
 vi.mock('@/lib/api', () => ({
   getHomeFailurePlacement: harness.getHomeFailurePlacement,
+  getAttentionItems: harness.getAttentionItems,
+  retryAttentionItem: harness.retryAttentionItem,
   getFolders: harness.getFolders,
   createFolder: vi.fn(),
   updateFolder: vi.fn(),
@@ -154,6 +158,10 @@ beforeEach(() => {
   harness.showToast.mockReset();
   harness.setContext.mockReset();
   harness.getHomeFailurePlacement.mockReset().mockResolvedValue(false);
+  harness.getAttentionItems.mockReset().mockResolvedValue({ items: [] });
+  harness.retryAttentionItem
+    .mockReset()
+    .mockResolvedValue({ operation_id: 'op', state: 'in_progress' });
   harness.getFolders.mockReset().mockResolvedValue([]);
   harness.getRecapDetail.mockReset().mockResolvedValue(null);
 });
@@ -327,5 +335,55 @@ describe('failed conversation Activity placement', () => {
       expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: /Conversation:/ })).toBeInTheDocument();
+  });
+});
+
+describe('notes ledger inside Activity', () => {
+  it('dedupes a projected failed row, routes retry through the ledger, and preserves saved outputs', async () => {
+    const saved = {
+      ...conversation('kept-outputs', '2026-11-10T12:00:00Z'),
+      home_step: 'failed',
+      status: 'processing',
+    } as Conversation;
+    saved.structured.action_items = [
+      { description: 'Follow up', completed: false },
+    ] as never;
+    const before = JSON.stringify(saved);
+    harness.conversations = [saved];
+    harness.getHomeFailurePlacement.mockResolvedValue(true);
+    harness.getAttentionItems.mockResolvedValue({
+      items: [
+        {
+          id: 'notes-item',
+          kind: 'conversation_notes_failed_with_outputs',
+          conversation_id: saved.id,
+          retryable: true,
+          retry: { state: 'none', operation_id: null },
+          title: 'Notes need another try',
+        },
+      ],
+    });
+    render(<ConversationSplitView />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Activity' })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Re-run notes' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('kept-outputs')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Re-run notes' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Re-run notes' }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(harness.retryAttentionItem).toHaveBeenCalledWith(
+      'notes-item',
+      expect.any(String),
+    );
+    expect(harness.reprocessConversation).not.toHaveBeenCalled();
+    expect(JSON.stringify(saved)).toBe(before);
+    expect(screen.queryByText('kept-outputs')).not.toBeInTheDocument();
   });
 });

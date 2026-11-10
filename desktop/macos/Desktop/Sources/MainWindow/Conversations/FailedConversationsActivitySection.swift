@@ -6,13 +6,14 @@ import SwiftUI
 /// Owns failure navigation and retry feedback without introducing another chat.
 struct FailedConversationsActivitySection: View {
   let conversations: [ServerConversation]
+  var showHeader = true
   let onOpen: (ServerConversation) -> Void
   let retry: (ServerConversation) async throws -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       if !conversations.isEmpty {
-        Text("Needs attention").font(.headline).foregroundStyle(Ink.primary)
+        if showHeader { Text("Needs attention").font(.headline).foregroundStyle(Ink.primary) }
         ForEach(conversations) { conversation in
           FailureActivityRow(
             conversation: conversation, onOpen: { onOpen(conversation) },

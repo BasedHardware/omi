@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Nahrávky pozastavené",
     "activityAttentionUploadStalledTitle": "Odosielanie zastavené",
     "activityAttentionUploadRecordings": "{count, plural, =1{Čaká 1 nahrávka} other{Čaká {count} nahrávok}}",
+    "attentionRerunNotes": "Znova vytvoriť poznámky",
     "attentionSummaryFailed": "Tento rozhovor sa nepodarilo zhrnúť",
     "activityAttentionSemantics": "Aktivita, vyžaduje pozornosť",
     "connectAgentHeadline": "Používajte svoju pamäť Omi v ChatGPT a svojich AI agentoch",

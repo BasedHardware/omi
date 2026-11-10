@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "Naka-pause ang mga recording",
     "activityAttentionUploadStalledTitle": "Naka-stall ang upload",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 recording ang naghihintay} other{{count} na recording ang naghihintay}}",
+    "attentionRerunNotes": "Bumuo muli ng mga tala",
     "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito",
     "activityAttentionSemantics": "Aktibidad, kailangan ng pansin",
     "connectAgentHeadline": "Gamitin ang iyong Omi memory sa ChatGPT at sa iyong mga AI agent",

@@ -116,3 +116,45 @@ Verification via `omi-heavy run --`:
 
 Full preflight and the one normal full-hook push are recorded in the PR body.
 No production network, bundle launch, merge or deploy was performed.
+
+## Notes failures with kept outputs (relay-cl1 94a9ed / David 4ddd04)
+
+Cases 010/011/012 now have Activity captures on every client:
+
+| Case | Mobile | Web | macOS |
+| --- | --- | --- | --- |
+| 010: failed Home projection with kept outputs | 019-mobile-ios-notes-case-010.png | 022-web-notes-case-010.png | 025-desktop-macos-notes-case-010.png |
+| 011: action items kept, notes absent | 020-mobile-ios-notes-case-011.png | 023-web-notes-case-011.png | 026-desktop-macos-notes-case-011.png |
+| 012: events kept, notes absent | 021-mobile-ios-notes-case-012.png | 024-web-notes-case-012.png | 027-desktop-macos-notes-case-012.png |
+
+All nine use the server `conversation_notes_failed_with_outputs` attention kind;
+clients never infer it from noise or local summary metadata. Real Activity widgets
+show Needs attention and Re-run notes. Each conversation appears once. The mobile
+and browser fixtures retain task/event arrays across retry; native uses the real
+ledger model/store and SwiftUI section with injected server responses. No task or
+event store is mutated. These fixtures verify client behavior; backend discovery
+and the notes-only side-effect boundary belong to pipeline-driver's separate PR.
+
+The existing default-on Home placement confirmation gates the new notes section.
+Unknown kinds remain display-only, including mobile bulk retry. Accepted notes
+retries suppress stale ledger/projected duplicates; rejection/failure retains an
+error. Older reads and account changes are fenced; a genuinely new notes ledger
+generation can surface after recovery. Missing optional display metadata decodes
+through the existing generated mobile DTO with adapter defaults.
+
+Additional verification commands (through `omi-heavy run --`):
+
+```sh
+# repo root, credentials unset:
+backend/.venv/bin/python -m pytest backend/tests/unit/test_home_step.py backend/tests/unit/test_pending_work.py backend/tests/unit/test_flag_budget.py -q
+backend/.venv/bin/python -m pytest backend/tests/unit/test_app_client_schema_inventory.py -q
+# app/:
+flutter test --no-pub --timeout 90s --reporter expanded --dart-define=PROCESSING_TODAY_RENDER_OUTPUT=../.agent-artifacts/ui-evidence/processingtoday test/services/notes_attention_test.dart test/services/pending_work_store_test.dart test/widgets/pending_work_test.dart test/widgets/processing_today_render_test.dart test/unit/processing_today_test.dart test/unit/home_rows_test.dart test/pages/activity/activity_test.dart test/providers/conversation_home_projection_replacement_test.dart
+bash scripts/analyze_ratchet.sh
+```
+
+The web/native commands above now also capture cases 010/011/012. New native
+sources are covered by the existing failed-conversations-activity manual flow,
+extended with the notes-only ledger, unknown-kind, retry/error and account cases.
+The PNGs were inspected for real fonts, legibility, single placement and clipping.
+Final counts, preflight/full-hook result and non-test line delta are in the PR body.

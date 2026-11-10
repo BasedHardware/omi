@@ -13725,6 +13725,9 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Rigenera le note';
+
+  @override
   String get attentionSummaryFailed => 'Impossibile riassumere questa conversazione';
 
   @override

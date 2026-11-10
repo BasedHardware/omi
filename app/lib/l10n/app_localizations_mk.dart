@@ -13714,6 +13714,9 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Повторно создај белешки';
+
+  @override
   String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
 
   @override

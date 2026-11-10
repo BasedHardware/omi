@@ -79,3 +79,20 @@ Follow-up verification: 104 native tests passed (105 executed, one opt-in PNG
 skip); web typecheck, six smoke tests and 1,041 Vitest tests passed; all 148
 focused Flutter tests passed. Full preflight and normal push result are recorded
 in the PR body. The PCM CPU guard remains unchanged.
+
+## Scope addition: notes failed with outputs kept — 94a9ed / 4ddd04
+
+| Finding / requirement | Disposition |
+| --- | --- |
+| #25034 overlap and conflicting main | Merged main 7ebd8450b6 (including #25034) as 0bb9d47e424477fcd185e5d3dd83738dfc49c868. home_step.py and the generated registry doc auto-merged. Resolved the config conflict by retaining #25024's cross-client HOME_STEP_PROJECTION entry and #25034's HOME_EMPTY_OUTPUT_NOISE entry once each; regenerated the doc. Main's overview OR section-body, banked-output/debt, curated-row and failure guards remain intact. Further fresh-main integration is recorded in the PR body. |
+| L4b eligibility pitfalls | Clients consume the new ledger kind; no title/overview-only inference, no treating every noise row as attention, no client-side banked receipt/debt predicate, and no new candidate query/history scan. Backend eligibility and notes-only execution remain pipeline-driver's separate responsibility. |
+| 010/011/012 hidden notes failures | Added Needs attention rows with Re-run notes on mobile, web Activity and native macOS Activity, using the item retry endpoint. Saved task/event models and destinations are unchanged. Web/native also honor explicit noise on Home without adding it to failed Activity. |
+| One row per conversation | Ledger rows prefer the notes-only kind over legacy duplicates, suppress projected failed-row duplicates, and remember accepted retries against stale ledger/list snapshots. A new notes ledger generation or confirmed failed operation can surface again. |
+| Unknown kind merge safety | Unknown kind strings decode and display without retry, regardless of retryable=true. Mobile bulk retry dispatches known-item calls when any non-legacy kind is present, preventing an implicit unknown-kind retry. |
+| Retry success and error | Accepted in-progress/succeeded notes retries remove the row. 409, transport and failed-operation results keep an actionable error. Busy state fences double taps; mobile/web keep ambiguous idempotency keys; account changes and older reads are fenced. Ordinary failed-row retry keeps its existing path. |
+| Kill switch and API order | Existing successful explicit pending-work confirmation gates the new notes placement; off/missing/error restores previous placement. No new flag. The optional/minimal ledger contract decodes without a new backend enum; the separate server kind must be published for discovery. |
+| Evidence | Added 019–027 to evidence.json: three cases each on mobile/web/macOS. Mobile uses the real ActivityPage and unchanged task/event arrays; browser uses production sections/hooks with all external requests blocked; native uses actual SwiftUI ledger components. These are fixtures, not paid notes runs or signed full-app sessions. |
+
+Tests and final repository gates are recorded in README.md and the PR body. The
+pre-existing PCM CPU guard, thresholds, allowlists and pusher code were not edited
+for this addition; upstream-only changes stay part of the main merge.

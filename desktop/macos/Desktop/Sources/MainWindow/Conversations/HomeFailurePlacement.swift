@@ -96,7 +96,7 @@ enum ConversationFailurePlacement {
   }
 
   static func home(_ conversations: [ServerConversation], confirmed: Bool) -> [ServerConversation] {
-    confirmed ? conversations.filter { !isFailed($0) } : conversations
+    confirmed ? conversations.filter { !isFailed($0) && $0.homeStep != "noise" } : conversations
   }
 
   static func activity(_ conversations: [ServerConversation], confirmed: Bool) -> [ServerConversation] {

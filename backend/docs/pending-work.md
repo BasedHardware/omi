@@ -119,3 +119,38 @@ failed once another caller has reclaimed it.
 No queue scheduling or priority changes are made.
 
 Relay 714b03 expands the failed placement to web `/conversations` (an Activity tab in the gallery) and native macOS Conversations (the existing Memory hub Activity destination). Web `/home` remains its chat/tasks/goals destination. These clients also require explicit pending-work confirmation and restore previous placement after failed reads; missing/false fields disable placement. They retain server Home projections through list/detail/search reconciliation and retry. macOS supplements loaded rows with failures found only by search, clearing this supplement at account reset. All clients use their existing reprocess endpoint and shared state refresh. Native Activity filters these failures from the chronological spine to avoid duplicate rows. No second chat, new backend query, new flag or persisted job state is introduced.
+
+
+## Notes-only attention clients (relay-cl1 94a9ed / David 4ddd04)
+
+The separate backend ledger-kind change owns discovery and eligibility for
+`conversation_notes_failed_with_outputs`: notes failed while tasks/events were
+kept. Clients consume that kind from `GET /v1/attention-items`; they do not infer
+it from `home_step=noise`, overview absence, title provenance or local metadata.
+This leaves the backend's section-body/overview, banked receipt, live debt,
+curation and revision guards authoritative. Ordinary noise is not attention.
+
+The client contract requires `id`, `kind`, `conversation_id`, `retryable` and
+`retry: {state, operation_id}`. Optional title/timing metadata enriches display.
+The existing `conversation_summary_failed` kind remains supported. Unknown
+kinds are display-only even if their wire `retryable` value is true. Mobile
+bulk retry uses individual known-item calls whenever the ledger includes a
+non-legacy kind, so it cannot retry a displayed unknown kind implicitly.
+
+Mobile, web Activity and macOS Activity render the new kind under Needs attention
+with Re-run notes. They POST `/v1/attention-items/{item_id}/retry`, never the
+conversation reprocess endpoint for this kind. The backend owns the notes-only
+side-effect guarantee. Accepted in-progress/succeeded retries remove the notes
+item and suppress stale ledger/projected duplicates. Rejected 409, transport and
+failed-operation results retain an actionable error row. A current failed
+operation or a new ledger generation can surface again. Account changes fence
+late responses. The clients do not alter saved tasks, events or their stores.
+
+The existing pending-work confirmation still gates the new notes placement.
+Off/missing/error confirmation hides it and restores previous Home placement;
+legacy mobile attention behavior is retained. Web/macOS now also honor explicit
+`noise` on Home under confirmed placement without turning noise into Activity
+rows. No new flag, backend query, scheduler, inference or history scan is added.
+Clients can land before the new kind: old ledgers decode normally and future
+kinds remain readable without mutation. The backend must publish the new kind
+before these previously hidden notes failures become discoverable.

@@ -13667,6 +13667,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Notları yeniden oluştur';
+
+  @override
   String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
 
   @override

@@ -8,6 +8,8 @@ description: >-
   without a signed app session; this flow verifies the mounted destinations.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/AttentionLedgerStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/AttentionLedgerSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/FailedConversationsActivitySection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/HomeFailurePlacement.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+HomeFailurePlacement.swift
@@ -64,3 +66,18 @@ steps:
     expect:
       text_visible:
         - Conversations
+  - id: S5
+    name: Notes-only attention preserves saved outputs
+    do: >-
+      Return conversation_notes_failed_with_outputs items for the 010/011/012
+      synthetic cases from attention-items, plus an unknown retryable kind.
+      Verify each conversation appears once in Needs attention and noise stays
+      off Home. Re-run notes uses the item retry endpoint, never conversation
+      reprocess. A 409 or transport failure keeps the row with an error; success
+      removes it even if an old ledger/list read arrives late. Unknown kinds
+      show no retry. Tasks and calendar events are unchanged. Disable placement
+      and verify the new section disappears. Switch accounts during a delayed
+      retry and verify no previous-account row or callback lands.
+    expect:
+      text_visible:
+        - Re-run notes

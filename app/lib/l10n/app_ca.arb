@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Enregistraments en pausa",
     "activityAttentionUploadStalledTitle": "La pujada s'ha aturat",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 enregistrament en espera} other{{count} enregistraments en espera}}",
+    "attentionRerunNotes": "Torna a generar les notes",
     "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa",
     "activityAttentionSemantics": "Activitat, requereix atenció",
     "connectAgentHeadline": "Fes servir la memòria d'Omi a ChatGPT i als teus agents d'IA",

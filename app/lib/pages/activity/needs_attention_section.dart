@@ -82,7 +82,7 @@ class NeedsAttentionSection extends StatelessWidget {
         // exhausted ingress recovery proves ingress, not durability (INV-CAP-1): no claim for either.
         final retentionPlausible =
             acute != null && !ingressFailure && acute.trigger != CaptureWedgeMonitor.triggerConnectedNoBytes;
-        final retryable = store.attention.where((i) => i.retryable && i.retryState == AttentionRetryState.none);
+        final retryable = store.attention.where((i) => i.canRetry);
         return Column(
           key: const Key('activity_needs_attention'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -121,17 +121,19 @@ class NeedsAttentionSection extends StatelessWidget {
                     if (index > 0) Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
                     _AttentionRow(
                       key: ValueKey('activity_attention_${item.id}'),
-                      title: item.title ?? l.attentionSummaryFailed,
+                      title: item.title ??
+                          (item.notesOnly || item.kind == 'conversation_summary_failed'
+                              ? l.attentionSummaryFailed
+                              : l.activityNeedsAttention),
                       subtitle: [
-                        if (item.title != null) l.attentionSummaryFailed,
+                        if (item.title != null && (item.notesOnly || item.kind == 'conversation_summary_failed'))
+                          l.attentionSummaryFailed,
+                        if (store.retryErrors.contains(item.id)) l.somethingWentWrong,
                         if (item.startedAt != null) dates.time(item.startedAt!.toLocal()),
                       ].join(' · '),
                       busy: item.retryState == AttentionRetryState.inProgress,
-                      onRetry: item.retryable &&
-                              item.retryState != AttentionRetryState.inProgress &&
-                              item.retryState != AttentionRetryState.succeeded
-                          ? () => store.retry(item)
-                          : null,
+                      retryLabel: item.notesOnly ? l.attentionRerunNotes : null,
+                      onRetry: item.canRetry ? () => store.retry(item) : null,
                       onTap: item.conversationId == null
                           ? null
                           : () => (openConversation ?? _openConversation)(context, item.conversationId!),
@@ -311,6 +313,7 @@ class _AttentionRow extends StatelessWidget {
     required this.busy,
     required this.onRetry,
     required this.onTap,
+    this.retryLabel,
   });
 
   final String title;
@@ -318,6 +321,7 @@ class _AttentionRow extends StatelessWidget {
   final bool busy;
   final VoidCallback? onRetry;
   final VoidCallback? onTap;
+  final String? retryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -354,7 +358,7 @@ class _AttentionRow extends StatelessWidget {
               )
             else if (onRetry != null)
               OmiButton.secondary(
-                label: context.l10n.tryAgain,
+                label: retryLabel ?? context.l10n.tryAgain,
                 onPressed: onRetry,
                 size: OmiButtonSize.compact,
               )

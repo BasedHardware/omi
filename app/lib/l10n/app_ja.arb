@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "録音を一時停止中",
     "activityAttentionUploadStalledTitle": "アップロードが停止しています",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 件の録音が待機中} other{{count} 件の録音が待機中}}",
+    "attentionRerunNotes": "ノートを再生成",
     "attentionSummaryFailed": "この会話を要約できませんでした",
     "activityAttentionSemantics": "アクティビティ、要対応",
     "connectAgentHeadline": "OmiのメモリをChatGPTやAIエージェントで使う",

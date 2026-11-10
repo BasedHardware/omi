@@ -113,11 +113,12 @@ class AttentionItem {
     this.startedAt,
     this.durationSeconds,
     this.createdAt,
+    this.operationId,
   });
 
   final String id;
 
-  /// `conversation_summary_failed` in v1.
+  /// Server kind; unknown values remain display-only.
   final String kind;
   final String? conversationId;
   final String? title;
@@ -127,6 +128,14 @@ class AttentionItem {
   final bool retryable;
   final bool seen;
   final AttentionRetryState retryState;
+  final String? operationId;
+
+  bool get notesOnly => kind == 'conversation_notes_failed_with_outputs';
+  bool get canRetry =>
+      retryable &&
+      (notesOnly || kind == 'conversation_summary_failed') &&
+      retryState != AttentionRetryState.inProgress &&
+      retryState != AttentionRetryState.succeeded;
 
   AttentionItem copyWith({AttentionRetryState? retryState, bool? seen}) => AttentionItem(
         id: id,
@@ -139,6 +148,7 @@ class AttentionItem {
         startedAt: startedAt,
         durationSeconds: durationSeconds,
         createdAt: createdAt,
+        operationId: operationId,
       );
 
   static AttentionItem? fromJson(Object? json) {
@@ -160,6 +170,7 @@ class AttentionItem {
       retryable: json['retryable'] == true,
       seen: json['seen'] == true,
       retryState: retry is Map ? _retryState(retry['state']) : AttentionRetryState.none,
+      operationId: retry is Map && retry['operation_id'] is String ? retry['operation_id'] as String : null,
     );
   }
 }

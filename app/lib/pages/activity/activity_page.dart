@@ -263,10 +263,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
               ...?provider?.conversations
             ],
             episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
-            attentionIds: {
-              for (final item in _pendingWork.attention)
-                if (item.conversationId != null) item.conversationId!
-            },
+            attentionIds: _pendingWork.attentionConversationIds,
           )
         : <ServerConversation>[];
     final attention = NeedsAttentionSection(
@@ -282,10 +279,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
               ...?provider?.processingConversations,
               ...?provider?.conversations,
             ],
-            attentionIds: {
-              for (final item in _pendingWork.attention)
-                if (item.conversationId != null) item.conversationId!
-            },
+            attentionIds: _pendingWork.attentionConversationIds,
           )
         : <ServerConversation>[];
     final hasAttention = processing.isNotEmpty ||

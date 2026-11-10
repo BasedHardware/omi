@@ -126,6 +126,69 @@
       "description": "Real SwiftUI FailedConversationsActivitySection used by ActivityHubTab: failure and Try Again.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-ios-notes-case-010.png",
+      "platform": "mobile-ios",
+      "description": "Case 010: Notes failure with retained outputs, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-notes-case-011.png",
+      "platform": "mobile-ios",
+      "description": "Case 011: Notes failure with action items kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-ios-notes-case-012.png",
+      "platform": "mobile-ios",
+      "description": "Case 012: Notes failure with events kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-web-notes-case-010.png",
+      "platform": "web",
+      "description": "Case 010: Notes failure with retained outputs, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-web-notes-case-011.png",
+      "platform": "web",
+      "description": "Case 011: Notes failure with action items kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-web-notes-case-012.png",
+      "platform": "web",
+      "description": "Case 012: Notes failure with events kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "025-desktop-macos-notes-case-010.png",
+      "platform": "desktop-macos",
+      "description": "Case 010: Notes failure with retained outputs, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "026-desktop-macos-notes-case-011.png",
+      "platform": "desktop-macos",
+      "description": "Case 011: Notes failure with action items kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "027-desktop-macos-notes-case-012.png",
+      "platform": "desktop-macos",
+      "description": "Case 012: Notes failure with events kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ],
   "captured_at_utc": "2026-11-10T13:10:14.224870+00:00",

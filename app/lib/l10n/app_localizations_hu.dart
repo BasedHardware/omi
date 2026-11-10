@@ -13705,6 +13705,9 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Jegyzetek újragenerálása';
+
+  @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
 
   @override

@@ -24,3 +24,11 @@ describe('Home and Activity failure placement', () => {
     expect(conversationsForSurface(rows, true, false)).toEqual([]);
   });
 });
+
+// Noise is hidden from Home without becoming Activity attention by inference.
+it('keeps projected noise off Home and out of failed Activity, with rollback', () => {
+  const row = { id: 'noise', status: 'completed', home_step: 'noise' } as Conversation;
+  expect(conversationsForSurface([row], false, true)).toEqual([]);
+  expect(conversationsForSurface([row], true, true)).toEqual([]);
+  expect(conversationsForSurface([row], false, false)).toEqual([row]);
+});

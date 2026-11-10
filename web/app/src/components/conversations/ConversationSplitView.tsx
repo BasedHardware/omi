@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { conversationsForSurface } from '@/lib/conversationHome';
 import { useConversations } from '@/hooks/useConversations';
 import { useActivityFailures } from '@/hooks/useActivityFailures';
+import { useAttentionItems } from '@/hooks/useAttentionItems';
+import { AttentionItemsSection } from './AttentionItemsSection';
 import { useConversation } from '@/hooks/useConversation';
 import { useRecaps } from '@/hooks/useRecaps';
 import { useSearchConversations } from '@/hooks/useSearchConversations';
@@ -319,13 +321,17 @@ export function ConversationSplitView() {
     user?.uid,
   );
 
+  const attention = useAttentionItems(failurePlacement, user?.uid);
+
   // The Starred list is fetched starred-only, but search results (and the previous
   // tab's page while that fetch is in flight) are not, so keep filtering here.
   const visibleConversations = useMemo(() => {
     const loaded =
       selectedFolderId === FOLDER_ACTIVITY
         ? knownFailures.filter(
-            (row) => !isSearching || searchResults.some((match) => match.id === row.id),
+            (row) =>
+              !attention.conversationIds.has(row.id) &&
+              (!isSearching || searchResults.some((match) => match.id === row.id)),
           )
         : isSearching
         ? searchResults
@@ -346,6 +352,7 @@ export function ConversationSplitView() {
     selectedFolderId,
     failurePlacement,
     knownFailures,
+    attention.conversationIds,
   ]);
 
   // Recaps only belong in the unfiltered gallery: a search, a date filter or a
@@ -905,6 +912,18 @@ export function ConversationSplitView() {
             </div>
           )}
 
+          {failurePlacement && selectedFolderId === FOLDER_ACTIVITY && (
+            <AttentionItemsSection
+              {...attention}
+              onRetry={attention.retry}
+              onOpen={(id) => {
+                setSelection({ kind: 'conversation', id });
+                setSelectedRecap(null);
+                preventAutoSelect.current = false;
+              }}
+            />
+          )}
+
           {/* Empty state */}
           {recapsError &&
             !isSearching &&
@@ -925,30 +944,36 @@ export function ConversationSplitView() {
                 </Button>
               </div>
             )}
-          {isEmpty && !listError && !recapsError && (
-            <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
-                {isSearching ? (
-                  <SearchIcon className="h-6 w-6 text-text-quaternary" />
-                ) : (
-                  <CalendarDays className="h-6 w-6 text-text-quaternary" />
-                )}
+          {isEmpty &&
+            !listError &&
+            !recapsError &&
+            !(
+              selectedFolderId === FOLDER_ACTIVITY &&
+              (attention.items.length || attention.loadError)
+            ) && (
+              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
+                  {isSearching ? (
+                    <SearchIcon className="h-6 w-6 text-text-quaternary" />
+                  ) : (
+                    <CalendarDays className="h-6 w-6 text-text-quaternary" />
+                  )}
+                </div>
+                <p className="text-sm text-text-tertiary">
+                  {isSearching
+                    ? 'No conversations found'
+                    : filterDate
+                    ? 'Nothing on this date'
+                    : selectedFolderId === FOLDER_STARRED
+                    ? 'No starred conversations'
+                    : selectedFolderId === FOLDER_ACTIVITY
+                    ? 'No failed conversations'
+                    : selectedFolderId !== FOLDER_ALL
+                    ? 'No conversations in this folder'
+                    : 'Your timeline is empty'}
+                </p>
               </div>
-              <p className="text-sm text-text-tertiary">
-                {isSearching
-                  ? 'No conversations found'
-                  : filterDate
-                  ? 'Nothing on this date'
-                  : selectedFolderId === FOLDER_STARRED
-                  ? 'No starred conversations'
-                  : selectedFolderId === FOLDER_ACTIVITY
-                  ? 'No failed conversations'
-                  : selectedFolderId !== FOLDER_ALL
-                  ? 'No conversations in this folder'
-                  : 'Your timeline is empty'}
-              </p>
-            </div>
-          )}
+            )}
 
           {dayGroups.length > 0 && (
             <div className="flex-1 overflow-hidden pt-4">

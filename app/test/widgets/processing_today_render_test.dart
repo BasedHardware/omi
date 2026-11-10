@@ -75,10 +75,11 @@ Future<void> _fonts() async {
   }
 }
 
-PendingWorkStore _store(bool enabled, List<PendingWorkItem> pending) => PendingWorkStore(
+PendingWorkStore _store(bool enabled, List<PendingWorkItem> pending, {List<AttentionItem> attention = const []}) =>
+    PendingWorkStore(
       loadPending: () async => ApiSuccess(
           PendingWorkSnapshot(enabled: true, items: pending, attentionUnseenCount: 0, homeProcessingToday: enabled)),
-      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+      loadAttention: () async => ApiSuccess(AttentionItemsPage(enabled: true, items: attention, unseenCount: 0)),
     );
 
 ServerConversation _conversation(String id, DateTime at, {String step = 'ready', String title = ''}) =>
@@ -131,6 +132,137 @@ void main() {
     OmiColors.active = OmiPalette.light;
   });
   tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+  testWidgets('unknown attention kinds remain display-only with conversation navigation', (tester) async {
+    final store = _store(true, [], attention: const [
+      AttentionItem(
+          id: 'future',
+          kind: 'future_kind',
+          conversationId: 'future-conversation',
+          title: 'New attention kind',
+          retryable: true,
+          seen: true,
+          retryState: AttentionRetryState.none)
+    ]);
+    await store.refresh();
+    addTearDown(store.dispose);
+    String? opened;
+    await tester.pumpWidget(MaterialApp(
+        theme: _theme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: NeedsAttentionSection(store: store, openConversation: (_, id) async => opened = id))));
+    expect(find.text('New attention kind'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Re-run notes'), findsNothing);
+    await tester.tap(find.text('New attention kind'));
+    expect(opened, 'future-conversation');
+    expect(await store.retry(store.attention.single), isFalse);
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final (index, title) in ['Planning follow-up', 'Actions captured', 'Meeting scheduled'].indexed) {
+    evidenceTest('notes attention case 0${10 + index} keeps outputs and retries notes only', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = _phone;
+      addTearDown(tester.view.reset);
+      SharedPreferences.setMockInitialValues({'uid': 'fixture'});
+      await SharedPreferencesUtil.init();
+      final structured = Structured(title, '');
+      if (index != 2) {
+        structured.actionItems = [ActionItem('Send the design follow-up')];
+      }
+      if (index != 1) {
+        structured.events = [Event('Planning meeting', DateTime(2026, 11, 11, 10), 30, created: true)];
+      }
+      final conversation = ServerConversation(
+          id: 'kept-outputs',
+          createdAt: clock.now(),
+          homeStep: index == 0 ? 'failed' : 'noise',
+          structured: structured);
+      final before = jsonEncode(conversation.toJson());
+      final provider = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
+      final notes = AttentionItem(
+          id: 'notes-case-0${10 + index}',
+          kind: 'conversation_notes_failed_with_outputs',
+          conversationId: conversation.id,
+          title: title,
+          retryable: true,
+          seen: true,
+          retryState: AttentionRetryState.none);
+      var rejected = true;
+      final sent = <String>[];
+      final store = PendingWorkStore(
+        loadPending: () async => const ApiSuccess(
+            PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+        loadAttention: () async => ApiSuccess(AttentionItemsPage(
+            enabled: true,
+            items: [
+              AttentionItem(
+                  id: 'legacy',
+                  kind: 'conversation_summary_failed',
+                  conversationId: conversation.id,
+                  retryable: true,
+                  seen: true,
+                  retryState: AttentionRetryState.none),
+              notes
+            ],
+            unseenCount: 0)),
+        retry: (id, {required idempotencyKey}) async {
+          sent.add(id);
+          if (rejected) {
+            return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409));
+          }
+          return ApiSuccess(AttentionRetryResult(itemId: id, state: AttentionRetryState.inProgress, operationId: 'op'));
+        },
+      );
+      final monitor = CaptureWedgeMonitor(
+          featureGate: () async => false,
+          track: (_, __) {},
+          bleRetry: (_) async {},
+          appBuild: () => 'fixture',
+          platform: () => 'ios');
+      addTearDown(store.dispose);
+      addTearDown(provider.dispose);
+      addTearDown(monitor.dispose);
+      final boundary = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+          key: boundary,
+          child: ChangeNotifierProvider.value(
+              value: provider,
+              child: MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: _theme(),
+                  localizationsDelegates: AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
+                  home: ActivityPage(
+                      pendingWork: store,
+                      captureWedgeMonitor: monitor,
+                      seen: ActivitySeen(read: () => 0, write: (_) {}),
+                      probeDreamReport: () async => false,
+                      loadRecaps: () async => (items: <DailySummary>[], ok: true),
+                      loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])))))));
+      await _capture(tester, boundary, '0${19 + index}-mobile-ios-notes-case-0${10 + index}');
+      expect(find.text(title), findsOneWidget);
+      expect(find.text('Re-run notes'), findsOneWidget);
+      expect(find.byKey(ValueKey('activity_failed_${conversation.id}')), findsNothing);
+      await tester.tap(find.text('Re-run notes'));
+      await tester.pumpAndSettle();
+      expect(store.retryErrors, contains(notes.id));
+      expect(find.textContaining('Something went wrong'), findsOneWidget);
+      expect(find.text('Re-run notes'), findsOneWidget);
+      rejected = false;
+      await tester.tap(find.text('Re-run notes'));
+      await tester.pumpAndSettle();
+      expect(sent, [notes.id, notes.id]);
+      expect(find.text(title), findsNothing);
+      expect(jsonEncode(conversation.toJson()), before, reason: 'saved tasks/events must remain unchanged');
+      expect(provider.conversations.single, same(conversation));
+      await tester.pumpWidget(const SizedBox());
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 
   for (final after in [false, true]) {
     final phase = after ? 'after' : 'before';

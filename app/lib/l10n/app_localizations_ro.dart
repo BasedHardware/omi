@@ -13710,6 +13710,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Generează din nou notițele';
+
+  @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
 
   @override

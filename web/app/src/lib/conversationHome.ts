@@ -21,6 +21,8 @@ export function conversationsForSurface(
 ): Conversation[] {
   if (!confirmed) return activity ? [] : conversations;
   return conversations.filter(
-    (conversation) => isFailedConversation(conversation) === activity,
+    (conversation) =>
+      isFailedConversation(conversation) === activity &&
+      (activity || conversation.home_step !== 'noise'),
   );
 }

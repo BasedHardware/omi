@@ -13663,6 +13663,9 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Buat ulang catatan';
+
+  @override
   String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
 
   @override

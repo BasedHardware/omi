@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ConversationGallery } from '@/components/conversations/ConversationGallery';
+import { AttentionItemsSection } from '@/components/conversations/AttentionItemsSection';
+import { useAttentionItems } from '@/hooks/useAttentionItems';
 import {
   FolderTabs,
   FOLDER_ACTIVITY,
@@ -43,10 +45,46 @@ const ready = {
 } as Conversation;
 
 function Evidence() {
-  const [rows, setRows] = useState([failed, ready]);
+  const caseNumber = new URLSearchParams(location.search).get('notes');
+  const caseIndex = Number(caseNumber) - 10;
+  const kept = {
+    ...failed,
+    id: 'kept-outputs',
+    home_step: caseIndex === 0 ? 'failed' : 'noise',
+    status: 'completed',
+    structured: {
+      ...failed.structured,
+      title: ['Planning follow-up', 'Actions captured', 'Meeting scheduled'][caseIndex],
+      action_items:
+        caseIndex !== 2
+          ? [{ description: 'Send the design follow-up', completed: false }]
+          : [],
+      events:
+        caseIndex !== 1
+          ? [
+              {
+                title: 'Planning meeting',
+                start: '2026-11-11T10:00:00Z',
+                duration: 30,
+                created: true,
+              },
+            ]
+          : [],
+    },
+  } as Conversation;
+  const [rows, setRows] = useState([caseNumber ? kept : failed, ready]);
+  (window as unknown as { savedOutputs: string }).savedOutputs = JSON.stringify(
+    rows[0].structured,
+  );
+
   const [tab, setTab] = useState(FOLDER_ALL);
   const confirmed = new URLSearchParams(location.search).get('rollback') !== '1';
-  const visible = conversationsForSurface(rows, tab === FOLDER_ACTIVITY, confirmed);
+  const attention = useAttentionItems(confirmed, 'fixture');
+  const visible = conversationsForSurface(
+    rows,
+    tab === FOLDER_ACTIVITY,
+    confirmed,
+  ).filter((row) => tab !== FOLDER_ACTIVITY || !attention.conversationIds.has(row.id));
   const groups = buildTimelineDayGroups({
     conversations: visible,
     recaps: [],
@@ -64,6 +102,13 @@ function Evidence() {
           onCreateFolder={() => {}}
         />
       </div>
+      {confirmed && tab === FOLDER_ACTIVITY && (
+        <AttentionItemsSection
+          {...attention}
+          onRetry={attention.retry}
+          onOpen={() => {}}
+        />
+      )}
       <ConversationGallery
         showFailedStatus={confirmed && tab === FOLDER_ACTIVITY}
         groups={groups}
