@@ -163,7 +163,7 @@ cloud_tasks:
   enrichment-fresh:
     # First-summary latency: the 5/2 cap backlogged ~32k tasks on 2026-11-10.
     # Only recently finished conversations enter this reserved queue.
-    max_concurrent_dispatches: 60
+    max_concurrent_dispatches: 30
     max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
