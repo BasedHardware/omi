@@ -100,6 +100,12 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
    */
   /** Revokes adapter execution when the authorizing parent invocation expires. */
   authoritySignal?: AbortSignal;
+  /**
+   * Wall-clock deadline for this run in milliseconds, covering every attempt.
+   * `0` disables the deadline for this run. Omitted means the kernel default
+   * (`AgentRuntimeKernelOptions.runTimeoutMs`).
+   */
+  timeoutMs?: number;
 }
 
 export interface BeginExternalSurfaceRunInput {
@@ -495,4 +501,11 @@ export interface AgentRuntimeKernelOptions {
     adapterId: string;
     executionRole: AgentExecutionRole;
   };
+  /**
+   * Default wall-clock deadline for a run, in milliseconds, covering every
+   * attempt. A hung adapter prompt otherwise pins a worker until the user
+   * cancels or the daemon restarts. `0` disables the deadline. Defaults to
+   * `OMI_AGENT_RUN_TIMEOUT_MS` or `DEFAULT_RUN_TIMEOUT_MS`.
+   */
+  runTimeoutMs?: number;
 }

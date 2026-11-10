@@ -128,6 +128,7 @@ import {
   runColumnMap,
   attemptColumnMap,
   bindingColumnMap,
+  configuredRunTimeoutMs,
 } from "./kernel-support.js";
 import type {
   KernelSessionResolutionInput,
@@ -206,6 +207,21 @@ interface ActiveExecution {
   sessionId: string;
 }
 
+/**
+ * Raised when a run exceeds its wall-clock deadline. The kernel maps this to
+ * the `timed_out` terminal status rather than a generic failure, and never
+ * retries it: a deadline is a property of the run, not a transient error.
+ */
+export class RunDeadlineExceededError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`Agent run exceeded its ${Math.round(timeoutMs / 1000)}s deadline`);
+    this.name = "RunDeadlineExceededError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 function externalSurfacePromptIsSynthetic(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object") return false;
   const external = (metadata as Record<string, unknown>).externalSurface;
@@ -219,6 +235,7 @@ export class KernelCore {
   protected readonly runtimeNodeId: string;
   protected readonly artifactStorage?: OmiArtifactStorage;
   protected readonly recoverRunInput?: AgentRuntimeKernelOptions["recoverRunInput"];
+  protected readonly runTimeoutMs: number;
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
@@ -254,6 +271,7 @@ export class KernelCore {
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
     this.recoverRunInput = options.recoverRunInput;
+    this.runTimeoutMs = options.runTimeoutMs ?? configuredRunTimeoutMs();
     this.toolCapabilities = new RunToolCapabilityBroker({
       store: this.store,
       onRejected: options.onToolCapabilityRejected,
@@ -1180,6 +1198,8 @@ export class KernelCore {
       }
     }
     const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
+    const runTimeoutMs = this.runTimeoutMsFor(input);
+    const runDeadlineAtMs = runTimeoutMs > 0 ? Date.now() + runTimeoutMs : null;
     let retryReason: string | null = null;
     let resumeFromAttemptId: string | null = null;
     let lastAttempt: RunAttempt | undefined;
@@ -1206,6 +1226,16 @@ export class KernelCore {
         } : undefined,
       });
       lastAttempt = attempt;
+      if (runDeadlineAtMs !== null && Date.now() >= runDeadlineAtMs) {
+        this.finishRunAsTimedOut({
+          sessionId: accepted.session.sessionId,
+          runId: accepted.run.runId,
+          attemptId: attempt.attemptId,
+          adapterId,
+          timeoutMs: runTimeoutMs,
+        });
+        break;
+      }
       const toolCapability = this.toolCapabilities.register({
         ownerId: accepted.session.ownerId,
         sessionId: accepted.session.sessionId,
@@ -1367,11 +1397,17 @@ export class KernelCore {
       }
 
       const servedModelIds = new Set<string>();
+      let timedOut = false;
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
           assertExecutionAuthority();
           if (this.runStatus(accepted.run.runId) === "cancelling") {
             throw new Error("cancelled_before_adapter_dispatch");
+          }
+          const remainingMs = runDeadlineAtMs === null ? null : runDeadlineAtMs - Date.now();
+          if (remainingMs !== null && remainingMs <= 0) {
+            timedOut = true;
+            throw new RunDeadlineExceededError(runTimeoutMs);
           }
           this.activeExecutions.set(accepted.run.runId, {
             adapter: worker.adapter,
@@ -1392,7 +1428,7 @@ export class KernelCore {
           );
           this.markAttemptRunning(attempt, binding);
           adapterDispatchStarted = true;
-          return worker.adapter.executeAttempt(
+          const execution = worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
               ownerId: input.ownerId,
@@ -1420,12 +1456,35 @@ export class KernelCore {
             },
             abortController.signal,
           );
+          if (remainingMs === null) return execution;
+          return await this.raceWithRunDeadline({
+            execution,
+            remainingMs,
+            onDeadline: () => {
+              timedOut = true;
+              const error = new RunDeadlineExceededError(runTimeoutMs);
+              // Ask the adapter to stop the in-flight prompt, then revoke the
+              // signal. The race releases the worker even if the adapter never
+              // settles, so a stalled provider cannot pin it forever.
+              void worker.adapter.cancelAttempt({
+                sessionId: accepted.session.sessionId,
+                ownerId: input.ownerId,
+                requestId: accepted.run.requestId,
+                clientId: accepted.run.clientId,
+                runId: accepted.run.runId,
+                attemptId: attempt.attemptId,
+                binding: handle,
+              }).catch(() => {});
+              abortController.abort(error);
+              return error;
+            },
+          });
         }, adapterId === "pi-mono" ? {
           recycleWorkerOnError: true,
           shouldRecycleWorkerOnError: () => (
             adapterDispatchStarted
             && !input.authoritySignal?.aborted
-            && !abortController.signal.aborted
+            && (timedOut || !abortController.signal.aborted)
             && this.runStatus(accepted.run.runId) !== "cancelling"
             && this.readAttempt(attempt.attemptId).status !== "cancelling"
           ),
@@ -1485,6 +1544,16 @@ export class KernelCore {
         return { ...completed, completionDeltaArtifacts };
       } catch (error) {
         this.activeExecutions.delete(accepted.run.runId);
+        if (timedOut) {
+          this.finishRunAsTimedOut({
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+            attemptId: attempt.attemptId,
+            adapterId,
+            timeoutMs: runTimeoutMs,
+          });
+          break;
+        }
         if (input.authoritySignal?.aborted) {
           if (!this.isTerminalRun(accepted.run.runId)) {
             this.finishAttemptAndRun({
@@ -1502,6 +1571,18 @@ export class KernelCore {
         }
         const workerRecovery = error instanceof AdapterWorkerRecycledError ? error : null;
         const executionError = workerRecovery?.originalError ?? error;
+        const adapterTimeout = this.adapterTimeoutFailure(executionError, attempt.adapterId);
+        if (adapterTimeout) {
+          this.finishRunAsTimedOut({
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+            attemptId: attempt.attemptId,
+            adapterId,
+            timeoutMs: runTimeoutMs,
+            failure: adapterTimeout,
+          });
+          break;
+        }
         if (isStaleBindingError(executionError)) {
           if (!workerRecovery?.bindingInvalidationSucceeded) {
             this.markBindingStale(binding, attempt, messageFrom(executionError));
@@ -1590,7 +1671,9 @@ export class KernelCore {
     }
 
     const finalRun = this.readRun(accepted.run.runId);
-    const attempt = lastAttempt ?? this.readLatestAttempt(accepted.run.runId);
+    const attempt = lastAttempt
+      ? this.readAttempt(lastAttempt.attemptId)
+      : this.readLatestAttempt(accepted.run.runId);
     return {
       session: accepted.session,
       run: finalRun,
@@ -1601,6 +1684,107 @@ export class KernelCore {
       text: finalRun.finalText ?? "",
       completionDeltaArtifacts,
     };
+  }
+
+  /**
+   * Resolves the wall-clock deadline for a run. A per-run `timeoutMs` wins;
+   * otherwise the kernel default applies. `0` disables the deadline.
+   */
+  protected runTimeoutMsFor(input: ExecuteAgentRunInput): number {
+    const requested = input.timeoutMs;
+    if (typeof requested === "number" && Number.isFinite(requested) && requested >= 0) {
+      return requested;
+    }
+    return this.runTimeoutMs;
+  }
+
+  /**
+   * Races an adapter execution against the run deadline. The deadline rejects
+   * even when the adapter never settles, so the worker lease is released and
+   * the run can be terminalized as `timed_out`.
+   */
+  private raceWithRunDeadline<T>(input: {
+    execution: Promise<T>;
+    remainingMs: number;
+    onDeadline: () => Error;
+  }): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(input.onDeadline());
+      }, Math.max(0, input.remainingMs));
+      timer.unref?.();
+      input.execution.then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  private timedOutFailure(adapterId: string, timeoutMs: number): RuntimeFailure {
+    const seconds = Math.max(1, Math.round(timeoutMs / 1000));
+    return {
+      code: "run_timed_out",
+      failureCode: "timeout",
+      source: "runtime",
+      adapterId,
+      retryable: false,
+      userMessage: `The agent run exceeded its ${seconds}-second deadline and was stopped.`,
+      technicalMessage: `Run exceeded the ${timeoutMs}ms wall-clock deadline`,
+    };
+  }
+
+  /**
+   * An adapter that enforces its own prompt deadline reports a timeout-class
+   * failure. That is still a timed-out run, not a generic adapter failure, so
+   * it terminalizes the same way.
+   */
+  private adapterTimeoutFailure(error: unknown, adapterId: string): RuntimeFailure | null {
+    const failure = failureFromError(error, {
+      code: "adapter_execution_failed",
+      source: "adapter_execution",
+      adapterId,
+    });
+    return failure.code === "adapter_prompt_timeout" ? failure : null;
+  }
+
+  /**
+   * Terminalizes the current attempt and run as `timed_out`. This is the only
+   * live producer of the `timed_out` status; it is never retried because the
+   * deadline belongs to the run, not to a transient adapter error.
+   */
+  protected finishRunAsTimedOut(input: {
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    adapterId: string;
+    timeoutMs: number;
+    failure?: RuntimeFailure;
+  }): void {
+    if (this.isTerminalRun(input.runId)) return;
+    const failure = input.failure ?? this.timedOutFailure(input.adapterId, input.timeoutMs);
+    this.finishAttemptAndRun({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      attemptId: input.attemptId,
+      status: "timed_out",
+      finalText: null,
+      errorCode: failure.code,
+      errorMessage: failure.userMessage,
+      failure,
+    });
   }
 
   protected surfaceRefForInput(input: ExecuteAgentRunInput): SurfaceRef | null {
@@ -2408,12 +2592,16 @@ export class KernelCore {
       runPatch.requestedModelId = input.servedModelIds[0] ?? null;
     }
     this.updateRun(input.runId, runPatch);
-    if (completedStatus === "failed" || completedStatus === "cancelled") {
+    if (completedStatus === "failed" || completedStatus === "cancelled" || completedStatus === "timed_out") {
       this.appendEvent({
         sessionId: input.sessionId,
         runId: input.runId,
         attemptId: input.attemptId,
-        type: completedStatus === "failed" ? "attempt.failed" : "attempt.cancelled",
+        type: completedStatus === "failed"
+          ? "attempt.failed"
+          : completedStatus === "cancelled"
+            ? "attempt.cancelled"
+            : "attempt.timed_out",
         payload: { attemptId: input.attemptId, status: completedStatus, failure: input.failure ?? input.result?.failure },
       });
     }
