@@ -12,6 +12,7 @@ const harness = vi.hoisted(() => ({
   searchResults: [] as Conversation[],
   refresh: vi.fn(),
   toggleStarred: vi.fn(),
+  reprocessConversation: vi.fn(),
   showToast: vi.fn(),
   setContext: vi.fn(),
   getFolders: vi.fn(),
@@ -111,6 +112,7 @@ vi.mock('@/lib/api', () => ({
   bulkMoveConversationsToFolder: vi.fn(),
   mergeConversations: vi.fn(),
   toggleStarred: harness.toggleStarred,
+  reprocessConversation: harness.reprocessConversation,
   deleteConversation: vi.fn(),
 }));
 
@@ -138,6 +140,7 @@ beforeEach(() => {
   harness.conversations = [conversation('team-sync', '2026-08-11T12:00:00Z')];
   harness.refresh.mockReset().mockResolvedValue(undefined);
   harness.toggleStarred.mockReset();
+  harness.reprocessConversation.mockReset();
   harness.showToast.mockReset();
   harness.setContext.mockReset();
   harness.getFolders.mockReset().mockResolvedValue([]);
@@ -217,9 +220,7 @@ describe('ConversationSplitView star toggle', () => {
 
   it('updates the tile star when a refetch changes conversation.starred', async () => {
     const { rerender } = render(<ConversationSplitView />);
-    expect(
-      screen.getByRole('button', { name: 'Star conversation' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Star conversation' })).toBeInTheDocument();
 
     harness.conversations = [
       { ...conversation('team-sync', '2026-08-11T12:00:00Z'), starred: true },
@@ -231,5 +232,25 @@ describe('ConversationSplitView star toggle', () => {
         screen.getByRole('button', { name: 'Unstar conversation' }),
       ).toBeInTheDocument(),
     );
+  });
+});
+
+describe('ConversationSplitView failed tile retry', () => {
+  it('wires the gallery Retry to reprocessing and refreshes the feed', async () => {
+    harness.conversations[0] = {
+      ...harness.conversations[0],
+      status: 'processing',
+      home_step: 'failed',
+    };
+    const updated = {
+      ...harness.conversations[0],
+      status: 'completed',
+      home_step: 'done',
+    } as Conversation;
+    harness.reprocessConversation.mockResolvedValue(updated);
+    render(<ConversationSplitView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(harness.refresh).toHaveBeenCalledOnce());
+    expect(harness.reprocessConversation).toHaveBeenCalledExactlyOnceWith('team-sync');
   });
 });

@@ -1503,7 +1503,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert config['metadata']['name'] == shared['metadata']['name']
     assert shared['spec']['endpoints'][0]['interval'] == '60s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
-        'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
+        'omi_.*|omi_listen_server_batch_suppression_total|listen_quiet_check_.*|conversation_llm_input_dedupe_.*'
         '|privacy_(checks|check_calls|check_reads|decision_mismatch|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total'
     )
     # The privacy shadow kill switch reads these from Cloud Run (cl2-infracost 2026-11-04).
