@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -147,11 +149,18 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     conversations.dispose();
     episodes.dispose();
   });
+  final store = PendingWorkStore(
+      loadPending: () async => const ApiSuccess(
+          PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+  await store.refresh();
+  addTearDown(store.dispose);
   final boundary = GlobalKey();
   await tester.pumpWidget(RepaintBoundary(
     key: boundary,
     child: await buildTypedConversationScreen(
       conversations,
+      pendingWork: store,
       episodes: episodes,
       captureProvider: capture,
       initializePreferences: false,

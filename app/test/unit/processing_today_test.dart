@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
@@ -41,7 +42,8 @@ void main() {
         structured: Structured('', ''),
         status: ConversationStatus.processing,
         homeStep: 'failed');
-    expect(pastProcessingConversations(pending: pending, conversations: [expiredWait], now: midnight).single.id, 'old');
+    expect(pastProcessingConversations(pending: pending, conversations: [expiredWait], now: midnight), isEmpty);
+    expect(home([expiredWait]).single.conversation.id, 'old');
     expect(pastProcessingConversations(pending: pending, conversations: [row('old', at, 'ready')], now: midnight),
         isEmpty);
     expect(pastProcessingConversations(pending: pending, conversations: [], attentionIds: {'old'}, now: midnight),
@@ -105,5 +107,132 @@ void main() {
               id: 'locked', createdAt: at, structured: Structured('', ''), homeStep: 'transcribing', isLocked: true),
         ], now: midnight),
         isEmpty);
+  });
+  test('expired today wait is exactly one terminal Home row, never Activity', () {
+    final at = midnight.add(const Duration(hours: 1));
+    final expired = ServerConversation(
+        id: 'expired',
+        createdAt: at,
+        startedAt: at,
+        structured: Structured('', ''),
+        status: ConversationStatus.processing,
+        homeStep: 'failed');
+    final pending = [
+      PendingWorkItem(
+          id: 'conv:expired', kind: 'conversation', state: 'summarizing', conversationIds: ['expired'], startedAt: at)
+    ];
+    final rows = buildHomeRows(
+        [expired, row('older', midnight.subtract(const Duration(hours: 1)), 'writing_notes')], [],
+        enabled: false,
+        groupAwaitingTranscript: true,
+        processingTodayOnly: true,
+        now: midnight.add(const Duration(hours: 8)));
+    expect(rows.single.conversation.id, 'expired');
+    expect(rows.single.isProcessing, isFalse);
+    expect(
+        pastProcessingConversations(
+            pending: pending, conversations: [expired], now: midnight.add(const Duration(hours: 8))),
+        isEmpty);
+  });
+
+  test('episode_id survives API, cache and transcript copy; older APIs omit it', () {
+    final original = ServerConversation.fromJson({...row('member', midnight, 'ready').toJson(), 'episode_id': 'e'});
+    expect(original.episodeId, 'e');
+    expect(ServerConversation.fromJson(original.toJson()).episodeId, 'e');
+    expect(ServerConversation.fromGenerated(original.toGenerated()).episodeId, 'e');
+    expect(original.withTranscriptSegments([]).withHomeStep('ready').episodeId, 'e');
+    expect(ServerConversation.fromJson(row('old', midnight, 'ready').toJson()).episodeId, isNull);
+    expect(original.toJson(), isNot(contains('home_step')));
+  });
+
+  test('episode-owned row never flashes standalone before or after episode fetch', () {
+    for (final step in ['ready', 'writing_notes', 'failed']) {
+      final member = ServerConversation(
+          id: 'member',
+          createdAt: midnight,
+          startedAt: midnight,
+          structured: Structured('Planning', ''),
+          homeStep: step,
+          episodeId: 'e');
+      final episode = Episode(
+          id: 'e',
+          live: false,
+          startedAt: midnight,
+          lastActivityAt: midnight,
+          conversationIds: const [],
+          members: const []);
+      for (final episodes in [
+        <Episode>[],
+        [episode]
+      ]) {
+        final rows = home([member], episodes: episodes);
+        expect(rows, hasLength(1));
+        expect(rows.single.episode?.id, 'e');
+        expect(rows.single.episodeConversationIds, contains('member'));
+      }
+    }
+  });
+
+  test('queued past work is labelled as awaiting transcription', () {
+    final items = [
+      PendingWorkItem(
+          id: 'conv:q',
+          kind: 'conversation',
+          state: 'queued',
+          conversationIds: ['q'],
+          startedAt: midnight.subtract(const Duration(hours: 1)))
+    ];
+    expect(homeStepOf(pastProcessingConversations(pending: items, conversations: [], now: midnight).single),
+        HomeStep.transcribing);
+  });
+
+  test('UTC instants follow the local calendar in east and west zones', () {
+    for (final instant in [DateTime.utc(2026, 11, 10, 0, 30), DateTime.utc(2026, 11, 10, 23, 30)]) {
+      final local = instant.toLocal();
+      final day = DateTime(local.year, local.month, local.day);
+      expect(localHomeDay(instant), day);
+      expect(
+          buildHomeRows([row('local', instant, 'transcribing')], [],
+              enabled: false,
+              groupAwaitingTranscript: true,
+              processingTodayOnly: true,
+              now: day.add(const Duration(hours: 12))),
+          hasLength(1));
+    }
+    if (Platform.environment['TZ'] == 'Pacific/Kiritimati') {
+      expect(localHomeDay(DateTime.utc(2026, 11, 10, 23, 30)), DateTime(2026, 11, 11));
+    }
+    if (Platform.environment['TZ'] == 'Pacific/Pago_Pago') {
+      expect(localHomeDay(DateTime.utc(2026, 11, 10, 0, 30)), DateTime(2026, 11, 9));
+    }
+  });
+
+  test('DST uses civil midnight on both short and long local days', () {
+    if (Platform.environment['TZ'] != 'America/New_York') return;
+    for (final boundary in [
+      (DateTime(2026, 3, 8), DateTime(2026, 3, 9), 23),
+      (DateTime(2026, 11, 1), DateTime(2026, 11, 2), 25)
+    ]) {
+      expect(boundary.$2.difference(boundary.$1).inHours, boundary.$3);
+      final before = row('before', boundary.$2.subtract(const Duration(seconds: 1)), 'transcribing');
+      expect(
+          buildHomeRows([before], [],
+              enabled: false, groupAwaitingTranscript: true, processingTodayOnly: true, now: boundary.$2),
+          isEmpty);
+      expect(pastProcessingConversations(pending: [], conversations: [before], now: boundary.$2).single.id, 'before');
+    }
+  });
+
+  test('loaded Home rows supplement a full pending window in Activity', () {
+    final at = midnight.subtract(const Duration(hours: 1));
+    final items = [
+      for (var i = 0; i < 100; i++)
+        PendingWorkItem(
+            id: 'conv:$i', kind: 'conversation', state: 'transcribing', conversationIds: ['$i'], startedAt: at)
+    ];
+    final outside = row('outside-window', at, 'writing_notes');
+    expect(home([outside]), isEmpty);
+    expect(pastProcessingConversations(pending: items, conversations: [outside], now: midnight).map((c) => c.id),
+        contains('outside-window'));
   });
 }

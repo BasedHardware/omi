@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api_result.dart';
@@ -60,6 +61,73 @@ PendingWorkStore _store(
 }
 
 void main() {
+  test('placement requires an explicit true wire confirmation', () {
+    for (final value in [null, false, true]) {
+      final json = <String, dynamic>{
+        'enabled': true,
+        'items': [],
+        'attention_unseen_count': 0,
+        if (value != null) 'home_processing_today': value
+      };
+      expect(PendingWorkSnapshot.fromJson(json).homeProcessingToday, value == true);
+      expect(PendingWorkSnapshot.fromGenerated(wire.GeneratedPendingWorkSnapshot.fromJson(json)).homeProcessingToday,
+          value == true);
+    }
+  });
+
+  test('every failed read restores old Home after a successful opt-in', () async {
+    for (final kind in ApiProblemKind.values) {
+      var failing = false;
+      final store = PendingWorkStore(
+          loadPending: () async => failing
+              ? ApiFailure(ApiProblem(kind))
+              : const ApiSuccess(
+                  PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+      expect(store.homeProcessingToday, isFalse);
+      await store.refresh();
+      expect(store.homeProcessingToday, isTrue);
+      failing = true;
+      await store.refresh();
+      expect(store.homeProcessingToday, isFalse, reason: kind.name);
+      store.dispose();
+    }
+  });
+
+  test('thrown reads and account reset restore old placement', () async {
+    var throwing = false;
+    final store = PendingWorkStore(
+        loadPending: () async {
+          if (throwing) throw StateError('offline');
+          return const ApiSuccess(
+              PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true));
+        },
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+    await store.refresh();
+    throwing = true;
+    await store.refresh();
+    expect(store.homeProcessingToday, isFalse);
+    throwing = false;
+    await store.refresh();
+    store.reset();
+    expect(store.homeProcessingToday, isFalse);
+    expect(store.pending, isEmpty);
+    store.dispose();
+  });
+
+  test('an old account response cannot enable placement after reset', () async {
+    final response = Completer<ApiResult<PendingWorkSnapshot>>();
+    final store = PendingWorkStore(
+        loadPending: () => response.future, loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+    final refreshing = store.refresh();
+    store.reset();
+    response.complete(const ApiSuccess(
+        PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)));
+    await refreshing;
+    expect(store.homeProcessingToday, isFalse);
+    store.dispose();
+  });
+
   test('generated pending work keeps the recording count and legacy default', () {
     for (final count in [null, 3]) {
       final decoded = wire.GeneratedPendingWorkSnapshot.fromJson({

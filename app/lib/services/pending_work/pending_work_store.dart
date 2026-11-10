@@ -42,7 +42,18 @@ class PendingWorkStore extends ChangeNotifier {
   List<PendingWorkItem> get pending => _pending;
 
   /// Server-driven Home placement kill switch, shared by Home and Activity.
-  bool homeProcessingToday = true;
+  bool homeProcessingToday = false;
+
+  /// Fence in-flight reads and forget the previous account on sign-out/switch.
+  void reset() {
+    _generation++;
+    homeProcessingToday = false;
+    _pending = const [];
+    _setAttention(const []);
+    _retryKeys.clear();
+    _retryAllKey = null;
+    notifyListeners();
+  }
 
   List<AttentionItem> _attention = const [];
 
@@ -62,18 +73,19 @@ class PendingWorkStore extends ChangeNotifier {
   /// empty the bell or drop the card.
   Future<void> refresh() async {
     final generation = ++_generation;
-    final results = await Future.wait<Object>([_loadPending(), _loadAttention()]);
+    final results = await Future.wait<Object>([_read(_loadPending), _read(_loadAttention)]);
     if (generation != _generation) return;
     final pending = results[0] as ApiResult<PendingWorkSnapshot>;
     final attention = results[1] as ApiResult<AttentionItemsPage>;
     switch (pending) {
       case ApiSuccess(:final data):
         _pending = data.enabled ? data.items : const [];
-        homeProcessingToday = data.homeProcessingToday;
+        homeProcessingToday = data.enabled && data.homeProcessingToday;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _pending = const [];
+        homeProcessingToday = false;
       case ApiFailure():
-        break;
+        homeProcessingToday = false;
     }
     switch (attention) {
       case ApiSuccess(:final data):
@@ -84,6 +96,14 @@ class PendingWorkStore extends ChangeNotifier {
         break;
     }
     notifyListeners();
+  }
+
+  Future<ApiResult<T>> _read<T>(Future<ApiResult<T>> Function() load) async {
+    try {
+      return await load();
+    } catch (_) {
+      return ApiFailure<T>(const ApiProblem(ApiProblemKind.transport));
+    }
   }
 
   void _setAttention(List<AttentionItem> items) {

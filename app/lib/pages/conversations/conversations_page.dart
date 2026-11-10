@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:omi/utils/local_day_rollover.dart';
 // The conversations list page: paged list with filter-keyed load-more state,
 // plus the capture-status surfaces stacked above it (processing card, held
 // audio, on-device queue banners).
@@ -370,16 +372,12 @@ class _ConversationsPageState extends State<ConversationsPage>
   bool get wantKeepAlive => true;
 
   /// Rebuilds Home at local midnight so the pending row moves under the new Today.
-  Timer? _dayTimer;
+  LocalDayRollover? _dayTimer;
 
   void _scheduleDayRollover() {
     _dayTimer?.cancel();
-    final now = DateTime.now();
-    final next = DateTime(now.year, now.month, now.day + 1);
-    _dayTimer = Timer(next.difference(now) + const Duration(seconds: 1), () {
-      if (!mounted) return;
-      setState(() {});
-      _scheduleDayRollover();
+    _dayTimer = LocalDayRollover(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -406,7 +404,7 @@ class _ConversationsPageState extends State<ConversationsPage>
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
-      final today = DateUtils.dateOnly(DateTime.now());
+      final today = DateUtils.dateOnly(clock.now());
       final initialFrom = conversationProvider.groupedConversations.keys.fold<DateTime>(
         today.subtract(const Duration(days: 7)),
         (oldest, day) => day.isBefore(oldest) ? day : oldest,
@@ -726,8 +724,11 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
-        if (!defaultHome && showRecordings && _pendingWork.homeProcessingToday) {
-          final today = localHomeDay(DateTime.now());
+        if (!defaultHome &&
+            showRecordings &&
+            !convoProvider.isSelectionModeActive &&
+            _pendingWork.homeProcessingToday) {
+          final today = localHomeDay(clock.now());
           conversationsByDate = {
             for (final entry in conversationsByDate.entries)
               entry.key: [
@@ -742,7 +743,7 @@ class _ConversationsPageState extends State<ConversationsPage>
         final projectedMemberIds = <String>{...hiddenByLive};
         final projectedProcessingIds = <String>{};
         if (defaultHome) {
-          final today = DateTime.now();
+          final today = clock.now();
           final days = conversationsByDate.keys;
           final from = days.isEmpty
               ? DateTime(today.year, today.month, today.day - 7)
@@ -780,6 +781,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             paintEpisodes,
             enabled: episodesOn,
             groupAwaitingTranscript: true,
+            now: clock.now(),
             processingTodayOnly: _pendingWork.homeProcessingToday,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
@@ -832,8 +834,9 @@ class _ConversationsPageState extends State<ConversationsPage>
           recordingsByDate: recordingsByDate,
           heldByDate: heldByDate,
         );
+        final localToday = localHomeDay(clock.now());
         final withLive =
-            episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
+            episodeLive ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode) : builtRows;
         // Only the default view: a search or folder shows what it matched.
         final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
             ? _withProcessingRows(
@@ -841,11 +844,10 @@ class _ConversationsPageState extends State<ConversationsPage>
                 [
                   for (final c in snapshot.processingConversations)
                     if (!projectedMemberIds.contains(c.id) &&
-                        (!_pendingWork.homeProcessingToday ||
-                            localHomeDay(c.startedAt ?? c.createdAt) == localHomeDay(DateTime.now())))
+                        (!_pendingWork.homeProcessingToday || localHomeDay(c.startedAt ?? c.createdAt) == localToday))
                       c,
                 ],
-                DateTime.now())
+                clock.now())
             : withLive;
 
         if (showRecordings &&
@@ -872,7 +874,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             // during this refresh cannot expose half of the new grouping.
             episodes?.invalidateHome();
             if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
-            final today = DateUtils.dateOnly(DateTime.now());
+            final today = DateUtils.dateOnly(clock.now());
             final from = convoProvider.groupedConversations.keys.fold<DateTime>(
               today.subtract(const Duration(days: 7)),
               (oldest, day) => day.isBefore(oldest) ? day : oldest,
@@ -933,7 +935,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        DateListItem(date: DateUtils.dateOnly(DateTime.now()), isFirst: true),
+                        DateListItem(date: DateUtils.dateOnly(clock.now()), isFirst: true),
                         const LiveEpisodeRow(),
                       ],
                     ),

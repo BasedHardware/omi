@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
@@ -18,7 +19,7 @@ List<ServerConversation> pastProcessingConversations({
   Set<String> attentionIds = const {},
   DateTime? now,
 }) {
-  final today = localHomeDay(now ?? DateTime.now());
+  final today = localHomeDay(now ?? clock.now());
   final byId = <String, ServerConversation>{};
   for (final item in pending) {
     if (item.kind != 'conversation' || item.startedAt == null) continue;
@@ -28,18 +29,11 @@ List<ServerConversation> pastProcessingConversations({
         createdAt: item.startedAt!,
         startedAt: item.startedAt,
         structured: Structured('', ''),
-        homeStep: item.state == 'transcribing' ? 'transcribing' : 'writing_notes',
+        homeStep: item.state != 'summarizing' ? 'transcribing' : 'writing_notes',
       );
     }
   }
   for (final conversation in conversations) {
-    // An expired Home wait is not a terminal job. Keep the server's pending
-    // link until completion or the attention ledger takes ownership.
-    if (byId.containsKey(conversation.id) &&
-        homeStepOf(conversation) == HomeStep.failed &&
-        (conversation.status == ConversationStatus.processing || conversation.status == ConversationStatus.merging)) {
-      continue;
-    }
     byId[conversation.id] = conversation;
   }
   // An episode can still owe its composed notes after every member finished.

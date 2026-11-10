@@ -25756,7 +25756,7 @@
             "type": "boolean"
           },
           "home_processing_today": {
-            "default": true,
+            "default": false,
             "title": "Home Processing Today",
             "type": "boolean"
           },

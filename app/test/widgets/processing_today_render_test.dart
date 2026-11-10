@@ -1,3 +1,5 @@
+import 'package:omi/utils/local_day_rollover.dart';
+import 'package:clock/clock.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -96,7 +98,6 @@ Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
     await tester.pump(const Duration(milliseconds: 200));
   }
   expect(tester.takeException(), isNull);
-  debugDefaultTargetPlatformOverride = null;
   if (_output.isEmpty) return;
   await tester.runAsync(() async {
     final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -106,6 +107,10 @@ Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
     await File('$_output/$name.png').writeAsBytes(data!.buffer.asUint8List());
     image.dispose();
   });
+}
+
+void evidenceTest(String description, Future<void> Function(WidgetTester) body) {
+  testWidgets(description, (tester) => withClock(Clock.fixed(DateTime(2026, 11, 10, 16)), () => body(tester)));
 }
 
 void main() {
@@ -124,11 +129,11 @@ void main() {
   for (final after in [false, true]) {
     final phase = after ? 'after' : 'before';
     for (final past in [false, true]) {
-      testWidgets('$phase Home ${past ? 'past day' : 'today'}', (tester) async {
+      evidenceTest('$phase Home ${past ? 'past day' : 'today'}', (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = _phone;
         addTearDown(tester.view.reset);
-        final now = DateTime.now();
+        final now = clock.now();
         final day = DateTime(now.year, now.month, now.day - (past ? 1 : 0));
         final rows = [
           _conversation('processing', day.add(const Duration(hours: 15)), step: 'transcribing'),
@@ -154,15 +159,16 @@ void main() {
         expect(find.byKey(const Key('home_processing_row')), past && after ? findsNothing : findsOneWidget);
         expect(find.text('Planning the week'), findsOneWidget);
         await tester.pumpWidget(const SizedBox());
+        debugDefaultTargetPlatformOverride = null;
       });
     }
 
     for (final empty in [false, true]) {
-      testWidgets('$phase Activity ${empty ? 'empty' : 'past processing'}', (tester) async {
+      evidenceTest('$phase Activity ${empty ? 'empty' : 'past processing'}', (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = _phone;
         addTearDown(tester.view.reset);
-        final now = DateTime.now();
+        final now = clock.now();
         final yesterday = DateTime(now.year, now.month, now.day - 1, 15, 42);
         final store = _store(after, [
           if (!empty)
@@ -201,6 +207,7 @@ void main() {
         await _capture(tester, boundary, '$index-mobile-ios-activity-${empty ? 'empty' : 'processing'}-$phase');
         expect(find.byKey(const Key('activity_processing_older')), after && !empty ? findsOneWidget : findsNothing);
         await tester.pumpWidget(const SizedBox());
+        debugDefaultTargetPlatformOverride = null;
       });
     }
   }
@@ -220,10 +227,11 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('Activity observes pending arrivals and completion even when recaps fail', (tester) async {
+  evidenceTest('Activity observes pending arrivals and completion even when recaps fail', (tester) async {
     var items = <PendingWorkItem>[];
     final store = PendingWorkStore(
-      loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, items: items, attentionUnseenCount: 0)),
+      loadPending: () async => ApiSuccess(
+          PendingWorkSnapshot(enabled: true, items: items, attentionUnseenCount: 0, homeProcessingToday: true)),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
     final monitor = CaptureWedgeMonitor(
@@ -247,7 +255,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('activity_processing_arrived')), findsNothing);
-    final now = DateTime.now();
+    final now = clock.now();
     items = [
       PendingWorkItem(
           id: 'conv:arrived',
@@ -265,6 +273,127 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('activity_processing_arrived')), findsNothing);
     await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+  testWidgets('Home and Activity move a recording at midnight while open and cancel on dispose', (tester) async {
+    var now = DateTime(2026, 11, 10, 23, 59, 59);
+    await withClock(Clock(() => now), () async {
+      final row = _conversation('midnight', now.subtract(const Duration(minutes: 10)), step: 'transcribing');
+      final provider = ConversationProvider(
+          isSignedIn: () => true,
+          conversationListFetcher: () async => (items: [row], ok: true),
+          dailySummariesChecker: () async => false)
+        ..conversations = [row]
+        ..processingConversations = [row]
+        ..groupedConversations = {
+          DateTime(2026, 11, 10): [row]
+        };
+      final store = _store(true, [
+        PendingWorkItem(
+            id: 'conv:midnight',
+            kind: 'conversation',
+            state: 'transcribing',
+            conversationIds: ['midnight'],
+            startedAt: row.startedAt)
+      ]);
+      await store.refresh();
+      addTearDown(provider.dispose);
+      addTearDown(store.dispose);
+      await tester.pumpWidget(await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme()));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+      now = DateTime(2026, 11, 11, 0, 0, 2);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(find.byKey(const Key('home_processing_row')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      now = DateTime(2026, 11, 10, 23, 59, 59);
+      final monitor = CaptureWedgeMonitor(
+          featureGate: () async => false,
+          track: (_, __) {},
+          bleRetry: (_) async {},
+          appBuild: () => 'fixture',
+          platform: () => 'ios');
+      addTearDown(monitor.dispose);
+      await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ActivityPage(
+              pendingWork: store,
+              captureWedgeMonitor: monitor,
+              seen: ActivitySeen(read: () => 0, write: (_) {}),
+              probeDreamReport: () async => false,
+              loadRecaps: () async => (items: <DailySummary>[], ok: true),
+              loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])))));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(find.byKey(const Key('activity_processing_midnight')), findsNothing);
+      now = DateTime(2026, 11, 11, 0, 0, 2);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(find.byKey(const Key('activity_processing_midnight')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(minutes: 2));
+    });
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final after in [false, true]) {
+    evidenceTest('episode ownership ${after ? 'after' : 'before'} delayed episode fetch', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = _phone;
+      addTearDown(tester.view.reset);
+      final now = clock.now();
+      final rows = [
+        for (final (id, title, hour) in [('planning', 'Planning the week', 14), ('coffee', 'Coffee with Maya', 10)])
+          ServerConversation(
+              id: id,
+              createdAt: DateTime(now.year, now.month, now.day, hour),
+              startedAt: DateTime(now.year, now.month, now.day, hour),
+              structured: Structured(title, 'The team agreed on the next steps.'),
+              homeStep: 'ready',
+              episodeId: after ? 'shared-episode' : null)
+      ];
+      final provider = ConversationProvider(
+          isSignedIn: () => true,
+          conversationListFetcher: () async => (items: rows, ok: true),
+          dailySummariesChecker: () async => false)
+        ..conversations = rows
+        ..groupedConversations = {DateTime(now.year, now.month, now.day): rows};
+      final store = _store(true, []);
+      await store.refresh();
+      addTearDown(provider.dispose);
+      addTearDown(store.dispose);
+      final boundary = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+          key: boundary, child: await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme())));
+      await _capture(
+          tester, boundary, '${after ? '010' : '009'}-mobile-ios-episode-owner-${after ? 'after' : 'before'}');
+      expect(find.text('Coffee with Maya'), after ? findsNothing : findsOneWidget);
+      expect(find.text('Planning the week'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  testWidgets('civil clock jumps rebuild once and disposal cancels the check', (tester) async {
+    var now = DateTime(2026, 11, 10, 12);
+    var changes = 0;
+    await withClock(Clock(() => now), () async {
+      final rollover = LocalDayRollover(() => changes++);
+      now = DateTime(2026, 11, 11, 2);
+      await tester.pump(const Duration(minutes: 1));
+      expect(changes, 1);
+      await tester.pump(const Duration(minutes: 1));
+      expect(changes, 1);
+      rollover.cancel();
+      now = DateTime(2026, 11, 12);
+      await tester.pump(const Duration(minutes: 1));
+      expect(changes, 1);
+    });
     debugDefaultTargetPlatformOverride = null;
   });
 }

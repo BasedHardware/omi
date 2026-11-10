@@ -345,6 +345,7 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
         while True:
             page = list(query.stream())
             owned_excluded = False
+            stored_excluded = False
             for snapshot in page:
                 if snapshot.id in seen:
                     continue
@@ -372,6 +373,8 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
                 )
                 phase_shadow.observe('processing_attention', row, not excluded)
                 if excluded:
+                    if stored_pending or row.get('status') in {'processing', 'merging'}:
+                        stored_excluded = True
                     continue
                 if exclude is not None and exclude(dict(row, id=snapshot.id)):
                     owned_excluded = True
@@ -396,7 +399,7 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
                 return result[:LIMIT]
             # Keep the existing owner-gap pagination, but never page through
             # history just because stale candidates failed Home classification.
-            if len(page) < LIMIT or not owned_excluded:
+            if len(page) < LIMIT or not (owned_excluded or stored_excluded):
                 break
             query = query.start_after(page[-1])
     return result

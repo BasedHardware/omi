@@ -56,8 +56,22 @@
       "description": "activity empty after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-episode-owner-before.png",
+      "platform": "mobile-ios",
+      "description": "Episode membership before the episode fetch, before. Before omits the previously unparsed episode_id; after keeps both recordings inside their episode.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-episode-owner-after.png",
+      "platform": "mobile-ios",
+      "description": "Episode membership before the episode fetch, after. Before omits the previously unparsed episode_id; after keeps both recordings inside their episode.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-10T07:56:33.859224+00:00",
+  "captured_at_utc": "2026-11-10T11:30:26.560167+00:00",
   "method": "Flutter widget-test RepaintBoundary, real production widgets, iOS theme, SF Pro fixtures; render-only Apple emoji font from this Mac, never bundled."
 }

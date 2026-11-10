@@ -19,7 +19,7 @@ class PendingWorkItem(BaseModel):
 
 class PendingWorkSnapshot(BaseModel):
     enabled: bool
-    home_processing_today: bool = True
+    home_processing_today: bool = False
     items: list[PendingWorkItem]
     attention_unseen_count: int
 

@@ -278,6 +278,7 @@ def test_dead_letter_and_attention_commit_in_same_strict_transaction(database):
 
 
 def test_enabled_http_get_shapes(monkeypatch, http_client):
+    monkeypatch.delenv('HOME_STEP_PROJECTION', raising=False)
     from database import sync_jobs
 
     item = {
@@ -686,15 +687,16 @@ def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, en
     assert len(sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'c1'})) == (0 if enabled else 1)
 
 
-def test_pending_conversations_fills_visible_page_after_owned_page(monkeypatch):
-    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
+@pytest.mark.parametrize('mode', ['on', 'off'])
+def test_pending_conversations_fills_visible_page_after_owned_page(monkeypatch, mode):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', mode)
     query = Mock()
     query.where.return_value = query
     query.limit.return_value = query
     query.start_after.return_value = query
     owned = [SimpleNamespace(id=str(i), to_dict=lambda: dict(ROW, status='processing')) for i in range(store.LIMIT)]
     outside = SimpleNamespace(id='outside', to_dict=lambda: dict(ROW, status='processing'))
-    query.stream.side_effect = [owned, [outside]]
+    query.stream.side_effect = [owned, [outside], [], []]
     client = Mock()
     client.collection.return_value.document.return_value.collection.return_value = query
     monkeypatch.setattr(store, 'db', client)
@@ -855,7 +857,10 @@ def test_pending_keeps_unfinished_jobs_past_home_deadline_and_bounds_stale_candi
     monkeypatch.setenv('HOME_STEP_PROJECTION', 'on')
     old = dict(ROW, status='processing', summary_retryable=False)
     queued = SimpleNamespace(id='queued', to_dict=lambda: old)
-    stale = [SimpleNamespace(id=str(i), to_dict=lambda: dict(ROW, status='completed')) for i in range(store.LIMIT)]
+    stale = [
+        SimpleNamespace(id=str(i), to_dict=lambda: dict(ROW, status='completed', summary_due_at=1))
+        for i in range(store.LIMIT)
+    ]
     query = Mock()
     query.where.return_value = query
     query.limit.return_value = query
@@ -868,3 +873,22 @@ def test_pending_keeps_unfinished_jobs_past_home_deadline_and_bounds_stale_candi
     assert [item['id'] for item in result] == ['conv:queued']
     assert query.stream.call_count == 3
     query.start_after.assert_not_called()
+
+
+def test_pending_on_fills_after_stored_terminal_page(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'on')
+    query = Mock()
+    query.where.return_value = query
+    query.limit.return_value = query
+    query.start_after.return_value = query
+    terminal = [
+        SimpleNamespace(id=str(i), to_dict=lambda: dict(ROW, status='processing', finalization_status='dead_letter'))
+        for i in range(store.LIMIT)
+    ]
+    live = SimpleNamespace(id='live', to_dict=lambda: dict(ROW, status='processing'))
+    query.stream.side_effect = [terminal, [live], [], []]
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value = query
+    monkeypatch.setattr(store, 'db', client)
+    assert [item['id'] for item in store.pending_conversations(UID)] == ['conv:live']
+    query.start_after.assert_called_once_with(terminal[-1])

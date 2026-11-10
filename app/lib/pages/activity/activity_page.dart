@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:omi/utils/local_day_rollover.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -104,15 +106,12 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   /// Null until a recap load succeeds: a failed load must not clear a bell the user never saw.
   DateTime? _shownThrough;
   StreamSubscription<void>? _arrivals;
-  Timer? _dayRollover;
+  LocalDayRollover? _dayRollover;
 
   void _scheduleDayRollover() {
     _dayRollover?.cancel();
-    final now = DateTime.now();
-    _dayRollover = Timer(DateTime(now.year, now.month, now.day + 1).difference(now), () {
-      if (!mounted) return;
-      setState(() {});
-      _scheduleDayRollover();
+    _dayRollover = LocalDayRollover(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -171,7 +170,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       _loading = _items.isEmpty;
       _failed = false;
     });
-    final startedAt = DateTime.now();
+    final startedAt = clock.now();
     final results = await Future.wait<Object>([
       (widget.loadRecaps ?? _loadActivityRecaps)(),
       (widget.loadChanges ?? review_api.getReviewChanges)(),

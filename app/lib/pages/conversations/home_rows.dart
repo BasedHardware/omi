@@ -100,16 +100,42 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   final singleIds = <String>{};
   final failures = <String, ServerConversation>{
     for (final c in conversations)
-      if (c.homeStep == 'failed') c.id: c,
+      if (c.homeStep == 'failed' && (c.episodeId == null || c.episodeId!.isEmpty)) c.id: c,
   };
-  for (final episode in enabled ? episodes : <Episode>[]) {
+  // A conversation's episode_id arrives with the list row, often before the
+  // episode fetch. Reconstruct its owner immediately instead of flashing a
+  // standalone row and later moving it into the episode.
+  final owners = <String, Episode>{
+    if (enabled)
+      for (final e in episodes) e.id: e
+  };
+  for (final c in byId.values) {
+    final id = c.episodeId;
+    if (id == null || id.isEmpty) continue;
+    final previous = owners[id];
+    owners[id] = previous == null
+        ? Episode(
+            id: id,
+            live: false,
+            startedAt: c.startedAt ?? c.createdAt,
+            lastActivityAt: c.finishedAt ?? c.createdAt,
+            conversationIds: [c.id],
+            members: [c])
+        : previous.copyWith(conversationIds: {...previous.conversationIds, c.id}.toList(), members: [
+            for (final m in previous.members)
+              if (m.id != c.id) m,
+            c
+          ]);
+  }
+  for (final episode in owners.values) {
     final metadata = {for (final c in episode.members) c.id: c};
     // Full membership includes discarded members for Delete. Only retained
     // members may keep the episode's display row in processing.
     final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys.toSet();
     for (final id in retainedIds) {
       final member = byId[id] ?? metadata[id];
-      if (member?.homeStep == 'failed') failures[id] = member!;
+      if (member?.homeStep == 'failed' && (member?.episodeId == null || member!.episodeId!.isEmpty))
+        failures[id] = member!;
     }
     final pending = processingConversations
         .where((c) => retainedIds.contains(c.id) && !c.discarded && !c.deleted && !deletedIds.contains(c.id))
@@ -160,13 +186,15 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           !member.discarded &&
           !member.deleted &&
           !deletedIds.contains(id) &&
-          member.homeStep != 'failed') {
+          (member.homeStep != 'failed' || member.episodeId == episode.id) &&
+          (member.episodeId == null || member.episodeId!.isEmpty || member.episodeId == episode.id)) {
         members.add(member);
       }
     }
     if (members.isEmpty) continue;
-    // Noise and legacy failures have no episode row; projected failures stay standalone.
-    if (groupAwaitingTranscript && members.every((m) => isHomeNoise(m) || homeStepOf(m) == HomeStep.failed)) {
+    // Noise and legacy failures have no episode row. Projected failures keep their explicit owner.
+    if (groupAwaitingTranscript &&
+        members.every((m) => isHomeNoise(m) || (homeStepOf(m) == HomeStep.failed && m.episodeId != episode.id))) {
       continue;
     }
     if (!episode.composed && members.any(awaitingHomeTranscript)) {
@@ -176,7 +204,9 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     }
     if (members.length == 1) {
       if (singleIds.add(members.single.id)) {
-        rows.add(HomeRow(members.single, episodeConversationIds: episode.conversationIds.toSet()));
+        rows.add(HomeRow(members.single,
+            episode: members.single.episodeId == episode.id ? episode.copyWith(members: members) : null,
+            episodeConversationIds: episode.conversationIds.toSet()));
       }
       continue;
     }
@@ -335,7 +365,7 @@ bool _serverFinished(ServerConversation c) =>
     c.homeStep == 'ready' || c.homeStep == 'noise' || c.homeStep == 'failed' || c.isLocked;
 
 /// The step an episode row may paint for a pending member: a member's failure never
-/// becomes the episode's failed row (projected failures stay standalone); the episode keeps
+/// becomes the episode's failed processing row; the episode keeps
 /// waiting for its remaining members.
 HomeStep _episodeStepOf(ServerConversation c) {
   final step = homeStepOf(c);

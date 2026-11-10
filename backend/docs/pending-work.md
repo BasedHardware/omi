@@ -2,7 +2,14 @@
 
 Processing attention, pending-work projection and reprocess deduplication are
 always active in every environment. Both GET endpoints retain `enabled: true`
-for client compatibility. There are no feature switches or PostHog calls.
+for client compatibility. `HOME_STEP_PROJECTION` is an existing default-on
+presentation kill switch shared with conversation list `home_step`. It also gates
+`home_processing_today` in pending-work and its expanded candidate sources.
+Off returns false, uses the legacy `status == processing` query and omits
+`home_step`. Flutter retains old Home placement until an enabled snapshot
+explicitly confirms true; absent fields, 404s, read errors and account changes
+restore old placement. There are no PostHog calls. Backend must ship before
+clients can apply the new placement; the backend flag remains default-on.
 
 The authenticated `/v1/pending-work` and `/v1/attention-items` GET responses
 follow `.agent-scratch/pending-contract.md`. Seen/dismiss return 204. Unknown
@@ -23,15 +30,40 @@ are immediately available to the next read. Concurrent resolution can appear
 one read later. Claim status is read from the common claim ledger, including
 claims made by the old reprocess endpoint.
 
-The projection reads at most 100 `status == processing` conversations and 100
-active attention documents, plus at most two direct reads per attention item.
-Live capture, discarded/deleted, completed and dead-letter rows are excluded.
-These queries use Firestore's default collection single-field indexes on
-`conversations.status` and `processing_attention_items.active`; no composite
-index or collection-group index is needed. Folder/date/list-page filters are
-not involved. The pending projection's unseen count describes this bounded
-window; GET attention-items, seen-all and retry-all use the full active set.
-The projection's windowed count is an addition to the shared contract.
+The pending conversation response remains capped at 100. With the switch on,
+three single-field candidate queries read `status in [processing, merging]`,
+`home_transcription_deadline_at > now` and `summary_due_at > 0`, each initially
+capped at 100. Duplicate ids, deleted/discarded, completed finalization and
+dead-letter jobs are excluded. Stored unfinished jobs remain pending beyond
+Home's presentation wait; this wait never completes a job. Live-owner and
+stored-terminal exclusions may advance the candidate cursor to fill the page;
+stale completed debt alone never triggers an unbounded history walk. Supplemental
+queries use the default single-field index order (earliest due first).
+No composite index or collection-group query is needed.
+
+The attention projection reads at most 100 active documents, plus at most two
+direct reads per attention item. Folder/date/list-page filters are not involved.
+The unseen count describes this bounded window; GET attention-items, seen-all
+and retry-all use the full active set. Sync duration is unchanged.
+
+Flutter chooses the user's current **local recorded day**, using `started_at`
+(or `created_at`), including recordings that cross midnight: after midnight they
+move to Processing in Activity. A foreground civil-clock check and resume
+recheck update both surfaces. Explicit projected failures remain terminal Home
+rows, including today's expired presentation wait, and do not duplicate Activity.
+Ready rows return to their recorded Home day. Search, folders, stars and selection
+retain exact matches. Queued work is labelled Transcribing, not Writing notes.
+
+Limits: pending is a bounded window, not an all-history backlog. Loaded Home
+conversations supplement Activity independently of the pending cap, so every
+loaded row hidden for its date is available there. Episode-only composition debt
+outside Home's loaded episode range and legacy empty completed rows without debt
+stamps are not discovered by these candidate queries. Fetching all such history
+requires a separate bounded/paged episode/debt API; no history scan is introduced.
+Existing catching-up and On the Way consumers intentionally include server work
+through note completion (including summary debt); their duration describes the
+recording awaiting completion, not bytes remaining to transfer. Older clients
+retain that broad interpretation; no released wire discriminator is changed.
 
 Sync jobs remain Redis-owned. New jobs enter
 a stage-scoped, per-user sorted set (latest 100 ids, 24h TTL); projection reads

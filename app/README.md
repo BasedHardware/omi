@@ -162,3 +162,5 @@ Once installed, the app will run on your iPhone independently from your developm
 ## Need Help?
 
 - 💬 Join our [Discord Community](http://discord.omi.me)
+
+Processing placement compatibility: the backend must explicitly confirm `home_processing_today: true`; missing fields, failed reads, 404s and account changes keep prior Home placement. The recorded start day is authoritative, including captures crossing midnight. Explicit terminal failures stay on Home. Episode membership from `episode_id` is honored before the episode fetch arrives.
