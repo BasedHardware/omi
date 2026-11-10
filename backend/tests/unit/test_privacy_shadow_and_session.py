@@ -60,11 +60,11 @@ def external(db, transaction=None):
 
 def test_counters_measure_live_check_reads_walks_and_absent_user_default(world):
     db, reads, _, _ = world
-    checks = metrics.CHECKS.labels('batch', 'live', 'allow')._value.get()
+    checks = metrics.CHECKS.labels('batch', 'live', 'allow', 'unknown')._value.get()
     walks = metrics.WALKS.labels('live')._value.get()
     assert check(db) == 7
     assert len(reads) == 5
-    assert metrics.CHECKS.labels('batch', 'live', 'allow')._value.get() == checks + 1
+    assert metrics.CHECKS.labels('batch', 'live', 'allow', 'unknown')._value.get() == checks + 1
     assert metrics.WALKS.labels('live')._value.get() == walks + 1
 
 

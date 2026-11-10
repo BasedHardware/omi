@@ -72,11 +72,21 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
             assert before[('privacy_conversations_walked_total', (('mode', 'live'),))] == attempt
             assert before[('privacy_conversations_walked_total', (('mode', 'shadow'),))] == attempt
             assert (
-                before[('privacy_check_reads_total', (('family', 'batch'), ('mode', 'live'), ('result', 'hit')))]
+                before[
+                    (
+                        'privacy_check_reads_total',
+                        (('family', 'batch'), ('mode', 'live'), ('plan_group', 'unknown'), ('result', 'hit')),
+                    )
+                ]
                 == attempt
             )
             assert (
-                before[('privacy_check_reads_total', (('family', 'batch'), ('mode', 'shadow'), ('result', 'miss')))]
+                before[
+                    (
+                        'privacy_check_reads_total',
+                        (('family', 'batch'), ('mode', 'shadow'), ('plan_group', 'unknown'), ('result', 'miss')),
+                    )
+                ]
                 == attempt
             )
             assert {name for name, _ in before} == {

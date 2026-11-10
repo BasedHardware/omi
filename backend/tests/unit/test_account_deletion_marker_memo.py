@@ -10,11 +10,28 @@ memoized in request scope.
 import json
 import fakeredis
 import pytest
+import time
 
 from database import account_deletion_marker as deletion
 from database import fsr_read_cache as cache
+from database import firestore_tier_context as tier, privacy_check_metrics as metrics
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from tests.unit.test_fsr_s4_caches import Store
+
+
+@pytest.mark.parametrize('plan,group', [('unlimited_v2', 'paid'), ('basic', 'basic_free'), (None, 'unknown')])
+def test_deletion_marker_metrics_use_existing_request_plan_without_extra_reads(env, plan, group):
+    store, redis = env
+    token = tier._request_owner.set(tier._RequestOwner('u', plan, time.monotonic() + 60))
+    before = metrics.READS.labels('deletion_marker', 'live', 'miss', group)._value.get()
+    checks = metrics.CHECKS.labels('deletion_marker', 'live', 'allow', group)._value.get()
+    try:
+        assert deletion.get_user_deletion_wipe_status('u') is None
+    finally:
+        tier._request_owner.reset(token)
+    assert len(store.reads) == 1
+    assert metrics.READS.labels('deletion_marker', 'live', 'miss', group)._value.get() == before + 1
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow', group)._value.get() == checks + 1
 
 
 @pytest.fixture

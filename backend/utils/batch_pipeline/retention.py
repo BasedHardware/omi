@@ -480,6 +480,7 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             privacy_check_metrics.read_snapshot(
                 'batch',
                 store.client.collection('users').document(item.owner_id),
+                uid=item.owner_id,
                 transaction=transaction,
                 read_budget=read_budget,
             ).to_dict()
