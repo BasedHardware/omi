@@ -573,3 +573,62 @@ async def test_lease_failure_keeps_tail_unstored_and_unacknowledged(inline_sessi
     assert windows[0].frames
     assert client.rows[path]['record_upload_sessions']
     assert not client.rows[path].get('record_audio_closed')
+
+
+@pytest.mark.parametrize('disconnect_first', [False, True])
+async def test_batch_renewal_outage_beyond_upload_retries_retains_audio(
+    inline_session, remote, monkeypatch, disconnect_first
+):
+    from database import record_audio
+
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    begin = barrier.begin_recording
+
+    async def expired_begin(cid):
+        await begin(cid)
+        barrier.lease_renewed_at[cid] -= 7200
+
+    monkeypatch.setattr(barrier, 'begin_recording', expired_begin)
+    fail = AsyncMock(wraps=barrier.fail_recording)
+    monkeypatch.setattr(barrier, 'fail_recording', fail)
+    renew = record_audio.renew_record_token_lease
+    attempts = []
+    outage_attempts = pusher.PRIVATE_CLOUD_SYNC_MAX_RETRIES + 3
+
+    def unavailable(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) <= outage_attempts:
+            assert not projected
+            raise OSError('persistent metadata outage')
+        return renew(*args, **kwargs)
+
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', unavailable)
+    stored = asyncio.Event()
+    upload = pusher.upload_audio_chunks_batch
+
+    def store(*args, **kwargs):
+        result = upload(*args, **kwargs)
+        loop.call_soon_threadsafe(stored.set)
+        return result
+
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', store)
+    pcm = b'\x01\x00' * 160
+    sock = Socket(_audio_frames('conversation', [pcm]))
+    receive = sock.receive_bytes
+
+    async def receive_until_stored():
+        if not sock.frames and not disconnect_first:
+            await stored.wait()
+        return await receive()
+
+    sock.receive_bytes = receive_until_stored
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000), 5)
+    assert len(attempts) == outage_attempts + 1
+    assert len(projected) == 1 and projected[0][0][0]['data'] == pcm
+    fail.assert_not_awaited()
+    assert not client.rows[path].get('record_upload_failed')

@@ -965,13 +965,20 @@ async def _run_websocket_util_trigger(
                 batch['data'] = bytearray()
                 return
             conv_id = batch['conversation_id']
+            if not await record_barrier.renew_recording(conv_id):
+                # Metadata refusal is not a storage attempt. Retain the batch
+                # and its audio-budget reservation without spending retries.
+                batch['retry_at'] = time.monotonic() + PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL
+                ready_batches.append(batch)
+                if not websocket_active:
+                    # The shutdown event is already set; pace the bounded drain.
+                    await wait_for_event(asyncio.Event(), PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+                return
             chunk_data = bytes(batch['data'])
             del batch['data']  # free bytearray immediately — chunk_data holds the bytes copy
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
-                if not await record_barrier.renew_recording(conv_id):
-                    raise RuntimeError('record lease unavailable; requeue frame batch')
                 late_append = conv_id in record_barrier.late_appends
                 upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
                 if batch.get('span'):
