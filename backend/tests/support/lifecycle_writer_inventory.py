@@ -2072,6 +2072,9 @@ FIELD_SITES = {
     'database/stuck_backfill.py': [
         ('_close_txn', 'status', "'completed'", ('discarded', 'status', 'stuck_noise_close'))
     ],
+    'database/no_speech_terminal.py': [
+        ('_close_txn', 'status', "'completed'", ('discarded', 'no_speech_terminal', 'status'))
+    ],
     'database/summary_debt_queries.py': [
         # Query cursors only: these maps go to start_after, never a storage write.
         ('due_conversations', 'summary_due_at', "after['due']", ('__name__', 'summary_due_at')),
@@ -4176,6 +4179,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('database/screen_frames.py', 'bump_conversation_screen_frames_revision'): 'unclassified',
         ('database/screen_frames.py', 'mark_conversation_screen_frames_adjudicated'): 'unclassified',
         ('database/stuck_backfill.py', '_restore_txn'): 'unclassified',
+        ('database/no_speech_terminal.py', '_restore_txn'): 'unclassified',
         ('utils/sync/assignment.py', 'assign_in_transaction'): 'unclassified',
         (
             'database/conversation_finalization_jobs.py',
@@ -4215,6 +4219,7 @@ KNOWN_TERMINAL_WRITERS = {
             '_complete_oversized_in_progress_conversation_txn',
         ): 'known_extra_writer: oversized',
         ('database/stuck_backfill.py', '_close_txn'): 'unclassified',
+        ('database/no_speech_terminal.py', '_close_txn'): 'unclassified',
         ('utils/conversations/late_meeting_notes.py', 'refresh_notes_after_evidence'): 'unclassified',
         ('utils/conversations/lifecycle.py', 'complete'): 'owner',
         ('utils/conversations/lifecycle.py', 'complete_orphan_batch_capture'): 'owner',

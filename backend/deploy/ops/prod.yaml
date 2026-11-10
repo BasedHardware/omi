@@ -157,15 +157,20 @@ cloud_tasks:
   enrichment:
     # Contract (a)/(d), lane 9: plan C3's queue for new sr- obligations (ENRICHMENT_ROUTE=enrichment_queue).
     # Created by the config-train before the backend roll that sets the route (planc, Plan C prod activation).
-    max_concurrent_dispatches: 50
+    # 2026-11-10 ruling 008024: reconcile primary live drift to 300/25 independently
+    # of fresh tuning; a fresh-only rollback must preserve this primary capacity.
+    max_concurrent_dispatches: 300
     max_dispatches_per_second: 25
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
   enrichment-fresh:
-    # Only recently finished conversations enter this reserved queue.
-    max_concurrent_dispatches: 5
-    max_dispatches_per_second: 2
+    # 2026-11-10 ruling 008024: permanent 30/10 for first-summary catch-up.
+    # The operational Firestore-pressure guard may temporarily lower live concurrency
+    # to 15 (rate stays 10); Git stays 30. cl2-deploy alone applies prod changes.
+    # Re-evaluate the 168h age gate after the backlog drains; this changes no admission policy.
+    max_concurrent_dispatches: 30
+    max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
