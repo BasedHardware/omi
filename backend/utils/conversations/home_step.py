@@ -9,8 +9,11 @@ list wire as ``home_step`` so clients stop inferring it from titles.
 - ``transcribing`` / ``writing_notes``: still being processed, at that step.
 - ``failed``: processing gave up or exceeded the Home wait; default Home hides it.
 - ``noise``: finished with nothing worth a Home row: no speech, below floor,
-  or a stand-in title (first sentence / "Recording · time") that no summary
-  will ever replace.
+  a stand-in title (first sentence / "Recording · time") that no summary will
+  ever replace, or a terminal empty-output block (``empty_output_exhausted`` /
+  ``empty_output_lifetime_exhausted``) with no overview or section body and no
+  banked receipt or open debt. ``HOME_EMPTY_OUTPUT_NOISE=false`` restores the
+  legacy stand-in-title-only rule.
 
 Presentation only: nothing is stored, search and direct links are unaffected,
 and a completed curated row (user title, star, folder, photos) is always ``ready``.
@@ -28,13 +31,14 @@ from prometheus_client import Counter
 
 from config.episodes import (
     DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS,
+    home_empty_output_noise_enabled,
     home_processing_max_age_seconds,
     home_step_projection_enabled,
 )
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed
-from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
 TRANSCRIBING = 'transcribing'
@@ -110,7 +114,17 @@ def classify(row: Mapping[str, Any]) -> str | None:
     ):
         return FAILED
     provisional = structured.get('title_provenance') == 'server_minimum'
-    if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
+    empty_output = (
+        home_empty_output_noise_enabled()
+        and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS
+        and not present(structured)
+        # A banked receipt or live debt outranks a stale terminal reason: the
+        # row recovered, or a late revision re-opened it.
+        and not row.get('summary_output_present')
+        and not row.get('summary_completed_at')
+        and not summary_owed(row)
+    )
+    if is_completed_below_floor(row) or empty_output:
         return NOISE
     if provisional:
         if summary_owed(row):

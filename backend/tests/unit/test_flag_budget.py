@@ -65,6 +65,7 @@ HELPER_KILL_SWITCHES = {
     'HOME_HIDE_BELOW_FLOOR_ROWS',
     'EPISODE_COMPOSER_THRIFT',
     'EPISODE_COMPOSER_NOTES_FIRST',
+    'HOME_EMPTY_OUTPUT_NOISE',
 }
 
 SCOPE = (
@@ -273,7 +274,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
-        elif name in {'EPISODE_COMPOSER_THRIFT', 'EPISODE_COMPOSER_NOTES_FIRST'}:
+        elif name in {'EPISODE_COMPOSER_THRIFT', 'EPISODE_COMPOSER_NOTES_FIRST', 'HOME_EMPTY_OUTPUT_NOISE'}:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
         else:

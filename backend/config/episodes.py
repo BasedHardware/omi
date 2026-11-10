@@ -47,6 +47,7 @@ HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
 HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
+HOME_EMPTY_OUTPUT_NOISE_ENV = 'HOME_EMPTY_OUTPUT_NOISE'
 HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
 DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS = 21600
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
@@ -118,6 +119,11 @@ def home_neutral_minimum_titles_enabled() -> bool:
 def home_step_projection_enabled() -> bool:
     """Default-on Home row contract field on list reads; off omits ``home_step``."""
     return modes_default_on(HOME_STEP_PROJECTION_ENV)
+
+
+def home_empty_output_noise_enabled() -> bool:
+    """Default-on: no-output terminal summaries are noise regardless of title provenance."""
+    return modes_default_on(HOME_EMPTY_OUTPUT_NOISE_ENV)
 
 
 def home_processing_max_age_seconds() -> int | None:
