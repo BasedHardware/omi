@@ -5,6 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from database.firestore_read_origin import read_origin
+from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_policy import (
     PROCESS_ENVIRONMENT,
     load_stage_policy,
@@ -12,7 +13,6 @@ from database.batch_pipeline_policy import (
     record_policy_observations,
 )
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
-from database.sync_ledger import batch_projection_ledger_owner_matches
 from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -42,81 +42,10 @@ def has_words_receipt(marker):
     )
 
 
-class RecoveryStore:
+class RecoveryStore(RecoveryFence):
     # Serving workers resolve an unpinned part from their own env; operator
     # subclasses replace this with explicit server settings or None (refuse).
     server_flags: Any = PROCESS_ENVIRONMENT
-
-    def __init__(self, store: Any):
-        self.store = store
-
-    def checked(
-        self,
-        tx,
-        segment_id,
-        *,
-        allow_completed_silence=False,
-        allow_completed_speech_redrive=False,
-        allow_completed_terminal=False,
-        allow_completed_recovery=False,
-    ):
-        job = tx.get('jobs', segment_id)
-        if not job or not job.get('projection_binding'):
-            raise ProjectionBlocked('recovery intake binding required')
-        binding = normalized_binding(job['projection_binding'])
-        from utils.sync.capture import chunk_identity
-
-        ids = set(job.get('conversation_ids') or [])
-        ids.add(
-            chunk_identity(
-                binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, job['capture_at']
-            )
-        )
-        ids.update(value for value in (job.get('conversation_id'), binding.target_conversation_id) if value)
-        tx.check_privacy(binding.owner_id, ids, binding.privacy_generation)
-        ledger = tx.get('content', f'{binding.owner_id}/{binding.content_id}')
-        if (
-            job.get('owner_id') != binding.owner_id
-            or job.get('privacy_generation') != binding.privacy_generation
-            or (job.get('recovery') and job['recovery'].get('privacy_generation') != binding.privacy_generation)
-            or segment_id not in binding.segment_ids
-            or ledger.get('dispatch_protocol') != 'batch_v1'
-            or ledger.get('batch_pipeline')
-            != {'protocol_version': 1, 'namespace': self.store.namespace, 'segment_ids': list(binding.segment_ids)}
-            or not (
-                batch_projection_ledger_owner_matches(ledger, binding.job_id, binding.run_token, binding.run_epoch)
-                or (
-                    allow_completed_silence
-                    and ledger.get('status') == 'completed'
-                    and ledger.get('job_id') == binding.job_id
-                    and job.get('silence_disposition', {}).get('state') == 'completed'
-                    and job.get('result', {}).get('outcome') == 'silence'
-                )
-                or (
-                    allow_completed_speech_redrive
-                    and ledger.get('status') == 'completed'
-                    and ledger.get('job_id') == binding.job_id
-                    and job.get('speech_redrive', {}).get('state') == 'completed'
-                    and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech', 'silence'}
-                )
-                or (
-                    allow_completed_recovery
-                    and ledger.get('status') == 'completed'
-                    and ledger.get('job_id') == binding.job_id
-                    and job.get('recovery_state') == 'recovered'
-                    and bool(job.get('result'))
-                )
-                or (
-                    allow_completed_terminal
-                    and ledger.get('status') == 'completed'
-                    and ledger.get('job_id') == binding.job_id
-                    and job.get('terminal_disposition', {}).get('state') == 'completed'
-                    and job.get('result', {}).get('outcome') == job['terminal_disposition'].get('outcome')
-                )
-            )
-        ):
-            raise ProjectionBlocked('recovery content owner lost')
-        return job, binding
 
     def expire_held(self, segment_id, now):
         if not batch_held_dead_letter_enabled():
@@ -131,12 +60,16 @@ class RecoveryStore:
         return self.store.run(commit)
 
     def requeue_quarantined(self, segment_id, now, *, dead_before=None, expected_job=None):
-        """Operator and nightly entry: retain the content/privacy ownership CAS."""
+        """Operator and nightly entry: retain the content/privacy ownership CAS.
+
+        Emit only a committed, newly spent held re-drive. Staging-input repairs
+        (expected_job) do not consume grants or feed production paging.
+        """
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             if expected_job is not None and job != expected_job:
-                return False
+                return None
             if dead_before is not None:
                 expired_at = job.get('held_expired_at')
                 if (
@@ -147,10 +80,15 @@ class RecoveryStore:
                     or not math.isfinite(expired_at)
                     or expired_at >= dead_before
                 ):
-                    return False
-            return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
+                    return None
+            return Scheduler.requeue_quarantined_in_transaction(tx, job, now, account=expected_job is None)
 
-        return self.store.run(commit)
+        outcome = self.store.run(commit)
+        if outcome is not None and outcome.spent:
+            from utils.backlog_metrics import record_transition
+
+            record_transition('held_redrive_budget_spent')
+        return outcome is not None
 
     def prepare(self, segment_id, owner_id, now):
         load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
