@@ -27,7 +27,8 @@ from database.batch_pipeline_projection_protocol import (
     normalized_binding,
 )
 
-from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
