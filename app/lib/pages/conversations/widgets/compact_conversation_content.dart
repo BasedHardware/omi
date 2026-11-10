@@ -1,3 +1,6 @@
+// Time, title and the existing summary gist for an episode member.
+// ConversationListItem retains navigation, locking, selection and deletion.
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversations/conversation_row_text.dart';

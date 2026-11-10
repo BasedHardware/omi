@@ -1,3 +1,6 @@
+// Full composed episode notes and follow-ups, expanded at page open.
+// Reuses moment transcript navigation and the canonical task creation path.
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/pages/episodes/episode_content.dart';

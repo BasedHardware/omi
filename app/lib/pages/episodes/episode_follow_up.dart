@@ -1,3 +1,6 @@
+// Explicit follow-up promotion through the canonical Tasks provider and API.
+// Pending/saved controls and stable server keys prevent duplicate creates.
+
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';

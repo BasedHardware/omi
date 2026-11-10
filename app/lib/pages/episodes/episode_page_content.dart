@@ -109,8 +109,7 @@ class EpisodePageContent extends StatelessWidget {
             !m.isHiddenFromDefaultList &&
             !hidden.contains(m.id) &&
             !(history?.memoriesToDelete.containsKey(m.id) ?? false))
-        .toList()
-      ..sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+        .toList();
     final memberIds = members.map((m) => m.id).toSet();
     final items =
         episode.visibleItems.where((i) => i.conversationId == null || memberIds.contains(i.conversationId)).toList();

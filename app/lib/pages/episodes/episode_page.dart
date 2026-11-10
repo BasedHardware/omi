@@ -1,3 +1,6 @@
+// Episode detail route owns the operational gate and full member refresh.
+// Existing content remains available when an older or offline server cannot refresh.
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';

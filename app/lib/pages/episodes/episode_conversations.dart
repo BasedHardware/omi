@@ -1,3 +1,6 @@
+// Episode member list with disclosure of the existing Home noise classification.
+// Unknown classifications stay visible; canonical row interactions remain intact.
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
