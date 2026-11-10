@@ -16,7 +16,8 @@ Host: m1-mac-studio. Heavy commands use omi-heavy.
 - Render capture: 28 PNGs and manifest; before/after four states, + ready/saved,
   noise expanded, Home no count and narrow light mode at larger type. Inspected
   real-font source frames and comparison boards. The final lock bit defaults false
-  for these fixtures; final wrapper refresh produced identical PNG bytes.
+  for these fixtures. Captures wait for a paint after scrolling; the supplementary
+  long-summary middle frame is distinct from the ending.
 - First-party TypeScript DTOs regenerated with backend/scripts/generate_ts_openapi_types.py
   after the first push hook detected stale clients; its --check now passes.
 - Repository checks before the additive lock-bit follow-up: make preflight passed

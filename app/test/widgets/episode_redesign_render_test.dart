@@ -56,6 +56,8 @@ Future<void> _fonts() async {
 
 Future<void> _capture(WidgetTester tester, String slug) async {
   _ordinal++;
+  // ensureVisible/jumpTo can change scroll position before its paint is scheduled.
+  await tester.pump();
   expect(tester.takeException(), isNull);
   if (_output.isEmpty) return;
   await tester.runAsync(() async {
@@ -176,6 +178,9 @@ void main() {
             expect(find.byKey(const Key('full_summary_toggle')), findsNothing);
             expect(find.text('Summary'), findsNothing);
             await tester.ensureVisible(find.text('Make the invitation feel welcoming'));
+            await tester.pump();
+            expect(tester.getTopLeft(find.text('Make the invitation feel welcoming')).dy,
+                inInclusiveRange(kToolbarHeight, 852));
             await _capture(tester, 'long-summary-after-expanded');
             await _bottom(tester);
             expect(find.text('An indoor plan if it rains'), findsOneWidget);
