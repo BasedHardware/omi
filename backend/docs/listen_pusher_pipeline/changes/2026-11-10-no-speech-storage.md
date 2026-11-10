@@ -26,3 +26,11 @@ revision and run fences, no deletion, post-commit IO failure, and restore with a
 existing quiet check. These are synthetic storage tests, not deployed UI evidence.
 Rollback: stop callers, restore unchanged closed rows using their run/revision,
 then revert the code. L6a installs no operator or automated caller.
+
+Pre-review fixes: close mirrors the canonical batch-live row/user privacy fence,
+and the lifecycle tripwire rejects both direct storage calls. A missing SDK
+write result returns `committed_revision_unknown` after commit; the private
+ledger can record it and L6b resolves its matching marker before fenced undo.
+Restore deliberately has no privacy admission gate: it only restores the
+owner's existing row, without audio access or new cloud work. A later consent
+opt-out must not strand that row hidden; run/revision/shape fences still apply.

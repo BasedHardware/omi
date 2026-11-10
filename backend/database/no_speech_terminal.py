@@ -25,6 +25,7 @@ from utils.conversations.recovery import TERMINAL_NO_DERIVED_EFFECTS_FIELD
 MARKER = 'no_speech_terminal'
 POLICY = 'batch_live_no_speech_v1'
 STATE = 'no_speech'
+COMMITTED_REVISION_UNKNOWN = 'committed_revision_unknown'
 _FIELDS = ('status', 'discarded', TERMINAL_NO_DERIVED_EFFECTS_FIELD)
 # A row that another owner already retired, locked, merged or admitted to
 # finalization is never ours to close or restore.
@@ -76,7 +77,11 @@ def _close_txn(
     # Owner consent is re-read in the same transaction as the write. A missing
     # preference keeps the canonical enabled default.
     owner = user.get(transaction=transaction).to_dict() or {}
-    if owner.get('private_cloud_sync_enabled', True) is False:
+    if (
+        row.get('uses_custom_stt')
+        or not row.get('private_cloud_sync_enabled')
+        or not owner.get('private_cloud_sync_enabled', True)
+    ):
         raise NoSpeechConflict('privacy_changed')
     transaction.update(
         ref,
@@ -110,7 +115,8 @@ def close_no_speech(
 ) -> str:
     """Hide one unchanged in-progress capture as the reversible no-speech terminal.
 
-    Returns the committed revision, which the private ledger binds to the undo.
+    Returns the committed revision, or COMMITTED_REVISION_UNKNOWN when the SDK
+    omits it. The ledger can record either without raising after the hide.
     """
     if not run_id or not 0 <= speech_seconds < 10 or not 0 <= audio_seconds <= 7200:
         raise NoSpeechConflict('unbound_plan')
@@ -129,10 +135,8 @@ def close_no_speech(
     )
     # No post-commit IO: the existing quiet evaluator retires terminal owners
     # idempotently. Keeping its state intact also preserves a live undo.
-    committed_revision = revision(transaction.write_results[0])
-    if committed_revision is None:
-        raise NoSpeechConflict('commit_revision_unavailable')
-    return committed_revision
+    results = getattr(transaction, 'write_results', None) or ()
+    return (revision(results[0]) if results else None) or COMMITTED_REVISION_UNKNOWN
 
 
 def _restore_txn(
@@ -182,6 +186,11 @@ def restore_no_speech(
     run_id: str,
     firestore_client: Any = None,
 ) -> None:
-    """Restore only the unchanged generation this run closed; never a later edit."""
+    """Restore only the unchanged generation this run closed; never a later edit.
+
+    Undo restores the owner's existing row and performs no cloud admission or
+    audio access. Do not reapply consent gates: opting out after close must not
+    strand the owner's row hidden. Run, revision and closed-shape fences remain.
+    """
     client = firestore_client or get_firestore_client()
     firestore.transactional(_restore_txn)(client.transaction(), client, uid, cid, expected_closed_revision, run_id)
