@@ -12,10 +12,13 @@ from google.cloud import firestore
 from config.sync_telemetry import SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS
 from database._client import get_firestore_client
 from database.sync_jobs import get_sync_job
-from database.sync_ledger_ownership import BATCH_PARTIAL_STATUS, ledger_owner_matches
+from database.sync_ledger_ownership import ledger_owner_matches
 from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
+# Terminal batch_v1 ledger state: every failed unit is held with no recovery
+# path left; projected siblings are published, the held span is counted.
+BATCH_PARTIAL_STATUS = 'partial'
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 REPEAT_FAILURE_LIMIT = 3
 REPEAT_FAILURE_WINDOW = timedelta(hours=24)
