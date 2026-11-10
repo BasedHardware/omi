@@ -62,3 +62,11 @@ account for this review; do not run it on any other account.
 Set `EPISODE_COMPOSER_NOTES_FIRST=off`. The next paid
 compose uses the full-transcript prompt. No data migration, no composer-version
 bump and no recompose wave.
+
+## Split-review dispositions
+
+L9 follows L8a #25073 and L8b #25065. It remains default OFF until David's side-by-side verdict. Compare cumulative billed input and output, logical turns, retries and failures per completed compose on identical episodes, not excerpt characters alone. A tool loop may resend notes and exceed full-mode input; no savings claim or automatic ramp is made.
+
+The lease covers five reasoning turns plus one repair, with two bounded provider attempts per turn, retry headroom and a write margin. Full mode retains the L8b claim duration while L9 is off. Every new turn checks remaining deadline and claim ownership; stale release/final writes are fenced. A two-replica regression crosses 240 seconds through tool turns and repair. Mid-loop failure counts every paid turn toward backoff (correctness P2-1).
+
+Action-items-only and title-only members retain their transcript; readable overview, sections or gist qualify as notes (correctness P2-3 / tests review). Unknown tools and excess parallel excerpt calls have direct regressions. Tiny budgets return a complete exhausted-budget error rather than a partial marker (correctness P2-10). L8b records reported input/output on every reply, including terminal failures; hidden provider retries remain an authoritative usage-ledger follow-up. No production inventory/dashboard is fabricated before these families serve.

@@ -340,3 +340,76 @@ def test_excerpt_respects_even_a_tiny_remaining_budget():
     )
     assert spent == 0 and text == 'error: excerpt budget exhausted'
     assert '[...' not in text
+
+
+@pytest.mark.parametrize('structured', [{'action_items': [{'description': 'Ship it'}]}, {'title': 'Title only'}])
+def test_non_body_notes_retain_the_member_transcript(store, monkeypatch, structured):
+    _enable(monkeypatch)
+    store.rows['c2']['structured'] = structured
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'Transcript:\n[17:57:00] David: We planned the launch.' in calls[0][0][1][1]
+
+
+def test_mid_loop_failure_counts_every_paid_turn(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 3:
+            raise TimeoutError('provider failure')
+        return _tool_reply(call_id=str(len(calls)))
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert store.episode['compose_failures'] == 3
+    store.episode['compose_failed_at'] = T0
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'backoff'
+    assert len(calls) == 3
+
+
+def test_slow_tool_loop_and_repair_remain_fenced_for_the_entire_sequence(store, monkeypatch):
+    _enable(monkeypatch)
+    clock = [datetime.now(timezone.utc)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    monkeypatch.setattr(composer, 'datetime', Clock)
+    replies = [_tool_reply(call_id=str(i)) for i in range(4)] + [
+        SimpleNamespace(content='malformed', usage_metadata={}),
+        _reply(),
+    ]
+    peers = []
+
+    def invoke(uid, messages, **kwargs):
+        clock[0] += timedelta(seconds=130)
+        if len(replies) < 5:
+            peers.append(composer.compose(UID, 'ep1', collaborators=_c()))
+        return replies.pop(0)
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert peers and set(peers) == {'leased'}
+    assert store.episode['usage']['composer_calls'] == 6
+
+
+def test_unknown_tools_and_excess_calls_return_bounded_errors(store, monkeypatch):
+    _enable(monkeypatch)
+    request = _tool_reply()
+    request.tool_calls = [{'name': 'unknown', 'args': {}, 'id': 'unknown'}] + [
+        {'name': 'get_transcript_excerpt', 'args': {'recording': 1, 'start': '14:56', 'end': '15:00'}, 'id': str(i)}
+        for i in range(config.COMPOSER_EXCERPT_MAX_CALLS + 1)
+    ]
+    seen = []
+
+    def invoke(uid, messages, **kwargs):
+        seen.append(list(messages))
+        return request if len(seen) == 1 else _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    results = [message.content for message in seen[-1] if getattr(message, 'type', '') == 'tool']
+    assert results[0] == 'error: unknown tool'
+    assert results[-1] == 'error: excerpt call budget exhausted'
+    assert store.episode['usage']['composer_tool_calls'] == config.COMPOSER_EXCERPT_MAX_CALLS

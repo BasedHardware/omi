@@ -1340,9 +1340,12 @@ def _compose(
     invoke = invoke or invoke_model
 
     # One paid call per evidence across replicas: claim a short lease for this fingerprint.
+    notes_first = composer_notes_first_enabled(uid)
+    keep_paid = episode_compose_keep_paid_enabled()
+    permitted_turns = (COMPOSER_NOTES_FIRST_MAX_TURNS if notes_first else 1) + int(keep_paid)
     now = datetime.now(timezone.utc)
     lease_token = uuid4().hex
-    lease_until = now + timedelta(seconds=COMPOSER_LEASE_SECONDS)
+    lease_until = now + timedelta(seconds=permitted_turns * COMPOSER_CALL_BUDGET_SECONDS + 60)
 
     def lease_guard(current: Mapping[str, Any]) -> Optional[str]:
         lease = current.get('compose_lease') or {}
@@ -1375,9 +1378,7 @@ def _compose(
     named = members  # already carry stored person names (``_members``)
     language = str(episode.get('output_language') or 'English')
     language = {'en': 'English'}.get(language, language)
-    notes_first = composer_notes_first_enabled(uid)
     mode = 'notes_first' if notes_first else 'full'
-    keep_paid = episode_compose_keep_paid_enabled()
     call_started = datetime.now(timezone.utc)
     input_tokens = output_tokens = tool_calls = paid_calls = 0
     repaired = False
@@ -1386,7 +1387,7 @@ def _compose(
         nonlocal input_tokens, output_tokens, paid_calls
         # Do not start a turn unless both provider attempts fit inside our claim.
         if (
-            paid_calls >= COMPOSER_MAX_PAID_TURNS
+            paid_calls >= permitted_turns
             or datetime.now(timezone.utc) + timedelta(seconds=COMPOSER_CALL_BUDGET_SECONDS) > lease_until
         ):
             raise ComposeFailed('compose_deadline')
