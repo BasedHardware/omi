@@ -244,7 +244,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     RewindDatabase.currentUserId = nil
   }
 
-  func testAgentSyncDatabaseFailureReportingClosesPoolForRecovery() async throws {
+  func testReportedDatabaseReadFailuresClosePoolForRecovery() async throws {
     let testUserId = "rewind-agent-sync-recovery-\(UUID().uuidString)"
     let applicationSupportDirectory = try XCTUnwrap(
       FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -262,20 +262,20 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     try await RewindDatabase.shared.initialize()
 
     // DatabasePool can bridge SQLite error 10 through a generic NSError while
-    // preserving it in the localized text; AgentSync must still let the shared
-    // recovery owner rotate the stale pool.
+    // preserving it in the localized text; the shared recovery owner must still
+    // rotate the stale pool.
     let ioError = NSError(
       domain: "GRDB.DatabaseError",
       code: 1,
       userInfo: [NSLocalizedDescriptionKey: "SQLite error 10: disk I/O error"])
     for _ in 0..<5 {
-      await AgentSyncService.reportDatabaseReadFailure(ioError)
+      await RewindDatabase.shared.reportQueryError(ioError)
     }
 
     let isInitializedAfterFailures = await RewindDatabase.shared.isInitialized
     XCTAssertFalse(
       isInitializedAfterFailures,
-      "AgentSync must let repeated recoverable local read failures rotate the stale pool"
+      "repeated recoverable local read failures must rotate the stale pool"
     )
 
     try await RewindDatabase.shared.initialize()
