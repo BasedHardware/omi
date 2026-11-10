@@ -34,11 +34,20 @@ pytestmark = [
 
 @pytest.mark.parametrize('lose_reply', [False, True])
 @pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
-async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch, tmp_path, lose_reply, seal):
+async def _emulator_client():
+    # Match the configured isolated project: a second project can require a
+    # cold database bootstrap after the CLI has reported the emulator ready.
+    project = os.environ.get('GOOGLE_CLOUD_PROJECT') or 'demo-omi-listen-stack'
+    if not project.startswith('demo-'):
+        raise ValueError('custody emulator proofs require a demo project')
+    return firestore.Client(project=project, credentials=AnonymousCredentials())
+
+
+def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch, tmp_path, lose_reply, seal):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    client = firestore.Client(project='demo-tokenlease-round4', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid, session = 'synthetic-r4-' + uuid.uuid4().hex, 'record', 'custody:ambiguous'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -121,7 +130,7 @@ async def test_shadow_observes_post_storage_state_through_real_renewal_reply_los
     monkeypatch, tmp_path, lose_reply, transition
 ):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
-    client = firestore.Client(project='demo-tokenlease-post-storage', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid = 'synthetic-post-storage-' + uuid.uuid4().hex, 'record'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -201,7 +210,7 @@ def test_old_worker_cannot_run_recovery_before_original_publication(monkeypatch,
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid = 'synthetic-gate-' + uuid.uuid4().hex, 'record'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -257,7 +266,7 @@ def test_finish_after_erasure_enumeration_cannot_create_an_orphan_receipt(monkey
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid, session = 'synthetic-erase-' + uuid.uuid4().hex, 'record', 'custody:erasure'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -303,7 +312,7 @@ def test_frame_registration_committed_reply_loss_preserves_append_late(monkeypat
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid = 'synthetic-register-' + uuid.uuid4().hex, 'record'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -358,7 +367,7 @@ def test_frame_registration_committed_reply_loss_preserves_append_late(monkeypat
 
 def test_expiry_prunes_only_receipts_and_keeps_audio_and_recovery(monkeypatch, tmp_path):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')  # Rollback does not disable expiry.
-    client = firestore.Client(project='demo-tokenlease-expiry', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid = 'synthetic-expiry-' + uuid.uuid4().hex, 'record'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -388,7 +397,7 @@ def test_parked_recovery_has_a_real_privacy_blocked_exit(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
-    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    client = _emulator_client()
     uid, cid, session = 'synthetic-gate-privacy-' + uuid.uuid4().hex, 'record', 'custody:privacy-gate'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
