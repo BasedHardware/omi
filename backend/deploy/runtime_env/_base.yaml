@@ -20,6 +20,7 @@ environment_shared:
       - memory.canonical.mutate
       env:
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
@@ -521,6 +522,7 @@ environment_shared:
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
         PUSHER_STORAGE_PCM_BUDGET_MB: {value: '0', category: ops_kill}
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
@@ -899,6 +901,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1301,6 +1304,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1656,6 +1660,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1993,6 +1998,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}

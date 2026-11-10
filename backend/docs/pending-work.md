@@ -2,7 +2,9 @@
 
 Processing attention, pending-work projection and reprocess deduplication are
 always active in every environment. Both GET endpoints retain `enabled: true`
-for client compatibility. There are no feature switches or PostHog calls.
+for client compatibility. The default-on ops kill switch
+`PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED` controls only new
+read-time expiry writes; there are no PostHog calls.
 
 The authenticated `/v1/pending-work` and `/v1/attention-items` GET responses
 follow `.agent-scratch/pending-contract.md`. Seen/dismiss return 204. Unknown
@@ -18,13 +20,30 @@ Attention id hashes finalization revision, sync content revision and job id;
 uid and conversation scope the item and retry claim collections. A terminal
 minimum title is not a successful summary. Read-time reconciliation resolves
 items whose owner disappeared, was soft deleted, or acquired an overview;
-there is no sweep or migration of historical failures. Seen/dismiss writes
+there is no sweep or migration of historical failures. Lazy expiry on either
+GET marks unresolved class 11 `recovery_structure_unavailable` items inactive
+at seven days from `created_at`, only when they remain non-retryable after
+claim reconciliation and have no in-progress retry. Other failure reasons,
+including `processing_failed`, `final_attempt_failed` and
+`durable_attempts_exhausted`, do not expire even if their stored retryable flag
+is false. Legacy naive timestamps are interpreted as UTC; ISO timestamps are
+normalized to UTC. Invalid or missing timestamps are retained. The transaction
+checks the exact observed item state and update time and rechecks the claim
+before writing `expired_at` and `expiry_reason=non_retryable_ttl`. Concurrent
+retry claims prevent stale expiry writes. Expiry retains the document and is
+terminal: setting the switch to `false` never reactivates expired items. The
+switch is declared in the runtime base and matching GKE chart env; change its
+value there and recompose `backend/deploy/runtime_env.yaml` for rollback. Seen/dismiss writes
 are immediately available to the next read. Concurrent resolution can appear
 one read later. Claim status is read from the common claim ledger, including
 claims made by the old reprocess endpoint.
 
-The projection reads at most 100 `status == processing` conversations and 100
-active attention documents, plus at most two direct reads per attention item.
+The projection reads at most 100 `status == processing` conversations and
+returns at most 100 attention items after resolution/expiry filtering. It
+streams active attention documents until that many survive or the set ends,
+so filtered documents do not consume the window. It performs two direct reads
+per unresolved attention item, plus transactional item and claim reads for an
+expiry candidate. GET attention-items reads the full active set.
 Live capture, discarded/deleted, completed and dead-letter rows are excluded.
 These queries use Firestore's default collection single-field indexes on
 `conversations.status` and `processing_attention_items.active`; no composite

@@ -199,7 +199,9 @@ def test_list_resolves_deleted_and_summarized_and_keeps_fallback_title(monkeypat
         conv = Mock(exists=row is not None)
         conv.to_dict.return_value = row
         conv.reference.collection.return_value.document.return_value.get.return_value = Mock(exists=False)
-        conversations[cid] = SimpleNamespace(get=lambda conv=conv: conv)
+        conversations[cid] = Mock()
+        conversations[cid].get.return_value = conv
+        conversations[cid].collection.return_value.document.return_value.get.return_value = Mock(exists=False)
     collection.stream.return_value = items
     monkeypatch.setattr(store, 'items_ref', lambda uid: collection)
     client = Mock()
@@ -215,64 +217,170 @@ def test_list_resolves_deleted_and_summarized_and_keeps_fallback_title(monkeypat
     items[3].reference.update.assert_not_called()
 
 
-@pytest.mark.parametrize('expiry_enabled', [True, False])
-def test_list_expires_only_old_non_retryable_items(monkeypatch, expiry_enabled):
-    collection = Mock()
-    collection.where.return_value = collection
-    definitions = [
-        ('expired', False, NOW - store.NON_RETRYABLE_ITEM_TTL),
-        ('retryable', True, NOW - timedelta(days=30)),
-        ('recent', False, NOW - store.NON_RETRYABLE_ITEM_TTL + timedelta(seconds=1)),
-    ]
-    snapshots = {}
-    conversations = {}
-    for cid, retryable, created_at in definitions:
-        item = {
-            'id': cid,
-            'conversation_id': cid,
-            'generation': store.generation(ROW),
-            'failure_code': 'recovery_structure_unavailable',
-            'active': True,
-            'created_at': created_at,
-            'retryable': retryable,
-            'seen': False,
-            'retry': {'state': 'none', 'operation_id': None},
-        }
-        snapshot = Mock()
-        snapshot.to_dict.return_value = item
-        snapshots[cid] = snapshot
-        conv = Mock(exists=True)
-        conv.to_dict.return_value = ROW
-        conv.reference.collection.return_value.document.return_value.get.return_value = Mock(exists=False)
-        conversations[cid] = SimpleNamespace(get=lambda conv=conv: conv)
-    collection.stream.return_value = list(snapshots.values())
-    monkeypatch.setattr(store, 'items_ref', lambda uid: collection)
-    client = Mock()
-    client.collection.return_value.document.return_value.collection.return_value.document.side_effect = (
-        conversations.get
+def attention_query(database, monkeypatch, ids):
+    """Use strict document/transaction semantics; the query only supplies frozen snapshots."""
+    snapshots = []
+    for item_id in ids:
+        ref = database.collection('users').document(UID).collection('processing_attention_items').document(item_id)
+        snapshot = ref.get()
+        snapshot.reference = ref
+        snapshots.append(snapshot)
+    query = Mock()
+    query.where.return_value = query
+    query.stream.return_value = snapshots
+    query.document.side_effect = (
+        database.collection('users').document(UID).collection('processing_attention_items').document
     )
-    monkeypatch.setattr(store, 'db', client)
+    monkeypatch.setattr(store, 'items_ref', lambda uid: query)
     monkeypatch.setattr(store, 'now_utc', lambda: NOW)
-    if expiry_enabled:
-        monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
-    else:
+    monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
+    return snapshots
+
+
+def permanent_item(database, conversation_id='c1', **overrides):
+    item_id = create_item(database, conversation_id)
+    path = ('users', UID, 'processing_attention_items', item_id)
+    database.rows[path].update(
+        retryable=False, failure_code='recovery_structure_unavailable', created_at=NOW - store.NON_RETRYABLE_ITEM_TTL
+    )
+    database.rows[path].update(overrides)
+    return item_id, path
+
+
+@pytest.mark.parametrize('expiry_enabled', [True, False])
+def test_list_expires_only_old_non_retryable_items(database, monkeypatch, expiry_enabled):
+    ids = []
+    paths = []
+    for cid, overrides in [
+        ('expired', {}),
+        ('retryable', {'retryable': True}),
+        ('recent', {'created_at': NOW - store.NON_RETRYABLE_ITEM_TTL + timedelta(seconds=1)}),
+        ('transient', {'failure_code': 'processing_failed'}),
+        ('running', {'retry': {'state': 'in_progress'}}),
+    ]:
+        database.rows[('users', UID, 'conversations', cid)] = dict(ROW)
+        item_id, path = permanent_item(database, cid, **overrides)
+        ids.append(item_id)
+        paths.append(path)
+    attention_query(database, monkeypatch, ids)
+    if not expiry_enabled:
         monkeypatch.setenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', 'false')
-
     result = store.list_items(UID)
-
-    expected = ['retryable', 'recent'] if expiry_enabled else ['expired', 'retryable', 'recent']
-    assert [item['id'] for item in result] == expected
-    expiry_write = {
-        'active': False,
-        'expired_at': NOW,
-        'expiry_reason': 'non_retryable_ttl',
-    }
+    assert [item['id'] for item in result] == (ids[1:] if expiry_enabled else ids)
+    assert database.rows[paths[0]]['active'] is not expiry_enabled
+    assert all(database.rows[path]['active'] for path in paths[1:])
     if expiry_enabled:
-        snapshots['expired'].reference.update.assert_called_once_with(expiry_write)
+        assert database.rows[paths[0]]['expired_at'] == NOW
+        assert database.rows[paths[0]]['expiry_reason'] == 'non_retryable_ttl'
     else:
-        snapshots['expired'].reference.update.assert_not_called()
-    snapshots['retryable'].reference.update.assert_not_called()
-    snapshots['recent'].reference.update.assert_not_called()
+        monkeypatch.setenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', 'true')
+        assert [item['id'] for item in store.list_items(UID)] == ids[1:]
+
+
+@pytest.mark.parametrize(
+    'created_at, expires',
+    [
+        (datetime(2026, 10, 1), True),
+        ('2026-10-01T00:00:00Z', True),
+        ('2026-10-01T02:00:00+02:00', True),
+        (None, False),
+        ('invalid', False),
+    ],
+)
+def test_expiry_normalizes_legacy_created_at(database, monkeypatch, created_at, expires):
+    item_id, path = permanent_item(database, created_at=created_at)
+    attention_query(database, monkeypatch, [item_id])
+    assert bool(store.list_items(UID)) is not expires
+    assert database.rows[path]['active'] is not expires
+
+
+@pytest.mark.parametrize('failure_code', ['processing_failed', 'final_attempt_failed', 'durable_attempts_exhausted'])
+def test_transient_non_retryable_items_do_not_expire(database, monkeypatch, failure_code):
+    item_id, path = permanent_item(database, failure_code=failure_code)
+    attention_query(database, monkeypatch, [item_id])
+    assert len(store.list_items(UID)) == 1
+    assert database.rows[path]['active']
+
+
+def test_failed_claim_repairs_retryability_before_expiry(database, monkeypatch):
+    item_id, path = permanent_item(database, retry={'state': 'failed'})
+    claim_ref = (
+        database.collection('users')
+        .document(UID)
+        .collection('conversations')
+        .document('c1')
+        .collection('processing_retry_claims')
+        .document(store.claim_id('c1', store.generation(ROW)))
+    )
+    database.rows[claim_ref.path] = {'state': 'failed', 'operation_id': 'legacy'}
+    attention_query(database, monkeypatch, [item_id])
+    result = store.list_items(UID)
+    assert result[0]['retryable'] is True
+    assert result[0]['retry'] == {'state': 'failed', 'operation_id': 'legacy'}
+    assert database.rows[path]['active']
+    assert not any(tx.updates for tx in database.transactions)
+
+
+@pytest.mark.parametrize('claim_first', [True, False])
+def test_stale_poll_cannot_expire_concurrent_retry(database, monkeypatch, claim_first):
+    item_id, path = permanent_item(database)
+    attention_query(database, monkeypatch, [item_id])
+    original_run = store.run_transactional
+    operations = []
+
+    def interleave(client, fn, *args, **kwargs):
+        if fn is store.expire_in_transaction:
+            if claim_first:
+                # The normal reprocess path can claim without an attention id.
+                operations.append(store.claim(UID, 'c1')[0])
+            result = original_run(client, fn, *args, **kwargs)
+            if not claim_first:
+                with pytest.raises(store.ClaimRejected, match='not_retryable'):
+                    store.claim(UID, 'c1', item_id)
+            return result
+        return original_run(client, fn, *args, **kwargs)
+
+    monkeypatch.setattr(store, 'run_transactional', interleave)
+    result = store.list_items(UID)
+    assert bool(result) is claim_first
+    assert database.rows[path]['active'] is claim_first
+    if claim_first:
+        assert store.finish(UID, operations[0], 'failed', item_id)
+        assert database.rows[path]['active']  # A failed retry remains visible.
+
+
+@pytest.mark.parametrize('change', ['retry', 'delete', 'version'])
+def test_expiry_refuses_changed_snapshot(database, monkeypatch, change):
+    item_id, path = permanent_item(database)
+    observed = attention_query(database, monkeypatch, [item_id])[0]
+    if change == 'retry':
+        database.rows[path]['retryable'] = True
+        store.claim(UID, 'c1', item_id)
+    elif change == 'delete':
+        database.rows.pop(path)
+    else:
+        # Same data written again is still a different Firestore document version.
+        observed.update_time = NOW - timedelta(seconds=1)
+    assert len(store.list_items(UID)) == 1
+    assert not any('expired_at' in patch for tx in database.transactions for _, patch in tx.updates)
+
+
+def test_attention_limit_is_after_expiry_filter(database, http_client, monkeypatch):
+    ids = []
+    for index in range(5):
+        cid = f'c{index}'
+        database.rows[('users', UID, 'conversations', cid)] = dict(ROW)
+        item_id, _ = permanent_item(database, cid, **({'retryable': True} if index >= 3 else {}))
+        ids.append(item_id)
+    attention_query(database, monkeypatch, ids)
+    assert [item['id'] for item in store.list_items(UID, limit=2)] == ids[3:]
+    # Rebuild the query with the remaining active set for the HTTP badge.
+    attention_query(database, monkeypatch, ids[3:])
+    monkeypatch.setattr(store, 'LIMIT', 2)
+    monkeypatch.setattr(store, 'pending_conversations', lambda uid: [])
+    monkeypatch.setattr(routes.sync_jobs, 'pending_sync_jobs', lambda uid: [])
+    monkeypatch.setattr(routes, 'ownership_enabled', lambda uid: False)
+    assert http_client.get('/v1/pending-work').json()['attention_unseen_count'] == 2
 
 
 def test_pending_sync_excludes_terminal_missing_and_foreign(monkeypatch):
