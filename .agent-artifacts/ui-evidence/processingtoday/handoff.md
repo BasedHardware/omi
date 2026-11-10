@@ -1,0 +1,84 @@
+# #25024 pending main-revert integration — 2026-11-10
+
+Workspace: `/Volumes/scratch/worktrees/omi/omi-lane-processingtoday-upstream-keep-clean`,
+branch `lane/processingtoday` on m1-mac-studio. Code checkpoint:
+`7e9c6f6af99faae6f2445eeeee81e072a5931a8a` (later commits may only add evidence docs).
+PR: https://github.com/BasedHardware/omi/pull/25024.
+
+## Dependency
+
+Relay 714b03 requires merging main **after** the #25013 revert, then re-landing
+the wanted client parts. Fresh main at 13:34Z remains
+`c8959fd6466368348f3458e61946a93816a170df`, still containing #25013 as
+`3ac877544f`. A bounded 20-minute fetch/log watcher ended without the revert.
+No linked revert PR was visible on #25013's timeline. The user has a pending
+question requesting its PR/SHA. Do not claim this integration is complete.
+
+**No push has occurred for this follow-up batch.** Remote #25024 remains
+`da955c8fe3430eab5f35deb383c277820e472856`. Preserve one normal, full-hook push;
+never force, skip hooks or merge the PR.
+
+## Prepared implementation
+
+- Mobile Home processes only today's local recorded day and excludes failures
+  from every Home insertion/group/search/filter path. Activity owns failures
+  with retry; completion updates the shared provider. Pending optionally echoes
+  home_step; failed flag reads restore previous Home. episodeId is parsed and
+  immediately owns Home rows before episode fetch.
+- Web /conversations adds Activity; /home remains chat/tasks/goals. Native
+  Conversations routes failures to existing Memory hub Activity and excludes
+  them from the spine. Both require explicit pending-work confirmation.
+- Loaded/list/search failures survive Home filters in account-scoped memory.
+  Completion, local deletion and account resets clear them. Web retry updates
+  list/search/cache immediately and fences older reads. Native observes shared
+  data and passes the emitted flag value to the spine.
+- Wanted #25013 parsing, reconciliation, terminal watcher stop and authoritative
+  retry replacement remain. Its failed rows on default Home are dropped;
+  previous rendering remains available for kill-switch rollback/direct detail.
+- Main's schema inventory failure is fixed in conversations.dart: direct
+  GeneratedSearchConversationsResponse decode, passed into the part helper.
+  No schema assertion/allowlist or PCM guard was weakened.
+
+## Finish once the revert lands
+
+1. Fetch main and the feature branch; inspect unseen commits. Confirm the main
+   revert in the log. Save the current local HEAD as the pre-merge checkpoint.
+2. Merge fresh main without committing immediately. Inspect its changes to the
+   #25013 paths before restoring wanted changes. Obtain the source with
+   `gh pr diff 25013 -R BasedHardware/omi`; the existing scratch source diff and
+   path list are `.agent-artifacts/pr25013-source.diff` and
+   `.agent-artifacts/pr25013-source-paths.txt`.
+3. Preserve the checkpoint versions of the wanted #25013 source/test/changelog
+   files, resolving revert conflicts with these adapted versions. Inspect any
+   independent fresh-main edits rather than overwriting them. Do not restore
+   `.agent-artifacts/ui-evidence/lane-homestep-client/` rejected-Home screenshots;
+   this directory has the replacement evidence. Commit the merge/re-land and
+   record exact order/SHAs in the PR body and disposition record.
+4. Run the schema inventory regression and required preflight/full push hook on
+   the integrated tree. Tests/commands are in README.md. The ignored prepared
+   PR body is `.agent-artifacts/processingtoday-pr-body.md`; rewrite its pending
+   integration paragraph and pin every render URL to the final containing SHA.
+   Fetch again before the normal push. Use OMI_PR_BODY_FILE for the full hook.
+5. Update #25024's title/body around the final mobile/web/macOS Activity policy,
+   post the commit-pinned raw render URLs, and report head + every disposition.
+   Record the published outcome in anx on
+   `card:keep-home-processing-on-today-and-route` as processingtoday. Do not merge.
+
+## Verification and evidence
+
+Latest focused runs: 1,039 web Vitest tests plus typecheck/smoke; 103 selected
+native tests; 14 schema inventory; 146 backend; 313 expanded Flutter and an
+84-test search/reconciliation rerun; 35 tests in each of New York, Kiritimati
+and Pago Pago; analyzer ratchet and generated Dart wire check. Final repository preflight passed all 88 checks after the filter supplement
+at 13:34Z. The actual normal push hook remains pending the main revert.
+
+Manifest: evidence.json, images 001–018. README contains reproduction commands.
+Mobile captures real pages; web/native capture real production components.
+Native manual mounted-destination flow is declared but not run as a signed app
+session. No production endpoint/account, cloud change, merge or deploy.
+
+Deferred limits: bounded historical discovery, episode-only debt outside the
+loaded range, unstamped old empty captures, capped earliest-due ordering,
+unmeasured live latency and physical/signed-session behavior. PCM CPU-duration
+guard remains untouched; its pre-existing main failure is documented in the
+prepared PR body and prereview-dispositions.md.
