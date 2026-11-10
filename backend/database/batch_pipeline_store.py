@@ -7,6 +7,7 @@ The transaction callback must be pure; it may be retried by Firestore.
 from copy import deepcopy
 import hashlib
 import logging
+import math
 import os
 import random
 import re
@@ -259,6 +260,18 @@ class _ContentionStormDamper:
     commit clears the ladder, but only if no concurrent arm happened since
     the entry consulted (generation guard, mirroring the pull loop's
     generation-based reset).
+
+    The damper's reach now ends at the process boundary the same way it once
+    ended at the store instance: a deployment is many pods, and the FIRST pod
+    into a fresh storm measured it while every sibling pod's damper was still
+    cold — five colliding attempts per pod, re-derived fleet-wide. A
+    process-shared damper therefore carries an optional fleet window
+    (``_FleetStormWindow``): ``arm`` broadcasts the applied window to one
+    Firestore document per label, and a cold ``consult`` adopts sibling pods'
+    windows, so the first exhaustion spaces the whole fleet's next entries.
+    The mirror is advisory and fail-open — bounded TTL, bounded size, every
+    fault collapses to "no window" — and an explicitly injected damper
+    carries no fleet window, exactly as it carries no registry identity.
     """
 
     def __init__(
@@ -267,29 +280,48 @@ class _ContentionStormDamper:
         monotonic: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
         random_value: Callable[[], float] = random.random,
+        fleet_window: '_FleetStormWindow | None' = None,
     ):
         self._monotonic = monotonic
         self._sleeper = sleeper
         self._random_value = random_value
+        self._fleet = fleet_window
         self._lock = threading.Lock()
         self._armed_until: dict[str, float] = {}
         self._failures: dict[str, int] = {}
         self._generations: dict[str, int] = {}
 
-    def consult(self, label: str) -> tuple[float, int]:
+    def consult(self, label: str, *, client: Any = None) -> tuple[float, int]:
         """Sleep out the residual backoff for ``label``; return ``(waited, generation)``.
 
         The sleep runs outside the lock so a damped entry never blocks a
         concurrent arm, consult or success. ``waited`` is ``0.0`` when no
         backoff is armed (or already expired) and no sleep happens.
+
+        When this damper carries a fleet window, a process-local residual of
+        zero is exactly the cold-start case the fleet mirror exists for: the
+        sibling pods' window for ``label`` is adopted (bounded, mirrored,
+        never raising) and the longer of the two residuals is slept. A
+        sibling pod's exhaustion therefore spaces this process's next entry
+        without this process having to burn its own chain first.
         """
         with self._lock:
             residual = self._armed_until.get(label, 0.0) - self._monotonic()
             generation = self._generations.get(label, 0)
-        if residual <= 0.0:
+        fleet_residual = 0.0
+        if self._fleet is not None:
+            fleet_residual = self._fleet.peek(label, client)
+            if fleet_residual > residual:
+                logger.info(
+                    'event=batch_store_backoff scope=fleet operation=%s waited_ms=%d',
+                    label,
+                    round(fleet_residual * 1000),
+                )
+        wait = max(residual, fleet_residual)
+        if wait <= 0.0:
             return 0.0, generation
-        self._sleeper(residual)
-        return residual, generation
+        self._sleeper(wait)
+        return wait, generation
 
     def peek(self, label: str) -> tuple[float, int]:
         """Read ``(residual, generation)`` for ``label`` without sleeping.
@@ -305,8 +337,16 @@ class _ContentionStormDamper:
             generation = self._generations.get(label, 0)
         return max(residual, 0.0), generation
 
-    def arm(self, label: str) -> float:
-        """Record one exhaustion for ``label``; return the applied retry-after seconds."""
+    def arm(self, label: str, *, client: Any = None) -> float:
+        """Record one exhaustion for ``label``; return the applied retry-after seconds.
+
+        When this damper carries a fleet window, the applied window is also
+        broadcast for sibling PODS: their next entry adopts it instead of
+        re-deriving the storm this process just measured. The broadcast is
+        best-effort and runs OUTSIDE the damper lock — a slow or faulting
+        Firestore write never delays a concurrent consult — and it never
+        changes the local arithmetic or the returned seconds.
+        """
         with self._lock:
             if label not in self._generations and len(self._generations) >= (
                 FirestoreStore.STORM_DAMPER_MAX_TRACKED_LABELS
@@ -323,7 +363,10 @@ class _ContentionStormDamper:
             until = max(self._armed_until.get(label, 0.0), self._monotonic() + delay)
             self._armed_until[label] = until
             self._generations[label] = self._generations.get(label, 0) + 1
-            return until - self._monotonic()
+            applied = until - self._monotonic()
+        if self._fleet is not None:
+            self._fleet.publish(label, applied, client=client)
+        return applied
 
     def note_success(self, label: str, generation: int) -> None:
         """Clear the ladder only if no concurrent arm happened since consult."""
@@ -357,6 +400,189 @@ class _ContentionStormDamper:
             return len(self._generations)
 
 
+def fleet_storm_window_doc_id(label: str) -> str | None:
+    """The storm-window document id for ``label``; ``None`` when unfit.
+
+    Labels are the validated operation grammar (``[a-z][a-z0-9_]{0,63}`` or
+    the composed serving-pull/claim form); the composed form's spaces and
+    equals signs map deterministically to underscores, and the result is
+    refused unless it stays inside the bounded document-id alphabet. A
+    document id is an address, never an interpolation surface, and an unfit
+    label fails open as "no fleet window" on both the read and the write.
+    """
+    doc_id = label.replace(' ', '_').replace('=', '_')
+    if not re.fullmatch(r'[a-z0-9_]{1,128}', doc_id):
+        return None
+    return doc_id
+
+
+class _FleetStormWindow:
+    """Best-effort cross-process mirror of one namespace's storm windows.
+
+    The process-shared damper made an exhaustion's re-strike window true for
+    every store instance in ONE process. A deployment is not one process: a
+    hot label exhausts on many pods at once, and every pod whose damper is
+    still cold re-derives the storm the fleet has already measured — five
+    colliding attempts per pod, exactly the ``x1056/30m`` exhausted burn the
+    damper family exists to stop. This window publishes each armed window to
+    one Firestore document per label (``{namespace}_storm_dampers/{doc_id}``)
+    and adopts sibling pods' windows on entry, so the FIRST pod through a
+    storm spaces the fleet's next entries, not just its own process.
+
+    Everything here is advisory and fail-open: the publish is a single merge
+    set with no SDK retry and a bounded call timeout, every Firestore fault
+    collapses to "no fleet window", a missing or malformed document reads as
+    residual ``0.0``, and per-label results are mirrored for
+    ``CACHE_TTL_SECONDS`` so adoption never amplifies reads on the entry
+    path. A pod that still holds a longer window of its own keeps it — the
+    adopted residual only ever raises the wait to the fleet's measurement,
+    never shortens the process's own. There is no separate kill switch: the
+    window is carried by the process-shared damper, so it lives and dies
+    with the storm damper lever the way the registry does.
+    """
+
+    # At most one storm-window read per label per process per this many
+    # seconds: storms are damped by the mirror, not paid for in reads.
+    CACHE_TTL_SECONDS = 1.0
+    # The mirror is keyed by whatever label is consulted; labels are static
+    # literals, but the bound mirrors the damper's label cap (fail-open past
+    # it: the oldest mirror entry is evicted rather than growing forever).
+    MAX_CACHED_LABELS = 128
+    # The publish and the adopt each get one bounded call budget; a hanging
+    # Firestore call must not extend the entry path the way an unbounded
+    # read would. Well above a healthy call, far below the damper cap.
+    CALL_TIMEOUT_SECONDS = 1.0
+
+    def __init__(self, namespace: str, *, wall_now: Callable[[], float] = time.time):
+        self.namespace = namespace
+        self._wall_now = wall_now
+        self._lock = threading.Lock()
+        self._until_wall: dict[str, float] = {}
+        self._fetched_at: dict[str, float] = {}
+        self.reads = 0
+        self.absent_reads = 0
+        self.malformed_reads = 0
+        self.failed_reads = 0
+        self.publishes = 0
+        self.publish_skips = 0
+        self.publish_failures = 0
+        self.unfit_labels = 0
+
+    def peek(self, label: str, client: Any = None) -> float:
+        """The sibling pods' residual for ``label``; ``0.0`` without a client.
+
+        Mirrored: at most one document read per label per
+        ``CACHE_TTL_SECONDS``, and a publish warms the mirror so the
+        publisher never re-reads its own window. Never raises.
+        """
+        if client is None:
+            return 0.0
+        doc_id = fleet_storm_window_doc_id(label)
+        if doc_id is None:
+            with self._lock:
+                self.unfit_labels += 1
+            return 0.0
+        now = self._wall_now()
+        with self._lock:
+            fresh = label in self._fetched_at and now - self._fetched_at[label] < self.CACHE_TTL_SECONDS
+            until_wall = self._until_wall.get(label, 0.0)
+        if fresh:
+            return max(0.0, until_wall - now)
+        until_wall = self._fetch_until_wall(doc_id, client, now)
+        self._remember(label, until_wall, now)
+        return max(0.0, until_wall - now)
+
+    def _fetch_until_wall(self, doc_id: str, client: Any, now: float) -> float:
+        with self._lock:
+            self.reads += 1
+        try:
+            snapshot = (
+                client.collection(f'{self.namespace}_storm_dampers')
+                .document(doc_id)
+                .get(timeout=self.CALL_TIMEOUT_SECONDS)
+            )
+            data = snapshot.to_dict() if snapshot.exists else None
+        except Exception:
+            # A read fault is "no window", cached like one for the TTL: a
+            # blip must degrade to process-local damping, never to retries
+            # on the entry path.
+            with self._lock:
+                self.failed_reads += 1
+            return 0.0
+        if data is None:
+            with self._lock:
+                self.absent_reads += 1
+            return 0.0
+        armed_until = data.get('armed_until') if isinstance(data, dict) else None
+        if (
+            isinstance(armed_until, bool)
+            or not isinstance(armed_until, (int, float))
+            or not math.isfinite(float(armed_until))
+        ):
+            with self._lock:
+                self.malformed_reads += 1
+            return 0.0
+        return float(armed_until)
+
+    def publish(self, label: str, window_seconds: float, *, client: Any = None) -> None:
+        """Broadcast one armed window for ``label``; best-effort, never raises.
+
+        A window already covered by the mirror is skipped — during a
+        lockstep burst every sibling would otherwise rewrite the same
+        document with a window the first publisher already broadcast. The
+        skip is advisory: it compares against what THIS process last saw,
+        and a skipped window costs at most the residual the mirror already
+        carries.
+        """
+        if client is None:
+            return
+        doc_id = fleet_storm_window_doc_id(label)
+        if doc_id is None:
+            with self._lock:
+                self.unfit_labels += 1
+            return
+        if not math.isfinite(float(window_seconds)) or window_seconds <= 0.0:
+            return
+        now = self._wall_now()
+        with self._lock:
+            known = self._until_wall.get(label, 0.0) - now
+        if known >= float(window_seconds):
+            with self._lock:
+                self.publish_skips += 1
+            return
+        until_wall = now + float(window_seconds)
+        try:
+            client.collection(f'{self.namespace}_storm_dampers').document(doc_id).set(
+                {'armed_until': until_wall, 'window_seconds': float(window_seconds)},
+                merge=True,
+                timeout=self.CALL_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            with self._lock:
+                self.publish_failures += 1
+            return
+        with self._lock:
+            self.publishes += 1
+            self._remember_locked(label, until_wall, now)
+
+    def _remember(self, label: str, until_wall: float, now: float) -> None:
+        with self._lock:
+            self._remember_locked(label, until_wall, now)
+
+    def _remember_locked(self, label: str, until_wall: float, now: float) -> None:
+        if len(self._until_wall) >= self.MAX_CACHED_LABELS and label not in self._until_wall:
+            oldest = min(self._fetched_at, key=lambda key: self._fetched_at[key], default=None)
+            if oldest is not None:
+                self._until_wall.pop(oldest, None)
+                self._fetched_at.pop(oldest, None)
+        self._until_wall[label] = until_wall
+        self._fetched_at[label] = now
+
+    def cached_labels(self) -> int:
+        with self._lock:
+            return len(self._until_wall)
+
+
 # One damper per namespace per process, shared by every ``FirestoreStore``
 # constructed without an injected ``storm_damper=``. The process mints many
 # store instances for one namespace — serving, intake, provider STT, voice
@@ -372,19 +598,21 @@ _SHARED_STORM_DAMPERS: dict[str, _ContentionStormDamper] = {}
 _SHARED_STORM_DAMPERS_LOCK = threading.Lock()
 
 
-def shared_storm_damper(namespace: str) -> _ContentionStormDamper:
+def shared_storm_damper(namespace: str) -> '_ContentionStormDamper':
     """The process-shared storm damper for ``namespace``.
 
     Every store built without an explicit ``storm_damper=`` gets this one
     object, so an exhaustion armed through any instance spaces the next
-    entry of the label on every instance of the same namespace. The
+    entry of the label on every instance of the same namespace. The damper
+    carries the namespace's fleet window (``fleet_storm_window``), so its
+    windows are also broadcast to and adopted from sibling PODS; the
     double-checked get-or-create is locked because stores are constructed
-    on executor threads (intake admissions, serving pulls); the unsynchronized
-    fast path is safe under the GIL's dict-read guarantee.
+    on executor threads (intake admissions, serving pulls); the
+    unsynchronized fast path is safe under the GIL's dict-read guarantee.
 
     An explicitly injected damper is honored verbatim and never registered:
     tests own their damper identity, and a foreign damper must not leak
-    state into the process-shared one.
+    state into the process-shared one — or into the fleet view.
 
     Failure-Class: FC-storm-damper-window-dies-with-its-store-instance
     """
@@ -393,7 +621,7 @@ def shared_storm_damper(namespace: str) -> _ContentionStormDamper:
         with _SHARED_STORM_DAMPERS_LOCK:
             damper = _SHARED_STORM_DAMPERS.get(namespace)
             if damper is None:
-                damper = _ContentionStormDamper()
+                damper = _ContentionStormDamper(fleet_window=fleet_storm_window(namespace))
                 _SHARED_STORM_DAMPERS[namespace] = damper
     return damper
 
@@ -408,6 +636,44 @@ def reset_shared_storm_dampers() -> None:
     """
     with _SHARED_STORM_DAMPERS_LOCK:
         _SHARED_STORM_DAMPERS.clear()
+
+
+# The fleet mirror registry, keyed like the damper registry: one mirror per
+# namespace per process, created alongside its damper by
+# ``shared_storm_damper`` so every store of the namespace publishes into and
+# adopts from the same cross-process view. Bounded by the namespace count,
+# exactly like the damper registry.
+_FLEET_STORM_WINDOWS: dict[str, _FleetStormWindow] = {}
+_FLEET_STORM_WINDOWS_LOCK = threading.Lock()
+
+
+def fleet_storm_window(namespace: str) -> _FleetStormWindow:
+    """The process-level fleet window for ``namespace``.
+
+    The double-checked get-or-create mirrors ``shared_storm_damper``: stores
+    are constructed on executor threads, and two concurrent constructions of
+    one namespace must observe the same mirror.
+    """
+    window = _FLEET_STORM_WINDOWS.get(namespace)
+    if window is None:
+        with _FLEET_STORM_WINDOWS_LOCK:
+            window = _FLEET_STORM_WINDOWS.get(namespace)
+            if window is None:
+                window = _FleetStormWindow(namespace)
+                _FLEET_STORM_WINDOWS[namespace] = window
+    return window
+
+
+def reset_fleet_storm_windows() -> None:
+    """Drop every fleet window; the test-isolation twin of the damper reset.
+
+    A mirror entry is a wall-clock window another test's fake client wrote;
+    carrying it across tests would let one test's storm leak into the next
+    test's adopt. Production code never calls this — the mirrors are the
+    feature.
+    """
+    with _FLEET_STORM_WINDOWS_LOCK:
+        _FLEET_STORM_WINDOWS.clear()
 
 
 class FirestoreStore:
@@ -504,13 +770,25 @@ class FirestoreStore:
         clears the ladder only if no arm happened since the latest consult
         or mid-ladder peek (generation guard).
 
+        The window the damper keeps is fleet-shared: the process-shared
+        damper carries the namespace's fleet mirror, so this entry adopts
+        sibling pods' armed windows on entry (logged at INFO as
+        ``event=batch_store_backoff scope=fleet`` when the fleet's window
+        outwaits the process's own) and this process's exhaustions broadcast
+        theirs. A cold pod waits out a storm the fleet already measured
+        instead of re-deriving it with a fresh five-attempt chain; both the
+        adopt and the broadcast are best-effort, and every fault collapses
+        to the process-local behavior. An injected ``storm_damper=`` carries
+        no fleet mirror, exactly as it carries no registry identity.
+
         Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-window
         """
         label = require_operation_label(operation if operation is not None else current_operation())
+        client = self.client
         damper = self._storm_damper if (contention_retry_enabled() and contention_storm_damper_enabled()) else None
         generation = 0
         if damper is not None:
-            waited, generation = damper.consult(label)
+            waited, generation = damper.consult(label, client=client)
             if waited > 0:
                 logger.info('event=batch_store_backoff operation=%s waited_ms=%d', label, round(waited * 1000))
         # The latest damper generation this entry has observed: the entry
@@ -579,7 +857,7 @@ class FirestoreStore:
             # drain lane) lands it after the armed window instead of
             # colliding inside it on a fixed ladder.
             if damper is not None:
-                error.retry_after = damper.arm(label)
+                error.retry_after = damper.arm(label, client=client)
             raise
         if damper is not None:
             damper.note_success(label, latest_generation)

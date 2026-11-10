@@ -409,7 +409,9 @@ def _fresh_shared_storm_dampers():
     module = sys.modules.get('database.batch_pipeline_store')
     if module is not None:
         module.reset_shared_storm_dampers()
+        module.reset_fleet_storm_windows()
     yield
     module = sys.modules.get('database.batch_pipeline_store')
     if module is not None:
         module.reset_shared_storm_dampers()
+        module.reset_fleet_storm_windows()

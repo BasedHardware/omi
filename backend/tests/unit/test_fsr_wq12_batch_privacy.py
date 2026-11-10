@@ -174,7 +174,10 @@ def test_real_intake_batch_counts(monkeypatch, reads):
         # 20 assertions for 20 distinct source conversations.
         assert assertions.call_count == 20
         assert len(db.transactions[0].sets) == 24  # jobs + owner, queue, control, content
-        assert len(reads) == (67 if on else 124)  # 24 unchanged scheduler/content reads
+        # The first batch_admit entry adopts the fleet storm window (+1 bounded
+        # read, database/docs/batch-store-fleet-storm-window.md); the second
+        # entry's adopt is answered by the process mirror, not the document.
+        assert len(reads) == (67 if on else 125)
         results.append(db.rows)
     assert results[0] == results[1]
 

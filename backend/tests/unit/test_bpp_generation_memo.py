@@ -76,6 +76,10 @@ def test_real_store_transactions_100_to_24_and_retry_scope_reset(monkeypatch, re
     enabled(monkeypatch)
     db = database()
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    # Pre-warm the fleet storm-window mirror so every measured segment below is
+    # mirror-served and the pinned read budgets keep counting privacy reads only.
+    storage.fleet_storm_window('batch_pipeline_dev').peek('batch_test_probe', db)
+    reads.clear()  # drop the pre-warm's own adopt read from the measured budget
     with batch_privacy_attempt() as attempt:
         for _ in range(20):
             assert store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe') == 7
@@ -532,6 +536,11 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
     enabled(monkeypatch)
     db = database()
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    # The entry of every commit adopts the fleet storm window once per TTL
+    # (database/docs/batch-store-fleet-storm-window.md). Pre-warm the label's
+    # mirror so both measured ticks are answered without a document read and
+    # the pinned walk below stays exactly what it budgets.
+    storage.fleet_storm_window('batch_pipeline_dev').peek('batch_test_probe', db)
     attempts, failures, token_transactions = [], [], []
     finished = asyncio.Event()
     original_get = StrictFirestoreDocument.get
@@ -552,7 +561,7 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
             job = {'owner_id': UID, 'conversation_id': 'source', 'privacy_generation': 7}
             reads.clear()
             store.run(lambda tx: tx.put('jobs', 'first', job), operation='batch_test_probe')
-            assert len(reads) == 5  # Full walk on the first commit of each tick.
+            assert len(reads) == 5  # Full walk on the first commit of each tick; the fleet adopt is mirror-served.
             if mutation:
                 db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
                 if mutation == 'deletion':

@@ -254,7 +254,7 @@ def test_parity_pump_names_the_measured_window():
 
 
 def test_parity_store_stamps_the_applied_window():
-    assert 'error.retry_after = damper.arm(label)' in STORE_SOURCE
+    assert 'error.retry_after = damper.arm(label, client=client)' in STORE_SOURCE
 
 
 def test_parity_store_names_the_carried_window():

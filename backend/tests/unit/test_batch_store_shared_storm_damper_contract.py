@@ -107,13 +107,18 @@ def shared_damper(namespace='batch_pipeline_dev', jitter=0.0, now=100.0):
 
     The registry object is adopted onto an injected clock/seeder so the
     shared-window tests never sleep real time; the object identity stays
-    exactly what the store constructor resolved.
+    exactly what the store constructor resolved. The namespace's fleet
+    window is adopted onto the SAME clock: a broadcast window is a wall
+    deadline, and a test that advances the damper's monotonic clock past it
+    must advance the mirror's wall clock with it, or a real-time mirror
+    would re-arm a label the damper has already expired.
     """
     clock = FakeClock(now=now, jitter=jitter)
     damper = storage.shared_storm_damper(namespace)
     damper._monotonic = clock.monotonic
     damper._sleeper = clock.sleep
     damper._random_value = clock.random_value
+    storage.fleet_storm_window(namespace)._wall_now = clock.monotonic
     return damper, clock
 
 

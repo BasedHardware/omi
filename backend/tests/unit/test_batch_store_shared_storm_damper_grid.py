@@ -91,6 +91,10 @@ def shared_damper(namespace=NS, jitter=0.0, now=100.0):
     damper._monotonic = clock.monotonic
     damper._sleeper = clock.sleep
     damper._random_value = clock.random_value
+    # The namespace's fleet mirror is adopted onto the SAME clock: a broadcast
+    # window is a wall deadline, and a test that advances the damper's
+    # monotonic clock past it must advance the mirror's wall clock with it.
+    storage.fleet_storm_window(namespace)._wall_now = clock.monotonic
     return damper, clock
 
 
