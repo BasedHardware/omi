@@ -369,7 +369,7 @@ def test_a_trigger_during_a_run_composes_again(store, monkeypatch):
     outcomes = iter(['composed', 'unchanged'])
     seen = []
 
-    def fake_compose(uid, episode_id, collaborators=None, force=False, background=False):
+    def fake_compose(uid, episode_id, collaborators=None, force=False, background=False, trigger=None):
         seen.append(episode_id)
         if len(seen) == 1:
             # A member finalize arrives while this run is in flight.
@@ -382,13 +382,16 @@ def test_a_trigger_during_a_run_composes_again(store, monkeypatch):
     assert seen == ['ep1', 'ep1']
 
 
-def test_membership_change_during_the_call_is_not_overwritten(store):
+def test_membership_change_during_the_call_keeps_the_paid_result_pending(store):
     def invoke(uid, messages):
         store.episode['conversation_ids'] = ['c1', 'c2', 'c3']
         return _reply()
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
-    assert not any("bullets" in w for w in store.writes) and store.episode["compose_lease"] is None
+    # The paid result is kept and the episode is pending, so a settled compose refreshes it.
+    assert store.episode['title'] == 'Omi app bugs and labeling tool'
+    assert store.episode['compose_pending_since'] and store.episode['compose_lease'] is None
+    assert composer.needs_compose(store.episode) is True
 
 
 def test_long_transcripts_keep_the_densest_windows_in_order():
@@ -500,14 +503,14 @@ def test_a_second_replica_does_not_pay_for_the_same_evidence(store):
     assert calls == [1] and store.episode['compose_lease'] is None
 
 
-def test_discard_during_the_call_is_superseded_not_written(store):
+def test_discard_during_the_call_keeps_the_paid_result_pending(store):
     def invoke(uid, messages):
         store.rows['c2']['discarded'] = True
         return _reply()
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
-    assert not any('bullets' in w for w in store.writes)
-    assert store.episode['compose_lease'] is None
+    assert store.episode['title'] == 'Omi app bugs and labeling tool'
+    assert store.episode['compose_pending_since'] and store.episode['compose_lease'] is None
 
 
 def test_same_shape_transcript_edit_recomposes(store):
@@ -829,7 +832,7 @@ def test_full_settle_queue_composes_immediately_without_losing_pending_evidence(
     fallbacks = []
     outcomes = []
     monkeypatch.setattr(composer, 'record_fallback', lambda **kw: fallbacks.append(kw))
-    monkeypatch.setattr(composer.metrics, 'record_compose', lambda outcome, seconds: outcomes.append(outcome))
+    monkeypatch.setattr(composer.metrics, 'record_compose', lambda outcome, seconds, **_: outcomes.append(outcome))
 
     assert composer.schedule(UID, 'ep1', collaborators=c)
 
@@ -1081,7 +1084,7 @@ def test_racing_paid_background_call_waits_before_retry(store, monkeypatch, outc
 
         monkeypatch.setattr(composer.episodes_db, 'update_episode', write)
     outcomes = []
-    monkeypatch.setattr(composer.metrics, 'record_compose', lambda result, seconds: outcomes.append(result))
+    monkeypatch.setattr(composer.metrics, 'record_compose', lambda result, seconds, **_: outcomes.append(result))
     assert composer.schedule(UID, 'ep1', collaborators=c)
     assert outcomes == [outcome, 'settling']
     assert len(calls) == 1 and composer._deferred and not composer._inflight
@@ -1099,14 +1102,21 @@ def test_off_restores_label_drift_payment_and_immediate_background(store, monkey
 
 
 def test_settling_and_skipped_trigger_metrics_have_no_user_labels():
-    before = metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='settling')._value.get()
+    before = metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='settling', trigger='close')._value.get()
     skips = metrics.EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason='evidence_unchanged')._value.get()
-    metrics.record_compose('settling', 0.01)
+    calls = metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='parse_error')._value.get()
+    metrics.record_compose('settling', 0.01, trigger='close')
     metrics.record_compose_trigger_skipped('evidence_unchanged')
-    assert metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='settling')._value.get() == before + 1
+    metrics.record_compose_call('repair', 'parse_error')
+    assert metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='settling', trigger='close')._value.get() == before + 1
     assert metrics.EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason='evidence_unchanged')._value.get() == skips + 1
-    assert metrics.EPISODE_COMPOSE_TOTAL._labelnames == ('outcome',)
+    assert metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='parse_error')._value.get() == calls + 1
+    assert metrics.EPISODE_COMPOSE_TOTAL._labelnames == ('outcome', 'trigger')
     assert metrics.EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL._labelnames == ('reason',)
+    assert metrics.EPISODE_COMPOSE_CALLS_TOTAL._labelnames == ('trigger', 'outcome')
+    # An unknown trigger or outcome is folded into a bounded label, never a uid.
+    metrics.record_compose('composed', 0.01, trigger='someone-uid')
+    assert metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='composed', trigger='other')._value.get() >= 1
 
 
 def test_settle_retry_task_cancels_and_clears_its_queue(monkeypatch):
@@ -1229,3 +1239,160 @@ def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, c
     store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
     assert len(calls) == 2
+
+
+# --------------------------------------------------------------------------- keep paid composes
+
+
+def test_parse_failure_repairs_once_with_only_the_bad_output(store):
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        if len(calls) == 1:
+            return SimpleNamespace(content='not json at all', usage_metadata={'input_tokens': 100, 'output_tokens': 5})
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert len(calls) == 2
+    system, human = calls[1]
+    assert 'repair' in system[1].lower()
+    # The repair prompt is the bad output alone: no transcript, no member summaries.
+    assert human[1] == 'not json at all'
+    assert 'We planned the launch' not in human[1] and 'Existing summary' not in human[1]
+    assert store.episode['title'] == 'Omi app bugs and labeling tool'
+    # Both paid calls are counted in the episode's usage.
+    assert store.episode['usage']['composer_input_tokens'] == 100 + 8000
+    assert store.episode['usage']['composer_output_tokens'] == 5 + 500
+
+
+def test_repair_failure_counts_two_paid_failures_and_stops(store):
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return SimpleNamespace(content='still not json', usage_metadata={'input_tokens': 10, 'output_tokens': 1})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 2
+    assert store.episode['compose_failures'] == 2 and store.episode['compose_lease'] is None
+    # The cap is two paid failures: no third call on the same evidence.
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'backoff'
+    assert len(calls) == 2
+
+
+def test_paid_failure_cap_is_two_per_episode(store):
+    calls = []
+
+    def boom(uid, messages):
+        calls.append(1)
+        raise TimeoutError('slow')
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert store.episode['compose_failures'] == 1
+    store.episode['compose_failed_at'] = T0  # past the backoff window, same evidence
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert store.episode['compose_failures'] == 2
+    store.episode['compose_failed_at'] = T0
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'backoff'
+    assert len(calls) == 2
+
+
+def test_short_episode_accepts_a_title_and_lede_without_chapters(store):
+    store.episode['conversation_ids'] = ['c1']
+    store.rows['c1'] = _row('c1', T0, 5)
+    reply = _reply(chapters=[])
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: reply)) == 'composed'
+    assert store.episode['title'] == 'Omi app bugs and labeling tool'
+    assert store.episode['lede'] == 'David found two app regressions and explained the labeling tool.'
+    assert store.episode['moments'] == [] and store.episode['compose_failures'] == 0
+
+
+def test_long_episode_without_chapters_is_still_a_failed_compose(store):
+    reply = _reply(chapters=[])
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: reply)) == 'error'
+    assert store.episode['compose_failures'] == 1
+    assert not any('lede' in w for w in store.writes)
+
+
+def test_repair_call_is_counted_with_its_own_trigger(store):
+    before = metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='ok')._value.get()
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return SimpleNamespace(content='not json', usage_metadata={}) if len(calls) == 1 else _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='ok')._value.get() == before + 1
+
+
+def test_kill_switch_off_skips_the_repair_retry(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSE_KEEP_PAID_ENV, 'off')
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return SimpleNamespace(content='not json', usage_metadata={})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 1 and store.episode['compose_failures'] == 1
+
+
+def test_kill_switch_off_discards_a_superseded_result(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSE_KEEP_PAID_ENV, 'off')
+
+    def invoke(uid, messages):
+        store.rows['c2']['transcript_segments'].append({'start': 700, 'end': 705, 'text': 'Late.', 'is_user': True})
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert not any('bullets' in w for w in store.writes)
+    assert not store.episode.get('compose_pending_since')
+
+
+def test_kill_switch_off_keeps_the_four_failure_cap(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSE_KEEP_PAID_ENV, 'off')
+    calls = []
+
+    def boom(uid, messages):
+        calls.append(1)
+        raise TimeoutError('slow')
+
+    store.episode.update(
+        compose_failures=3,
+        compose_failed_at=T0,
+        compose_failed_fingerprint=composer.fingerprint(list(store.rows.values())),
+    )
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert store.episode['compose_failures'] == 4
+    store.episode['compose_failed_at'] = T0
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'backoff'
+    assert len(calls) == 1
+
+
+def test_compose_trigger_labels_follow_the_caller(store, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        composer.metrics, 'record_compose', lambda outcome, seconds, trigger='close': seen.append(trigger)
+    )
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    c = _c()
+    assert composer.schedule(UID, 'ep1', collaborators=c, trigger='read')
+    assert seen == ['read']
+    seen.clear()
+    composer._deferred.clear()
+    store.rows['c1']['transcript_segments'][0]['text'] += ' New speech.'
+    assert composer.schedule(UID, 'ep1', collaborators=c, trigger='member_final')
+    assert seen == ['member_final']
+
+
+def test_settle_timer_labels_its_compose(store, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        composer.metrics, 'record_compose', lambda outcome, seconds, trigger='close': seen.append(trigger)
+    )
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    composer._deferred[(UID, 'ep1')] = (0, _c())
+    composer._schedule_due()
+    assert seen == ['settle']
