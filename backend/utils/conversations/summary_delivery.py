@@ -261,6 +261,7 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     if not rich and not discarded and obligation_open:
         raise SummaryOutputUnavailable('kept first-summary output is empty')
     if existing.get('summary_completed_at'):
+        write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused
         # the whole write to protect it, which stranded completed results in
         # every lane without an outbox. Commit instead, but never let an empty

@@ -2468,7 +2468,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title, 'user_title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title, 'summary_due_at': None})
     _sync_conversation_search_index(uid, conversation_id)
 
 

@@ -76,6 +76,8 @@ def restore(uid, kind, target_id, expected, previous, *, firestore_client=None):
         if current != expected:
             raise PermissionError('Edit target changed; undo refused')
         patch = {key: decode(previous[key]) if key in previous else firestore.DELETE_FIELD for key in FIELDS[kind]}
+        if kind == 'conversation' and any(previous.get(key) is not None for key in ('user_title', 'user_overview')):
+            patch['summary_due_at'] = None
         tx.update(ref, patch)
         if kind == 'person':
             bump_people_generation(tx, ref)
@@ -88,7 +90,10 @@ def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=No
     """Commit an owned domain's prepared fields, fencing the observed before state."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _ref(uid, kind, target_id, client)
-    if not set(updates) <= set(FIELDS[kind]):
+    allowed = set(FIELDS[kind])
+    if kind == 'conversation':
+        allowed.add('summary_due_at')
+    if not set(updates) <= allowed or ('summary_due_at' in updates and updates['summary_due_at'] is not None):
         raise ValueError('Unsupported chat edit field')
 
     @firestore.transactional
@@ -102,7 +107,10 @@ def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=No
         prior = {key: data[key] for key in FIELDS[kind] if key in data}
         if encode(prior) != expected:
             raise PermissionError('Edit target changed before write')
-        tx.update(ref, updates)
+        patch = dict(updates)
+        if kind == 'conversation' and any(updates.get(key) is not None for key in ('user_title', 'user_overview')):
+            patch['summary_due_at'] = None
+        tx.update(ref, patch)
         if kind == 'person':
             bump_people_generation(tx, ref)
         prior.update(updates)

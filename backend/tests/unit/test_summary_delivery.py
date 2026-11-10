@@ -163,7 +163,7 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
         **row,
         'structured': {'title': 'Kept', 'overview': 'Banked summary'},
         'summary_completed_at': 150,
-        'summary_due_at': None,
+        'summary_due_at': 220,  # Legacy residue must not survive this return.
         'summary_output_present': True,
     }
     empty_write = minimum()

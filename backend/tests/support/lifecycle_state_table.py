@@ -112,6 +112,20 @@ def writers(machine, *fields):
     )
 
 
+# Durably refused transitions must retire the summary due index in the same
+# payload. These write owners are exercised by test_summary_refusal_writers;
+# they do not create a new lifecycle state or retire transient pending debt.
+SUMMARY_REFUSAL_WRITERS = (
+    Writer('utils/sync/assignment.py', '_donor_redirect_patch'),
+    Writer('database/conversations.py', 'update_conversation_title'),
+    Writer('database/conversation_mutations.py', '_apply_operation'),
+    Writer('database/chat_edits.py', 'apply_update.apply'),
+    Writer('database/chat_edits.py', 'restore.apply'),
+    Writer('utils/retrieval/tools/edit_tools.py', 'update_conversation'),
+    Writer('utils/conversations/summary_delivery.py', 'merge_result'),
+)
+
+
 FINALIZATION_MODULE = 'database/conversation_finalization_jobs.py'
 FAIR_USE_MODULE = 'utils/fair_use.py'
 
