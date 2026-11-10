@@ -219,6 +219,20 @@ EPISODE_COMPOSE_SECONDS = reuse_or_create(
     ['outcome'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
 )
+COMPOSE_MODES = frozenset({'full', 'notes_first'})
+EPISODE_COMPOSE_INPUT_TOKENS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_input_tokens_total',
+    'Input tokens spent by closed-episode composes, by prompt mode (full|notes_first). Never labeled by uid.',
+    ['mode'],
+)
+EPISODE_COMPOSE_TOOL_CALLS = reuse_or_create(
+    Histogram,
+    'omi_episode_compose_tool_calls',
+    'Transcript-excerpt tool calls per closed-episode compose, by prompt mode (full|notes_first).',
+    ['mode'],
+    buckets=(0, 1, 2, 3, 4, 5),
+)
 COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
 EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
     Counter,
@@ -282,6 +296,9 @@ def _prime() -> None:
         for outcome in COMPOSE_OUTCOMES:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+        for mode in COMPOSE_MODES:
+            EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode=_label(mode, COMPOSE_MODES))
+            EPISODE_COMPOSE_TOOL_CALLS.labels(mode=_label(mode, COMPOSE_MODES))
         for reason in COMPOSE_SKIP_REASONS:
             EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
         for outcome in HOME_MEMBER_OUTCOMES:
@@ -403,6 +420,17 @@ def record_compose(outcome: str, seconds: float) -> None:
     try:
         EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
         EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
+    except Exception:
+        pass
+
+
+def record_compose_tokens(mode: str, input_tokens: int, tool_calls: int) -> None:
+    """Input tokens and excerpt-tool calls for one paid compose, by prompt mode."""
+    try:
+        label = _label(mode, COMPOSE_MODES)
+        if input_tokens > 0:
+            EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode=label).inc(input_tokens)
+        EPISODE_COMPOSE_TOOL_CALLS.labels(mode=label).observe(max(0, int(tool_calls)))
     except Exception:
         pass
 

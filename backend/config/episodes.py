@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_modes import default_off as modes_default_off
 from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
@@ -52,6 +53,8 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_COMPOSER_NOTES_FIRST_ENV = 'EPISODE_COMPOSER_NOTES_FIRST'
+EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV = 'EPISODE_COMPOSER_NOTES_FIRST_PERCENT'
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -159,6 +162,35 @@ def episode_composer_enabled() -> bool:
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+# Notes-first compose (Fable LLM-efficiency #3, David 2026-11-10). Off by default:
+# today's compose sends every member's full transcript. On, the composer reads each
+# member's notes (title, overview, sections, action items, timestamps) and may call
+# ``get_transcript_excerpt`` for a bounded raw excerpt when it needs exact detail.
+# The cohort is a salted uid bucket; 100 admits every owner. The same env is the
+# kill switch: off/false/0/no (or an unknown value) restores the full-transcript path.
+COMPOSER_NOTES_FIRST_SALT = 'episode-composer-notes-first-v1'
+# Bounds for the on-demand excerpt tool. One call returns at most 4,000 characters
+# from at most 15 minutes of one recording; one compose may make at most 4 calls and
+# read at most 12,000 excerpt characters in total. The model gets at most 5 turns
+# (the first answer plus one per excerpt call), so a compose cannot loop.
+COMPOSER_EXCERPT_MAX_CHARS = 4_000
+COMPOSER_EXCERPT_MAX_CALLS = 4
+COMPOSER_EXCERPT_MAX_TOTAL_CHARS = 12_000
+COMPOSER_EXCERPT_MAX_SECONDS = 15 * 60
+COMPOSER_NOTES_FIRST_MAX_TURNS = 5
+
+
+def composer_notes_first_enabled(uid: str | None = None) -> bool:
+    """Default off (today's full-transcript compose); on admits the salted uid cohort."""
+    if not modes_default_off(EPISODE_COMPOSER_NOTES_FIRST_ENV):
+        return False
+    if not uid:
+        return False
+    return uid_bucket(uid, COMPOSER_NOTES_FIRST_SALT) < percentage(
+        EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV, default=0.0
+    )
 
 
 def client_channel_admitted(raw: str | None) -> bool:
