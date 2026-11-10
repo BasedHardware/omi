@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 from google.cloud import firestore
 
+from database.batch_pipeline_privacy import PRIVACY_COLLECTION, privacy_owner_key
 from database import no_speech_terminal as terminal
 from database.conversations import is_visible_conversation
 from database import quiet_check_retirement
@@ -18,6 +19,7 @@ from database import quiet_check_retirement
 NOW = datetime.now(timezone.utc)
 UID, CID = 'synthetic-owner', 'synthetic-capture'
 PATH = ('users', UID, 'conversations', CID)
+PRIVACY_PATH = (PRIVACY_COLLECTION, privacy_owner_key(UID))
 ROW_PATH = f'users/{UID}/conversations/{CID}'
 
 
@@ -148,7 +150,7 @@ def client():
     return Client({('users', UID): {'private_cloud_sync_enabled': True}, PATH: original_row()})
 
 
-def close(client, *, run_id='run-1', speech=0.0, audio=1.0):
+def close(client, *, run_id='run-1', speech=0.0, audio=1.0, expected_privacy_generation=None):
     return terminal.close_no_speech(
         UID,
         CID,
@@ -157,6 +159,7 @@ def close(client, *, run_id='run-1', speech=0.0, audio=1.0):
         speech_seconds=speech,
         audio_seconds=audio,
         firestore_client=client,
+        expected_privacy_generation=expected_privacy_generation,
     )
 
 
@@ -337,4 +340,24 @@ def test_restore_keeps_owner_row_recoverable_after_privacy_opt_out(client):
     terminal.restore_no_speech(UID, CID, expected_closed_revision=committed, run_id='run-1', firestore_client=client)
     assert client.rows[PATH] == before
     assert is_visible_conversation(client.rows[PATH]) is True
+    assert client.deletes == []
+
+
+@pytest.mark.parametrize('generation,expected', [(None, 0), (7, 7), (9, None)])
+def test_close_optional_privacy_generation_accepts_matching_or_direct_call(client, generation, expected):
+    if generation is not None:
+        client.rows[PRIVACY_PATH] = {'generation': generation}
+        client.revisions[PRIVACY_PATH] = NOW
+    close(client, expected_privacy_generation=expected)
+    assert client.rows[PATH]['no_speech_terminal']['run_id'] == 'run-1'
+
+
+def test_close_refuses_changed_privacy_generation_without_write(client):
+    client.rows[PRIVACY_PATH] = {'generation': 9}
+    client.revisions[PRIVACY_PATH] = NOW
+    before = dict(client.rows[PATH])
+    with pytest.raises(terminal.NoSpeechConflict, match='^privacy_changed$'):
+        close(client, expected_privacy_generation=7)
+    assert client.rows[PATH] == before
+    assert all(not txn.has_written for txn in client.transactions)
     assert client.deletes == []

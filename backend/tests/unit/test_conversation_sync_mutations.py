@@ -148,7 +148,7 @@ def _apply(
 
 
 def test_title_mutation_commits_compact_receipt_and_exact_canonical_revision():
-    database = _Firestore(_conversation())
+    database = _Firestore({**_conversation(), 'summary_due_at': 220})
 
     response = _apply(database)
 
@@ -166,6 +166,7 @@ def test_title_mutation_commits_compact_receipt_and_exact_canonical_revision():
     }
     assert database.rows[database.conversation_path]['structured']['title'] == 'My title'
     assert database.rows[database.conversation_path]['user_title'] == 'My title'
+    assert database.rows[database.conversation_path]['summary_due_at'] is None
     receipt_paths = [path for path in database.rows if path[-2:-1] == ('mutation_receipts',)]
     assert len(receipt_paths) == 1
     assert 'transcript_segments' not in database.rows[receipt_paths[0]]
