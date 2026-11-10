@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import time
+from unittest.mock import Mock
 from datetime import datetime, timezone
 from contextvars import Context
 from types import SimpleNamespace
@@ -131,6 +132,7 @@ class Ref:
 
 @pytest.fixture
 def env(monkeypatch):
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '0')
     store = Store()
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(cache, '_redis', lambda: redis)
@@ -138,6 +140,7 @@ def env(monkeypatch):
     monkeypatch.setattr(users, 'get_data_plane_firestore_client', lambda: store)
     monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: store)
     monkeypatch.setattr(user_usage, 'db', store)
+    monkeypatch.setattr(user_usage, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'basic')
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
     cache._configs.clear()
@@ -278,6 +281,66 @@ def test_usage_month_counts_and_writer_never_undercounts(env, monkeypatch, enabl
     assert len(store.reads) == expected
     user_usage.update_hourly_usage('u', date, {'transcription_seconds': 100})
     assert user_usage.get_monthly_usage_stats_since('u', date, date)['transcription_seconds'] == 120
+
+
+@pytest.mark.parametrize('since', [False, True])
+def test_usage_shadow_hit_only_and_fresh_error_preserves_response(env, monkeypatch, since):
+    from utils import executors, read_cache_shadow as shadow
+
+    enable(monkeypatch, 'usage_month_cache')
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    pending = []
+    metric = Mock()
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    date = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    read = user_usage.get_monthly_usage_stats_since if since else user_usage.get_monthly_usage_stats
+    args = ('u', date, date) if since else ('u', date)
+    expected = read(*args)
+    assert not pending
+    assert read(*args) == expected
+    fresh = Mock(side_effect=RuntimeError('durable read failed'))
+    monkeypatch.setattr(user_usage, '_fresh_month_stats', fresh)
+    pending.pop()()
+    fresh.assert_called_once_with('u', date, date if since else None, 5.0)
+    metric.labels.assert_called_with(cache='usage_month', result='error')
+    assert read(*args) == expected
+
+
+def test_broken_hit_observer_does_not_fetch_or_change_response(env, monkeypatch):
+    enable(monkeypatch, 'usage_month_cache')
+    fetch = Mock(return_value={'total': 10})
+    observer = Mock(side_effect=RuntimeError('observer broken'))
+    assert cache.cached_read('usage_month_cache', 'u', 'v', fetch, on_hit=observer) == {'total': 10}
+    assert cache.cached_read('usage_month_cache', 'u', 'v', fetch, on_hit=observer) == {'total': 10}
+    fetch.assert_called_once()
+    observer.assert_called_once_with({'total': 10})
+
+
+@pytest.mark.parametrize('start_day,expected', [(None, 17), (16, 16)])
+def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, start_day, expected):
+    store, _ = env
+    for day in (1, 16):
+        key = f'2026-10-{day:02}-00'
+        store.docs[f'users/u/hourly_usage/{key}'] = {
+            'id': key,
+            'year': 2026,
+            'month': 10,
+            'transcription_seconds': day,
+        }
+    options_seen = []
+    stream = Ref.stream
+
+    def bounded_stream(self, *, timeout, retry):
+        options_seen.append((timeout, retry))
+        return stream(self)
+
+    monkeypatch.setattr(Ref, 'stream', bounded_stream)
+    date = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    start = date.replace(day=start_day) if start_day else None
+    assert user_usage._fresh_month_stats('u', date, start, 5)['transcription_seconds'] == expected
+    assert options_seen == [(5, user_usage.FIRESTORE_NO_RETRY)]
+    assert not store.writes
 
 
 def test_usage_month_and_launch_boundary_separate(env, monkeypatch):

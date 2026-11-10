@@ -282,6 +282,10 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# Optional read-cache checks cannot queue behind, or consume, serving DB workers.
+read_cache_shadow_executor = MonitoredThreadPoolExecutor(
+    name="read_cache_shadow", max_workers=2, max_queue_size=0, thread_name_prefix="read-cache-shadow"
+)
 record_barrier_executor = MonitoredThreadPoolExecutor(
     name="record_barrier",
     max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
@@ -339,6 +343,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    read_cache_shadow_executor,
     record_barrier_executor,
     llm_executor,
     stripe_executor,

@@ -50,6 +50,7 @@ class Store(Ref):
 
 @pytest.fixture
 def memo(monkeypatch):
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '0')
     store = Store()
     clock = SimpleNamespace(now=100.0)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"episode_members_cache":100}')
@@ -59,6 +60,74 @@ def memo(monkeypatch):
     prepare = Mock(side_effect=lambda row, uid: None if row.get('unreadable') else row)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', prepare)
     return store, clock, prepare
+
+
+def test_shadow_only_on_hit_and_error_keeps_cached_response(memo, monkeypatch):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _, _ = memo
+    pending = []
+    metric = Mock()
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    store.put('u1', 'a', user_title='cached')
+    expected = read()
+    assert not pending
+    assert read() == expected
+    store.error = RuntimeError('fresh failed')
+    pending.pop()()
+    metric.labels.assert_called_with(cache='episode_members', result='error')
+    assert read() == expected
+
+
+def test_shadow_bypasses_memo_without_republishing(memo, monkeypatch):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _, _ = memo
+    pending = []
+    metric = Mock()
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    store.put('u1', 'a')
+    expected = read()
+    assert read() == expected
+    store.rows.clear()
+    original = store.get_all
+    options_seen = []
+
+    def fresh_get_all(refs, *, field_paths, timeout, retry):
+        options_seen.append((timeout, retry))
+        return original(refs, field_paths=field_paths)
+
+    monkeypatch.setattr(store, 'get_all', fresh_get_all)
+    pending.pop()()
+    assert options_seen == [(5.0, home_read.FIRESTORE_NO_RETRY)]
+    metric.labels.assert_called_with(cache='episode_members', result='mismatch')
+    assert read() == expected
+
+
+def test_broken_shadow_observer_preserves_member_hit(memo, monkeypatch):
+    store, _, _ = memo
+    store.put('u1', 'a')
+    expected = read()
+    monkeypatch.setattr(home_read, 'compare_hit', Mock(side_effect=RuntimeError('observer broken')))
+    assert read() == expected
+    assert len(store.calls) == 1
+
+
+def test_shadow_batch_deadline_stops_before_another_rpc(memo, monkeypatch):
+    store, clock, _ = memo
+    monkeypatch.setattr(home_read.episodes, 'MEMBERSHIP_BATCH_LIMIT', 1)
+    store.after_read = lambda: setattr(clock, 'now', clock.now + 6)
+    get_all = store.get_all
+    monkeypatch.setattr(
+        store, 'get_all', lambda refs, *, field_paths, **options: get_all(refs, field_paths=field_paths)
+    )
+    with pytest.raises(TimeoutError, match='shadow read deadline'):
+        home_read._fetch_members('u1', ['a', 'b'], store, timeout=5)
+    assert len(store.calls) == 1
 
 
 def read(uid='u1', ids=('b', 'a', 'b'), **kwargs):
