@@ -76,6 +76,10 @@ try {
     new URL(route.request().url()).origin === origin ? route.continue() : route.abort(),
   );
   await page.goto(origin);
+  // Capture the selected tab at rest rather than between its color transitions.
+  await page.addStyleTag({
+    content: '*,*::before,*::after{transition:none!important;animation:none!important}',
+  });
   await page.getByText('Coffee with Alex', { exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
   if (await page.getByText('Unfinished planning', { exact: true }).count())
