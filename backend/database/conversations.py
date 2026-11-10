@@ -4597,6 +4597,7 @@ def assign_sync_conversation(
     retry_contention: bool = False,
     timing: bool = False,
     defer_index: Callable[[str, str, list[str]], None] | None = None,
+    absorb_contained_processed_donor: bool = False,
 ):
     """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
 
@@ -4687,6 +4688,7 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=discovery.candidate_ids,
                 absorbed=absorbed,
+                absorb_contained_processed_donor=absorb_contained_processed_donor,
                 **({'record_obligations': record_obligations} if incoming.get('_batch_replace_live') else {}),
                 **discovery.plan_kwargs(),
             )

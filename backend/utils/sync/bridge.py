@@ -16,6 +16,7 @@ from typing import Callable, NotRequired, TypedDict
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config import merge_ancestry, merge_before_processing
 from config import sync_operation_snapshot
+from config.sync_bridge_containment import CONTAINMENT_TOLERANCE_SECONDS, contained_donor_merge_enabled
 from config.firestore_read_levers import lever_enabled
 from config.sync_finalize import sync_finalize_target_recovery_enabled
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
@@ -40,7 +41,7 @@ from utils.sync.assignment_errors import (
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 from utils.sync.fsr_metadata import read_metadata
 from utils.sync import bridge_pending
-from utils.sync.live_overlap import choose_live_overlap
+from utils.sync.live_overlap import choose_live_overlap, span_contained
 from utils.conversations.fragment_visibility import is_user_curated
 
 logger = logging.getLogger(__name__)
@@ -145,19 +146,29 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
     if not source or source.get('deleted') or not source.get(bridge_pending.FIELD):
         return conversation_id
     target_id = source[bridge_pending.FIELD].get('target_id')
-    if (
-        not isinstance(target_id, str)
-        or target_id == conversation_id
-        or is_user_curated(source)
-        or merge_before_processing.already_processed(source)
-    ):
+    if not isinstance(target_id, str) or target_id == conversation_id or is_user_curated(source):
+        return conversation_id
+    processed = merge_before_processing.already_processed(source)
+    if processed and not contained_donor_merge_enabled():
         return conversation_id
     target = conversations_db.get_conversation(uid, target_id)
     if not target or target.get('status') == 'in_progress':
         return conversation_id
     if choose_live_overlap([target], source, uid=uid) != target_id:
         return conversation_id
-    assigned, _, _ = conversations_db.assign_sync_conversation(uid, source, target_id=target_id)
+    if processed and not span_contained(source, target, tolerance_seconds=CONTAINMENT_TOLERANCE_SECONDS):
+        # A processed donor is absorbed only when the target already covers its
+        # whole recorded span. Partial overlap keeps the standalone row.
+        return conversation_id
+    try:
+        assigned, _, _ = conversations_db.assign_sync_conversation(
+            uid, source, target_id=target_id, absorb_contained_processed_donor=processed
+        )
+    except SyncAssignmentConflict as error:
+        if error.subtype != SyncAssignmentConflictReason.CONTAINED_DONOR_NOT_CONTAINED:
+            raise
+        # The donor grew past the target between this read and the transaction.
+        return conversation_id
     donor = conversations_db.get_conversation(uid, conversation_id)
     return assigned['id'] if donor and donor.get('sync_merged_into') == assigned['id'] else conversation_id
 

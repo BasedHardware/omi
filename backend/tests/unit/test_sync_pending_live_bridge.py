@@ -1,6 +1,7 @@
 """A live overlap hint holds standalone visibility until proof, keep or expiry."""
 
 from copy import deepcopy
+from datetime import timedelta
 import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -175,6 +176,62 @@ def test_pending_bridge_preserves_an_independently_enriched_donor(pending):
     assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
     assert not source.get('deleted')
     assert not store.rows[('users', 'u', 'conversations', 'live')].get('sync_content_revision')
+
+
+def _mark_processed(store, conversation_id='wal'):
+    source = store.rows[('users', 'u', 'conversations', conversation_id)]
+    source['summary_completed_at'] = source['started_at'] + timedelta(seconds=1)
+    source['structured'] = {'title': 'Generated notes', 'overview': 'Existing protected notes.'}
+    return source
+
+
+def _finish_target(store, *, end_seconds):
+    target = store.rows[('users', 'u', 'conversations', 'live')]
+    target.update(live_row('completed'))
+    target['transcript_segments'] = [
+        {'start': 0.0, 'end': end_seconds, 'text': 'Live capture.', 'speaker_id': 0, 'is_user': False}
+    ]
+    return target
+
+
+def test_contained_processed_donor_merges(pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # Donor span is 1002..1011.5; the target covers 1000..1020.
+    _finish_target(store, end_seconds=20.0)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'live'
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert donor['deleted'] and donor['sync_merged_into'] == 'live'
+    assert 'wal' in store.rows[('users', 'u', 'conversations', 'live')]['sync_merged_from']
+
+
+def test_partial_overlap_processed_donor_is_refused(pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # Donor span is 1002..1011.5; the target covers only 1000..1009.5.
+    _finish_target(store, end_seconds=9.5)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert not source.get('deleted')
+    assert not source.get('sync_merged_into')
+
+
+def test_open_target_processed_donor_is_refused(pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # The live capture is still open, so no merge is due yet.
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert not source.get('deleted')
+    assert not source.get('sync_merged_into')
+
+
+def test_contained_donor_switch_off_restores_refusal(monkeypatch, pending):
+    monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', 'false')
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    _finish_target(store, end_seconds=20.0)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert not source.get('deleted')
+    assert not source.get('sync_merged_into')
 
 
 def test_sync_enrichment_yields_to_a_bound_processing_finalizer(monkeypatch, pending):

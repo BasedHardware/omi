@@ -1,6 +1,7 @@
 """Metadata-only live overlap admission; never treats a near-time stub as proof."""
 
 import os
+from datetime import timedelta
 
 from utils.conversations.recorded_time import conversation_span
 
@@ -40,6 +41,24 @@ def _strict_overlap_seconds(row: dict, incoming: dict, *, require_device: bool =
     return max(
         0.0,
         (min(left.recorded_end, right.recorded_end) - max(left.recorded_start, right.recorded_start)).total_seconds(),
+    )
+
+
+def span_contained(donor: dict, target: dict, *, tolerance_seconds: float = 0.0) -> bool:
+    """Whether the donor's recorded span lies inside the target's, by segment spans.
+
+    Wall-clock envelopes never authorize this: a coarse hint can cover a donor
+    whose real speech starts before or ends after the target's. A missing span
+    on either side is not proof.
+    """
+    donor_span = conversation_span(donor)
+    target_span = conversation_span(target)
+    if donor_span is None or target_span is None:
+        return False
+    tolerance = timedelta(seconds=max(0.0, tolerance_seconds))
+    return (
+        donor_span.recorded_start >= target_span.recorded_start - tolerance
+        and donor_span.recorded_end <= target_span.recorded_end + tolerance
     )
 
 

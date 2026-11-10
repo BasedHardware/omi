@@ -9238,6 +9238,17 @@ to be retried after visibility expiry, so a longer capture still converges after
 it ends. A deleted/incompatible target or size refusal never authorizes a forced
 merge; the standalone recording remains recoverable.
 
+A donor summarized before its live target closed is otherwise refused forever by
+the `already_processed` fence. `SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED`
+(default on) lets the bridge absorb it only when the donor's recorded span is
+fully inside the target's, by `conversation_span` with a 0.5 s jitter tolerance;
+the wall-clock envelope never authorizes it. User curation, an open target,
+`choose_live_overlap`, privacy and size fences are unchanged, and partial overlap
+keeps the standalone row. The assignment transaction re-proves containment on
+the rows it merges and refuses the whole assignment with
+`contained_donor_not_contained` when the donor grew past the target. Explicit off
+restores the pre-change refusal exactly.
+
 Committed donor absorption and published-row counters are documented in [Sync bridge absorption](sync-bridge-absorption.md).
 
 A finalizer losing its processing-result CAS checks the current job lease and
