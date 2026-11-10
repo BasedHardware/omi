@@ -24,6 +24,7 @@ from database.summary_debt_queries import due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
+from utils.enrichment.age_gate import max_age_seconds
 
 Row = dict[str, Any]
 CURSOR = 'maintenance/summary_debt_repair_v1'
@@ -101,7 +102,7 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
 
 
 def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
-    counts = {'scanned': 0, 'admitted': 0, 'errors': 0}
+    counts = {'scanned': 0, 'admitted': 0, 'errors': 0, 'expired_seen': 0}
     if not repair_enabled():
         return counts
     current = time.time() if now is None else now
@@ -128,6 +129,8 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     cursor = claim(client.transaction())
     if cursor is None:
         return counts
+    # Scan/account only after the claim commits: Firestore may replay its
+    # callback. Keep counts and gauge publication outside retryable callbacks.
     page = due_conversations(now=current, limit=REPAIR_SCAN_LIMIT, after=cursor, firestore_client=client)
     attempts = 0
     overdue = 0
@@ -145,6 +148,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         from utils.enrichment.age_gate import expired
 
         if expired({'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current):
+            counts['expired_seen'] += 1
             continue  # Historical debt cannot consume the bounded fresh-admission budget.
         overdue += 1
         oldest = max(oldest, current - row['summary_due_at'])
@@ -159,6 +163,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     delivery.DEBT.set(overdue)
     delivery.OLDEST.set(oldest)
     delivery.SAMPLED_AT.set(current)
+    delivery.EXPIRED_SEEN.set(counts['expired_seen'])
 
     @firestore.transactional
     def finish(transaction: Any) -> None:
@@ -172,6 +177,11 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 'lease_until': 0,
                 'path': last.reference.path if last else None,
                 'due': cast(Row, last.to_dict() or {}).get('summary_due_at') if last else None,
+                'pending': (
+                    cast(Row, last.to_dict() or {}).get('summary_first_pending_at')
+                    if last and max_age_seconds()
+                    else None
+                ),
             },
         )
 

@@ -876,7 +876,9 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
     _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(4, 1, 2, 1))
-    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0})
+    monkeypatch.setattr(
+        summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0, 'expired_seen': 2}
+    )
     assert route.maintain(1000.0) == {
         'rewoken': 2,
         'discarded': 1,
@@ -885,6 +887,7 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_discarded': 2,
         'provider_stt_sweep_errors': 1,
         'summary_debt_scanned': 5,
+        'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
         'summary_debt_errors': 0,
     }
@@ -909,7 +912,9 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(1, 0, 0, 0))
     _provider_sweep(monkeypatch, Mock(side_effect=RuntimeError('synthetic')))
-    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 1, 'admitted': 1, 'errors': 0})
+    monkeypatch.setattr(
+        summary_debt_repair, 'tick', lambda *, now: {'scanned': 1, 'admitted': 1, 'errors': 0, 'expired_seen': 0}
+    )
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
     assert counts['summary_debt_admitted'] == 1

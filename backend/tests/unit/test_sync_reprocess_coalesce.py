@@ -701,13 +701,14 @@ def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, 'sweep', Mock(return_value={'repaired': 0, 'error': 0}))
     monkeypatch.setattr(sync_router, 'summary_repair_enabled', lambda: enabled)
-    scan = Mock(return_value={'scanned': 100, 'admitted': 10, 'errors': 0})
+    scan = Mock(return_value={'scanned': 100, 'admitted': 10, 'errors': 0, 'expired_seen': 3})
     monkeypatch.setattr(sync_router.summary_debt_repair, 'tick', scan)
     response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
     outcomes = json.loads(response.body)['outcomes']
     if enabled:
         scan.assert_called_once_with()
         assert outcomes['summary_debt_scanned'] == 100 and outcomes['summary_debt_admitted'] == 10
+        assert outcomes['summary_debt_expired_seen'] == 3
     else:
         scan.assert_not_called()
         assert 'summary_debt_scanned' not in outcomes
