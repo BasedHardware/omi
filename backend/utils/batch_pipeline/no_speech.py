@@ -21,6 +21,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config.refactor_modes import no_speech_terminal_enabled
+from config.no_speech_terminal import EXITS, OPERATION
 from database import no_speech_terminal as terminal_db
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils import encryption
@@ -34,44 +35,14 @@ from utils.batch_pipeline.record_seal_nojob import conversation_path
 from utils.batch_pipeline.record_seal_repair import plan_digest
 from utils.batch_pipeline.source_audio import read_reference
 from utils.conversations import lifecycle
+from utils.batch_pipeline.no_speech_undo import undo_no_speech as undo_no_speech
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.stt.local_vad import offline_pcm_speech_segments
 
-OPERATION = 'batch-live-no-speech-v1'
 SPEECH_LIMIT_SECONDS = 10.0
 MAX_RAW_OBJECTS = 4096
 MAX_AUDIO_SECONDS = 7200
-EXITS = {
-    'no_speech': 'operator_undo_restores_original_fields',
-    'no_retained_audio': 'operator_undo_restores_original_fields',
-    'has_speech': 'normal_batch_pipeline',
-    'retained_audio_unmeasured': 'operator_review',
-    'decode_failed': 'operator_review',
-    'privacy_blocked': 'operator_rerun_after_consent',
-    'privacy_skipped': 'operator_rerun_after_consent',
-    'upload_pending': 'operator_review',
-    'not_candidate': 'existing_lifecycle_owner',
-    'barrier_mismatch': 'operator_review',
-    'already_registered': 'normal_batch_pipeline',
-    'already_marked': 'operator_undo',
-    'state_changed': 'operator_rerun',
-    'proof_refused': 'operator_rerun',
-    'read_error': 'operator_rerun',
-    'write_error': 'operator_rerun',
-    'disabled': 'operator_rerun_after_enablement',
-    'closed': 'operator_undo_restores_original_fields',
-    # Closed storage-primitive conflict reasons.
-    'revision_changed': 'operator_rerun',
-    'not_batch_live_owner': 'existing_lifecycle_owner',
-    'not_in_progress': 'existing_lifecycle_owner',
-    'row_retired_or_locked': 'operator_review',
-    'already_discarded': 'operator_review',
-    'unbound_plan': 'operator_rerun',
-    'committed_revision_unknown': 'operator_undo_resolves_marker',
-    'not_matching_close': 'operator_review',
-    'invalid_snapshot': 'operator_review',
-    'privacy_changed': 'operator_rerun_after_consent',
-}
+
 ACTIONABLE = frozenset({'no_speech', 'no_retained_audio'})
 
 
@@ -322,40 +293,6 @@ def apply_no_speech(store, plan, approved_digest, storage_client, *, ledger, pac
             outcomes['privacy_blocked'] += 1
         except NoSpeechRefused as error:
             outcomes[str(error)] += 1
-        except terminal_db.NoSpeechConflict as error:
-            outcomes[str(error)] += 1
-        except Exception:
-            outcomes['write_error'] += 1
-        if pace:
-            time.sleep(pace)
-    return dict(sorted(outcomes.items()))
-
-
-def undo_no_speech(store, entries, *, ledger, pace=0.0):
-    outcomes = Counter()
-    for entry in entries:
-        try:
-            expected_revision = entry.get('committed_revision')
-            if not expected_revision or expected_revision == terminal_db.COMMITTED_REVISION_UNKNOWN:
-                row, expected_revision = _snapshot(store, entry['uid'], entry['conversation_id'])
-                marker = row.get(terminal_db.MARKER) or {}
-                if (
-                    marker.get('run_id') != entry['run_id']
-                    or row.get('status') != 'completed'
-                    or row.get('discarded') is not True
-                    or row.get(terminal_db.TERMINAL_NO_DERIVED_EFFECTS_FIELD) is not True
-                ):
-                    raise terminal_db.NoSpeechConflict('not_matching_close')
-                if not expected_revision:
-                    raise terminal_db.NoSpeechConflict('committed_revision_unknown')
-            lifecycle.restore_no_speech_capture(
-                entry['uid'],
-                entry['conversation_id'],
-                expected_closed_revision=expected_revision,
-                run_id=entry['run_id'],
-                firestore_client=store.client,
-            )
-            outcomes['restored'] += 1
         except terminal_db.NoSpeechConflict as error:
             outcomes[str(error)] += 1
         except Exception:

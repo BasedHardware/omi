@@ -11,29 +11,21 @@ import argparse
 from contextlib import redirect_stdout, redirect_stderr
 import fcntl
 import json
+import importlib
 import logging
 import os
 from pathlib import Path
 import secrets
 import stat
 import sys
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.refactor_modes import no_speech_terminal_enabled
 from database._client import get_firestore_client
-from database.batch_pipeline_store import FirestoreStore
-from scripts.backfill_record_seal_nojob import write_cursor
-from utils.batch_pipeline.no_speech import (
-    EXITS,
-    OPERATION,
-    apply_no_speech,
-    discover,
-    plan_no_speech,
-    summary,
-    undo_no_speech,
-)
-from utils.other.local_storage import create_storage_client
+from config.no_speech_terminal import EXITS, OPERATION
+from utils.batch_pipeline.no_speech_undo import undo_no_speech
 
 
 class CountsOnlyParser(argparse.ArgumentParser):
@@ -112,15 +104,27 @@ class Refused(ValueError):
     pass
 
 
+def _plan_dependencies():
+    # Dynamic loading keeps secret-validating audio imports off the undo path.
+    # All imports are defined here through the stdlib loader at this boundary.
+    return SimpleNamespace(
+        planner=importlib.import_module('utils.batch_pipeline.no_speech'),
+        store=importlib.import_module('database.batch_pipeline_store').FirestoreStore,
+        storage=importlib.import_module('utils.other.local_storage').create_storage_client,
+        write_cursor=importlib.import_module('scripts.backfill_record_seal_nojob').write_cursor,
+    )
+
+
 def run(args):
     client = get_firestore_client()
-    store = FirestoreStore('batch_pipeline_prod', firestore_client=client)
     if args.undo:
         ledger = Ledger(args.ledger)
         try:
             entries = ledger.entries()[: args.limit]
             if args.apply:
-                outcomes = undo_no_speech(store, entries, ledger=ledger, pace=args.pace_seconds)
+                outcomes = undo_no_speech(
+                    SimpleNamespace(client=client), entries, ledger=ledger, pace=args.pace_seconds
+                )
             else:
                 outcomes = {'would_restore': len(entries)}
         finally:
@@ -133,17 +137,19 @@ def run(args):
         }
     if len(os.getenv('ENCRYPTION_SECRET', '')) < 32:
         raise Refused('encryption_secret_required')
-    storage = create_storage_client()
+    dependencies = _plan_dependencies()
+    store = dependencies.store('batch_pipeline_prod', firestore_client=client)
+    storage = dependencies.storage()
     after = json.loads(Path(args.after_file).read_text())['after'] if args.after_file else None
-    paths, next_after = discover(client, limit=args.limit, after=after)
-    planned = plan_no_speech(store, paths, storage, pace=args.pace_seconds)
-    report = {**summary(planned), 'apply': args.apply}
+    paths, next_after = dependencies.planner.discover(client, limit=args.limit, after=after)
+    planned = dependencies.planner.plan_no_speech(store, paths, storage, pace=args.pace_seconds)
+    report = {**dependencies.planner.summary(planned), 'apply': args.apply}
     if args.next_file:
-        write_cursor(args.next_file, next_after)
+        dependencies.write_cursor(args.next_file, next_after)
     if args.apply:
         ledger = Ledger(args.ledger, create=True)
         try:
-            outcomes = apply_no_speech(
+            outcomes = dependencies.planner.apply_no_speech(
                 store,
                 planned,
                 args.approve_plan_sha256,

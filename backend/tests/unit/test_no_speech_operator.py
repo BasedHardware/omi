@@ -1,6 +1,10 @@
 """Synthetic strict-VAD/operator contracts; no cloud credentials or IO."""
 
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -9,7 +13,7 @@ import pytest
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from scripts import mark_no_speech_orphans as tool
 from tests.unit import test_no_speech_terminal as storage_tests
-from utils.batch_pipeline import no_speech
+from utils.batch_pipeline import no_speech, no_speech_undo
 
 UID, CID = storage_tests.UID, storage_tests.CID
 ROW_PATH = storage_tests.ROW_PATH
@@ -151,14 +155,15 @@ def operator_client(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-encryption-secret-32-characters')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.setattr(tool, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(
-        tool,
-        'FirestoreStore',
-        lambda *a, **kw: SimpleNamespace(
+    dependencies = SimpleNamespace(
+        planner=no_speech,
+        store=lambda *a, **kw: SimpleNamespace(
             client=client, namespace='batch_pipeline_test_nospeech', run=lambda body: body(Mock())
         ),
+        storage=Mock(return_value=Mock()),
+        write_cursor=Mock(),
     )
-    monkeypatch.setattr(tool, 'create_storage_client', Mock(return_value=Mock()))
+    monkeypatch.setattr(tool, '_plan_dependencies', lambda: dependencies)
     monkeypatch.setattr(no_speech.time, 'sleep', lambda *a: None)
     return client
 
@@ -198,7 +203,7 @@ def test_cli_reconstructs_approved_page_and_reports_success(monkeypatch, tmp_pat
     monkeypatch.setattr(
         no_speech, '_snapshot', lambda *a: (original_row(), client.revisions[storage_tests.PATH].isoformat())
     )
-    monkeypatch.setattr(tool, 'discover', lambda *a, **kw: ([ROW_PATH], None))
+    monkeypatch.setattr(no_speech, 'discover', lambda *a, **kw: ([ROW_PATH], None))
     monkeypatch.setattr(no_speech, '_reprove', lambda *a: (UID, CID, 0.0, 1.0))
     tmp_path.chmod(0o700)
     ledger_path = tmp_path / 'apply.jsonl'
@@ -301,7 +306,7 @@ def test_prepared_only_cli_undo_needs_no_encryption_or_storage(monkeypatch, tmp_
     storage_tests.close(client)  # Simulate process death before ledger.committed.
     monkeypatch.delenv('ENCRYPTION_SECRET', raising=False)
     storage = Mock(side_effect=OSError('storage unavailable'))
-    monkeypatch.setattr(tool, 'create_storage_client', storage)
+    monkeypatch.setattr(tool, '_plan_dependencies', storage)
     monkeypatch.setenv('NO_SPEECH_TERMINAL_ENABLED', 'false')
     tool.main(['--undo', '--apply', '--ledger', str(path)])
     assert json.loads(capsys.readouterr().out)['outcomes'] == {'restored': 1}
@@ -336,7 +341,7 @@ def test_empty_write_results_apply_records_unknown_then_undo_restores(monkeypatc
     assert outcomes == {'committed_revision_unknown': 1}
     assert entries[0]['committed_revision'] == storage_tests.terminal.COMMITTED_REVISION_UNKNOWN
     monkeypatch.delenv('ENCRYPTION_SECRET', raising=False)
-    monkeypatch.setattr(tool, 'create_storage_client', Mock(side_effect=AssertionError('undo touched GCS')))
+    monkeypatch.setattr(tool, '_plan_dependencies', Mock(side_effect=AssertionError('undo touched GCS')))
     tool.main(['--undo', '--apply', '--ledger', str(path)])
     assert json.loads(capsys.readouterr().out)['outcomes'] == {'restored': 1}
     assert client.rows[storage_tests.PATH] == before
@@ -368,7 +373,7 @@ def test_prepared_only_undo_refuses_foreign_or_changed_closed_shape(monkeypatch,
 def test_prepared_only_undo_fences_edits_after_resolution(monkeypatch):
     client = operator_client(monkeypatch)
     storage_tests.close(client)
-    snapshot = no_speech._snapshot
+    snapshot = no_speech_undo._snapshot
 
     def racing_snapshot(store, uid, cid):
         row, revision = snapshot(store, uid, cid)
@@ -376,7 +381,7 @@ def test_prepared_only_undo_fences_edits_after_resolution(monkeypatch):
         client.tick(storage_tests.PATH)
         return row, revision
 
-    monkeypatch.setattr(no_speech, '_snapshot', racing_snapshot)
+    monkeypatch.setattr(no_speech_undo, '_snapshot', racing_snapshot)
     entry = {'uid': UID, 'conversation_id': CID, 'run_id': 'run-1', 'committed_revision': None}
     assert no_speech.undo_no_speech(SimpleNamespace(client=client), [entry], ledger=Mock()) == {'revision_changed': 1}
     assert client.rows[storage_tests.PATH]['discarded'] is True
@@ -389,7 +394,7 @@ def test_undo_dry_run_counts_prepared_entries_without_secrets_or_storage(monkeyp
     storage_tests.close(client)
     before = dict(client.rows[storage_tests.PATH])
     monkeypatch.delenv('ENCRYPTION_SECRET', raising=False)
-    monkeypatch.setattr(tool, 'create_storage_client', Mock(side_effect=AssertionError('undo touched GCS')))
+    monkeypatch.setattr(tool, '_plan_dependencies', Mock(side_effect=AssertionError('undo touched GCS')))
     tool.main(['--undo', '--ledger', str(path)])
     assert json.loads(capsys.readouterr().out)['outcomes'] == {'would_restore': 1}
     assert client.rows[storage_tests.PATH] == before
@@ -443,3 +448,51 @@ def test_ledger_refuses_mode_symlink_and_reusing_page_path(tmp_path):
     with pytest.raises(FileExistsError):
         tool.Ledger(path, create=True)
     assert path.read_text() == 'private existing bytes'
+
+
+@pytest.mark.parametrize('apply', [False, True])
+def test_fresh_process_undo_imports_without_encryption_secret(tmp_path, apply):
+    tmp_path.chmod(0o700)
+    path = tmp_path / 'empty-ledger.jsonl'
+    path.touch(mode=0o600)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key
+        not in {
+            'ENCRYPTION_SECRET',
+            'GOOGLE_APPLICATION_CREDENTIALS',
+            'CLOUDSDK_CONFIG',
+            'CLOUDSDK_CORE_ACCOUNT',
+            'SERVICE_ACCOUNT_JSON',
+            'FIREBASE_AUTH_CREDENTIALS_PATH',
+        }
+    }
+    env['GCP_AGENT_TIER'] = 'prod-operator'
+    env['NO_SPEECH_TERMINAL_ENABLED'] = 'false'
+    env.pop('FIRESTORE_EMULATOR_HOST', None)
+    code = """
+import socket
+import sys
+
+def blocked(*a, **kw):
+    raise AssertionError('unexpected network or audio dependency')
+
+socket.create_connection = blocked
+socket.socket.connect = blocked
+from scripts import mark_no_speech_orphans as tool
+tool.get_firestore_client = lambda: object()
+tool._plan_dependencies = blocked
+tool.main(sys.argv[1:])
+"""
+    args = ['--undo', '--ledger', str(path)] + (['--apply'] if apply else [])
+    result = subprocess.run(
+        [sys.executable, '-c', code, *args],
+        env=env,
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['outcomes'] == ({} if apply else {'would_restore': 0})
