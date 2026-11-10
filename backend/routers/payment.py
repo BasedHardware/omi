@@ -1154,7 +1154,7 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
-def _update_checkout_subscription_metadata(uid: str, session: dict, only_with_promotion: bool = False) -> None:
+def _update_checkout_subscription_metadata(uid: str, session: dict) -> None:
     """Converge account and optional order attribution from verified Stripe objects."""
     subscription_id = session.get('subscription')
     if not subscription_id:
@@ -1168,11 +1168,6 @@ def _update_checkout_subscription_metadata(uid: str, session: dict, only_with_pr
         stripe_sub = stripe.Subscription.retrieve(subscription_id, expand=['discounts'])
         subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
         promotion_ids = stripe_utils.subscription_promotion_code_ids(subscription_obj)
-    if only_with_promotion and not promotion_ids:
-        # Preserve the legacy no-op for duplicate discount-free Checkouts while still
-        # repairing a code-bearing retry even when its Session lacks a breakdown.
-        return
-
     items = (subscription_obj.get('items') or {}).get('data') or []
     price_id = items[0]['price']['id'] if items else None
     sub_type = get_plan_type_from_price_id(price_id).value if price_id else 'unknown'
@@ -1290,22 +1285,15 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
-                    # A retry after a failed attributed metadata write can already have the
-                    # local paid row. Inspect the Subscription as well as Session discounts;
-                    # discount-free duplicate Checkouts remain a metadata no-op.
-                    try:
-                        await run_blocking(
-                            stripe_executor,
-                            _update_checkout_subscription_metadata,
-                            uid,
-                            session,
-                            True,
-                        )
-                    except ValueError as e:
-                        logger.error(f"Error updating subscription metadata: {e}")
-                    except Exception as e:
-                        logger.error(f"Retryable subscription metadata error: {sanitize(str(e))}")
-                        raise HTTPException(503, 'Subscription metadata must be retried') from e
+                    # Code-bearing replays can converge optional provenance, but legacy
+                    # discount-free duplicate Checkouts must not gain a Stripe dependency.
+                    if stripe_utils.checkout_promotion_code_ids(session):
+                        try:
+                            await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
+                        except Exception:
+                            logger.warning(
+                                'Optional Checkout attribution update failed; continuing entitlement reconciliation'
+                            )
                     # The paid plan is already stored. Stripe retries this
                     # delivery when unlock raises. Do not acknowledge it until
                     # unlock and the idempotent fair-use clear both finish:
@@ -1351,15 +1339,10 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             if subscription_id:
                 try:
                     await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
-                except ValueError as e:
-                    # Unknown legacy prices remain best-effort exactly as before.
-                    logger.error(f"Error updating subscription metadata: {e}")
-                except Exception as e:
-                    # An acknowledged Checkout must not silently lose its server-resolved
-                    # attribution. Missing/invalid metadata is a successful empty mapping;
-                    # provider/write failures instead remain retryable.
-                    logger.error(f"Retryable subscription metadata error: {sanitize(str(e))}")
-                    raise HTTPException(503, 'Subscription metadata must be retried') from e
+                except Exception:
+                    # Optional provenance and the pre-existing best-effort metadata write
+                    # must never become an entitlement or notification dependency.
+                    logger.warning('Optional Checkout attribution update failed; continuing entitlement reconciliation')
 
                 # Send paid notification if applicable
                 try:

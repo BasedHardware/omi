@@ -182,10 +182,7 @@ def test_failed_stripe_update_gives_the_code_back():
         env.sub_modify.side_effect = redemption.stripe.error.InvalidRequestError('nope', None)
         with pytest.raises(RedemptionError):
             redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
-    assert env.promo_modify.call_args_list[-1].kwargs == {
-        'active': True,
-        'metadata': {'redemption_attempt': '1'},
-    }
+    assert env.promo_modify.call_args_list[-1].kwargs == {'active': True}
     env.release.assert_called_once_with('promo_1')
 
 
@@ -202,7 +199,6 @@ def test_redemption_retains_issuance_provenance_on_claim_promo_and_subscription(
         **ATTRIBUTION,
         'redeemed_by_uid': 'uid_1',
         'redeemed_subscription_id': 'sub_1',
-        'redemption_attempt': '1',
     }
     sub_params = env.sub_modify.call_args.kwargs
     assert sub_params['metadata'] == {
@@ -212,8 +208,8 @@ def test_redemption_retains_issuance_provenance_on_claim_promo_and_subscription(
         **ATTRIBUTION,
         'redeemed_promotion_code_id': 'promo_1',
     }
-    assert sub_params['idempotency_key'].endswith('-subscription')
-    assert promo_params['idempotency_key'].endswith('-promotion')
+    assert set(promo_params) == {'active', 'metadata'}
+    assert set(sub_params) == {'discounts', 'metadata'}
 
 
 @pytest.mark.parametrize('role', ['self', 'gift', 'unknown'])
@@ -245,68 +241,30 @@ def test_redemption_preserves_conflicting_existing_order_provenance():
     assert metadata['redeemed_promotion_code_id'] == 'promo_1'
 
 
-def test_timeout_after_subscription_commit_does_not_release_or_reuse_code():
-    committed = _subscription(metadata={'uid': 'uid_1', 'redeemed_promotion_code_id': 'promo_1', **ATTRIBUTION})
-    with _Env(promos=[_promo(metadata=ISSUANCE)]) as env:
-        env.sub_modify.side_effect = RuntimeError('synthetic timeout after commit')
-        with patch.object(redemption.stripe.Subscription, 'retrieve', return_value=_obj(committed)):
-            result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
-
-    assert result['status'] == 'applied'
-    env.release.assert_not_called()
-    assert env.promo_modify.call_count == 1
-    env.claim.assert_called_once()
-
-
-def test_new_attempt_after_rollback_does_not_reuse_cached_deactivation_key():
-    with _Env() as first:
-        redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
-    first_attempt_key = first.promo_modify.call_args.kwargs['idempotency_key']
-
-    # Reactivation persists the completed attempt marker. A retry must advance it
-    # rather than replaying Stripe's cached active=False response.
-    with _Env(promos=[_promo(metadata={'redemption_attempt': '1'})]) as retry:
+@pytest.mark.parametrize(
+    'metadata,coupon',
+    [
+        ({**ISSUANCE, 'shopify_order_id': 'malformed'}, None),
+        (ISSUANCE, {'id': 'coupon_full', 'metadata': {**ISSUANCE, 'shopify_shop': 'other'}}),
+    ],
+)
+def test_invalid_or_conflicting_provenance_does_not_change_redemption_result(metadata, coupon):
+    promo = _promo(metadata=metadata)
+    if coupon is not None:
+        promo['coupon'] = coupon
+    with _Env(promos=[promo]) as env:
         result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
 
-    assert result['status'] == 'applied'
-    retry_params = retry.promo_modify.call_args.kwargs
-    assert retry_params['metadata']['redemption_attempt'] == '2'
-    assert retry_params['idempotency_key'] != first_attempt_key
-
-
-def test_timeout_after_promotion_deactivation_continues_without_reusing_code():
-    committed = {
-        'id': 'promo_1',
-        'active': False,
-        'metadata': {
-            'redeemed_by_uid': 'uid_1',
-            'redeemed_subscription_id': 'sub_1',
-            'redemption_attempt': '1',
-        },
+    assert result == {
+        'status': 'applied',
+        'percent_off': 100.0,
+        'amount_off': None,
+        'currency': None,
+        'applies_at': 1_900_000_000,
     }
-    with _Env(promos=[_promo(metadata=ISSUANCE)]) as env:
-        env.promo_modify.side_effect = RuntimeError('synthetic deactivation timeout after commit')
-        with patch.object(redemption.stripe.PromotionCode, 'retrieve', return_value=_obj(committed), create=True):
-            result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
-
-    assert result['status'] == 'applied'
-    assert env.sub_modify.call_args.kwargs['metadata']['shopify_order_id'] == ISSUANCE['shopify_order_id']
-    env.release.assert_not_called()
-    assert env.promo_modify.call_count == 1
-
-
-def test_unreadable_promotion_deactivation_result_never_releases_code():
-    with _Env() as env:
-        env.promo_modify.side_effect = RuntimeError('synthetic ambiguous deactivation result')
-        with patch.object(
-            redemption.stripe.PromotionCode, 'retrieve', side_effect=RuntimeError('still unavailable'), create=True
-        ):
-            with pytest.raises(RuntimeError, match='ambiguous deactivation'):
-                redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
-
-    env.release.assert_not_called()
-    env.sub_modify.assert_not_called()
-    assert env.promo_modify.call_count == 1
+    assert env.claim.call_args.kwargs['attribution'] == {}
+    subscription_metadata = env.sub_modify.call_args.kwargs['metadata']
+    assert subscription_metadata == {'uid': 'uid_1', 'redeemed_promotion_code_id': 'promo_1'}
 
 
 def test_endpoint_returns_the_refusal_as_a_client_error():

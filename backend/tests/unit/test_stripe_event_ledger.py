@@ -491,7 +491,7 @@ def _arm_hosted_checkout(lane, monkeypatch, metadata=None, coupon=None, metadata
             'discounts': [{'discount': {'promotion_code': 'promo_hosted'}}],
         }
     }
-    promotion = {'id': 'promo_hosted', 'object': 'promotion_code', 'metadata': metadata or {}}
+    promotion = {'id': 'promo_hosted', 'object': 'promotion_code', 'max_redemptions': 1, 'metadata': metadata or {}}
     if coupon is not None:
         promotion['coupon'] = coupon
     monkeypatch.setattr(
@@ -562,23 +562,12 @@ def test_missing_or_conflicting_hosted_provenance_does_not_block_entitlement(lan
     assert lane.current.plan == PlanType.plus
 
 
-@pytest.mark.parametrize('created_first', [False, True])
 @pytest.mark.parametrize('discount_key', ['discounts', 'discount'])
-def test_checkout_without_session_breakdown_uses_expanded_subscription_discount(
-    lane, monkeypatch, created_first, discount_key
-):
+def test_checkout_without_session_breakdown_uses_expanded_subscription_discount(lane, monkeypatch, discount_key):
     import stripe
 
     _, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE)
     del lane.event['data']['object']['total_details']
-    checkout = lane.event
-    if created_first:
-        created = lifecycle_event('customer.subscription.created', 'active')
-        created.update(id='evt-created-without-breakdown', created=199)
-        lane.event = created
-        assert run_lifecycle(lane) == {'status': 'success'}
-        assert writes == []
-    lane.event = checkout
     unexpanded = dict(lane.stripe_obj)
     unexpanded[discount_key] = ['di_fixture'] if discount_key == 'discounts' else 'di_fixture'
     expanded = dict(lane.stripe_obj)
@@ -609,17 +598,38 @@ def test_hosted_checkout_preserves_conflicting_existing_order(lane, monkeypatch)
     assert metadata['redeemed_promotion_code_id'] == 'promo_hosted'
 
 
-def test_hosted_metadata_write_failure_remains_retryable_after_local_paid_row(lane, monkeypatch):
-    db, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE, metadata_failures=1)
-    with pytest.raises(HTTPException) as error:
-        run_lifecycle(lane)
-    assert error.value.status_code == 503
-    assert receipt(db)['outcome'] == 'failed'
-    assert writes == []
-    assert lane.current.plan == PlanType.plus
+@pytest.mark.parametrize('created_first', [False, True])
+@pytest.mark.parametrize('failure_source', ['promotion_read', 'metadata_write'])
+def test_attribution_failures_never_block_legacy_entitlement_reconciliation(
+    lane, monkeypatch, created_first, failure_source
+):
+    db, writes = _arm_hosted_checkout(
+        lane,
+        monkeypatch,
+        metadata=_HOSTED_ISSUANCE,
+        metadata_failures=1 if failure_source == 'metadata_write' else 0,
+    )
+    if failure_source == 'promotion_read':
+        monkeypatch.setattr(
+            payment.stripe.PromotionCode,
+            'retrieve',
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('synthetic promotion read failure')),
+        )
+    checkout = lane.event
+    if created_first:
+        created = lifecycle_event('customer.subscription.created', 'active')
+        created.update(id='evt-created-before-attribution-failure', created=199)
+        lane.event = created
+        assert run_lifecycle(lane) == {'status': 'success'}
+    lane.event = checkout
 
-    assert run_lifecycle(lane) == {'status': 'success', 'message': 'Subscription already processed.'}
-    assert len(writes) == 1
-    assert writes[0][1]['metadata']['shopify_order_id'] == _HOSTED_ISSUANCE['shopify_order_id']
+    result = run_lifecycle(lane)
+
+    assert result['status'] == 'success'
+    assert lane.current.plan == PlanType.plus
+    assert writes == []
+    call_names = [name for name, _ in lane.calls]
+    for effect in ('write', 'credits', 'conversations', 'memories', 'actions', 'fair_use'):
+        assert effect in call_names
+    assert ('notification' in call_names) is (not created_first)
     assert receipt(db)['outcome'] == 'acknowledged'
-    assert receipt(db)['attempt'] == 2

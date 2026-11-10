@@ -121,7 +121,12 @@ def _issuance(**overrides):
 
 @pytest.mark.parametrize('role', ['self', 'gift', 'unknown'])
 def test_promotion_attribution_accepts_only_the_verified_issuer_contract(checkout_stripe_utils, role):
-    promo = {'id': 'promo_fixture', 'metadata': _issuance(bundle_redemption_role=role), 'client_order': 'ignored'}
+    promo = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(bundle_redemption_role=role),
+        'client_order': 'ignored',
+    }
     attribution = checkout_stripe_utils.promotion_code_attribution(promo)
     assert attribution == {**promo['metadata'], 'bundle_promotion_code_id': 'promo_fixture'}
     assert 'client_order' not in attribution
@@ -141,34 +146,66 @@ def test_promotion_attribution_accepts_only_the_verified_issuer_contract(checkou
     ],
 )
 def test_missing_or_malformed_promotion_attribution_fails_open(checkout_stripe_utils, metadata):
-    assert checkout_stripe_utils.promotion_code_attribution({'id': 'promo_fixture', 'metadata': metadata}) == {}
+    assert (
+        checkout_stripe_utils.promotion_code_attribution(
+            {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': metadata}
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize('max_redemptions', [None, 0, 2, True, '1'])
+def test_only_single_use_promotion_codes_can_carry_order_provenance(checkout_stripe_utils, max_redemptions):
+    promo = {'id': 'promo_fixture', 'max_redemptions': max_redemptions, 'metadata': _issuance()}
+    assert checkout_stripe_utils.promotion_code_attribution(promo) == {}
 
 
 def test_coupon_never_supplies_or_conflicts_with_unique_code_attribution(checkout_stripe_utils):
-    coupon_only = {'id': 'promo_fixture', 'metadata': {}, 'coupon': {'metadata': _issuance()}}
+    coupon_only = {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': {}, 'coupon': {'metadata': _issuance()}}
     assert checkout_stripe_utils.promotion_code_attribution(coupon_only) == {}
 
-    conflict = {'id': 'promo_fixture', 'metadata': _issuance(), 'coupon': {'metadata': _issuance(shopify_shop='other')}}
+    conflict = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(),
+        'coupon': {'metadata': _issuance(shopify_shop='other')},
+    }
     assert checkout_stripe_utils.promotion_code_attribution(conflict) == {}
 
-    matching = {'id': 'promo_fixture', 'metadata': _issuance(), 'coupon': {'metadata': _issuance()}}
+    matching = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(),
+        'coupon': {'metadata': _issuance()},
+    }
     assert checkout_stripe_utils.promotion_code_attribution(matching)['shopify_order_id'].endswith('/12345')
 
-    shared_coupon = {'id': 'promo_fixture', 'metadata': _issuance(), 'coupon': {'id': 'coupon_shared'}}
+    shared_coupon = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(),
+        'coupon': {'id': 'coupon_shared'},
+    }
     assert (
         checkout_stripe_utils.promotion_code_attribution(shared_coupon)['bundle_promotion_code_id'] == 'promo_fixture'
     )
 
 
 def test_multiple_codes_may_share_one_verified_order(checkout_stripe_utils):
-    first = checkout_stripe_utils.promotion_code_attribution({'id': 'promo_one', 'metadata': _issuance()})
-    second = checkout_stripe_utils.promotion_code_attribution({'id': 'promo_two', 'metadata': _issuance()})
+    first = checkout_stripe_utils.promotion_code_attribution(
+        {'id': 'promo_one', 'max_redemptions': 1, 'metadata': _issuance()}
+    )
+    second = checkout_stripe_utils.promotion_code_attribution(
+        {'id': 'promo_two', 'max_redemptions': 1, 'metadata': _issuance()}
+    )
     assert first['shopify_order_id'] == second['shopify_order_id']
     assert first['bundle_promotion_code_id'] != second['bundle_promotion_code_id']
 
 
 def test_session_and_subscription_receive_identical_provenance_without_overriding_auth(checkout_stripe_utils):
-    attribution = checkout_stripe_utils.promotion_code_attribution({'id': 'promo_fixture', 'metadata': _issuance()})
+    attribution = checkout_stripe_utils.promotion_code_attribution(
+        {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': _issuance()}
+    )
     captured = {}
     checkout_stripe_utils.base_url = 'https://api.example/'
     with (

@@ -96,6 +96,10 @@ def promotion_code_attribution(promotion_code: Any) -> Dict[str, str]:
     promo_id = promo.get('id')
     if not isinstance(promo_id, str) or not _PROMOTION_ID.fullmatch(promo_id):
         return {}
+    # Only codes contractually constrained to one redemption are issuers of order
+    # evidence. A shared or reusable PromotionCode is not unique order provenance.
+    if isinstance(promo.get('max_redemptions'), bool) or promo.get('max_redemptions') != 1:
+        return {}
     issuance = _validated_issuance_metadata(promo.get('metadata'))
     if issuance is None:
         return {}
