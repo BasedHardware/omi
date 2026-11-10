@@ -9606,12 +9606,17 @@ keeps its lane position. Wake keys expire 7 days after their last push.
    `pending` rows committed since its last pass, at most 5 pages of 100 rows.
    - A caught-up pass restarts 10 s before the newest row it saw, and never
      earlier than 60 s ago. A full page resumes at its cursor.
-   - Each owner is routed by its row's `capture_at`, so fresh GPU commits
+   - Each owner is routed by its freshest `capture_at`, so fresh GPU commits
      reach the fresh lane within one tick.
 4. Leader backstop. After the tail, the leader pages the whole pending log,
    discovery-only.
    - At most 30 pages of 100 rows in 10 s, from a resuming cursor that wraps.
    - It routes each owner once per tick and runs the sweep's finish page.
+   - Captures are aggregated across the bounded pages before routing. Any fresh
+     capture selects the fresh lane; the oldest commit orders backlog owners.
+     Discovery promotes an existing backlog wake atomically, invalidating stale
+     backlog takes without touching leases or shortening future retry deadlines.
+     Replays preserve fresh wakes and never demote them.
 
 Followers skip the sweep. Every process keeps its own async follow-up
 discovery.

@@ -581,7 +581,7 @@ class Projector:
             for _segment_id, owner_id, committed_at, capture_at in rows:
                 newest = committed_at if newest is None else max(newest, committed_at)
                 oldest, freshest = owners.get(owner_id, (committed_at, None))
-                if capture_at is not None and (freshest is None or capture_at > freshest):
+                if capture_at is not None and capture_at <= now and (freshest is None or capture_at > freshest):
                     freshest = capture_at
                 owners[owner_id] = (min(oldest, committed_at), freshest)
             if after is None:
@@ -606,11 +606,13 @@ class Projector:
         Pages the durable pending log and hands each owner found to ``route``
         once per call, oldest commit first. No assignment, claim or per-row
         read: owners come from the page rows. The cursor resumes across calls
-        and wraps at a short page, so every pending row is revisited.
+        and wraps at a short page, so every pending row is revisited. Aggregate
+        captures before routing so a later fresh row wins over older backlog.
         """
         deadline = time.monotonic() + budget_seconds
+        now = self.clock()
         counts = {'pages': 0, 'rows': 0, 'owners': 0, 'wrapped': 0}
-        seen: set[str] = set()
+        owners: dict[str, tuple[float, float | None]] = {}
         for _ in range(max(1, pages)):
             if counts['pages'] and time.monotonic() >= deadline:
                 break
@@ -621,14 +623,16 @@ class Projector:
             counts['pages'] += 1
             counts['rows'] += len(rows)
             for _segment_id, owner_id, committed_at, capture_at in rows:
-                if owner_id in seen:
-                    continue
-                seen.add(owner_id)
-                route(owner_id, committed_at, capture_at)
+                oldest, freshest = owners.get(owner_id, (committed_at, None))
+                if capture_at is not None and capture_at <= now and (freshest is None or capture_at > freshest):
+                    freshest = capture_at
+                owners[owner_id] = (min(oldest, committed_at), freshest)
             if after is None:
                 counts['wrapped'] = 1
                 break
-        counts['owners'] = len(seen)
+        for owner_id, (committed_at, capture_at) in owners.items():
+            route(owner_id, committed_at, capture_at)
+        counts['owners'] = len(owners)
         return counts
 
     def owe_followups(self, segment_ids) -> None:

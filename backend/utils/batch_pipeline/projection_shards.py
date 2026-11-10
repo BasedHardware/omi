@@ -72,18 +72,26 @@ for _, key in ipairs(KEYS) do
 end
 return n
 """
-# KEYS[1]: lane zset, KEYS[2]: its push-sequence hash, KEYS[3]: opposite lane.
-# ARGV: member, score, mode ('gt' newest, 'lt' oldest), ttl seconds, discovery.
-# Discovery only creates a missing owner wake; replaying either existing lane
-# must not invalidate a taken sequence or pull a persisted retry forward.
+# KEYS[1]/KEYS[2]: lane zset/sequence hash; KEYS[3]/KEYS[4]: opposite lane's.
+# ARGV: member, score, mode ('gt' newest, 'lt' oldest), ttl, discovery, now.
+# Discovery preserves same-lane wakes and never demotes fresh work. Promotion
+# invalidates old backlog takes but preserves a future retry deadline.
 # Real notifications always bump the sequence, even if the score is unchanged,
 # so an older take cannot erase new work. Plain ZADD GT/LT needs Redis 6.2.
 _PUSH_LUA = """
 local current = redis.call('zscore', KEYS[1], ARGV[1])
-if ARGV[5] == '1' and (current or redis.call('zscore', KEYS[3], ARGV[1])) then
-  return 0
-end
 local score = tonumber(ARGV[2])
+if ARGV[5] == '1' then
+  if current then return 0 end
+  local opposite = redis.call('zscore', KEYS[3], ARGV[1])
+  if opposite then
+    if ARGV[3] ~= 'gt' then return 0 end
+    if tonumber(opposite) > tonumber(ARGV[6]) then score = math.max(score, tonumber(opposite)) end
+    redis.call('zrem', KEYS[3], ARGV[1])
+    redis.call('hincrby', KEYS[4], ARGV[1], 1)
+    redis.call('expire', KEYS[4], ARGV[4])
+  end
+end
 if not current
   or (ARGV[3] == 'gt' and score > tonumber(current))
   or (ARGV[3] == 'lt' and score < tonumber(current)) then
@@ -339,10 +347,10 @@ class ProjectionShards:
         return f'batch_projection_wake_seq:{self.namespace}:{self.count}:{lane}:{shard}'
 
     def push(self, owner_id: str, owner_key: str, lane: str, score: float, *, discovery: bool = False) -> bool:
-        """Record work, or discover an owner absent from both lanes. Fails open (False).
+        """Record work, or discover/promote an owner's wake. Fails open (False).
 
         True includes a discovery replay of an existing wake: its holder still
-        owns the work, without changing that wake's ordering or sequence.
+        owns the work. Promotion preserves retry deadlines and never touches leases.
         """
         if lane not in LANES:
             raise ValueError('unknown projection wake lane')
@@ -350,15 +358,17 @@ class ProjectionShards:
         try:
             self._client().eval(
                 _PUSH_LUA,
-                3,
+                4,
                 self._lane_key(lane, shard),
                 self._seq_key(lane, shard),
                 self._lane_key(BACKLOG if lane == FRESH else FRESH, shard),
+                self._seq_key(BACKLOG if lane == FRESH else FRESH, shard),
                 owner_id,
                 float(score),
                 'gt' if lane == FRESH else 'lt',
                 WAKE_TTL_SECONDS,
                 int(discovery),
+                self.clock(),
             )
             return True
         except Exception as error:

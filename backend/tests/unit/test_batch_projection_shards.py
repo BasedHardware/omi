@@ -1023,7 +1023,7 @@ def test_tail_discovery_wakes_gpu_commits_fresh_and_follows_the_newest_row(serve
     assert calls == [(940.0, ''), None, (986.0, ''), None]
 
 
-@pytest.mark.parametrize('first_capture', [None, 1000.0 - 7 * 3600, 980.0, 995.0])
+@pytest.mark.parametrize('first_capture', [None, 1000.0 - 7 * 3600, 980.0, 995.0, 1001.0])
 @pytest.mark.parametrize('split_pages', [False, True])
 def test_tail_discovery_uses_the_owners_freshest_capture(server, first_capture, split_pages):
     shards = make(server, count=1)
@@ -1042,12 +1042,82 @@ def test_tail_discovery_uses_the_owners_freshest_capture(server, first_capture, 
         assert pump.wake(owner, capture, committed)
 
     counts = real.discover_tail(route, pages=2, overlap_seconds=60.0, slack_seconds=10.0)
-    expected_capture = max(first_capture or 990.0, 990.0)
+    expected_capture = max(first_capture or 990.0, 990.0) if first_capture != 1001.0 else 990.0
     assert routed == [('gpu', 995.0, expected_capture)]
     assert counts == {'pages': 2 if split_pages else 1, 'rows': 2, 'owners': 1}
     assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('gpu', expected_capture)]
     assert shards.take(BACKLOG, 10) == []
     assert real.tail_after == (986.0, '')
+
+
+@pytest.mark.parametrize('first_capture', [None, 1000.0 - 7 * 3600, 1001.0])
+@pytest.mark.parametrize('pagination', ['same_page', 'same_call', 'later_call'])
+def test_whole_log_discovery_routes_the_owners_freshest_capture(server, first_capture, pagination):
+    shards = make(server, count=1)
+    shards.refresh()
+    rows = [('old', 'gpu', 1.0, first_capture), ('fresh', 'gpu', 996.0, 990.0)]
+    pages = iter([(rows, None)] if pagination == 'same_page' else [(rows[:1], (1.0, 'old')), (rows[1:], None)])
+    store = Mock()
+    store.store.projection_page_owners.side_effect = lambda **kwargs: next(pages)
+    real = projection.Projector(store, Mock(), clock=lambda: 1000.0)
+    real.store = store
+    pump = ShardPump(real, shards)
+
+    def route(owner, committed, capture):
+        assert pump.wake(owner, capture, committed, discovery=True)
+
+    counts = real.discover_owners(route, pages=1 if pagination == 'later_call' else 2, budget_seconds=5)
+    if pagination == 'later_call':
+        assert [(w.owner_id, w.score) for w in shards.take(BACKLOG, 10)] == [('gpu', 1.0)]
+        assert shards.take(FRESH, 10) == []
+        counts = real.discover_owners(route, pages=1, budget_seconds=5)
+    assert counts['owners'] == 1 and counts['wrapped'] == 1
+    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('gpu', 990.0)]
+    assert shards.take(BACKLOG, 10) == []
+
+
+@pytest.mark.parametrize('held', [False, True])
+def test_discovery_promotes_backlog_without_demoting_or_stealing_a_lease(server, held):
+    holder = make(server, count=1)
+    if held:
+        holder.refresh()
+    observer = make(server, count=1, member=False)
+    client = holder._client()
+    lease = client.get(holder._lease_key(0))
+    assert (lease is not None) == held
+    observer.push('gpu', owner_key('gpu'), BACKLOG, 1.0, discovery=True)
+    (stale,) = holder.take(BACKLOG, 10, shards=[0])
+    assert observer.push('gpu', owner_key('gpu'), FRESH, 990.0, discovery=True)
+    (fresh,) = holder.take(FRESH, 10, shards=[0])
+    assert fresh.score == 990.0
+    assert not holder.settle(stale) and not holder.defer(stale, 2000.0)
+    assert holder.take(BACKLOG, 10, shards=[0]) == []
+    assert observer.push('gpu', owner_key('gpu'), BACKLOG, 0.0, discovery=True)
+    assert observer.push('gpu', owner_key('gpu'), FRESH, 995.0, discovery=True)
+    assert holder.take(FRESH, 10, shards=[0]) == [fresh]
+    assert holder.take(BACKLOG, 10, shards=[0]) == []
+    assert client.get(holder._lease_key(0)) == lease
+    assert observer.held == set() and holder.healthy
+
+
+def test_discovery_promotion_preserves_a_future_retry_across_holder_replacement(server):
+    now = [1000.0]
+    shards = make(server, count=1, clock=lambda: now[0])
+    shards.refresh()
+    shards.push('gpu', owner_key('gpu'), BACKLOG, 1.0)
+    (taken,) = shards.take(BACKLOG, 10)
+    assert shards.defer(taken, 1200.0)
+    assert shards.push('gpu', owner_key('gpu'), FRESH, 990.0, discovery=True)
+    assert shards.take(FRESH, 10) == shards.take(BACKLOG, 10) == []
+    assert shards._client().zscore(shards._lane_key(FRESH, 0), 'gpu') == 1200.0
+    shards.release()
+    replacement = make(server, count=1, clock=lambda: now[0])
+    replacement.refresh()
+    assert replacement.push('gpu', owner_key('gpu'), BACKLOG, 0.0, discovery=True)
+    assert replacement.take(FRESH, 10) == replacement.take(BACKLOG, 10) == []
+    now[0] = 1200.0
+    (due,) = replacement.take(FRESH, 10)
+    assert (due.owner_id, due.score) == ('gpu', 1200.0)
 
 
 def test_a_failed_take_turns_the_process_back_to_the_sweep(server):
@@ -1488,6 +1558,14 @@ def test_discovery_replays_preserve_taken_retry_across_restart(server, blocking_
         ]
 
     before = stored()
+    # The discovered capture is fresh, so normalize a backlog-only hint before
+    # taking the turn. Subsequent discovery is a replay of that same intent.
+    if lanes == (BACKLOG,):
+        drains.finish('retry', 'end')
+        assert asyncio.run(pump.tick()) == 0
+        discover(pump)
+        assert asyncio.run(pump.tick()) == 1
+        before = stored()
     discover(pump)  # Replay while the turn is still active.
     assert stored() == before
     drains.finish('retry', stop)
@@ -1504,8 +1582,10 @@ def test_discovery_replays_preserve_taken_retry_across_restart(server, blocking_
     next_drains = FakeDrains(1)
     next_pump = ShardPump(FakeProjector(next_drains), replacement, monotonic=lambda: now[0])
     assert next_pump.cooldown == {}
-    discover(next_pump)  # Must neither pull backlog earlier nor recreate a fresh wake.
-    assert stored() == deferred
+    discover(next_pump)  # Promotion must preserve the persisted retry deadline.
+    assert shards._client().zscore(shards._lane_key(FRESH, 0), 'retry') == retry_at
+    assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'retry') is None
+    deferred = stored()
     replacement.push('due-backlog', owner_key('due-backlog'), BACKLOG, 500.0)
     assert asyncio.run(next_pump.tick()) == 1
     assert next_drains.requested == ['due-backlog']

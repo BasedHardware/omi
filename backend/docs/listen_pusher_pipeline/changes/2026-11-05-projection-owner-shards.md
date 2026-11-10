@@ -17,9 +17,10 @@ parts.
      follows the newly committed tail each tick.
    - The leader alone runs a discovery-only backstop over the durable log,
      and followers no longer sweep.
-   - Tail/backstop discovery atomically creates a wake only if the owner has
-     none in either lane. Replays leave existing scores and sequences untouched,
-     including taken wakes and future retries in the opposite lane. Real commit
+   - Tail/backstop discovery atomically creates a missing wake or promotes a
+     backlog wake when fresh work is found. Promotion invalidates stale backlog
+     takes, preserves future retry deadlines and leaves shard leases untouched.
+     Other replays leave existing scores and sequences untouched. Real commit
      notifications still bump the sequence even if their score stays unchanged,
      so settlement or deferral cannot erase new work arriving during a turn.
      GPU-only rows racing with settlement remain in the durable log and are
@@ -39,8 +40,13 @@ parts.
    scores survive holder restarts or moves without consuming backlog reserve;
    reading them neither mutates their score nor their sequence. Legacy local
    continuations keep their FIFO behavior. Future captures use backlog, with no
-   clock-skew allowance. Tail discovery routes each owner using its freshest
-   capture across the bounded pages, retaining its oldest commit for backlog.
+   clock-skew allowance. Tail and whole-log discovery route each owner using its
+   freshest non-future capture across the bounded pages, retaining its oldest
+   commit for backlog. A later whole-log page can promote a previous backlog
+   hint to fresh; discovery never demotes a fresh wake. The same Lua push
+   atomically removes the old backlog wake and advances its sequence, so a
+   stale take cannot settle or defer the promoted wake. A future retry score
+   becomes the fresh wake's deadline, including across holder replacement.
 4. **Failing and eligible blocked heads have a bounded exit.**
    - Failing heads already took the held disposition after 24 h. That bound
      is now `BATCH_PROJECTION_HEAD_DEADLINE_SECONDS`.
