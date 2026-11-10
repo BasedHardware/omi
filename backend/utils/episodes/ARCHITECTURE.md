@@ -292,9 +292,12 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   distinguish label drift from new speech. That successful compose seeds the
   narrow stamp, so subsequent label-only finalizes skip. No historical backfill
   or production-data migration is required.
-- `omi_episode_compose_total{outcome="settling"}` counts deferred runs;
+- `omi_episode_compose_total{outcome,trigger}` counts runs by outcome and bounded
+  trigger (`close|read|member_final|settle`); `omi_episode_compose_seconds` carries
+  the same labels. `omi_episode_compose_calls_total{trigger,outcome}` counts each
+  paid model call, including `trigger="repair"`.
   `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
-  avoided triggers. Both have bounded labels and no user identifiers.
+  avoided triggers. All have bounded labels and no user identifiers.
 - Triggers: close, member finalize (including `sync_update`, gated on the changed
   member already loaded by finalization), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
@@ -308,8 +311,13 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   per request; changing it takes a new backend revision). Telemetry:
   `omi_episode_home_members_total{outcome}`.
 - Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
-  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
-  `omi_episode_compose_seconds`; usage adds `composer_*` counters.
+  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome,trigger}`,
+  `omi_episode_compose_seconds` and `omi_episode_compose_calls_total{trigger,outcome}`;
+  usage adds `composer_*` counters.
+- `EPISODE_COMPOSE_KEEP_PAID` (on unless set off) keeps paid composes: one repair
+  retry over the bad output alone, a title-and-lede compose for short episodes,
+  superseded results stored and marked pending, and a two-paid-failure cap. Off
+  restores discard-and-retry and the four-failure cap.
 
 ## Kill switch, cohort and client capability
 

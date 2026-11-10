@@ -11,6 +11,13 @@ transcript, a member is discarded): the ``composed_fingerprint`` over retained m
 their transcripts remains the composed-state stamp. A narrower speech/name/membership trigger
 and a bounded background quiet window avoid paying for label-only updates. Kill switch: ``EPISODE_COMPOSER`` (on unless set off). Never
 raises to callers.
+
+``EPISODE_COMPOSE_KEEP_PAID`` (on unless set off) keeps paid composes: a parse failure gets
+one repair retry over the bad output alone, a short episode may ship a title and lede with no
+chapters, a superseded result is stored and the episode marked pending, and paid failures stop
+at two per evidence. Off restores the previous discard-and-retry behavior and the four-failure
+cap. Every run and every paid call carries a bounded trigger label (close, read, member_final,
+settle, repair).
 """
 
 from __future__ import annotations
@@ -36,8 +43,10 @@ from config.episodes import (
     COMPOSER_SETTLE_SECONDS,
     COMPOSER_MAX_SETTLE_SECONDS,
     episode_compose_settle_enabled,
+    episode_compose_keep_paid_enabled,
     COMPOSER_LEASE_SECONDS,
     COMPOSER_MAX_FAILURES,
+    COMPOSER_MAX_PAID_FAILURES,
     COMPOSER_MAX_DETAILS,
     COMPOSER_MAX_PARAGRAPH_CHARS,
     COMPOSER_MAX_POINT_CHARS,
@@ -47,6 +56,7 @@ from config.episodes import (
     COMPOSER_MAX_CHAPTERS,
     COMPOSER_MAX_TRANSCRIPT_CHARS,
     COMPOSER_MIN_SECTION_SECONDS,
+    COMPOSER_SHORT_EPISODE_SECONDS,
     COMPOSER_TIMEOUT_SECONDS,
     RECOVERY_NOTES_MIN_INTERVAL_SECONDS,
     COMPOSER_VERSION,
@@ -83,6 +93,12 @@ Write in {language}. Return JSON only:
  "people": ["names of people who mattered, only if named"]}}
 chapters are the body of the page: 1 to {max_chapters} significant stretches in time order. start and end are the clock labels of the chapter's first and last transcript lines, copied exactly. Each chapter has 2 to 5 points; a point may carry 0 to 3 details. Points carry the substance the way good meeting notes do: names, numbers, product and feature names, the exact problem or idea, what was decided and why, open questions. Never repeat the lede inside a chapter. Attribute a statement, request or decision to a person only when the transcript makes the speaker clear; otherwise write it without a name.
 Skip noise, background chatter, mumbling and filler entirely. Never write meta-commentary such as "no decision was recorded" or "nothing else was discussed": leave it out. Never write speaker labels or quote filler. Never title anything "New moment" or similar. follow_ups is empty when there are none."""
+
+# The repair retry sees only the malformed reply, never the transcripts: the facts are
+# already in the reply, and re-sending the episode would pay for the same input twice.
+REPAIR_SYSTEM_PROMPT = """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
+{{"title": "<= 7 words", "emoji": "one emoji", "lede": "one or two sentences", "chapters": [{{"start": "HH:MM:SS", "end": "HH:MM:SS", "title": "<= 6 words", "points": [{{"text": "one specific point", "details": ["a supporting specific"]}}]}}], "follow_ups": ["a concrete next step"], "people": ["names of people who mattered"]}}
+Keep every fact, name, number and clock label that is already in the reply. Do not invent anything. Use an empty list for a field the reply does not have. Return only the JSON object, with no prose and no code fence."""
 
 
 class ComposeFailed(RuntimeError):
@@ -283,6 +299,32 @@ def build_messages(
     return [('system', system), ('human', '\n\n'.join(blocks))]
 
 
+def build_repair_messages(content: str) -> list[tuple[str, str]]:
+    """The one repair retry: the bad output alone, never the transcripts."""
+    return [('system', REPAIR_SYSTEM_PROMPT), ('human', str(content or ''))]
+
+
+def _content(reply: Any) -> str:
+    content = getattr(reply, 'content', reply)
+    if isinstance(content, list):
+        content = ''.join(part.get('text', '') if isinstance(part, Mapping) else str(part) for part in content)
+    return str(content)
+
+
+def _recorded_seconds(members: Sequence[Mapping[str, Any]]) -> float:
+    """Total recorded member time; a short episode may ship a lede with no chapters."""
+    total = 0.0
+    for row in members:
+        start, end = _span(row)
+        if start is not None and end is not None:
+            total += max(0.0, (end - start).total_seconds())
+    return total
+
+
+def _short_episode(members: Sequence[Mapping[str, Any]]) -> bool:
+    return _recorded_seconds(members) <= COMPOSER_SHORT_EPISODE_SECONDS
+
+
 def parse(content: str) -> dict[str, Any]:
     match = re.search(r'\{.*\}', content or '', re.S)
     if not match:
@@ -477,7 +519,13 @@ def _usage(reply: Any) -> tuple[int, int]:
 
 
 def compose(
-    uid: str, episode_id: str, *, collaborators: Any = None, force: bool = False, background: bool = False
+    uid: str,
+    episode_id: str,
+    *,
+    collaborators: Any = None,
+    force: bool = False,
+    background: bool = False,
+    trigger: str = 'close',
 ) -> str:
     """Compose a closed episode once its members are done. Returns an outcome label; never raises."""
     if not episode_composer_enabled():
@@ -488,11 +536,11 @@ def compose(
     c = collaborators or service.Collaborators()
     started = time.monotonic()
     try:
-        outcome = _compose(uid, episode_id, c, force=force, background=background, service=service)
+        outcome = _compose(uid, episode_id, c, force=force, background=background, service=service, trigger=trigger)
     except Exception as error:  # Never break finalization or reads.
         logger.warning('event=episode_compose outcome=error exception_type=%s', type(error).__name__)
         outcome = 'error'
-    metrics.record_compose(outcome, time.monotonic() - started)
+    metrics.record_compose(outcome, time.monotonic() - started, trigger=trigger)
     return outcome
 
 
@@ -555,8 +603,12 @@ def _write(
     return outcome
 
 
-def _record_failure(uid: str, episode_id: str, c: Any, print_: str) -> None:
-    """Back off after a failed paid attempt. The count is per evidence: new evidence starts at one."""
+def _record_failure(uid: str, episode_id: str, c: Any, print_: str, *, count: int = 1) -> None:
+    """Back off after failed paid attempts. The count is per evidence: new evidence starts at one.
+
+    ``count`` is the number of paid calls this attempt burned (a parse failure plus its
+    repair retry is two), so the cap counts money, not compose runs.
+    """
     try:
         _write(
             uid,
@@ -564,9 +616,9 @@ def _record_failure(uid: str, episode_id: str, c: Any, print_: str) -> None:
             c,
             lambda current: {
                 'compose_failures': (
-                    int(current.get('compose_failures') or 0) + 1
+                    int(current.get('compose_failures') or 0) + count
                     if current.get('compose_failed_fingerprint') == print_
-                    else 1
+                    else count
                 ),
                 'compose_failed_fingerprint': print_,
                 'compose_failed_at': datetime.now(timezone.utc),
@@ -583,6 +635,11 @@ def _release(current: Mapping[str, Any], print_: str) -> dict[str, Any]:
     return {'compose_lease': None} if isinstance(lease, Mapping) and lease.get('fingerprint') == print_ else {}
 
 
+def _max_failures() -> int:
+    """Paid failures allowed on one evidence: two with keep-paid on, the legacy four off."""
+    return COMPOSER_MAX_PAID_FAILURES if episode_compose_keep_paid_enabled() else COMPOSER_MAX_FAILURES
+
+
 def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> bool:
     """Failed paid attempts on the same evidence back off 10/20/40 min, then stop until it changes."""
     failures = int(episode.get('compose_failures') or 0)
@@ -590,14 +647,16 @@ def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> boo
         return False
     if print_ is not None and episode.get('compose_failed_fingerprint') != print_:
         return False
-    if failures >= COMPOSER_MAX_FAILURES:
+    if failures >= _max_failures():
         return True
     failed_at = _utc(episode.get('compose_failed_at'))
     backoff = timedelta(minutes=COMPOSER_RETRY_MINUTES * (2 ** (failures - 1)))
     return bool(failed_at and datetime.now(timezone.utc) - failed_at < backoff)
 
 
-def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any) -> str:
+def _compose(
+    uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any, trigger: str = 'close'
+) -> str:
     episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
     if not episode:
         return 'no_episode'
@@ -704,37 +763,70 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
     language = str(episode.get('output_language') or 'English')
     language = {'en': 'English'}.get(language, language)
     messages = build_messages(named, owner=owner, tz=tz, language=language)
+    keep_paid = episode_compose_keep_paid_enabled()
+    call_started = datetime.now(timezone.utc)
+    input_tokens = output_tokens = 0
+    paid_failures = 0
+
+    def call(trigger_label: str, payload: list[tuple[str, str]]) -> Any:
+        nonlocal input_tokens, output_tokens
+        reply_ = invoke(uid, payload)
+        call_input, call_output = _usage(reply_)
+        input_tokens += call_input
+        output_tokens += call_output
+        return reply_
+
+    repaired = False
     try:
-        reply = invoke(uid, messages)
-        content = getattr(reply, 'content', reply)
-        if isinstance(content, list):
-            content = ''.join(part.get('text', '') if isinstance(part, Mapping) else str(part) for part in content)
-        data = parse(str(content))
+        reply = call(trigger, messages)
+        content = _content(reply)
+        try:
+            data = parse(content)
+        except ComposeFailed as error:
+            if not keep_paid or str(error) != 'parse_error':
+                raise
+            # One repair retry over the bad output alone: the transcripts are already paid for.
+            paid_failures = 1
+            metrics.record_compose_call(trigger, 'parse_error')
+            repaired = True
+            reply = call('repair', build_repair_messages(content))
+            data = parse(_content(reply))
         times = {str(row['id']): speech_times(row) for row in members}
         spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
         composed = to_updates(data, members, tz, spans, times)
         if not any(m['points'] for m in composed['moments']):
-            raise ComposeFailed('no_sections')  # Speech was there: a page with no sections is a failed compose.
-    except Exception:
-        _record_failure(uid, episode_id, c, print_)
+            if not (keep_paid and _short_episode(members)):
+                # Speech was there: a page with no sections is a failed compose, unless the
+                # episode is short enough that the lede is the whole page.
+                raise ComposeFailed('no_sections')
+    except ComposeFailed as error:
+        metrics.record_compose_call('repair' if repaired else trigger, str(error))
+        _record_failure(uid, episode_id, c, print_, count=max(1, paid_failures + 1))
         raise
-    input_tokens, output_tokens = _usage(reply)
+    except Exception:
+        metrics.record_compose_call('repair' if repaired else trigger, 'error')
+        _record_failure(uid, episode_id, c, print_, count=max(1, paid_failures + 1))
+        raise
+    metrics.record_compose_call('repair' if repaired else trigger, 'ok')
 
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
     # membership change since then makes this result stale; its own trigger composes again.
     fresh_state, fresh = _members(
         uid, episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode, c
     )
-    if fresh_state != 'ok' or fingerprint(fresh) != print_:
+    superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
+    if superseded and not keep_paid:
         _write(uid, episode_id, c, lambda current: _release(current, print_))
         return 'superseded'
+
+    kept_pending = {'value': superseded}
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
         usage = dict(current.get('usage') or {})
         usage['composer_calls'] = int(usage.get('composer_calls') or 0) + 1
         usage['composer_input_tokens'] = int(usage.get('composer_input_tokens') or 0) + input_tokens
         usage['composer_output_tokens'] = int(usage.get('composer_output_tokens') or 0) + output_tokens
-        return {
+        payload = {
             **composed,
             'usage': usage,
             'composed_fingerprint': print_,
@@ -747,10 +839,24 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
             'compose_failures': 0,
             **_release(current, print_),
         }
+        membership_changed = sorted(_retained_ids(current)) != sorted(_retained_ids(episode))
+        if superseded or membership_changed:
+            # Keep the paid result and mark the episode pending: a settled compose refreshes it
+            # with the evidence that arrived during the call instead of throwing this one away.
+            kept_pending['value'] = True
+            payload['compose_pending_since'] = current.get('compose_pending_since') or call_started
+            payload['compose_activity_at'] = call_started
+            payload['compose_pending_evidence'] = _evidence(fresh) if fresh_state == 'ok' else None
+            payload['compose_pending_membership'] = sorted(_retained_ids(current))
+        return payload
 
     def finish_guard(current: Mapping[str, Any]) -> Optional[str]:
+        if superseded:
+            # Never clobber a compose that landed after this call started.
+            composed_at = _utc(current.get('composed_at'))
+            return 'unchanged' if composed_at and composed_at > call_started else None
         if sorted(_retained_ids(current)) != sorted(_retained_ids(episode)):
-            return 'superseded'
+            return None if keep_paid else 'superseded'
         return None
 
     written = _write(uid, episode_id, c, finish, guard=finish_guard)
@@ -769,6 +875,9 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
     if written != 'written':
         _write(uid, episode_id, c, lambda current: _release(current, print_))
         return written
+    if kept_pending['value']:
+        # The paid result is stored and the episode is pending; the settle timer refreshes it.
+        return 'superseded'
     # A transcript change that landed between the evidence re-read and the write: compose again.
     after_state, after = _members(
         uid, episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode, c
@@ -907,7 +1016,7 @@ def _schedule_due() -> None:
         due = [key for key, (at, _) in _deferred.items() if at <= now and key not in _inflight]
         work = [(key, _deferred.pop(key)[1]) for key in due]
     for (uid, episode_id), c in work:
-        schedule(uid, episode_id, collaborators=c)
+        schedule(uid, episode_id, collaborators=c, trigger='settle')
 
 
 async def retry_settled_composes() -> None:
@@ -921,11 +1030,14 @@ async def retry_settled_composes() -> None:
             _deferred.clear()
 
 
-def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: bool = False) -> bool:
+def schedule(
+    uid: str, episode_id: str, *, collaborators: Any = None, throttle: bool = False, trigger: str = 'close'
+) -> bool:
     """Compose in the background once per (uid, episode) at a time. Returns whether it was queued.
 
     ``throttle`` (read-side callers) skips an episode this process queued in the last few minutes,
-    so an episode still waiting on a member is not re-read on every list request.
+    so an episode still waiting on a member is not re-read on every list request. ``trigger`` is
+    the bounded origin label (close|read|member_final|settle) carried to the compose metric.
     """
     if not episode_composer_enabled() or not episode_id:
         return False
@@ -958,9 +1070,11 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
         try:
             for _attempt in range(3):
                 if episode_compose_settle_enabled():
-                    outcome = compose(uid, str(episode_id), collaborators=collaborators, background=not foreground)
+                    outcome = compose(
+                        uid, str(episode_id), collaborators=collaborators, background=not foreground, trigger=trigger
+                    )
                 else:
-                    outcome = compose(uid, str(episode_id), collaborators=collaborators)
+                    outcome = compose(uid, str(episode_id), collaborators=collaborators, trigger=trigger)
                 if outcome in {'stale', 'superseded'} and not foreground and episode_compose_settle_enabled():
                     # The cap allows one attempt during a long upload, not three paid retries in a burst.
                     now_at = datetime.now(timezone.utc)
@@ -997,7 +1111,7 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
                 _rerun.discard(key)
                 _foreground.discard(key)
             if reschedule:
-                schedule(uid, str(episode_id), collaborators=collaborators, throttle=promote)
+                schedule(uid, str(episode_id), collaborators=collaborators, throttle=promote, trigger=trigger)
 
     try:
         _executor.submit(run)
@@ -1059,7 +1173,7 @@ def schedule_for_conversation(
                         return
                     if changed:
                         _observe_evidence(uid, episode, c, evidence)
-            schedule(uid, str(episode['id']), collaborators=collaborators)
+            schedule(uid, str(episode['id']), collaborators=collaborators, trigger='member_final')
     except Exception as error:
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
 

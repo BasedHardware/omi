@@ -279,7 +279,7 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
                 continue
             if not composer.needs_compose(row, visible_member_ids=visible.get(str(row.get('id')), [])):
                 continue
-            if composer.schedule(uid, str(row.get('id')), throttle=True):
+            if composer.schedule(uid, str(row.get('id')), throttle=True, trigger='read'):
                 queued += 1
     except Exception as error:
         logger.warning(

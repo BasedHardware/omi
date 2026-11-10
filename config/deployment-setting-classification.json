@@ -606,7 +606,8 @@
       "EDGE_SHADOW_PERCENT",
       "EDGE_SHADOW_MAX_SESSIONS",
       "EDGE_UPSTREAM_URL",
-      "EDGE_VAD_MODEL_PATH"
+      "EDGE_VAD_MODEL_PATH",
+      "EPISODE_COMPOSE_KEEP_PAID"
     ],
     "public_build": [
       "API_URL",

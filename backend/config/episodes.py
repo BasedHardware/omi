@@ -52,6 +52,7 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_COMPOSE_KEEP_PAID_ENV = 'EPISODE_COMPOSE_KEEP_PAID'
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -159,6 +160,18 @@ def episode_composer_enabled() -> bool:
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_compose_keep_paid_enabled() -> bool:
+    """Default-on: keep paid composes instead of discarding them.
+
+    On, a parse failure gets one repair retry over the bad output alone, a short
+    episode may ship a title and lede with no chapters, a superseded result is
+    stored and the episode marked pending, and paid failures stop at two per
+    evidence. Off restores the previous discard-and-retry behavior and the
+    four-failure cap.
+    """
+    return modes_default_on(EPISODE_COMPOSE_KEEP_PAID_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -318,6 +331,12 @@ COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
 COMPOSER_MAX_FAILURES = 4
+# With EPISODE_COMPOSE_KEEP_PAID on, one attempt plus one repair retry is the whole budget:
+# a third paid failure on the same evidence cannot produce a different result.
+COMPOSER_MAX_PAID_FAILURES = 2
+# A short episode (at most this much recorded member time) may ship a title and lede with
+# no chapters: the lede is the page, and a sectionless reply is not a failed compose.
+COMPOSER_SHORT_EPISODE_SECONDS = 15 * 60
 # Wire budget per composed paragraph (to_wire serves bullets up to this length).
 COMPOSER_MAX_PARAGRAPH_CHARS = 1200
 # A composed moment's points (each with a few supporting details) are the episode page's sections.
