@@ -3938,6 +3938,16 @@ _add(
                     'path': 'users/synthetic/conversations/c',
                 },
                 {'due': T0.timestamp(), 'pending': T0.timestamp() - 60, 'path': 'users/synthetic/conversations/c'},
+                *[
+                    {
+                        'phase': 'newest',
+                        'window': 72 * 3600,
+                        'due': due,
+                        'pending': T0.timestamp() - 60,
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for due in (0, -10, T0, float('inf'))
+                ],
                 {
                     'due': T0.timestamp() - 300000,
                     'pending': T0.timestamp() - 300000,

@@ -1,6 +1,7 @@
 """Indexed summary-debt phases; cursors never need a document read."""
 
 from typing import Any, Literal
+import math
 from google.cloud import firestore
 from database._client import get_firestore_client
 from config.summary_guarantee import REPAIR_NEAR_EXPIRY_SECONDS, REPAIR_QUERY_PAGE_LIMIT
@@ -40,7 +41,12 @@ def due_conversations(
         if after and after.get('path') and isinstance(after.get('due'), (float, int)) and after.get('pending') is None:
             query = query.start_after({'summary_due_at': after['due'], '__name__': client.document(after['path'])})
     elif after and after.get('phase') == phase and after.get('window') == window and after.get('path'):
-        pending, due = timestamp(after.get('pending')), timestamp(after.get('due'))
+        pending = timestamp(after.get('pending'))
+        due = after.get('due')
+        if not isinstance(due, (int, float)) or isinstance(due, bool):
+            due = timestamp(due)
+        elif not math.isfinite(due):
+            due = None
         in_band = pending is not None and (
             cutoff <= pending <= boundary if phase == 'near_expiry' else pending > boundary
         )

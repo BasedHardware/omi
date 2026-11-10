@@ -1833,7 +1833,7 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
                 summary = {'scanned': 0, 'admitted': 0, 'near_expiry_admitted': 0, 'errors': 1, 'expired_seen': 0}
             outcomes['summary_debt_scanned'] = summary['scanned']
             outcomes['summary_debt_admitted'] = summary['admitted']
-            outcomes['summary_debt_near_expiry_admitted'] = summary['near_expiry_admitted']
+            outcomes['summary_debt_near_expiry_admitted'] = summary.get('near_expiry_admitted', 0)
             outcomes['summary_debt_errors'] = summary['errors']
             outcomes['summary_debt_expired_seen'] = summary['expired_seen']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})

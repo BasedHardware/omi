@@ -870,16 +870,20 @@ def _provider_sweep(monkeypatch, sweep):
     monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
 
 
-def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
+@pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])
+def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch, near_expiry):
     from services import summary_debt_repair
     from database.outbox import SweepCounts
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
     _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(4, 1, 2, 1))
+    tick_counts = {'scanned': 5, 'admitted': 3, 'errors': 0, 'expired_seen': 2}
+    if near_expiry is not None:
+        tick_counts['near_expiry_admitted'] = near_expiry
     monkeypatch.setattr(
         summary_debt_repair,
         'tick',
-        lambda *, now: {'scanned': 5, 'admitted': 3, 'near_expiry_admitted': 2, 'errors': 0, 'expired_seen': 2},
+        lambda *, now: tick_counts,
     )
     assert route.maintain(1000.0) == {
         'rewoken': 2,
@@ -891,7 +895,7 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'summary_debt_scanned': 5,
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
-        'summary_debt_near_expiry_admitted': 2,
+        'summary_debt_near_expiry_admitted': near_expiry or 0,
         'summary_debt_errors': 0,
     }
 

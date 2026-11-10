@@ -489,13 +489,19 @@ def test_window_cursor_paginates_equal_timestamps_and_resets_on_mode_changes(deb
 
 
 @pytest.mark.parametrize('cursor_kind', ['legacy', 'old_disabled_phase'])
-def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(debt_store, monkeypatch, cursor_kind):
+@pytest.mark.parametrize('pending_kind', ['missing', 'null'])
+def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(
+    debt_store, monkeypatch, cursor_kind, pending_kind
+):
     client, uid, tasks, ref, row = debt_store
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
     monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 1)
     missing = ref.parent.document('missing-pending')
     candidate = {**row, 'summary_due_at': 219}
-    del candidate['summary_first_pending_at']
+    if pending_kind == 'missing':
+        del candidate['summary_first_pending_at']
+    else:
+        candidate['summary_first_pending_at'] = None
     missing.set(candidate)
     cursor = {'due': 218, 'path': ref.path}
     if cursor_kind == 'old_disabled_phase':
@@ -515,6 +521,27 @@ def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(debt_s
         assert client.document(repair.CURSOR).get().to_dict()['path'] == ref.path
     finally:
         missing.delete()
+
+
+@pytest.mark.parametrize('due', [0, -10])
+def test_gated_nonpositive_due_cursor_advances_from_a_to_b(debt_store, monkeypatch, due):
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    ref.update({'summary_due_at': None})
+    refs = [ref.parent.document(name) for name in ('a', 'b')]
+    pending = now - 1
+    try:
+        for added in refs:
+            added.set({**row, 'summary_first_pending_at': pending, 'summary_due_at': due})
+        first = repair.due_conversations(now=now, limit=1, firestore_client=client)[0]
+        assert first.reference == refs[0]
+        after = {'phase': 'newest', 'window': 72 * 3600, 'pending': pending, 'due': due, 'path': first.reference.path}
+        second = repair.due_conversations(now=now, limit=1, after=after, firestore_client=client)[0]
+        assert second.reference == refs[1]
+    finally:
+        for added in refs:
+            added.delete()
 
 
 def test_newest_phase_orders_pending_desc_then_due_and_name(debt_store, monkeypatch):

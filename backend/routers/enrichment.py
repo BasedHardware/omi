@@ -208,7 +208,7 @@ def maintain(now: float) -> dict[str, int]:
     counts.update(
         summary_debt_scanned=summary['scanned'],
         summary_debt_admitted=summary['admitted'],
-        summary_debt_near_expiry_admitted=summary['near_expiry_admitted'],
+        summary_debt_near_expiry_admitted=summary.get('near_expiry_admitted', 0),
         summary_debt_errors=summary['errors'],
         summary_debt_expired_seen=summary['expired_seen'],
     )

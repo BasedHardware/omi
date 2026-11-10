@@ -301,7 +301,8 @@ def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase
 
 
 @pytest.mark.parametrize('cursor_kind', ['legacy', 'gated', 'old_disabled_phase'])
-def test_disabled_gate_scans_and_admits_missing_pending_with_legacy_query(monkeypatch, cursor_kind):
+@pytest.mark.parametrize('pending_kind', ['missing', 'null'])
+def test_disabled_gate_scans_and_admits_missing_pending_with_legacy_query(monkeypatch, cursor_kind, pending_kind):
     from services import summary_debt_repair as repair
     from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
 
@@ -312,7 +313,10 @@ def test_disabled_gate_scans_and_admits_missing_pending_with_legacy_query(monkey
         cursor.update(version=2, pending=100, phase='newest', window=72 * 3600 if cursor_kind == 'gated' else 0)
     client = RecordingFirestore({repair.CURSOR: cursor})
     row = {**debt(), 'summary_due_at': 220}
-    del row['summary_first_pending_at']
+    if pending_kind == 'missing':
+        del row['summary_first_pending_at']
+    else:
+        row['summary_first_pending_at'] = None
     snapshot = client.snapshot('users/synthetic/conversations/c', row)
     client.queue_results([snapshot])
     monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
@@ -327,3 +331,140 @@ def test_disabled_gate_scans_and_admits_missing_pending_with_legacy_query(monkey
     assert [(f.field, f.operator, f.value) for f in shape.filters] == [('summary_due_at', '<=', 220)]
     assert shape.orders == (('summary_due_at', 'ASCENDING'), ('__name__', 'ASCENDING'))
     assert shape.uses_cursors is (cursor_kind == 'legacy')
+
+
+@pytest.mark.parametrize(
+    'due', [0, -10, datetime(2026, 1, 1, tzinfo=timezone.utc), float('inf'), float('-inf'), float('nan')]
+)
+def test_gated_cursor_preserves_finite_nonpositive_due_and_datetime(monkeypatch, due):
+    from database.summary_debt_queries import due_conversations
+    from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    client = RecordingFirestore()
+    cursor = {
+        'phase': 'newest',
+        'window': 72 * 3600,
+        'pending': now - 1,
+        'due': due,
+        'path': 'users/synthetic/conversations/a',
+    }
+    with install_recorder(client):
+        due_conversations(now=now, after=cursor, limit=1, firestore_client=client)
+    shape = client.shapes[0]
+    if isinstance(due, datetime) or due in (0, -10):
+        assert dict(shape.cursors)['start_after']['summary_due_at'] == (
+            due.timestamp() if isinstance(due, datetime) else due
+        )
+    else:
+        assert not shape.uses_cursors
+
+
+def test_newest_index_failure_finishes_near_expiry_progress_and_counts(monkeypatch, caplog):
+    from google.api_core.exceptions import FailedPrecondition
+    from services import summary_debt_repair as repair
+    from tests.support.firestore_shape_recorder import (
+        RecordingFirestore,
+        RecordingQuery,
+        RecordingTransaction,
+        install_recorder,
+    )
+
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(repair, 'REPAIR_QUERY_PAGE_LIMIT', 2)
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 1)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    monkeypatch.setattr(repair, 'redrive', lambda *_args, **_kwargs: True)
+    now = 1_800_000_000.0
+    prior = {
+        'phase': 'newest',
+        'window': 72 * 3600,
+        'pending': now - 1,
+        'due': now - 1,
+        'path': 'users/synthetic/conversations/z',
+    }
+    client = RecordingFirestore({repair.CURSOR: {'version': 2, 'phases': {'newest': prior}}})
+    rows = [
+        client.snapshot(
+            f'users/synthetic/conversations/{name}',
+            {**debt(), 'summary_first_pending_at': now - 72 * 3600 + 100 + i, 'summary_due_at': now - 1},
+        )
+        for i, name in enumerate(('a', 'b'))
+    ]
+    client.queue_results(rows)
+    client.queue_results([])
+    original_stream = RecordingQuery.stream
+    original_commit = RecordingTransaction._commit
+
+    def stream(query, *args, **kwargs):
+        if ('summary_first_pending_at', 'DESCENDING') in query._state.orders:
+            raise FailedPrecondition('synthetic index unavailable')
+        return original_stream(query, *args, **kwargs)
+
+    def commit(transaction, *args, **kwargs):
+        for operation, ref, payload in transaction._write_ops:
+            assert operation in ('set', 'update')
+            existing = client.documents.get(ref.path, {}) if operation == 'update' else {}
+            client.documents[ref.path] = {**existing, **payload}
+        return original_commit(transaction, *args, **kwargs)
+
+    monkeypatch.setattr(RecordingQuery, 'stream', stream)
+    monkeypatch.setattr(RecordingTransaction, '_commit', commit)
+
+    def totals():
+        return {
+            sample.labels['outcome']: sample.value
+            for metric in delivery.REPAIR.collect()
+            for sample in metric.samples
+            if sample.name.endswith('_total')
+        }
+
+    before = totals()
+    with install_recorder(client):
+        counts = repair.tick(now=now, client=client)
+    assert counts == {'scanned': 2, 'admitted': 1, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 0}
+    progress = client.documents[repair.CURSOR]
+    assert progress['lease_until'] == 0
+    assert progress['phases']['near_expiry']['path'] == rows[0].reference.path
+    assert progress['phases']['newest'] == prior
+    assert (
+        len(
+            [
+                r
+                for r in caplog.records
+                if r.message == 'event=summary_debt_repair_newest_index_unavailable outcome=error'
+            ]
+        )
+        == 1
+    )
+    after = totals()
+    assert {key: after[key] - before.get(key, 0) for key in after} == {
+        'scanned': 2,
+        'admitted': 1,
+        'near_expiry_admitted': 1,
+        'error': 1,
+        'expired_seen': 0,
+    }
+
+
+@pytest.mark.parametrize('phase,error_type', [('near_expiry', 'precondition'), ('newest', 'other')])
+def test_query_errors_other_than_newest_precondition_propagate(monkeypatch, phase, error_type):
+    from google.api_core.exceptions import FailedPrecondition
+    from services import summary_debt_repair as repair
+    from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    error = FailedPrecondition if error_type == 'precondition' else RuntimeError
+
+    def query(**kwargs):
+        if kwargs['phase'] == phase:
+            raise error('synthetic query error')
+        return []
+
+    monkeypatch.setattr(repair, 'due_conversations', query)
+    client = RecordingFirestore()
+    with install_recorder(client), pytest.raises(error):
+        repair.tick(now=1_800_000_000.0, client=client)

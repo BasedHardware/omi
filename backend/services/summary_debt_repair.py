@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import time
 import uuid
+import logging
 from typing import Any, Callable, cast
 
 from google.cloud import firestore
+from google.api_core.exceptions import FailedPrecondition
 from config.summary_guarantee import (
     repair_enabled,
     REPAIR_INTERVAL_SECONDS,
@@ -32,6 +34,7 @@ from utils.enrichment.age_gate import max_age_seconds
 Row = dict[str, Any]
 _scan_clock = time.monotonic
 CURSOR = 'maintenance/summary_debt_repair_v1'
+logger = logging.getLogger(__name__)
 
 
 def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
@@ -78,7 +81,12 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             new, _ = operation(old)
             # With the age gate off, legacy due-only debt may lack pending
             # metadata. Its existing due time conservatively bounds the wake.
-            pending = row['summary_first_pending_at'] if max_age_seconds() else row.get('summary_first_pending_at', due)
+            if max_age_seconds():
+                pending = row['summary_first_pending_at']
+            else:
+                pending = row.get('summary_first_pending_at')
+                if pending is None:
+                    pending = due
             new['first_pending_at'] = min(new['first_pending_at'], pending)
             new['summary_deadline_at'] = min(new.get('summary_deadline_at', due), due)
             new['due_at'] = min(new['due_at'], due)
@@ -168,7 +176,16 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             and _scan_clock() < scan_deadline
         ):
             limit = min(REPAIR_QUERY_PAGE_LIMIT, REPAIR_SCAN_LIMIT - counts['scanned'])
-            page = due_conversations(now=current, phase=phase, limit=limit, after=walk, firestore_client=client)
+            try:
+                page = due_conversations(now=current, phase=phase, limit=limit, after=walk, firestore_client=client)
+            except FailedPrecondition:
+                if phase != 'newest':
+                    raise
+                # Hard-fail only this phase; finish still commits near-expiry
+                # progress and publishes this tick's counts. No alternate query.
+                logger.warning('event=summary_debt_repair_newest_index_unavailable outcome=error')
+                counts['errors'] += 1
+                break
             # Count every returned document, including a fetched tail left for
             # next tick. No later RPC starts once attempts/time are exhausted.
             counts['scanned'] += len(page)
