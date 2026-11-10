@@ -38,6 +38,24 @@ Failure-Class: FC-publication-drain-contention-exhaustion-left-without-a-converg
   the historical ERROR `event=batch_merge outcome=retry exception_type=...`
   line remains only when the attempt cap refuses to re-arm — the
   maintenance-sweep backstop takes over from there.
+- Storm-window alignment: when a drained chain loses to contention,
+  `FirestoreStore.run` stamps the retry-after its storm damper actually
+  armed for the drain's label onto the raised
+  `FirestoreContentionExhausted.retry_after` (0.0 when no damper ran). A
+  re-arm that carries that signal waits out the measured window first —
+  `due_at = now + max(documented backoff step, retry_after)` — instead of
+  re-striking on the fixed ladder while the damper window is still armed.
+  Without it every lane attempt collided inside the armed window: the
+  consult in `store.run` delayed it, the chain burned all five attempts
+  against the same hot document, and the lockstep burn repeated until the
+  six-attempt budget died and the ERROR line fired. The signal never
+  changes the budget or its ceiling: the retry-after is clamped to
+  `DRAIN_RETRY_MAX_SECONDS`, a non-contention loss or a foreign exception
+  keeps the legacy schedule, and a continuation re-offer whose drain lost
+  to contention aligns the same way (`event=batch_merge outcome=retry`
+  still fires only at the attempt cap).
+
+  Failure-Class: FC-deferred-drain-restrike-collides-inside-the-armed-storm-window
 
 ## What did not change
 
@@ -59,3 +77,15 @@ Failure-Class: FC-publication-drain-contention-exhaustion-left-without-a-converg
   `result_ready` rows, and the maintenance ready page remains its convergence
   path — the lane is an accelerator in front of the durable backstop, never a
   replacement for it.
+
+## Carried suite repair
+
+While landing this change the full unit lane failed on
+`tests/unit/test_flag_budget.py` for reasons upstream of it: the
+`SYNC_BACKFILL_WORKER_API_URL` / `SYNC_BACKFILL_WORKER_AUDIENCE` budget
+exceptions (owner `infracost / syncsplit`) carried `review_by: 2026-11-09`,
+and the gate compares against the UTC date, so every run after 19:00 EST on
+2026-11-09 failed the suite on the parent commit itself. Both names are live
+(running sync-split runtime reads them), so per ADR-0006 the entries were
+renewed one month to `2026-12-09` rather than deleted. No env surface change:
+`budget` and the seeded/replacement slot count are untouched.

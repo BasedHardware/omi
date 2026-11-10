@@ -400,11 +400,15 @@ class FirestoreStore:
                 commit,
                 operation_name=label,
             )
-        except FirestoreContentionExhausted:
+        except FirestoreContentionExhausted as error:
             # This label just burned its whole budget against hot documents;
             # space out the next re-strike instead of colliding immediately.
+            # The window the damper actually applied rides on the exception:
+            # a caller that schedules its own re-offer (the pump's deferred
+            # drain lane) lands it after the armed window instead of
+            # colliding inside it on a fixed ladder.
             if damper is not None:
-                damper.arm(label)
+                error.retry_after = damper.arm(label)
             raise
         if damper is not None:
             damper.note_success(label, generation)

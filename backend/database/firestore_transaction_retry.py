@@ -89,11 +89,18 @@ class FirestoreContentionExhausted(RuntimeError):
 
     ``reason`` is the closed outcome token ``attempts_exhausted`` or
     ``deadline_exhausted``; callers log it, never the message.
+
+    A store-level storm damper that spaces the label's next re-strike stamps
+    the retry-after seconds it actually applied onto ``retry_after`` (0.0
+    when no damper was in scope), so a caller scheduling its own re-offer —
+    the pump's deferred publication-drain lane — can land that re-offer after
+    the armed window instead of colliding inside it on its fixed ladder.
     """
 
-    def __init__(self, message: str, *, reason: str = "attempts_exhausted") -> None:
+    def __init__(self, message: str, *, reason: str = "attempts_exhausted", retry_after: float = 0.0) -> None:
         super().__init__(message)
         self.reason = reason
+        self.retry_after = float(retry_after)
 
 
 def _is_expired_transaction(error: BaseException) -> bool:

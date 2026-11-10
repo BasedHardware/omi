@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import math
 import time
 import threading
 from collections import OrderedDict
@@ -98,6 +99,31 @@ def deferred_drain_delay(attempt: int) -> float:
         # caller data, and the schedule's shape past the cap is just the cap.
         return DRAIN_RETRY_MAX_SECONDS
     return min(DRAIN_RETRY_MAX_SECONDS, DRAIN_RETRY_BASE_SECONDS * (2 ** (attempt - 1)))
+
+
+def contention_retry_after(error: BaseException | None) -> float:
+    """The storm damper's applied retry-after carried on a contention exhaustion.
+
+    ``FirestoreStore.run`` stamps the window its storm damper actually armed
+    for the drain's label onto the exhausted chain's ``retry_after``. On that
+    measured signal the deferred lane lands its next re-drain after the armed
+    window instead of colliding inside it: a fixed 0.5s re-offer against a
+    document the damper just spaced waits out the same window inside
+    ``store.run`` and burns a full five-attempt chain — the lockstep burn the
+    damper exists to prevent — once per lane attempt until the budget dies.
+    Only a positive finite number counts; a foreign exception, an exhaustion
+    raised with no damper in scope, hostile or malformed input all keep the
+    legacy fixed ladder. Never raises. The clamp keeps the lane's documented
+    horizon (the max backoff step) unchanged: a storm shifts WHEN the next
+    attempt lands, never the attempt budget or its ceiling.
+    """
+    value = getattr(error, 'retry_after', None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    value = float(value)
+    if not math.isfinite(value) or value <= 0.0:
+        return 0.0
+    return min(value, DRAIN_RETRY_MAX_SECONDS)
 
 
 # Bounded publication re-strike lane. A publication transition that exhausts
@@ -1059,7 +1085,7 @@ class Pump:
             # bounded deferred lane, and the maintenance ready page stays the
             # durable backstop behind it. Only a lane already at its attempt
             # cap falls back to the historical error line.
-            if self._defer_drain(owner_id):
+            if self._defer_drain(owner_id, retry_after=contention_retry_after(error)):
                 logger.info(
                     'event=batch_merge_drain outcome=deferred exception_type=%s',
                     type(error).__name__,
@@ -1099,7 +1125,9 @@ class Pump:
 
         await asyncio.gather(*(publish_owner(owner_id, owned) for owner_id, owned in by_owner.items()))
 
-    def _defer_drain(self, owner_id: str, *, continuation: bool = False, attempts: int | None = None) -> bool:
+    def _defer_drain(
+        self, owner_id: str, *, continuation: bool = False, attempts: int | None = None, retry_after: float = 0.0
+    ) -> bool:
         """Arm one owner's deferred re-drain. True when armed, False at the cap.
 
         ``attempts`` counts armed re-drains this owner's episode already spent;
@@ -1107,6 +1135,13 @@ class Pump:
         converge on one budget instead of resetting it at every catch site. A continuation (a drain that hit
         the 100-commit bound with work possibly pending) re-offers at once and
         spends a smaller budget.
+
+        ``retry_after`` is the storm window the store's damper applied to the
+        drain's label when the re-offered chain lost (0.0 when the loss was
+        not contention or no damper ran): the re-drain then waits out that
+        measured window instead of colliding inside it on the fixed ladder.
+        The budget is unchanged — a storm shifts when the next attempt lands,
+        never how many attempts remain.
         """
         if attempts is None:
             armed = self._deferred_drains.get(owner_id)
@@ -1117,6 +1152,10 @@ class Pump:
             self._deferred_drains.pop(owner_id, None)
             return False
         delay = 0.0 if continuation else deferred_drain_delay(next_attempt)
+        if retry_after > 0.0:
+            # Storm alignment: land the re-drain after the damper's armed
+            # window, clamped to the lane's documented max step.
+            delay = max(delay, min(float(retry_after), DRAIN_RETRY_MAX_SECONDS))
         self._deferred_drains.pop(owner_id, None)
         self._deferred_drains[owner_id] = {
             'attempts': next_attempt,
@@ -1166,7 +1205,10 @@ class Pump:
             except Exception as error:
                 armed = self._deferred_drains.get(owner_id)
                 if armed is not None and self._defer_drain(
-                    owner_id, attempts=armed['attempts'], continuation=armed['continuation']
+                    owner_id,
+                    attempts=armed['attempts'],
+                    continuation=armed['continuation'],
+                    retry_after=contention_retry_after(error),
                 ):
                     logger.info(
                         'event=batch_merge_drain outcome=deferred exception_type=%s attempt=%d',
