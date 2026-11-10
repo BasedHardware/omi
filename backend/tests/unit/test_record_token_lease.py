@@ -120,15 +120,16 @@ def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypat
 
 @pytest.mark.parametrize('source', ['frames', 'custody_append'])
 def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled, source):
-    enabled.rows[PATH]['record_upload_sessions']['s']['signal_source'] = source
+    producer = {**POD, 'pod': ''} if source == 'custody_append' else POD
+    enabled.rows[PATH]['record_upload_sessions']['s'].update(producer, signal_source=source)
     before = deepcopy(enabled.rows[PATH])
     assert record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
     row = enabled.rows[PATH]
     assert row['record_upload_revision'] == before['record_upload_revision'] + (source == 'frames')
     assert row['record_upload_sessions']['s'] == {
-        **POD,
+        **producer,
         'last_signal_at': NOW,
-        'lease_expires_at': NOW + 3600,
+        'lease_expires_at': NOW + lease.producer_token_lease_seconds({**producer, 'signal_source': source}),
         'signal_source': source,
     }
     assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
@@ -139,7 +140,7 @@ def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled,
 
 
 def test_custody_renews_only_custody_tokens_and_frames_are_exact(enabled):
-    enabled.rows[PATH]['record_upload_sessions']['other'] = {**TOKEN, 'pod': 'other', 'signal_source': 'custody_append'}
+    enabled.rows[PATH]['record_upload_sessions']['other'] = {**TOKEN, 'pod': '', 'signal_source': 'custody_append'}
     enabled.rows[PATH]['record_upload_sessions']['legacy'] = True
     record_audio.renew_record_token_lease('synthetic', 'record', source='frames', session='s', firestore_client=enabled)
     assert enabled.rows[PATH]['record_upload_sessions']['other']['last_signal_at'] == TOKEN['last_signal_at']
@@ -150,7 +151,7 @@ def test_custody_renews_only_custody_tokens_and_frames_are_exact(enabled):
 
 
 def test_custody_upload_survives_abandon_or_pod_death(enabled):
-    enabled.rows[PATH]['record_upload_sessions']['s']['signal_source'] = 'custody_append'
+    enabled.rows[PATH]['record_upload_sessions']['s'].update(pod='', signal_source='custody_append')
     enabled.rows[PATH]['record_upload_sessions']['s']['abandoned_at'] = NOW - 4000
     record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
     tokens = enabled.rows[PATH]['record_upload_sessions']
