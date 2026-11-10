@@ -56,7 +56,7 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert pod['containers'][0]['securityContext']['readOnlyRootFilesystem']
 
 
-def test_repair_pod_runs_on_batch_pipeline_pool_with_four_guaranteed_cores():
+def test_repair_pod_runs_on_batch_pipeline_pool_with_four_requested_cores():
     pod = documents()[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
     terms = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
     assert terms == [
@@ -76,8 +76,7 @@ def test_repair_pod_runs_on_batch_pipeline_pool_with_four_guaranteed_cores():
         ('nvidia.com/gpu', 'present', 'NoSchedule'),
     }
     resources = pod['containers'][0]['resources']
-    # Request == limit: 16 row workers must not be starved to the ~2 cores the
-    # saturated monitoring pool gave them.
+    # Reserve the full CPU limit. Memory still differs, so pod QoS is Burstable.
     assert resources['requests']['cpu'] == '4'
     assert resources['limits']['cpu'] == '4'
     assert 'nvidia.com/gpu' not in resources['limits']

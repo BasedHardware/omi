@@ -65,6 +65,7 @@ def entries():
             trials=2,
             patchers=(_repair_age_orders,),
             domains={
+                'urgent': [False, True],
                 'after': [
                     None,
                     {
@@ -76,7 +77,7 @@ def entries():
                         'enqueued_at': 1.0,
                         'horizon': datetime(2026, 10, 1, tzinfo=timezone.utc),
                     },
-                ]
+                ],
             },
             neutrals={
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),

@@ -13,12 +13,17 @@ PURPOSE = b'record-seal-repair-cursor-v1'
 
 
 class RepairCursor:
-    def __init__(self, client, secret, *, jobs=False):
+    def __init__(self, client, secret, *, jobs=False, urgent=False):
         if len(secret) < 32:
             raise ValueError('cursor key required')
         self.cipher = AESGCM(hmac.digest(secret, PURPOSE, 'sha256'))
         self.jobs = jobs
-        name = 'record_seal_repair_jobs_cursor_v1' if jobs else 'record_seal_repair_cursor_v1'
+        # Separate namespaces prevent an ascending frontier from skipping work in descending order.
+        name = (
+            'record_seal_repair_urgent_cursor_v1'
+            if urgent
+            else 'record_seal_repair_jobs_cursor_v2' if jobs else 'record_seal_repair_cursor_v2'
+        )
         self.ref = client.collection('batch_pipeline_prod_maintenance').document(name)
 
     def read(self, budget):

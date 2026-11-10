@@ -43,10 +43,10 @@ def test_row_module_import_graph_excludes_the_web_framework():
     # as cheap as the row child.
     result = _run(
         'import sys; import utils.batch_pipeline.record_seal_cluster_repair;'
-        " print('fastapi' in sys.modules, 'pydantic' in sys.modules)"
+        " print('fastapi' in sys.modules, 'pydantic' in sys.modules, 'starlette' in sys.modules)"
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == 'False False', result.stdout
+    assert result.stdout.strip() == 'False False False', result.stdout
 
 
 def test_metrics_route_still_serves_the_web_framework_response():

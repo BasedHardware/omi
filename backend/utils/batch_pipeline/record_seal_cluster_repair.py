@@ -35,6 +35,8 @@ from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
+# Final day of the stored 14-day barrier deadline gets priority over recency.
+NEAR_DEAD_LETTER_SECONDS = 86400
 _age_order_index_warned = False
 DISPOSITIONS = frozenset(
     {
@@ -237,7 +239,7 @@ def settled(data):
 def discover(
     client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN, advance_rows=MAX_ROWS, selected_cursors=None
 ):
-    """Page past closed rows; oldest finished first within each bounded pass.
+    """Page past closed rows; newest finished first within each bounded pass.
 
     Both owners use the canonical record identity. Sync rows without a job are
     refused by the existing no-job planner (which only registers batch_live).
@@ -258,8 +260,8 @@ def discover(
             .where(filter=FieldFilter('record_lane_owner', 'in', ['batch_live_v1', 'batch_sync_v1']))
             .where(filter=FieldFilter('status', '==', 'completed'))
             .where(filter=FieldFilter('finished_at', '<=', horizon))
-            .order_by('finished_at')
-            .order_by('__name__')
+            .order_by('finished_at', direction='DESCENDING')
+            .order_by('__name__', direction='DESCENDING')
             .select(
                 (
                     'finished_at',
@@ -338,9 +340,17 @@ def pending_blocker(row):
 
 @read_origin('job:record_seal_cluster_repair:discover_jobs')
 def discover_jobs(
-    client, *, budget, after=None, max_rows=8, max_scan=128, selected_cursors=None, progress=lambda _: None
+    client,
+    *,
+    budget,
+    after=None,
+    max_rows=8,
+    max_scan=128,
+    selected_cursors=None,
+    progress=lambda _: None,
+    urgent=False,
 ):
-    """Oldest pending jobs first, with a frozen horizon and wrapping frontier.
+    """Newest pending jobs, or earliest near-dead-letter deadline, with bounded cursors.
 
     Missing/non-finite/non-numeric enqueue clocks were already ineligible in
     the name scan; the age query does not remove any eligible record. Keep the
@@ -351,27 +361,40 @@ def discover_jobs(
         raise ValueError('invalid jobs discovery limits')
     budget.check()
     age_order = refactor_modes.record_seal_repair_age_order()
+    if urgent and not age_order:
+        return [], False, None
+    order_field = 'record_dead_letter_deadline_at' if urgent else 'enqueued_at'
     hash_after = after if after and 'enqueued_at' not in after else None
     # A cursor from the other ordering cannot be resumed safely. Restart at
     # that order's head (also upgrades the legacy hash frontier without loss).
     if after and ('enqueued_at' in after) != age_order:
         after = None
-    horizon = (after or {}).get('horizon' if age_order else 'finished_at') or datetime.now(timezone.utc)
+    # Deadline order can safely expand its tail as new rows enter the final day.
+    # Recency passes freeze their head so continuous inflow cannot prevent wrap.
+    horizon = None if urgent else (after or {}).get('horizon' if age_order else 'finished_at')
+    horizon = horizon or datetime.now(timezone.utc)
 
     def page_for(age_order, after):
         budget.check()
         query = client.collection('batch_pipeline_prod_jobs').where(filter=FieldFilter('state', '==', 'record_pending'))
         if age_order:
-            query = query.where(filter=FieldFilter('enqueued_at', '<=', horizon.timestamp())).order_by('enqueued_at')
+            cutoff = horizon.timestamp() + (NEAR_DEAD_LETTER_SECONDS if urgent else 0)
+            query = query.where(filter=FieldFilter(order_field, '<=', cutoff)).order_by(
+                order_field, direction='ASCENDING' if urgent else 'DESCENDING'
+            )
         query = (
-            query.order_by('__name__')
-            .select(('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id'))
-            .limit(min(128, max_scan))
+            query.order_by('__name__', direction='DESCENDING')
+            if age_order and not urgent
+            else query.order_by('__name__')
         )
+        query = query.select(
+            ('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id')
+            + (('record_dead_letter_deadline_at',) if urgent else ())
+        ).limit(min(128, max_scan))
         if after:
             values = {'__name__': client.document(after['path'])}
             if age_order:
-                values['enqueued_at'] = after['enqueued_at']
+                values[order_field] = after['enqueued_at']
             query = query.start_after(values)
         return list(query.stream(timeout=budget.timeout(), retry=None))
 
@@ -379,8 +402,13 @@ def discover_jobs(
         page = page_for(age_order, after)
     except FailedPrecondition as error:
         message = str(error).lower()
-        if not age_order or not (
-            'requires an index' in message or ('index' in message and ('not ready' in message or 'building' in message))
+        if (
+            urgent
+            or not age_order
+            or not (
+                'requires an index' in message
+                or ('index' in message and ('not ready' in message or 'building' in message))
+            )
         ):
             raise
         if not _age_order_index_warned:
@@ -405,8 +433,10 @@ def discover_jobs(
         budget.check()
         job = doc.to_dict() or {}
         uid, cid, enqueued = job.get('owner_id'), job.get('conversation_id'), job.get('enqueued_at')
+        # The encrypted numeric slot carries this scan's ordered field. Urgent
+        # and ordinary scans have separate frontier documents.
         cursor = (
-            {'path': doc.reference.path, 'enqueued_at': enqueued, 'horizon': horizon}
+            {'path': doc.reference.path, 'enqueued_at': job.get(order_field), 'horizon': horizon}
             if age_order
             else {'path': doc.reference.path, 'finished_at': horizon}
         )
@@ -416,6 +446,10 @@ def discover_jobs(
             continue
         if not isinstance(enqueued, (int, float)) or isinstance(enqueued, bool) or not math.isfinite(enqueued):
             continue
+        if urgent:
+            deadline = job.get(order_field)
+            if not valid_metric_clock(deadline) or deadline > horizon.timestamp() + NEAR_DEAD_LETTER_SECONDS:
+                continue
         age = horizon.timestamp() - enqueued
         if age < config.JOBS_MIN_AGE_SECONDS:
             continue
@@ -730,24 +764,41 @@ def run(*, progress=lambda _: None):
             frontier = RepairCursor(client, config.cursor_secret())
             selected_cursors, job_cursors = {}, {}
             job_rows, jobs_saturated, jobs_cursor = [], False, None
-            jobs_frontier = None
+            jobs_frontier, urgent_frontier = None, None
+            urgent_rows, urgent_cursors, urgent_cursor = [], {}, None
             if config.jobs_enabled():
                 jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
-                job_rows, jobs_saturated, jobs_cursor = discover_jobs(
-                    client,
-                    budget=budget,
-                    after=jobs_frontier.read(budget),
-                    max_rows=max(1, workers // 2),
-                    selected_cursors=job_cursors,
-                    progress=progress,
-                )
+                if refactor_modes.record_seal_repair_age_order():
+                    urgent_frontier = RepairCursor(client, config.cursor_secret(), jobs=True, urgent=True)
+                    urgent_rows, jobs_saturated, urgent_cursor = discover_jobs(
+                        client,
+                        budget=budget,
+                        after=urgent_frontier.read(budget),
+                        max_rows=max(1, workers // 2),
+                        selected_cursors=urgent_cursors,
+                        urgent=True,
+                    )
+                jobs_cursor = jobs_frontier.read(budget)
+                remaining = max(1, workers // 2) - len(urgent_rows)
+                if remaining:
+                    job_rows, recent_saturated, jobs_cursor = discover_jobs(
+                        client,
+                        budget=budget,
+                        after=jobs_cursor,
+                        max_rows=remaining,
+                        selected_cursors=job_cursors,
+                        progress=progress,
+                    )
+                    jobs_saturated = jobs_saturated or recent_saturated
+                # Keep the existing half-worker reservation for the conversation leg.
+                job_rows = urgent_rows + [(path, age) for path, age in job_rows if path not in urgent_cursors]
             rows, saturated, cursor = discover(
                 client,
                 budget=budget,
                 after=frontier.read(budget),
                 advance_rows=workers - len(job_rows),
                 max_rows=MAX_ROWS - len(job_rows),
-                max_scan=MAX_SCAN - (128 if jobs_frontier else 0),
+                max_scan=MAX_SCAN - (128 if jobs_frontier else 0) - (128 if urgent_frontier else 0),
                 selected_cursors=selected_cursors,
             )
             # Advance before slow proofs: refused, hung, deferred or killed rows
@@ -757,13 +808,19 @@ def run(*, progress=lambda _: None):
                 frontier.write(cursor, budget)
                 if jobs_frontier:
                     jobs_frontier.write(jobs_cursor, budget)
-            rows = job_rows + [(path, age) for path, age in rows if path not in job_cursors]
+                if urgent_frontier:
+                    urgent_frontier.write(urgent_cursor, budget)
+            rows = job_rows + [
+                (path, age) for path, age in rows if path not in job_cursors and path not in urgent_cursors
+            ]
             saturated = saturated or jobs_saturated
-    last_attempted, last_job_attempted = None, None
+    last_attempted, last_job_attempted, last_urgent_attempted = None, None, None
 
     def attempted(path):
-        nonlocal last_attempted, last_job_attempted
-        if path in job_cursors:
+        nonlocal last_attempted, last_job_attempted, last_urgent_attempted
+        if path in urgent_cursors:
+            last_urgent_attempted = urgent_cursors[path]
+        elif path in job_cursors:
             last_job_attempted = job_cursors[path]
         else:
             last_attempted = selected_cursors[path]
@@ -777,7 +834,7 @@ def run(*, progress=lambda _: None):
         progress=progress,
         attempted=attempted,
     )
-    if mode == 'apply' and (last_attempted or last_job_attempted):
+    if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
         # Preserve exact Firestore nanoseconds, not an age reconstructed clock.
         # The second point write (lead ruling 4cbd2a) advances past ALL attempts,
         # never past a deferred row. Initial checkpoint survives interruption;
@@ -788,4 +845,6 @@ def run(*, progress=lambda _: None):
                 frontier.write(last_attempted, budget)
             if last_job_attempted and jobs_frontier is not None:
                 jobs_frontier.write(last_job_attempted, budget)
+            if last_urgent_attempted:
+                urgent_frontier.write(last_urgent_attempted, budget)
     return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}
