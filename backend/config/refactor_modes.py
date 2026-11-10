@@ -139,6 +139,11 @@ def batch_input_expiring_enabled() -> bool:
     return default_on('BATCH_INPUT_EXPIRING_ENABLED')
 
 
+def pipeline_ledger_enabled() -> bool:
+    """Write-only in-flight ledger; off stops ledger writes and leaves capture behavior unchanged."""
+    return default_on('PIPELINE_LEDGER')
+
+
 def uid_digest(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
