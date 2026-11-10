@@ -1735,6 +1735,7 @@ def schedule(
 
     def run() -> None:
         foreground = throttle
+        outcome = 'error'
         try:
             for _attempt in range(3):
                 if episode_compose_settle_enabled():

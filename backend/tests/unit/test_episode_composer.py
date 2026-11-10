@@ -1681,3 +1681,12 @@ def test_unknown_recording_span_does_not_admit_sectionless_paid_output(store):
         for key in ('recorded_start', 'recorded_end', 'started_at', 'finished_at', 'created_at'):
             row.pop(key, None)
     assert not composer._short_episode(list(store.rows.values()))
+
+
+def test_unexpected_compose_exception_still_releases_scheduler_ownership(store, monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(composer, 'compose', Mock(side_effect=RuntimeError('unexpected worker error')))
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    assert composer.schedule(UID, 'ep1', collaborators=_c()) is False
+    assert not composer._inflight and not composer._rerun and not composer._foreground
