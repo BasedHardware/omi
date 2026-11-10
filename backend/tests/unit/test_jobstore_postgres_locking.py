@@ -38,10 +38,11 @@ class Conn:
         yield
 
     def execute(self, sql, params=()):
-        self.sql.append(sql)
-        if self.fail and self.fail[0] in sql:
+        text = sql.as_string(None) if hasattr(sql, 'as_string') else sql
+        self.sql.append(text)
+        if self.fail and self.fail[0] in text:
             raise self.fail[1]
-        if sql.startswith('SELECT doc FROM'):
+        if text.startswith('SELECT doc FROM'):
             key = params[-1]
             return Result((self.docs[key],) if key in self.docs else None)
         return Result()

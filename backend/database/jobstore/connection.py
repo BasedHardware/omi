@@ -25,6 +25,23 @@ def _psycopg():
     return psycopg
 
 
+class _LazySql:
+    """``psycopg.sql`` behind a lazy import, so importing the job store never requires the driver.
+
+    Every dynamic identifier (table, column, namespace-derived name) is composed with
+    ``sql.Identifier`` and every value stays a bound parameter; no caller text is ever interpolated
+    into a statement.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        from psycopg import sql as _sql  # pyright: ignore[reportMissingImports]
+
+        return getattr(_sql, name)
+
+
+sql = _LazySql()
+
+
 def configure(conn: Any) -> Any:
     """Per-connection setup: restore Firestore-native values (datetime, bytes) when reading jsonb."""
     from psycopg.types.json import set_json_loads  # pyright: ignore[reportMissingImports]
