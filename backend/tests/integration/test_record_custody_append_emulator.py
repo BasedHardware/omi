@@ -382,3 +382,41 @@ def test_expiry_prunes_only_receipts_and_keeps_audio_and_recovery(monkeypatch, t
         for ref in (expired, live_receipt, recovery, row, user):
             ref.delete()
         client.close()
+
+
+def test_parked_recovery_has_a_real_privacy_blocked_exit(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    client = firestore.Client(project='demo-tokenlease-prereview', credentials=AnonymousCredentials())
+    uid, cid, session = 'synthetic-gate-privacy-' + uuid.uuid4().hex, 'record', 'custody:privacy-gate'
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    _, original = record_identity(uid, cid)
+    original_ref = client.collection('batch_pipeline_dev_jobs').document(original)
+    recovery = client.collection('batch_pipeline_dev_jobs').document(recovery_segment(uid, cid))
+    receipt = row.collection('record_custody_recoveries').document(hashlib.sha256(session.encode()).hexdigest())
+    privacy = client.collection('batch_pipeline_privacy').document(privacy_owner_key(uid))
+    user.set({'private_cloud_sync_enabled': True})
+    row.set(
+        {
+            'record_lane_owner': 'batch_live_v1',
+            'finished_at': datetime.now(timezone.utc),
+            'record_upload_revision': 7,
+            'record_upload_sessions': {},
+        }
+    )
+    original_ref.set({'state': 'ready', 'record_input_upload_revision': 7})
+    try:
+        assert custody.begin(uid, cid, session, firestore_client=client)
+        custody.finish(uid, cid, session, accepted=True, firestore_client=client)
+        assert recovery.get().to_dict()['state'] == record_recovery_gate.WAITING_STATE
+        privacy.set({'generation': 1, 'blocked': True, 'purging': True})
+        assert not record_recovery_gate.promote(
+            client, 'batch_pipeline_dev', recovery.id, datetime.now(timezone.utc).timestamp()
+        )
+        assert recovery.get().to_dict()['state'] == 'privacy_blocked'
+    finally:
+        for ref in (receipt, recovery, original_ref, row, user):
+            ref.delete()
+        client.close()  # The synthetic erasure authority intentionally survives until emulator shutdown.
