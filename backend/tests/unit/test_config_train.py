@@ -215,9 +215,14 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
     # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
     assert queues['enrichment'].enabled is True
+    enrichment = queues['enrichment']
+    assert (enrichment.fields['max_concurrent_dispatches'], enrichment.fields['max_dispatches_per_second']) == (
+        300,
+        25.0,
+    )
     fresh = queues['enrichment-fresh']
     assert fresh.enabled is True
-    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (5, 2.0)
+    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (60, 10.0)
     assert fresh.fields['max_attempts'] == -1
     provider = queues['provider-stt']
     assert provider.enabled is True
@@ -236,7 +241,13 @@ def test_staging_mirrors_prod_except_names():
         # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
     staging_queues = {q.name: q for q in staging.queues}
     for queue in prod.queues:
-        assert staging_queues[f'staging-{queue.name}'].fields == queue.fields
+        expected = queue.fields
+        # The 2026-11-10 production backlog response and live-drift reconciliation do not change staging.
+        if queue.name == 'enrichment':
+            expected = {**expected, 'max_concurrent_dispatches': 50}
+        elif queue.name == 'enrichment-fresh':
+            expected = {**expected, 'max_concurrent_dispatches': 5, 'max_dispatches_per_second': 2.0}
+        assert staging_queues[f'staging-{queue.name}'].fields == expected
 
 
 # ----------------------------------------------------------------------------- schema

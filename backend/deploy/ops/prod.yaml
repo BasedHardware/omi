@@ -155,15 +155,16 @@ cloud_tasks:
   enrichment:
     # Contract (a)/(d), lane 9: plan C3's queue for new sr- obligations (ENRICHMENT_ROUTE=enrichment_queue).
     # Created by the config-train before the backend roll that sets the route (planc, Plan C prod activation).
-    max_concurrent_dispatches: 50
+    max_concurrent_dispatches: 300
     max_dispatches_per_second: 25
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
   enrichment-fresh:
+    # First-summary latency: the 5/2 cap backlogged ~32k tasks on 2026-11-10.
     # Only recently finished conversations enter this reserved queue.
-    max_concurrent_dispatches: 5
-    max_dispatches_per_second: 2
+    max_concurrent_dispatches: 60
+    max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
