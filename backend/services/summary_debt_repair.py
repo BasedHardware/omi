@@ -226,12 +226,9 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
 
     finish(client.transaction())
     # Count completed ticks once, outside Firestore's replayable callbacks.
-    for outcome, key in (
-        ('scanned', 'scanned'),
-        ('admitted', 'admitted'),
-        ('error', 'errors'),
-        ('expired_seen', 'expired_seen'),
-        ('near_expiry_admitted', 'near_expiry_admitted'),
-    ):
-        delivery.REPAIR.labels(outcome=outcome).inc(counts[key])
+    delivery.REPAIR.labels(outcome='scanned').inc(counts['scanned'])
+    delivery.REPAIR.labels(outcome='admitted').inc(counts['admitted'])
+    delivery.REPAIR.labels(outcome='error').inc(counts['errors'])
+    delivery.REPAIR.labels(outcome='expired_seen').inc(counts['expired_seen'])
+    delivery.REPAIR.labels(outcome='near_expiry_admitted').inc(counts['near_expiry_admitted'])
     return counts
