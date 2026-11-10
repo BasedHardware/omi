@@ -6,6 +6,7 @@ import pytest
 
 from models.conversation import Conversation
 from utils.conversations import home_step, home_titles
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
 
 NOW = datetime.now(timezone.utc)
 
@@ -91,20 +92,25 @@ def test_unstamped_empty_capture_cannot_stay_processing_forever(age_hours, expec
     assert home_step.classify(data) == expected
 
 
+EMPTY_REASONS = sorted(EMPTY_BLOCKED_REASONS)
+
+
+def empty_block(**updates):
+    """A completed row with a terminal empty-output block and no summary body."""
+    updates.setdefault('summary_blocked_reason', 'empty_output_exhausted')
+    return row(structured={'title': 'Recording · 9:38 AM', 'overview': '', 'sections': []}, **updates)
+
+
 @pytest.mark.parametrize('provenance', [None, 'server_minimum', 'llm', 'generated'])
 def test_empty_blocked_stand_in_is_noise_whatever_title_provenance(provenance):
-    from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
-
-    for reason in sorted(EMPTY_BLOCKED_REASONS):
-        data = row(
-            structured={'title': 'Recording · 9:38 AM', 'overview': '', 'sections': []},
-            summary_blocked_reason=reason,
-        )
+    for reason in EMPTY_REASONS:
+        data = empty_block(summary_blocked_reason=reason)
         if provenance is not None:
             data['structured']['title_provenance'] = provenance
         assert home_step.classify(data) == 'noise'
 
 
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
 @pytest.mark.parametrize(
     'structured',
     [
@@ -116,18 +122,63 @@ def test_empty_blocked_stand_in_is_noise_whatever_title_provenance(provenance):
         },
     ],
 )
-def test_empty_block_with_summary_output_is_not_noise(structured):
-    assert home_step.classify(row(structured=structured, summary_blocked_reason='empty_output_exhausted')) == 'ready'
+def test_empty_block_with_summary_output_is_not_noise(structured, reason):
+    assert home_step.classify(row(structured=structured, summary_blocked_reason=reason)) == 'ready'
 
 
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
+@pytest.mark.parametrize('receipt', [{'summary_output_present': True}, {'summary_completed_at': NOW.timestamp()}])
+def test_empty_block_with_banked_receipt_is_not_noise(receipt, reason):
+    """A stale terminal reason must not hide a row whose summary already landed."""
+    assert home_step.classify(empty_block(summary_blocked_reason=reason, **receipt)) == 'ready'
+
+
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
+def test_empty_block_with_open_debt_is_not_noise(reason):
+    """A live summary_due_at outranks a stale terminal reason."""
+    provisional = minimum('Recording · 9:38 AM', summary_blocked_reason=reason)
+    assert home_step.classify(provisional) == 'writing_notes'
+    unprovenanced = empty_block(summary_blocked_reason=reason, summary_due_at=NOW.timestamp())
+    assert home_step.classify(unprovenanced) == 'ready'
+
+
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
+def test_late_revision_reopen_returns_to_writing_notes_or_ready(reason):
+    """Clearing the reason on a re-arm must move the row back out of noise."""
+    blocked = minimum('Recording · 9:38 AM', summary_blocked_reason=reason, summary_due_at=None)
+    assert home_step.classify(blocked) == 'noise'
+    reopened = dict(blocked, summary_blocked_reason=None, summary_due_at=NOW.timestamp())
+    assert home_step.classify(reopened) == 'writing_notes'
+    delivered = dict(blocked, summary_blocked_reason=None, summary_output_present=True)
+    assert home_step.classify(delivered) == 'ready'
+
+
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
+@pytest.mark.parametrize(
+    'curation',
+    [{'user_title': 'Mine'}, {'starred': True}, {'folder_user_set': True}, {'has_photos': True}],
+)
+def test_curated_row_outranks_empty_output_block(curation, reason):
+    assert home_step.classify(empty_block(summary_blocked_reason=reason, **curation)) == 'ready'
+
+
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
 @pytest.mark.parametrize('provenance,expected', [(None, 'ready'), ('server_minimum', 'noise')])
-def test_empty_output_noise_kill_switch_restores_legacy_classification(monkeypatch, provenance, expected):
+def test_empty_output_noise_kill_switch_restores_legacy_classification(monkeypatch, provenance, expected, reason):
+    monkeypatch.setenv('HOME_EMPTY_OUTPUT_NOISE', 'false')
+    data = empty_block(summary_blocked_reason=reason)
+    data['structured']['title_provenance'] = provenance
+    assert home_step.classify(data) == expected
+
+
+@pytest.mark.parametrize('reason', EMPTY_REASONS)
+def test_summary_output_stays_visible_with_kill_switch_off(monkeypatch, reason):
     monkeypatch.setenv('HOME_EMPTY_OUTPUT_NOISE', 'false')
     data = row(
-        structured={'title': 'Recording · 9:38 AM', 'overview': '', 'title_provenance': provenance},
-        summary_blocked_reason='empty_output_exhausted',
+        structured={'title': 'Recording · 9:38 AM', 'overview': 'Actual notes.', 'sections': []},
+        summary_blocked_reason=reason,
     )
-    assert home_step.classify(data) == expected
+    assert home_step.classify(data) == 'ready'
 
 
 @pytest.mark.parametrize('hours,expected', [(1, 'transcribing'), (-1, 'failed')])

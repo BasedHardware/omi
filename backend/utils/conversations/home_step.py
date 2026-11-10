@@ -9,8 +9,11 @@ list wire as ``home_step`` so clients stop inferring it from titles.
 - ``transcribing`` / ``writing_notes``: still being processed, at that step.
 - ``failed``: processing gave up or exceeded the Home wait; default Home hides it.
 - ``noise``: finished with nothing worth a Home row: no speech, below floor,
-  or a stand-in title (first sentence / "Recording · time") that no summary
-  will ever replace.
+  a stand-in title (first sentence / "Recording · time") that no summary will
+  ever replace, or a terminal empty-output block (``empty_output_exhausted`` /
+  ``empty_output_lifetime_exhausted``) with no overview or section body and no
+  banked receipt or open debt. ``HOME_EMPTY_OUTPUT_NOISE=false`` restores the
+  legacy stand-in-title-only rule.
 
 Presentation only: nothing is stored, search and direct links are unaffected,
 and a completed curated row (user title, star, folder, photos) is always ``ready``.
@@ -115,6 +118,11 @@ def classify(row: Mapping[str, Any]) -> str | None:
         home_empty_output_noise_enabled()
         and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS
         and not present(structured)
+        # A banked receipt or live debt outranks a stale terminal reason: the
+        # row recovered, or a late revision re-opened it.
+        and not row.get('summary_output_present')
+        and not row.get('summary_completed_at')
+        and not summary_owed(row)
     )
     if is_completed_below_floor(row) or empty_output:
         return NOISE
