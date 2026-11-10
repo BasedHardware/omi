@@ -1357,6 +1357,7 @@ def close_no_speech_capture(
     speech_seconds: float,
     audio_seconds: float,
     firestore_client: Any = None,
+    expected_privacy_generation: int | None = None,
 ) -> str:
     """Lifecycle owner for the reversible no-speech terminal.
 
@@ -1372,4 +1373,5 @@ def close_no_speech_capture(
         speech_seconds=speech_seconds,
         audio_seconds=audio_seconds,
         firestore_client=firestore_client,
+        expected_privacy_generation=expected_privacy_generation,
     )
