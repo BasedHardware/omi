@@ -155,6 +155,7 @@ vi.mock('@/components/recaps/RecapDetailPanel', () => ({
 vi.mock('@/components/conversations/FolderTabs', () => ({
   FOLDER_ALL: 'all',
   FOLDER_STARRED: 'starred',
+  FOLDER_ACTIVITY: 'activity',
   FolderTabs: () => null,
   FolderTabsSkeleton: () => null,
 }));

@@ -5,6 +5,7 @@ import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarDays, CheckSquare, Search as SearchIcon, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { conversationsForSurface } from '@/lib/conversationHome';
 import { useConversations } from '@/hooks/useConversations';
 import { useConversation } from '@/hooks/useConversation';
 import { useRecaps } from '@/hooks/useRecaps';
@@ -22,6 +23,7 @@ import {
   FolderTabsSkeleton,
   FOLDER_ALL,
   FOLDER_STARRED,
+  FOLDER_ACTIVITY,
 } from '@/components/conversations/FolderTabs';
 import {
   FolderDialog,
@@ -37,6 +39,7 @@ import { PageToolbar } from '@/components/layout/PageToolbar';
 import { useToast } from '@/components/ui/Toast';
 import { TextSwap } from '@/components/ui/TextSwap';
 import {
+  getHomeFailurePlacement,
   mergeConversations,
   getFolders,
   createFolder,
@@ -155,7 +158,8 @@ export function ConversationSplitView() {
     if (
       selectedFolderId &&
       selectedFolderId !== FOLDER_ALL &&
-      selectedFolderId !== FOLDER_STARRED
+      selectedFolderId !== FOLDER_STARRED &&
+      selectedFolderId !== FOLDER_ACTIVITY
     ) {
       params.folderId = selectedFolderId;
     }
@@ -278,15 +282,47 @@ export function ConversationSplitView() {
   // Determine if we're showing search results or regular list
   const isSearching = submittedSearchQuery.length > 0;
 
+  const [failurePlacement, setFailurePlacement] = useState(false);
+  useEffect(() => {
+    let current = true;
+    let sequence = 0;
+    setFailurePlacement(false);
+    async function reload() {
+      const request = ++sequence;
+      let confirmed = false;
+      try {
+        confirmed = await getHomeFailurePlacement();
+      } catch {
+        /* Restore previous placement. */
+      }
+      if (!current || request !== sequence) return;
+      setFailurePlacement(confirmed);
+      if (!confirmed)
+        setSelectedFolderId((previous) =>
+          previous === FOLDER_ACTIVITY ? FOLDER_ALL : previous,
+        );
+    }
+    void reload();
+    window.addEventListener('focus', reload);
+    return () => {
+      current = false;
+      window.removeEventListener('focus', reload);
+    };
+  }, [user?.uid]);
+
   // The Starred list is fetched starred-only, but search results (and the previous
   // tab's page while that fetch is in flight) are not, so keep filtering here.
   const visibleConversations = useMemo(() => {
-    const source = isSearching ? searchResults : conversations;
+    const source = conversationsForSurface(
+      isSearching ? searchResults : conversations,
+      selectedFolderId === FOLDER_ACTIVITY,
+      failurePlacement,
+    );
     if (selectedFolderId === FOLDER_STARRED) {
       return source.filter((c) => c.starred);
     }
     return source;
-  }, [isSearching, searchResults, conversations, selectedFolderId]);
+  }, [isSearching, searchResults, conversations, selectedFolderId, failurePlacement]);
 
   // Recaps only belong in the unfiltered gallery: a search, a date filter or a
   // folder is a question about conversations, and a day summary cannot answer it.
@@ -712,6 +748,7 @@ export function ConversationSplitView() {
             ) : (
               <FolderTabs
                 folders={folders}
+                showActivity={failurePlacement}
                 selectedFolderId={selectedFolderId}
                 onSelectFolder={handleFolderSelect}
                 onCreateFolder={handleCreateFolder}
@@ -868,6 +905,8 @@ export function ConversationSplitView() {
                   ? 'Nothing on this date'
                   : selectedFolderId === FOLDER_STARRED
                   ? 'No starred conversations'
+                  : selectedFolderId === FOLDER_ACTIVITY
+                  ? 'No failed conversations'
                   : selectedFolderId !== FOLDER_ALL
                   ? 'No conversations in this folder'
                   : 'Your timeline is empty'}

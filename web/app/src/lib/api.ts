@@ -179,6 +179,14 @@ export interface GetConversationsParams {
 }
 
 /** Flags owned by Omi's flag store for this account; unlisted keys keep reading PostHog. */
+/** Missing/error confirmation keeps the previous Home failure rows. */
+export async function getHomeFailurePlacement(): Promise<boolean> {
+  const snapshot = await fetchWithAuth<import('./omiApi.generated').PendingWorkSnapshot>(
+    '/v1/pending-work',
+  );
+  return snapshot.enabled === true && snapshot.home_processing_today === true;
+}
+
 export async function getClientFlags(): Promise<ClientFlagsResponse> {
   return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }

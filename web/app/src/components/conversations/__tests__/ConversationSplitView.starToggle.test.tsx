@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConversationSplitView } from '@/components/conversations/ConversationSplitView';
 import type { Conversation } from '@/types/conversation';
@@ -15,6 +15,7 @@ const harness = vi.hoisted(() => ({
   reprocessConversation: vi.fn(),
   showToast: vi.fn(),
   setContext: vi.fn(),
+  getHomeFailurePlacement: vi.fn(),
   getFolders: vi.fn(),
   getRecapDetail: vi.fn(),
 }));
@@ -25,7 +26,15 @@ vi.mock('@tschk/moonshine-next/navigation', () => ({
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
   motion: {
-    div: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    div: ({
+      children,
+      role,
+      'aria-label': label,
+    }: React.HTMLAttributes<HTMLDivElement>) => (
+      <div role={role} aria-label={label}>
+        {children}
+      </div>
+    ),
   },
 }));
 vi.mock('@/lib/analytics/posthog', () => ({
@@ -75,17 +84,13 @@ vi.mock('@/hooks/useSearchConversations', () => ({
     clear: vi.fn(),
   }),
 }));
-vi.mock('@/components/layout/PageToolbar', () => ({ PageToolbar: () => null }));
+vi.mock('@/components/layout/PageToolbar', () => ({
+  PageToolbar: ({ controls }: { controls: React.ReactNode }) => <div>{controls}</div>,
+}));
 vi.mock('@/components/conversations/ConversationDetailPanel', () => ({
   ConversationDetailPanel: () => null,
 }));
 vi.mock('@/components/recaps/RecapDetailPanel', () => ({ RecapDetailPanel: () => null }));
-vi.mock('@/components/conversations/FolderTabs', () => ({
-  FOLDER_ALL: 'all',
-  FOLDER_STARRED: 'starred',
-  FolderTabs: () => null,
-  FolderTabsSkeleton: () => null,
-}));
 vi.mock('@/components/conversations/DateFilter', () => ({ DateFilter: () => null }));
 vi.mock('@/components/conversations/MergeActionBar', () => ({
   MergeActionBar: () => null,
@@ -105,6 +110,7 @@ vi.mock('@/components/conversations/MoveFolderDialog', () => ({
 }));
 vi.mock('@/components/ui/ResizeHandle', () => ({ ResizeHandle: () => null }));
 vi.mock('@/lib/api', () => ({
+  getHomeFailurePlacement: harness.getHomeFailurePlacement,
   getFolders: harness.getFolders,
   createFolder: vi.fn(),
   updateFolder: vi.fn(),
@@ -143,6 +149,7 @@ beforeEach(() => {
   harness.reprocessConversation.mockReset();
   harness.showToast.mockReset();
   harness.setContext.mockReset();
+  harness.getHomeFailurePlacement.mockReset().mockResolvedValue(false);
   harness.getFolders.mockReset().mockResolvedValue([]);
   harness.getRecapDetail.mockReset().mockResolvedValue(null);
 });
@@ -252,5 +259,67 @@ describe('ConversationSplitView failed tile retry', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(harness.refresh).toHaveBeenCalledOnce());
     expect(harness.reprocessConversation).toHaveBeenCalledExactlyOnceWith('team-sync');
+  });
+});
+
+describe('failed conversation Activity placement', () => {
+  it('ignores an old successful confirmation after a newer failed read', async () => {
+    harness.conversations = [
+      {
+        ...conversation('failed-notes', '2026-11-10T08:00:00Z'),
+        home_step: 'failed' as const,
+      },
+    ];
+    let finish!: (confirmed: boolean) => void;
+    harness.getHomeFailurePlacement.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(<ConversationSplitView />);
+    await waitFor(() => expect(harness.getHomeFailurePlacement).toHaveBeenCalledOnce());
+    harness.getHomeFailurePlacement.mockRejectedValueOnce(new Error('offline'));
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(harness.getHomeFailurePlacement).toHaveBeenCalledTimes(2));
+    await act(async () => finish(true));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Conversation:/ })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument();
+  });
+
+  it('hides failure from All, exposes Activity retry, and restores previous Home on read failure', async () => {
+    const failed = {
+      ...conversation('failed-notes', '2026-11-10T08:00:00Z'),
+      home_step: 'failed' as const,
+    };
+    harness.conversations = [failed];
+    harness.getHomeFailurePlacement.mockResolvedValue(true);
+    render(<ConversationSplitView />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Activity' })).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole('button', { name: /Conversation:/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    expect(screen.getByRole('button', { name: /Conversation:/ })).toBeInTheDocument();
+    harness.reprocessConversation.mockResolvedValue({
+      ...failed,
+      home_step: 'ready',
+      status: 'completed',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(harness.reprocessConversation).toHaveBeenCalledExactlyOnceWith(
+        'failed-notes',
+      ),
+    );
+    harness.getHomeFailurePlacement.mockRejectedValueOnce(new Error('offline'));
+    fireEvent(window, new Event('focus'));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: /Conversation:/ })).toBeInTheDocument();
   });
 });

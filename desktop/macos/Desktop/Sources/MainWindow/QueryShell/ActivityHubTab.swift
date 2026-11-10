@@ -20,6 +20,8 @@ struct ActivityHubTab: View {
   let onSelectDestination: (MemoryHubDestination) -> Void
 
   @ObservedObject private var tasksStore = TasksStore.shared
+  @ObservedObject private var failurePlacement = HomeFailurePlacementStore.shared
+  @ObservedObject private var placementAuth = AuthState.shared
   @State private var filters = QueryShellFilters()
   @State private var searchText = ""
   @State private var screenCount: Int?
@@ -54,17 +56,32 @@ struct ActivityHubTab: View {
           headerAccessory: { EmptyView() },
           footer: { EmptyView() }
         ) {
-          SpineStream(
-            request: QueryShellRequest(text: searchText, filters: filters),
-            appState: appState,
-            memoriesViewModel: memoriesViewModel,
-            tasksStore: tasksStore,
-            searchSurface: .activity,
-            onOpenConversation: onOpenConversation,
-            onOpenMemory: onOpenMemory,
-            onOpenBrainMap: onOpenBrainMap,
-            onOpenRewind: onOpenRewind
-          )
+          VStack(alignment: .leading, spacing: 12) {
+            if !failurePlacement.activity(appState.conversations).isEmpty {
+              ScrollView {
+                FailedConversationsActivitySection(
+                  conversations: failurePlacement.activity(appState.conversations),
+                  onOpen: onOpenConversation,
+                  retry: { conversation in
+                    let updated = try await APIClient.shared.reprocessConversation(conversationId: conversation.id)
+                    appState.replaceConversation(updated)
+                    failurePlacement.remember([updated], for: AuthState.shared.userId)
+                  }
+                )
+              }.frame(maxHeight: 260)
+            }
+            SpineStream(
+              request: QueryShellRequest(text: searchText, filters: filters),
+              appState: appState,
+              memoriesViewModel: memoriesViewModel,
+              tasksStore: tasksStore,
+              searchSurface: .activity,
+              onOpenConversation: onOpenConversation,
+              onOpenMemory: onOpenMemory,
+              onOpenBrainMap: onOpenBrainMap,
+              onOpenRewind: onOpenRewind
+            )
+          }
         }
         Spacer(minLength: 0)
       }
@@ -73,6 +90,14 @@ struct ActivityHubTab: View {
       .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .task { await loadScreenCount() }
+    .task(id: placementAuth.userId) { await failurePlacement.refresh() }
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      failurePlacement.reset()
+      Task { await failurePlacement.refresh() }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      Task { await failurePlacement.refresh() }
+    }
   }
 
   private var searchBar: some View {

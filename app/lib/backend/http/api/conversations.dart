@@ -1308,8 +1308,9 @@ Future<ConversationSearchResult> searchConversationsServerResult(
   if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
     try {
-      return decodeConversationSearchResponse(jsonDecode(response.body) as Map<String, dynamic>,
-          statusCode: response.statusCode);
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final generated = wire.GeneratedSearchConversationsResponse.fromJson(json);
+      return decodeConversationSearchResponse(json, generated: generated, statusCode: response.statusCode);
     } catch (e) {
       Logger.debug('searchConversationsServer parse error: $e');
       return ConversationSearchResult.failure(statusCode: response.statusCode);

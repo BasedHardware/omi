@@ -6,7 +6,7 @@ for client compatibility. `HOME_STEP_PROJECTION` is an existing default-on
 presentation kill switch shared with conversation list `home_step`. It also gates
 `home_processing_today` in pending-work and its expanded candidate sources.
 Off returns false, uses the legacy `status == processing` query and omits
-`home_step`. Flutter retains old Home placement until an enabled snapshot
+`home_step`. Mobile, web conversation-gallery and macOS clients retain old Home placement until an enabled snapshot
 explicitly confirms true; absent fields, 404s, read errors and account changes
 restore old placement. There are no PostHog calls. Backend must ship before
 clients can apply the new placement; the backend flag remains default-on.
@@ -50,7 +50,7 @@ Flutter chooses the user's current **local recorded day**, using `started_at`
 (or `created_at`), including recordings that cross midnight: after midnight they
 move to Processing in Activity. A foreground civil-clock check and resume
 recheck update both surfaces. Relay 9e09f1 (David, 2026-11-10 11:53Z) overrides the earlier failed Home UI:
-**no failed conversation appears on mobile Home**. Failed status, failed Home
+**no failed conversation appears on any conversation Home surface**. Failed status, failed Home
 projection and failed episode members appear only in Activity with retry, on any
 day. Ledger entries keep the existing keyed retry; projected failures without a
 ledger item use the existing fenced conversation reprocess endpoint. Activity
@@ -117,3 +117,5 @@ or resolve its attention item. Keyed replay of an abandoned attempt reports
 failed once another caller has reclaimed it.
 
 No queue scheduling or priority changes are made.
+
+Relay 714b03 expands the failed placement to web `/conversations` (an Activity tab in the gallery) and native macOS Conversations (the existing Memory hub Activity destination). Web `/home` remains its chat/tasks/goals destination. These clients also require explicit pending-work confirmation and restore previous placement after failed reads; missing/false fields disable placement. They retain server Home projections through list/detail/search reconciliation and retry. macOS supplements loaded rows with failures found only by search, clearing this supplement at account reset. All clients use their existing reprocess endpoint and shared state refresh. Native Activity filters these failures from the chronological spine to avoid duplicate rows. No second chat, new backend query, new flag or persisted job state is introduced.

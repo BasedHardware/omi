@@ -41,6 +41,14 @@ requires a separate API design; it is not represented as fixed here.
 
 David at 11:53Z: no failed rows on mobile Home, including episode members, filtered views and local processing fallback. Activity lists ledger and projected failures with retry, deduplicated. Retry uses the existing fenced endpoint, disables double taps, keeps errors retryable, and updates the shared provider on success. Pending items optionally carry home_step so an expired job does not need its Home day loaded. No new query, stored state or flag. Confirmed switch off/missing/error restores previous Home placement and pending consumers.
 
-Mobile Home and Activity changed. Web /home has chat/tasks/goals and no conversation gallery; /conversations is separate. macOS uses independent Swift presentation rather than these Flutter Home rows. Their UI is unchanged by this addition; generated client types receive the optional step. New pairs 011/012 show failed Home before/after, and 013/014 show Activity before/after with retry.
+Relay 714b03 expands this to mobile Home/Activity, web /conversations All/Activity, and native macOS Conversations/existing Memory hub Activity. Web /home is chat/tasks/goals and remains unchanged. New pairs 011/012 show failed Home before/after, and 013/014 show Activity before/after with retry.
 
 Final reachability checks include search-only failed rows and locked failures. Locked rows keep a generic label and date; private titles are not rendered. Retry still uses server authorization/entitlement checks.
+
+## Relay 714b03: re-land after #25013 revert
+
+Wanted #25013 parts: optional Home projection decode and copying; authoritative list/detail/search reconciliation; terminal failure watcher stop; shared retry-response replacement; web and macOS model/presentation compatibility. Dropped as default UI: failed rows on Home. Confirmed placement routes failures only to Activity with retry on all three clients. The prior presentation remains available for the kill-switch rollback. Web has an Activity tab in its existing conversation gallery; macOS uses its existing Activity destination (INV-NAV-1, no composer or new chat).
+
+Schema inventory: main run [42812549326](https://github.com/BasedHardware/omi/actions/runs/42812549326) failed `test_inventory_openapi_route_response_decode_migration_complete` because the search route moved its generated decode behind a Dart part helper. The route now directly decodes GeneratedSearchConversationsResponse and passes it into the helper that carries home_step. All 14 inventory tests pass. No assertion, schema allowlist or CPU threshold was weakened.
+
+Renders 015/016 exercise actual web tabs/gallery/tiles and admission, with external requests blocked; 017/018 render the actual native SwiftUI components used by their destinations. They are component evidence rather than a signed full-app session. Fixture retry proves the web failure leaves Activity after success. Native retry and read-failure tests exercise injected dependencies with no network. Final integration SHA/order is recorded in the PR body after merging the pending main revert.

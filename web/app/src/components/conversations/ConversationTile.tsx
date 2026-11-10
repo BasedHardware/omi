@@ -8,7 +8,7 @@ import { reprocessConversation } from '@/lib/api';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import { conversationDisplayTitle } from '@/lib/conversationTitle';
-import { isConversationProcessing } from '@/lib/conversationHome';
+import { isConversationProcessing, isFailedConversation } from '@/lib/conversationHome';
 import type { Conversation } from '@/types/conversation';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
@@ -45,7 +45,7 @@ export const ConversationTile = memo(function ConversationTile({
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   const retryPending = useRef(false);
-  const isFailed = conversation.home_step === 'failed';
+  const isFailed = isFailedConversation(conversation);
   // One star request at a time, so a failed one puts back the value it replaced
   const starRequestPending = useRef(false);
 

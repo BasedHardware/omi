@@ -19,6 +19,12 @@ function conversation(home_step?: string | null): Conversation {
 }
 
 describe('ConversationTile Home projection', () => {
+  it('keeps a status-only failed Activity row retryable', () => {
+    render(<ConversationTile conversation={{ ...conversation(), status: 'failed' }} />);
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(screen.queryByText('Processing')).not.toBeInTheDocument();
+  });
+
   it('labels a failed projection and keeps it openable without Processing', () => {
     const open = vi.fn();
     render(<ConversationTile conversation={conversation('failed')} onClick={open} />);
