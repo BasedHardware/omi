@@ -249,9 +249,13 @@ class _ContentionStormDamper:
     exhaustion-stamped window callers schedule against stays
     exhaustion-driven.
 
-    One store instance is one process's view of one namespace, and the
-    scheduler shards, the pump, intake and maintenance all share it — arming
-    here damps all of them, not just the caller that exhausted. A successful
+    One store instance is one process's view of one namespace, and every
+    instance of the same namespace now shares ONE damper through the
+    process-level registry (``shared_storm_damper``): the scheduler shards,
+    the pump, intake and maintenance all arm and consult the same per-label
+    windows, so arming damps all of them, not just the caller that exhausted.
+    A store that injects an explicit ``storm_damper=`` keeps its private
+    damper and never joins the registry. A successful
     commit clears the ladder, but only if no concurrent arm happened since
     the entry consulted (generation guard, mirroring the pull loop's
     generation-based reset).
@@ -353,6 +357,59 @@ class _ContentionStormDamper:
             return len(self._generations)
 
 
+# One damper per namespace per process, shared by every ``FirestoreStore``
+# constructed without an injected ``storm_damper=``. The process mints many
+# store instances for one namespace — serving, intake, provider STT, voice
+# evidence and cap-hold admission each construct their own, several per call —
+# and a per-instance damper made an exhaustion's re-strike window die with the
+# instance that armed it: the next entry of the same label on a sibling
+# instance consulted an empty damper and re-struck the hot documents at once,
+# exactly the lockstep burn the damper exists to prevent. The registry makes
+# the damper's contract true process-wide while staying bounded: one small
+# object per namespace (prod/dev processes hold one or two; the label cap
+# inside each damper still bounds its own state).
+_SHARED_STORM_DAMPERS: dict[str, _ContentionStormDamper] = {}
+_SHARED_STORM_DAMPERS_LOCK = threading.Lock()
+
+
+def shared_storm_damper(namespace: str) -> _ContentionStormDamper:
+    """The process-shared storm damper for ``namespace``.
+
+    Every store built without an explicit ``storm_damper=`` gets this one
+    object, so an exhaustion armed through any instance spaces the next
+    entry of the label on every instance of the same namespace. The
+    double-checked get-or-create is locked because stores are constructed
+    on executor threads (intake admissions, serving pulls); the unsynchronized
+    fast path is safe under the GIL's dict-read guarantee.
+
+    An explicitly injected damper is honored verbatim and never registered:
+    tests own their damper identity, and a foreign damper must not leak
+    state into the process-shared one.
+
+    Failure-Class: FC-storm-damper-window-dies-with-its-store-instance
+    """
+    damper = _SHARED_STORM_DAMPERS.get(namespace)
+    if damper is None:
+        with _SHARED_STORM_DAMPERS_LOCK:
+            damper = _SHARED_STORM_DAMPERS.get(namespace)
+            if damper is None:
+                damper = _ContentionStormDamper()
+                _SHARED_STORM_DAMPERS[namespace] = damper
+    return damper
+
+
+def reset_shared_storm_dampers() -> None:
+    """Drop every process-shared damper.
+
+    Test-isolation seam: a test that arms a label through one store must not
+    leak that window into the next test's stores of the same namespace. The
+    unit conftest resets the registry around every test; production code
+    never calls this — the process-shared windows are the feature.
+    """
+    with _SHARED_STORM_DAMPERS_LOCK:
+        _SHARED_STORM_DAMPERS.clear()
+
+
 class FirestoreStore:
     # Storm-damper ladder shape. Delays mirror the worker pull loop's damper
     # (exponential ladder under an equal jitter) but cap well below the pull
@@ -375,7 +432,6 @@ class FirestoreStore:
     def __init__(
         self, namespace: str, *, firestore_client: Any = None, storm_damper: '_ContentionStormDamper | None' = None
     ):
-        self._storm_damper = storm_damper if storm_damper is not None else _ContentionStormDamper()
         # Require a stage-qualified name; never infer dev from the customer project.
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'} and not re.fullmatch(
             r'batch_pipeline_test_[a-z0-9_]{1,40}', namespace
@@ -384,6 +440,16 @@ class FirestoreStore:
         self.namespace = namespace
         self._client = firestore_client
         self._require_stage()
+        # One process-shared damper per namespace: an exhaustion armed through
+        # any instance must space the next entry of that label on every
+        # instance, and the process mints many instances for one namespace —
+        # serving, intake, provider STT, voice evidence and cap-hold admission
+        # each construct their own, several per call. A per-instance damper
+        # let that window die with its store, so siblings re-struck the hot
+        # documents at once. An injected damper stays private to this store.
+        #
+        # Failure-Class: FC-storm-damper-window-dies-with-its-store-instance
+        self._storm_damper = storm_damper if storm_damper is not None else shared_storm_damper(namespace)
 
     def _require_stage(self):
         if self.namespace.startswith('batch_pipeline_test_'):

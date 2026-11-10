@@ -392,3 +392,24 @@ def isolated_git_env(monkeypatch):
     local_vars = subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).split()
     for name in [*local_vars, 'GIT_NAMESPACE']:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_shared_storm_dampers():
+    """Reset the process-shared storm-damper registry around every test.
+
+    Store instances of one namespace deliberately share one damper now
+    (``database.batch_pipeline_store.shared_storm_damper``); a window armed
+    through one test's store must not leak into the next test's stores of
+    the same namespace. The registry is only touched when this process has
+    actually imported the store module (pytest imports test modules during
+    collection), so files that never exercise the batch store pay two dict
+    lookups and no import.
+    """
+    module = sys.modules.get('database.batch_pipeline_store')
+    if module is not None:
+        module.reset_shared_storm_dampers()
+    yield
+    module = sys.modules.get('database.batch_pipeline_store')
+    if module is not None:
+        module.reset_shared_storm_dampers()
