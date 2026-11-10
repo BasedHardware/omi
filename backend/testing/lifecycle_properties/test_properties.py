@@ -242,7 +242,7 @@ async def test_leased_lapsed_token_has_named_exit(lifecycle_sim, monkeypatch, ex
         # fence. The original frame token stays lapsed until that socket sends
         # another durable frame batch.
         record_audio.renew_record_token_lease(
-            sim.uid, sim.cid, source='custody_append', firestore_client=sim.stack.firestore
+            sim.uid, sim.cid, source='custody_append', session='custody:lifecycle', firestore_client=sim.stack.firestore
         )
         assert sim.row()['record_upload_revision'] == revision
         record_custody_append.finish(

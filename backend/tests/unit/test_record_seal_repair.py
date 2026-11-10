@@ -420,7 +420,9 @@ def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, 
     assert repair.apply_seals(store, result, result['plan_sha256']) == {'state_changed': 1}
     assert plan(source)['entries'][0]['disposition'] == 'upload_pending'
     # The durable file append is a throttled heartbeat, still no early bump.
-    renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=client)
+    renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', session='custody:plan-race', firestore_client=client
+    )
     assert client.rows[PATH].get('record_upload_revision', 0) == 0
     record_custody_append.finish('synthetic', 'record', 'custody:plan-race', accepted=True, firestore_client=client)
     assert client.rows[PATH]['record_upload_revision'] == 1

@@ -52,10 +52,17 @@ def begin(uid, cid, session, *, firestore_client=None):
     @firestore.transactional
     def commit(tx):
         owner = client.collection('users').document(uid).get(transaction=tx).to_dict() or {}
+        # Sync opt-out keeps its no-custody path, but never bypasses erasure.
+        # Actual custody enrolls the same conversation checks as finish/recovery.
+        assert_batch_write_allowed(
+            client, tx, uid, conversation_ids=() if owner.get('private_cloud_sync_enabled', True) is False else (cid,)
+        )
         if owner.get('private_cloud_sync_enabled', True) is False:
             return False
-        assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
-        row = ref.get(transaction=tx).to_dict() or {}
+        snapshot = ref.get(transaction=tx)
+        if not snapshot.exists:
+            raise RecordCustodyFenceLost('custody target no longer exists; retain local audio')
+        row = snapshot.to_dict() or {}
         if (
             not row
             or row.get('deleted')

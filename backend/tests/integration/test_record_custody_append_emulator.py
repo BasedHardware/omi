@@ -430,3 +430,57 @@ def test_parked_recovery_has_a_real_privacy_blocked_exit(monkeypatch):
         for ref in (receipt, recovery, original_ref, row, user):
             ref.delete()
         client.close()  # The synthetic erasure authority intentionally survives until emulator shutdown.
+
+
+@pytest.mark.parametrize(
+    'reason', ['missing_owner', 'erasure', 'blocked', 'purging', 'privacy_declined', 'missing_row']
+)
+async def test_admission_refuses_before_any_synthetic_archive(monkeypatch, reason):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    client = _emulator_client()
+    uid = 'synthetic-admission-' + uuid.uuid4().hex
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document('record')
+    privacy = client.collection('batch_pipeline_privacy').document(privacy_owner_key(uid))
+    deletion = client.collection('account_deletions').document(uid)
+    user.set({'private_cloud_sync_enabled': True})
+    original = {'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True, 'record_upload_sessions': {}}
+    row.set(original)
+    if reason == 'missing_owner':
+        user.delete()
+    elif reason == 'erasure':
+        deletion.set({'wipe_status': 'in_progress'})
+    elif reason in {'blocked', 'purging'}:
+        privacy.set({'generation': 1, 'blocked': reason == 'blocked', 'purging': reason == 'purging'})
+    elif reason == 'privacy_declined':
+        row.update({'private_cloud_sync_enabled': False})
+    else:
+        row.delete()
+    monkeypatch.setattr(custody, 'get_firestore_client', lambda: client)
+    before = row.get().to_dict()
+    archive = Mock(return_value=['synthetic-object'])
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload(uid, 'record', 'denied')
+        paths = await request.archive(archive, uid, ['synthetic-audio'], {})
+        request.stored(['synthetic-audio'], paths)
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    try:
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as error:
+            await upload()
+        assert error.value.status_code == 503
+        archive.assert_not_called()
+        assert row.get().to_dict() == before
+        assert list(row.collections()) == []
+    finally:
+        # The synthetic authority is retained until isolated emulator shutdown.
+        row.delete()
+        user.delete()
+        deletion.delete()
+        client.close()

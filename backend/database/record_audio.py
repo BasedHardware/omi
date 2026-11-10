@@ -243,6 +243,10 @@ def renew_record_token_lease(
             # Publish only after renewal succeeds, but retain post-storage
             # observations if its committed response is lost and retried.
             observed_late |= late
+            # An unowned/non-serving archive may observe lateness, never renew
+            # another upload's custody. Frame renewal keeps its own contract.
+            if not serving or not session:
+                return False, late, []
         if (
             source == 'custody_append'
             and targets

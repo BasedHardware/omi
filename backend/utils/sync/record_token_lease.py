@@ -140,6 +140,7 @@ async def _renew_after_append(uid: str, cid: str, state: UploadState | None) -> 
         uid,
         cid,
         source='custody_append',
+        session=state.get('session') if state is not None else None,
         late_observation=observed,
     )
     if state is not None and observed.get('late'):

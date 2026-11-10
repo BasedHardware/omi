@@ -299,7 +299,9 @@ def test_custody_heartbeat_cannot_renew_a_previously_mislabelled_pusher(world):
         record_audio_partial=None,
         record_upload_sessions={'old-frame': frame, 'custody:live': fence},
     )
-    assert record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=world)
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', session='custody:live', firestore_client=world
+    )
     tokens = world.rows[PATH]['record_upload_sessions']
     assert tokens['old-frame'] == frame
     assert tokens['custody:live']['last_signal_at'] == NOW

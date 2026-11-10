@@ -123,7 +123,9 @@ def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled,
     producer = {**POD, 'pod': ''} if source == 'custody_append' else POD
     enabled.rows[PATH]['record_upload_sessions']['s'].update(producer, signal_source=source)
     before = deepcopy(enabled.rows[PATH])
-    assert record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source=source, session='s', firestore_client=enabled
+    )
     row = enabled.rows[PATH]
     assert row['record_upload_revision'] == before['record_upload_revision'] + (source == 'frames')
     assert row['record_upload_sessions']['s'] == {
@@ -134,7 +136,9 @@ def test_late_signal_reactivates_token_and_invalidates_partial_revision(enabled,
     }
     assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
     assert bool(
-        record_audio.renew_record_token_lease('synthetic', 'record', source=source, firestore_client=enabled)
+        record_audio.renew_record_token_lease(
+            'synthetic', 'record', source=source, session='s', firestore_client=enabled
+        )
     ) is (source == 'frames')
     assert row['record_upload_revision'] == (8 if source == 'frames' else 7)
 
@@ -144,7 +148,9 @@ def test_custody_renews_only_custody_tokens_and_frames_are_exact(enabled):
     enabled.rows[PATH]['record_upload_sessions']['legacy'] = True
     record_audio.renew_record_token_lease('synthetic', 'record', source='frames', session='s', firestore_client=enabled)
     assert enabled.rows[PATH]['record_upload_sessions']['other']['last_signal_at'] == TOKEN['last_signal_at']
-    record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
+    record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', session='other', firestore_client=enabled
+    )
     assert enabled.rows[PATH]['record_upload_sessions']['other']['last_signal_at'] == NOW
     assert enabled.rows[PATH]['record_upload_sessions']['legacy'] is True
     assert enabled.rows[PATH]['record_upload_sessions']['s']['signal_source'] == 'frames'
@@ -153,7 +159,9 @@ def test_custody_renews_only_custody_tokens_and_frames_are_exact(enabled):
 def test_custody_upload_survives_abandon_or_pod_death(enabled):
     enabled.rows[PATH]['record_upload_sessions']['s'].update(pod='', signal_source='custody_append')
     enabled.rows[PATH]['record_upload_sessions']['s']['abandoned_at'] = NOW - 4000
-    record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=enabled)
+    record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', session='s', firestore_client=enabled
+    )
     tokens = enabled.rows[PATH]['record_upload_sessions']
     assert 'abandoned_at' not in tokens['s']
     proof = {'namespace': 'prod-omi-backend', 'captured_at': NOW, 'pods': {}}
@@ -361,17 +369,17 @@ def test_custody_exact_clear_and_late_counter_follow_acceptance(enabled, accepte
 def test_custody_heartbeat_writes_at_most_once_per_half_lease(enabled, monkeypatch):
     enabled.rows[PATH]['record_upload_sessions'] = {'custody': {**TOKEN, 'pod': '', 'signal_source': 'custody_append'}}
     assert record_audio.renew_record_token_lease(
-        'synthetic', 'record', source='custody_append', firestore_client=enabled
+        'synthetic', 'record', source='custody_append', session='custody', firestore_client=enabled
     )
     for seconds in (0, 1, 60, 1949):
         monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + seconds)
         assert not record_audio.renew_record_token_lease(
-            'synthetic', 'record', source='custody_append', firestore_client=enabled
+            'synthetic', 'record', source='custody_append', session='custody', firestore_client=enabled
         )
         assert not enabled.transactions[-1].updates
     monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + 1950)
     assert record_audio.renew_record_token_lease(
-        'synthetic', 'record', source='custody_append', firestore_client=enabled
+        'synthetic', 'record', source='custody_append', session='custody', firestore_client=enabled
     )
     assert len(enabled.transactions[-1].updates) == 1
 
