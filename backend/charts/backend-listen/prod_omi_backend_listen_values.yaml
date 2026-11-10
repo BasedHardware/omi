@@ -100,6 +100,8 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
