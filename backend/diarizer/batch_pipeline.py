@@ -750,6 +750,22 @@ class PipelineWorker:
 
     def _process(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         states: dict[str, dict[str, Any]] = {}
+        # Per-flight stage cursor: the deepest typed boundary each unit has
+        # completed evidence for. The orchestration between the per-item
+        # ``fail()`` boundaries runs unwrapped, so one exception there used to
+        # propagate out of the flight: the pump received no results at all,
+        # settled outcomes were re-leased for duplicate GPU work, admission
+        # holds re-walked the ladder, and every unit in the flight ended
+        # evidence-less at the anonymous ``stage=unknown
+        # worker_reason=unclassified`` terminal quarantine (the ladder's
+        # ceiling attempt arrives with no diagnosis to preserve). The salvage
+        # below reads this cursor instead and closes each affected unit's
+        # evidence at its real position; a unit the escape reached before its
+        # entry boundary completed is attributed to ``fetch_decode`` — the
+        # boundary it was entering — so no unit of a salvaged flight stays
+        # anonymous.
+        stage_cursor: dict[str, str] = {}
+        validated_windows: dict[str, int] = {}
         windows, failed, results = [], set(), []
         failure_records = []
         held = set()
@@ -956,6 +972,7 @@ class PipelineWorker:
                     except Exception as exc:
                         fail(item, exc, 'fetch_decode')
                         continue
+                    stage_cursor[item.segment_id] = WorkerValidationStage.FETCH_DECODE.value
                     frozen_languages[item.segment_id] = frozen_language
                     frozen_streams[item.segment_id] = frozen_stream
                     strict_shadow[item.segment_id] = shadow_silent
@@ -1102,6 +1119,7 @@ class PipelineWorker:
                             # Keep encrypted audio for independent recovery; this
                             # is not evidence of an empty recognizer response.
                             raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
+                    stage_cursor[item.segment_id] = WorkerValidationStage.VAD_WINDOWS.value
                     if not clips:
                         self.counts['silence'] += 1
                         continue
@@ -1195,6 +1213,15 @@ class PipelineWorker:
                             if window.core_start <= midpoint < window.core_end:
                                 # A left-context window may own a word straddling the seam.
                                 states[window.segment_id]['words'].append({**word, 'timestamp': [max(0.0, start), end]})
+                        validated = validated_windows.get(window.segment_id, 0) + 1
+                        validated_windows[window.segment_id] = validated
+                        # A unit's windows can pack across batches; the word_clocks
+                        # boundary completes only once every window cut for the
+                        # unit has validated. The left-context prefix window is
+                        # the predecessor's audio, so the unit's own clip count
+                        # from the shapes record is the completion threshold.
+                        if validated >= shapes[window.segment_id]['windows']:
+                            stage_cursor[window.segment_id] = WorkerValidationStage.WORD_CLOCKS.value
                     except Exception as exc:
                         fail(states[window.segment_id]['item'], exc, 'word_clocks')
 
@@ -1368,6 +1395,7 @@ class PipelineWorker:
                     # run qualifies it (see batch_pipeline_runtime.md).
                     short = not single and short_speech_single_enabled() and short_single_region(evidence)
                     prepared.append((item, state, words, silence, duration, single, evidence, short))
+                    stage_cursor[item.segment_id] = WorkerValidationStage.ASSEMBLE_WORDS.value
                 except Exception as exc:
                     fail(item, exc, stage)
 
@@ -1469,6 +1497,85 @@ class PipelineWorker:
                 except Exception as exc:
                     fail(item, exc, stage)
             handed_off = True
+        except FatalGpuError:
+            raise
+        except Exception as error:
+            # An orchestration escape between the typed per-item stage
+            # boundaries (left-context bookkeeping, window packing, flight
+            # segmentation and diarization assembly) must not void the whole
+            # flight. Propagating hands the pump an empty result map: units
+            # that already settled lose their outcomes and are re-leased for
+            # duplicate GPU work, admission holds re-walk the ladder as
+            # ordinary failures, and every affected unit climbs evidence-less
+            # to the ceiling attempt, whose terminal record collapses to the
+            # anonymous ``stage=unknown worker_reason=unclassified`` quarantine
+            # because no diagnosis was ever preserved on the job. Salvage
+            # instead: settled outcomes stand, held units keep their admission
+            # holds, and each unsettled unit leaves as an ordinary retryable
+            # failure whose evidence is the unit's stage cursor with the
+            # closed ``unknown`` reason — never the escape's exception text —
+            # so the ladder's eventual terminal record names the last stage
+            # the unit actually completed. A unit the escape reached before
+            # its entry boundary completed is attributed to ``fetch_decode``,
+            # the boundary it was entering: the evidence slot is diagnostics
+            # only and decides no transition a typed boundary did not make.
+            if is_fatal_cuda_error(error):
+                self._unavailable = True
+                raise FatalGpuError('fatal CUDA error; restart GPU chain') from error
+            settled = {entry[1].segment_id for entry in pending_persist} | {
+                result.segment_id for result in results if result is not None
+            }
+            salvaged = []
+            for flight_item in items:
+                if flight_item.segment_id in settled:
+                    continue
+                if flight_item.segment_id in held:
+                    salvaged.append(
+                        HeldWork(flight_item.segment_id, reason=held_reasons.get(flight_item.segment_id, ''))
+                    )
+                    continue
+                cursor_stage = stage_cursor.get(flight_item.segment_id)
+                if cursor_stage is None:
+                    cursor_stage = WorkerValidationStage.FETCH_DECODE.value
+                # A unit whose typed ``fail()`` died mid-way (a raise from the
+                # fault-channel hooks inside the handler) is already in
+                # ``failed`` and already counted, but never emitted a result;
+                # it is salvaged here exactly once, without a second count.
+                if flight_item.segment_id not in failed:
+                    self.counts['failed'] += 1
+                salvaged.append(
+                    FailedWork(
+                        flight_item.segment_id,
+                        worker_failure=transient_failure_evidence(cursor_stage, WorkerValidationReason.UNKNOWN.value),
+                    )
+                )
+                if self.on_failure:
+                    try:
+                        self.on_failure(flight_item, type(error).__name__)
+                    except Exception as callback_error:
+                        logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
+                shape = shapes[flight_item.segment_id]
+                failure_records.append(
+                    (
+                        type(error).__name__,
+                        cursor_stage,
+                        flight_item.segment_id,
+                        WorkerValidationReason.UNKNOWN.value,
+                        shape['samples'],
+                        shape['vad_spans'],
+                        shape['windows'],
+                        shape['asr_words'],
+                        len(states.get(flight_item.segment_id, {}).get('words', [])),
+                        error_site_field(error),
+                    )
+                )
+            results.extend(salvaged)
+            logger.error(
+                'event=batch_chain outcome=salvaged exception_type=%s salvaged=%d settled=%d',
+                type(error).__name__,
+                len(salvaged),
+                len(items) - len(salvaged),
+            )
         finally:
             if prefetch is not None:
                 prefetch.close()
