@@ -244,6 +244,35 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  testWidgets('processing stand-in resolves to full detail when composed notes arrive', (tester) async {
+    final detail = fixture('many-noisy');
+    final opening = Episode(
+        id: '',
+        live: false,
+        startedAt: detail.startedAt,
+        lastActivityAt: detail.lastActivityAt,
+        members: [detail.members.first],
+        conversationIds: [detail.members.first.id]);
+    final ids = <String>[];
+    await _pump(tester, opening, before: false, loadDetail: (id) async {
+      ids.add(id);
+      return ApiSuccess(detail);
+    });
+    expect(ids, isEmpty);
+    final provider = Provider.of<EpisodeProvider>(tester.element(find.byType(EpisodePage)), listen: false);
+    provider
+        .debugSetHomeEpisodes([detail.copyWith(members: detail.members.where((m) => m.homeStep != 'noise').toList())]);
+    await tester.pumpAndSettle();
+    await _bottom(tester);
+    expect(ids, [detail.id]);
+    expect(find.text('8 short clips hidden'), findsOneWidget);
+    provider.notifyListeners();
+    await tester.pump();
+    expect(ids, [detail.id], reason: 'Unchanged notes never re-read detail.');
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('old server retains opening snapshot; kill switch skips new detail request', (tester) async {
     var calls = 0;
     Future<ApiResult<Episode>> unavailable(String id) async {

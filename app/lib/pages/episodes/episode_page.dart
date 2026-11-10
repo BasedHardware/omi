@@ -28,39 +28,51 @@ class _EpisodePageState extends State<EpisodePage> {
   bool _redesigned = true;
   Episode? _detail;
   int _generation = 0;
+  late final Future<bool> _gate;
+  (String, DateTime?, bool)? _requested;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    _gate = EpisodeDetailGate.enabled(readFlag: widget.readFlag);
   }
 
-  @override
-  void didUpdateWidget(EpisodePage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.episode.id != widget.episode.id) {
-      _detail = null;
-      unawaited(_load());
-    }
+  void _refresh((String, DateTime?, bool) key) {
+    if (_requested == key) return;
+    _requested = key;
+    if (_detail?.id != key.$1) _detail = null;
+    unawaited(_load(key.$1));
   }
 
-  Future<void> _load() async {
+  Future<void> _load(String episodeId) async {
     final generation = ++_generation;
-    final enabled = await EpisodeDetailGate.enabled(readFlag: widget.readFlag);
+    final enabled = await _gate;
     if (!mounted || generation != _generation) return;
     setState(() => _redesigned = enabled);
-    if (!enabled || widget.episode.id.isEmpty) return;
+    if (!enabled || episodeId.isEmpty) return;
     final result =
-        await (widget.loadDetail ?? context.read<EpisodeProvider?>()?.detailFor ?? api.getEpisode)(widget.episode.id);
+        await (widget.loadDetail ?? context.read<EpisodeProvider?>()?.detailFor ?? api.getEpisode)(episodeId);
     if (!mounted || generation != _generation) return;
     if (result case ApiSuccess<Episode>(:final data)) setState(() => _detail = data);
     // An older/offline server retains the opening snapshot and normal row navigation.
   }
 
   @override
-  Widget build(BuildContext context) => EpisodePageContent(
-        episode: _detail ?? widget.episode,
-        detailMembers: _redesigned ? _detail?.members : null,
-        redesigned: _redesigned,
-      );
+  Widget build(BuildContext context) {
+    final revision = context.select<EpisodeProvider?, (String, DateTime?, bool)>((episodes) {
+      final opened = widget.episode;
+      final current = episodes?.homeEpisodes
+              .where(
+                  (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id)
+              .firstOrNull ??
+          opened;
+      return (current.id, current.stateUpdatedAt, current.composed);
+    });
+    _refresh(revision);
+    return EpisodePageContent(
+      episode: _detail ?? widget.episode,
+      detailMembers: _redesigned ? _detail?.members : null,
+      redesigned: _redesigned,
+    );
+  }
 }

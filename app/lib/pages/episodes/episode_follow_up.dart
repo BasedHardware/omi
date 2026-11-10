@@ -10,7 +10,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Saves through the canonical Tasks provider/API. No second todo store.
+/// Saves through the canonical Tasks provider/API. The canonical provider owns saved tasks.
 class EpisodeFollowUp extends StatefulWidget {
   const EpisodeFollowUp({super.key, required this.episodeId, required this.text, required this.conversationId});
   final String episodeId;

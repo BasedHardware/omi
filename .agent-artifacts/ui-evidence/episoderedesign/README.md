@@ -7,6 +7,7 @@ and no count badge on Home. PR #25022, lead refactor-lead. Synthetic data only.
 
 These captures render the real EpisodePage on both sides: before has the operational
 kill switch set true; after has it false. No test-only proposal widget remains.
+Full detail also refreshes when a processing stand-in resolves or a new notes revision arrives; unrelated provider notifications do not re-read.
 The default is on. Set `mobile-episode-detail-redesign-disabled=true` through the
 existing mobile flag service to restore the previous layout on next page open.
 No remote flag row is created or changed by this PR.
