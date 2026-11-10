@@ -23,6 +23,13 @@ def _repair_age_orders(client):
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        CoveredByEntry(
+            'database.record_custody_receipts.prune',
+            covered_by=('database.record_custody_receipts.expired_page',),
+            reason='bounded cleanup delegates its only query to expired_page; deletes use document batches',
+            expect_observed=False,
+            body_digest='a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
+        ),
         DriverEntry(
             'database.record_custody_receipts.expired_page',
             neutrals={
@@ -457,6 +464,13 @@ def entries():
             'database.batch_pipeline_store.held_merge_owners',
             domains={'namespace': namespaces, 'after': [None, 'owner-hash']},
             neutrals={'limit': (50, 'bounded page size')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.promote_record_recoveries',
+            covered_by=('database.batch_pipeline_store.due',),
+            reason='bounded promotion delegates its waiting-state query to due; promotion uses document transactions',
+            expect_observed=False,
+            body_digest='ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',
