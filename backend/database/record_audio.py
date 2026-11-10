@@ -201,8 +201,11 @@ def renew_record_token_lease(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
 
+    observed_late = False
+
     @firestore.transactional
     def commit(tx):
+        nonlocal observed_late
         row = ref.get(transaction=tx).to_dict() or {}
         if (
             not row
@@ -220,6 +223,11 @@ def renew_record_token_lease(
         if closed_frame and not serving:
             return False, True, []  # Shadow observes a seal; it never mutates it.
         identified = [token for token in sessions.values() if isinstance(token, dict)]
+        if source == 'custody_append':
+            late |= any(record_seal_rules.token_lease_lapsed(token, now, row=row) for token in identified)
+            # Publish only after renewal succeeds, but retain post-storage
+            # observations if its committed response is lost and retried.
+            observed_late |= late
         if (
             source == 'custody_append'
             and identified
@@ -229,7 +237,7 @@ def renew_record_token_lease(
                 for token in identified
             )
         ):
-            return False, False, []
+            return False, late, []
         changed = False
         # Restore only this socket's identity. Serve also reopens complete
         # seals so newly retained interior audio gets a continuation pass.
@@ -293,5 +301,5 @@ def renew_record_token_lease(
         for gap in gaps:
             lease_metrics.SIGNAL_GAP.observe(gap)
     if late_observation is not None:
-        late_observation['late'] = late and source == 'frames'
+        late_observation['late'] = late or observed_late
     return changed

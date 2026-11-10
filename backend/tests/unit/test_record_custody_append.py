@@ -10,7 +10,7 @@ from google.api_core.exceptions import ServiceUnavailable
 from starlette.responses import JSONResponse
 
 from database import record_custody_append as database
-from database import record_token_lease_metrics as metrics
+from database import record_token_lease_metrics as metrics, record_audio
 from config.record_audio import record_identity
 from config import record_seal_rules as lease
 from database.batch_pipeline_record_lease_recovery import recovery_segment
@@ -30,6 +30,7 @@ async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mo
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
     client = StrictFirestore({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
     counter = metrics.LATE_APPEND._value.get()
     before = deepcopy(client.rows)
 
@@ -40,7 +41,8 @@ async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mo
         assert row['record_upload_revision'] == 7
         assert ('custody:request' in row['record_upload_sessions']) is (mode == 'serve')
         if durable:
-            request.stored(['local'], ['durable-archive'])
+            archived = await request.archive(lambda *args: ['durable-archive'], 'synthetic', ['local'], {})
+            request.stored(['local'], archived)
         return JSONResponse(status_code=status, content={'status': 'synthetic'})
 
     if status == 202 and not durable and mode == 'serve':
@@ -53,7 +55,7 @@ async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mo
     assert 'custody:request' not in client.rows[PATH]['record_upload_sessions']
     assert client.rows[PATH]['record_upload_revision'] == 7 + (mode == 'serve' and accepted)
     assert metrics.LATE_APPEND._value.get() == counter + (mode != 'off' and accepted)
-    if mode != 'serve':
+    if mode == 'off' or (mode == 'shadow' and not durable):
         assert client.rows == before
     assert request._upload.get() is None
 
@@ -335,13 +337,16 @@ def test_finish_receipt_makes_repeated_completion_read_only(monkeypatch, late):
     assert metrics.LATE_APPEND._value.get() == counter + int(late)
 
 
+@pytest.mark.parametrize('transition_after_begin', [False, True])
 @pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
-async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(monkeypatch, seal):
+async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(
+    monkeypatch, seal, transition_after_begin
+):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    row = {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': seal == 'closed'}
-    if seal == 'partial':
+    row = {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': seal == 'closed' and not transition_after_begin}
+    if seal == 'partial' and not transition_after_begin:
         row['record_audio_partial'] = {'version': 1, 'upload_revision': 7}
     client = StrictFirestore({PATH: row, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
@@ -362,6 +367,10 @@ async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(
     @request.custody_upload
     async def upload():
         await request.begin_upload('synthetic', 'record', 'ambiguous')
+        if transition_after_begin:
+            client.rows[PATH]['record_audio_closed'] = seal == 'closed'
+            if seal == 'partial':
+                client.rows[PATH]['record_audio_partial'] = {'version': 1, 'upload_revision': 7}
         request.stored(['local'], ['committed-object'])
         return JSONResponse(status_code=202, content={'status': 'queued'})
 
@@ -415,3 +424,120 @@ def test_recovery_receipt_counts_once_after_a_committed_reply_is_lost(monkeypatc
     assert lost == ([True] if lose_reply else [])
     assert metrics.LATE_APPEND._value.get() == counter + 1
     assert not client.transactions[-1].has_written
+
+
+@pytest.mark.parametrize('mode,percent', [('shadow', '100'), ('serve', '0'), ('serve', '100')])
+@pytest.mark.parametrize('transition', ['none', 'closed', 'partial', 'lapsed'])
+@pytest.mark.parametrize('lose_reply', [False, True])
+async def test_post_storage_late_observation_survives_repair_and_renewal_reply_loss(
+    monkeypatch, mode, percent, transition, lose_reply
+):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = StrictFirestore(
+        {
+            PATH: {**ROW, 'record_audio_closed': False, 'record_upload_sessions': {}},
+            ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
+        }
+    )
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
+    counter = metrics.LATE_APPEND._value.get()
+    objects = []
+    lost = []
+    original_commit = StrictFirestoreTransaction._commit
+
+    def commit_then_lose_renewal_reply(tx):
+        original_commit(tx)
+        if lose_reply and objects and not lost:
+            lost.append(True)
+            raise ServiceUnavailable('synthetic renewal response lost after commit')
+
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit_then_lose_renewal_reply)
+
+    def archive(uid, paths, metadata):
+        assert metrics.LATE_APPEND._value.get() == counter
+        row = client.rows[PATH]
+        if transition == 'closed':
+            row['record_audio_closed'] = True
+        elif transition == 'partial':
+            row['record_audio_partial'] = {'version': 1, 'upload_revision': 7}
+        elif transition == 'lapsed':
+            row['record_upload_sessions']['older'] = deepcopy(ROW['record_upload_sessions']['s'])
+        objects.extend(paths)  # The durable commit precedes the renewal transaction.
+        return ['archive:' + path for path in paths]
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'post-storage')
+        paths = ['local-a', 'local-b']
+        archived = await request.archive(archive, 'synthetic', paths, {})
+        request.stored(paths, archived)
+        assert metrics.LATE_APPEND._value.get() == counter
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    assert (await upload()).status_code == 202
+    assert objects == ['local-a', 'local-b']
+    assert lost == ([True] if lose_reply else [])
+    assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
+    if mode == 'serve' and percent == '100':
+        before = deepcopy(client.rows)
+        assert database.finish(
+            'synthetic', 'record', 'custody:post-storage', accepted=True, late_observed=True, firestore_client=client
+        ) is (transition != 'none')
+        assert client.rows == before
+        assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
+
+
+@pytest.mark.parametrize('mode,percent', [('shadow', '100'), ('serve', '0'), ('serve', '100')])
+@pytest.mark.parametrize('failure', ['archive', 'partial_archive', 'refused'])
+async def test_post_storage_observation_never_counts_failed_or_refused_append(monkeypatch, mode, percent, failure):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = StrictFirestore({PATH: {**ROW, 'record_audio_closed': False, 'record_upload_sessions': {}}})
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
+    counter = metrics.LATE_APPEND._value.get()
+
+    def archive(uid, paths, metadata):
+        client.rows[PATH]['record_audio_closed'] = True
+        if failure == 'archive' or (failure == 'partial_archive' and paths[0] == 'local-b'):
+            raise OSError('synthetic durable commit failed')
+        return ['archive:local-a'] if failure == 'partial_archive' else ['archive:' + path for path in paths]
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'refused')
+        paths = ['local-a', 'local-b']
+        archived = await request.archive(archive, 'synthetic', paths, {})
+        request.stored(paths, archived)
+        return JSONResponse(status_code=202, content={'status': 'failed' if failure == 'refused' else 'queued'})
+
+    if failure == 'archive' or (failure == 'partial_archive' and mode == 'serve' and percent == '100'):
+        with pytest.raises(OSError):
+            await upload()
+    else:
+        assert (await upload()).status_code == 202
+    assert client.rows[PATH]['record_upload_revision'] == 7
+    assert metrics.LATE_APPEND._value.get() == counter
+
+
+def test_finish_observes_its_own_lapsed_lease_after_durable_acceptance(monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = StrictFirestore({PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': False}})
+    assert database.begin('synthetic', 'record', 'custody:late', firestore_client=client)
+    client.rows[PATH]['record_upload_sessions']['custody:late'].update(
+        last_signal_at=NOW - 7200, lease_expires_at=NOW - 1
+    )
+    counter = metrics.LATE_APPEND._value.get()
+    assert database.finish('synthetic', 'record', 'custody:late', accepted=True, firestore_client=client)
+    assert client.rows[PATH]['record_upload_revision'] == 8
+    assert metrics.LATE_APPEND._value.get() == counter + 1

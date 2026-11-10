@@ -23,7 +23,7 @@ class UploadState(TypedDict, total=False):
     session: str
     durable: bool
     no_append: bool
-    shadow_late: bool
+    late_observed: bool
 
 
 P = ParamSpec('P')
@@ -66,6 +66,7 @@ def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
                             state['cid'],
                             session,
                             accepted=accepted,
+                            late_observed=bool(state.get('late_observed')),
                         )
                     except record_custody_append.RecordCustodyFenceLost:
                         if not accepted:
@@ -82,7 +83,7 @@ def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
                         raise HTTPException(
                             status_code=503, detail='Retain local audio until durable custody is available'
                         )
-                elif accepted and state.get('shadow_late'):
+                elif accepted and state.get('late_observed'):
                     record_token_lease_metrics.LATE_APPEND.inc()
             except Exception as error:
                 logger.warning(
@@ -110,7 +111,6 @@ async def begin_upload(uid: str, cid: str | None, job_id: str, *, recording_sess
         return
     state.update(uid=uid, cid=cid)
     if not lease.token_lease_serving(uid):
-        state['shadow_late'] = await run_blocking(db_executor, record_custody_append.late_snapshot, uid, cid)
         return
     # Retain the exact candidate even if the commit response is lost.
     state['session'] = 'custody:' + job_id
@@ -130,13 +130,29 @@ def stored(paths: Sequence[str], archives: Sequence[str]) -> None:
         state['durable'] = True
 
 
+async def _renew_after_append(uid: str, cid: str, state: UploadState | None) -> None:
+    observed: dict[str, bool] = {}
+    await run_blocking(
+        db_executor,
+        record_audio.renew_record_token_lease,
+        uid,
+        cid,
+        source='custody_append',
+        late_observation=observed,
+    )
+    if state is not None and observed.get('late'):
+        # Keep every durable file's observation even if another append reopens
+        # the row before this request finishes. Acceptance/receipt counts once.
+        state['late_observed'] = True
+
+
 async def archive(fn: Archive, uid: str, paths: list[str], metadata: dict[str, Any]) -> list[str]:
     state = _upload.get()
     cid = state.get('cid') if state is not None else None
     if not state or not state.get('session'):
         archived = await run_blocking(sync_executor, fn, uid, paths, metadata)
         if archived and cid:
-            await run_blocking(db_executor, record_audio.renew_record_token_lease, uid, cid, source='custody_append')
+            await _renew_after_append(uid, cid, state)
         return archived
     assert cid is not None  # The exact upload fence was acquired for this target.
     archived = []
@@ -146,7 +162,7 @@ async def archive(fn: Archive, uid: str, paths: list[str], metadata: dict[str, A
         # Only a completed durable file append is a signal. The transactional
         # heartbeat helper coalesces all open producers to lease/2; no timer.
         if committed:
-            await run_blocking(db_executor, record_audio.renew_record_token_lease, uid, cid, source='custody_append')
+            await _renew_after_append(uid, cid, state)
     return archived
 
 

@@ -434,3 +434,20 @@ def test_new_frame_token_observes_older_lease_before_replacing_custody(enabled, 
     assert enabled.rows[PATH]['record_upload_revision'] == 8
     assert not enabled.rows[PATH].get('record_audio_partial')
     assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter  # no durable frame yet
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+@pytest.mark.parametrize('state', ['closed', 'partial'])
+def test_throttled_custody_renewal_still_observes_late_state(enabled, monkeypatch, mode, state):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    row = enabled.rows[PATH]
+    row['record_upload_sessions']['s'].update(last_signal_at=NOW - 1, lease_expires_at=NOW + 3599)
+    row['record_audio_closed' if state == 'closed' else 'record_audio_partial'] = True
+    before = deepcopy(enabled.rows)
+    observed = {}
+    assert not record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', firestore_client=enabled, late_observation=observed
+    )
+    assert observed == {'late': True}
+    assert enabled.rows == before
+    assert not enabled.transactions[-1].has_written

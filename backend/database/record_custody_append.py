@@ -89,7 +89,7 @@ def begin(uid, cid, session, *, firestore_client=None):
     return run_transactional(client, commit, transient=True)
 
 
-def finish(uid, cid, session, *, accepted, firestore_client=None):
+def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestore_client=None):
     # A mode rollback must still clear this request's exact fence. Callers only
     # invoke finish for a token acquired by begin; off requests do no IO.
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -116,7 +116,12 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
         sessions.pop(session)
         patch: dict[str, object] = {'record_upload_sessions': sessions}
         recovery = None
-        late = bool(token.get('append_late'))
+        late = bool(
+            late_observed
+            or token.get('append_late')
+            or row.get('record_audio_closed')
+            or row.get('record_audio_partial')
+        ) or any(lease.token_lease_lapsed(value, time.time(), row=row) for value in (token, *sessions.values()))
         eligible = not row.get('deleted') and row.get('record_lane_owner') in {None, 'batch_live_v1', 'batch_sync_v1'}
         if accepted and eligible:
             revision = int(row.get('record_upload_revision') or 0) + 1
@@ -200,15 +205,3 @@ def recover_committed(uid, cid, session, *, firestore_client=None):
     if count_late:
         metrics.LATE_APPEND.inc()
     return recovered
-
-
-def late_snapshot(uid, cid, *, firestore_client=None):
-    """Shadow observes the pre-append state; only accepted storage counts it."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    row = client.collection('users').document(uid).collection('conversations').document(cid).get().to_dict() or {}
-    if not row or row.get('deleted') or row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
-        return False
-    return bool(row.get('record_audio_closed') or row.get('record_audio_partial')) or any(
-        lease.token_lease_lapsed(token, time.time(), row=row)
-        for token in (row.get('record_upload_sessions') or {}).values()
-    )

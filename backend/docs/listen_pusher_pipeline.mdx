@@ -221,6 +221,11 @@ no custody append for an unknown target. Captured native input pins
 A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.
 Frame late-append counting follows successful durable window/object commit.
+Custody late-append accounting observes the post-storage renewal/finish transaction
+in shadow, non-cohort and serve requests, including throttled renewals. Each
+request retains every durable-file observation through transaction retries and
+counts once only after accepted storage; serve receipts preserve that decision
+without another count on finish replay. No pre-storage row snapshot controls the counter.
 This includes a new pusher session's first durable frame when an older token on
 the still-open row has lapsed; registration alone never increments the counter.
 The active repair CronJob exports the sampled oldest-unsealed age and child
