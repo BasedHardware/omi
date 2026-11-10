@@ -19,6 +19,27 @@ provider/endpoint labels. Retries count each attempt; breaker refusals count non
 No audio, URL, user or job identity enters the metric. The two routine STT
 `*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
 outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
+
+## Pre-recorded Modulate credit-refusal failover
+
+`PRERECORDED_SONIOX_FAILOVER_ENABLED` defaults to `true` and is explicitly declared
+on every pre-recorded runtime co-host. Only a typed Modulate credit/quota refusal
+or an open Modulate breaker retries the same WAV once through the existing Soniox
+batch client. Soniox must accept the resolved language hint (or `multi` auto-detection)
+and its positive duration must not exceed two hours. Empty transcripts, client or
+validation errors, plain rate limits, other transient errors, and timeouts of a
+posted request whose billing state is unknown keep the original Modulate behavior.
+A Soniox 429 returns the original Modulate failure class without another provider
+loop. Successful fallback reports `provider=modulate,to=soniox,outcome=recovered`;
+failure reports `exhausted`; both use `component=stt_prerecorded` with the bounded
+`provider_budget_exhausted` or `circuit_open` reason. Soniox audio seconds
+use `omi_prerecorded_vendor_audio_seconds_total{provider=soniox}`.
+
+Held-piece recovery and prompt-verification coordinators retain their existing single-provider attempt budgets. A prior failed Modulate POST suppresses cross-vendor failover even if a later retry receives a credit refusal. Direct authentication/client refusals do not fail over; a request refused locally by an open breaker can fail over as specified.
+
+Rollback sets `PRERECORDED_SONIOX_FAILOVER_ENABLED=false` everywhere it is declared.
+No Deepgram route or ordinary `soniox` pre-recorded model token is added.
+
 ## Fair-use decay switch
 
 `FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
