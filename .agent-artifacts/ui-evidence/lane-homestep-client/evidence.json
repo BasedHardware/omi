@@ -4,7 +4,7 @@
     {
       "file": "001-web-home-processing-projection.png",
       "platform": "web",
-      "description": "Offline production ConversationTile fixture: failed conversation remains openable in the feed without a Processing badge; legacy processing retains its badge",
+      "description": "Offline production ConversationTile fixture: failed conversation shows Omi couldn't finish with Retry and stays openable without Processing; legacy processing retains its badge",
       "captured_by": "agent",
       "source": "playwright-e2e"
     },

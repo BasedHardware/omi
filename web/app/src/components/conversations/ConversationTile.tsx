@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Check, CheckSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { reprocessConversation } from '@/lib/api';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import { conversationDisplayTitle } from '@/lib/conversationTitle';
@@ -16,6 +17,7 @@ interface ConversationTileProps {
   onClick?: () => void;
   // Rejects when the server did not save the change, so the tile can take it back
   onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
+  onConversationUpdate?: (conversation: Conversation) => void;
   isSelected?: boolean;
   // Selection mode props for merge feature
   isSelectionMode?: boolean;
@@ -30,6 +32,7 @@ export const ConversationTile = memo(function ConversationTile({
   conversation,
   onClick,
   onStarToggle,
+  onConversationUpdate,
   isSelected = false,
   isSelectionMode = false,
   isChecked = false,
@@ -39,6 +42,10 @@ export const ConversationTile = memo(function ConversationTile({
 }: ConversationTileProps) {
   const [isStarred, setIsStarred] = useState(conversation.starred);
   const [isHovered, setIsHovered] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryFailed, setRetryFailed] = useState(false);
+  const retryPending = useRef(false);
+  const isFailed = conversation.home_step === 'failed';
   // One star request at a time, so a failed one puts back the value it replaced
   const starRequestPending = useRef(false);
 
@@ -76,6 +83,23 @@ export const ConversationTile = memo(function ConversationTile({
       setIsStarred(!newStarred);
     } finally {
       starRequestPending.current = false;
+    }
+  };
+
+  const handleRetry = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (retryPending.current) return;
+    retryPending.current = true;
+    setIsRetrying(true);
+    setRetryFailed(false);
+    try {
+      const updated = await reprocessConversation(conversation.id);
+      onConversationUpdate?.(updated);
+    } catch {
+      setRetryFailed(true);
+    } finally {
+      retryPending.current = false;
+      setIsRetrying(false);
     }
   };
 
@@ -179,9 +203,31 @@ export const ConversationTile = memo(function ConversationTile({
         </div>
 
         <h3 className="line-clamp-2 min-w-0 flex-1 text-sm font-medium leading-snug text-text-primary">
-          {conversationDisplayTitle(conversation) || 'Untitled conversation'}
+          {isFailed
+            ? "Omi couldn't finish"
+            : conversationDisplayTitle(conversation) || 'Untitled conversation'}
         </h3>
       </div>
+
+      {isFailed && (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            onClick={handleRetry}
+            disabled={isRetrying || isSelectionMode}
+            className="rounded-element border border-stroke px-3 py-1 text-xs text-text-primary hover:bg-bg-quaternary disabled:opacity-50"
+          >
+            {isRetrying ? 'Retrying…' : 'Retry'}
+          </button>
+          {retryFailed && (
+            <p role="alert" className="text-xs text-text-secondary">
+              Retry failed. Please try again.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Excerpt — the scannable payload of a gallery tile */}
       {excerpt && (
