@@ -55,6 +55,7 @@ borrowedNodePools:
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
   # in omi-workspace): prod is claim-path bound (GPU util 16%, ~1.6 units per
   # 3.2s pull), so a second independent pump doubles concurrent claims per GPU.
