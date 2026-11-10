@@ -362,6 +362,7 @@ class ProjectionShards:
             )
             return True
         except Exception as error:
+            self.healthy = False
             logger.warning(
                 'event=batch_projection_shards action=push outcome=unavailable exception_type=%s',
                 type(error).__name__,
@@ -418,7 +419,11 @@ class ProjectionShards:
         return merged
 
     def settle(self, wake: Wake) -> bool:
-        """Drop a wake whose owner drained to the end, unless it was re-pushed."""
+        """Drop a drained wake unless re-pushed; Redis errors disengage serving.
+
+        The pump retains failed settlements for sequence-checked replay.
+        A superseded sequence returns False without changing health.
+        """
         try:
             return bool(
                 self._client().eval(
@@ -431,6 +436,7 @@ class ProjectionShards:
                 )
             )
         except Exception as error:
+            self.healthy = False
             logger.warning(
                 'event=batch_projection_shards action=settle outcome=unavailable exception_type=%s',
                 type(error).__name__,

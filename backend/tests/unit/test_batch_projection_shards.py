@@ -393,6 +393,7 @@ def test_settle_keeps_a_wake_pushed_after_it_was_taken(server):
     taken = shards.take(BACKLOG, 10)[0]
     shards.push('a', owner_key('a'), BACKLOG, 9.0)  # same score kept (lt), newer push
     assert shards.settle(taken) is False
+    assert shards.active and shards.healthy
     assert [w.owner_id for w in shards.take(BACKLOG, 10)] == ['a']
     assert shards.settle(shards.take(BACKLOG, 10)[0]) is True
     assert shards.take(BACKLOG, 10) == []
@@ -657,6 +658,206 @@ def test_stale_deferral_is_not_an_outage_or_retained_retry(server, blocking_inli
     assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('a', 6.0)]
 
 
+@pytest.mark.parametrize('lanes', [(FRESH,), (BACKLOG,), (BACKLOG, FRESH)])
+@pytest.mark.parametrize('reply_lost', [False, True])
+def test_settle_error_fails_open_without_readmitting_drained_owner(
+    server, blocking_inline, monkeypatch, lanes, reply_lost
+):
+    pump, shards, drains = pump_for(server, limit=2)
+    for lane in lanes:
+        assert shards.push('done', owner_key('done'), lane, 5.0)
+    assert asyncio.run(pump.tick()) == 1
+    drains.finish('done', 'end')
+    pending = list(pump.settling)
+    # A separate pending deferral must survive settlement's fallback too.
+    assert shards.push('stuck', owner_key('stuck'), BACKLOG, 1.0)
+    (stuck,) = [wake for wake in shards.take(BACKLOG, 10) if wake.owner_id == 'stuck']
+    pump.deferring.append((stuck, 2000.0))
+    deferred = list(pump.deferring)
+    client = shards._client()
+    real_eval = client.eval
+    unavailable = True
+    fallback = Mock()
+    monkeypatch.setattr(projection_shard_pump, 'record_fallback', fallback)
+
+    def eval_with_outage(script, *args):
+        if script == projection_shards._SETTLE_LUA and unavailable:
+            if reply_lost:
+                real_eval(script, *args)
+            raise ConnectionError('settlement unavailable')
+        return real_eval(script, *args)
+
+    monkeypatch.setattr(client, 'eval', eval_with_outage)
+    for _ in range(2):
+        assert asyncio.run(pump.tick()) == 0
+        assert not pump.engaged and not shards.healthy and not shards.held
+        assert client.get(shards._lease_key(0)) is None
+        assert pump.settling == pending and pump.deferring == deferred
+        assert drains.requested == ['done']
+        assert pump.route('local-fallback') is True
+    assert fallback.call_count == 2
+    assert fallback.call_args.kwargs['to_mode'] == 'legacy_sweep'
+    service = serving_with(pump, leads=False)
+    service.reconcile(periodic=True)
+    service.projector.sweep.assert_called_once()
+
+    unavailable = False
+    assert asyncio.run(pump.tick()) == 0
+    assert pump.engaged and pump.settling == [] and pump.deferring == []
+    assert shards.take(FRESH, 10) == [] and shards.take(BACKLOG, 10) == []
+    assert client.zscore(shards._lane_key(BACKLOG, 0), 'stuck') == 2000.0
+    assert drains.requested == ['done']
+
+
+def test_settlement_survives_full_outage_and_preserves_new_notification(server, blocking_inline, monkeypatch):
+    pump, shards, drains = pump_for(server, limit=1)
+    assert shards.push('done', owner_key('done'), FRESH, 5.0)
+    assert asyncio.run(pump.tick()) == 1
+    drains.finish('done', 'end')
+    pending = list(pump.settling)
+    client = shards._client()
+
+    def unavailable():
+        raise ConnectionError('down')
+
+    monkeypatch.setattr(shards, '_client', unavailable)
+    for _ in range(2):
+        assert asyncio.run(pump.tick()) == 0
+        assert not pump.engaged and not shards.held and pump.settling == pending
+    monkeypatch.setattr(shards, '_client', lambda: client)
+    assert shards.push('done', owner_key('done'), FRESH, 6.0)
+    # A stale settlement is healthy and only the new work is admitted.
+    assert asyncio.run(pump.tick()) == 1
+    assert pump.engaged and pump.settling == []
+    assert drains.requested == ['done', 'done']
+    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('done', 6.0)]
+
+
+@pytest.mark.parametrize('source', ['route', 'committed', 'discovery'])
+def test_push_error_marks_unhealthy_and_hands_back_leases(server, blocking_inline, monkeypatch, source):
+    pump, shards, drains = pump_for(server, limit=1)
+    assert asyncio.run(pump.tick()) == 0
+    client = shards._client()
+    real_eval = client.eval
+    fallback = Mock()
+    monkeypatch.setattr(projection_shard_pump, 'record_fallback', fallback)
+
+    def eval_with_outage(script, *args):
+        if script == projection_shards._PUSH_LUA:
+            raise ConnectionError('push unavailable')
+        return real_eval(script, *args)
+
+    monkeypatch.setattr(client, 'eval', eval_with_outage)
+    if source == 'route':
+        assert pump.route('local') is True
+    elif source == 'committed':
+        pump.committed('local', [{'committed_at': 1.0}])
+        assert pump.projector.local == ['local']
+    else:
+        assert pump.wake('local', None, 1.0, discovery=True) is False
+    assert not shards.healthy and not pump.engaged
+    assert not shards.held and client.get(shards._lease_key(0)) is None
+    fallback.assert_called_once()
+    monkeypatch.setattr(client, 'eval', real_eval)
+    assert asyncio.run(pump.tick()) == 0 and pump.engaged
+    assert pump.route('local') is False
+    assert asyncio.run(pump.tick()) == 1 and drains.requested == ['local']
+
+
+@pytest.mark.parametrize('failed_lane', [FRESH, BACKLOG])
+def test_take_error_cannot_admit_the_other_lanes_wakes(server, blocking_inline, monkeypatch, failed_lane):
+    pump, shards, drains = pump_for(server, limit=2)
+    assert asyncio.run(pump.tick()) == 0
+    for lane in (FRESH, BACKLOG):
+        assert shards.push(lane, owner_key(lane), lane, 5.0)
+    client = shards._client()
+    real_pipeline = client.pipeline
+    fallback = Mock()
+    monkeypatch.setattr(projection_shard_pump, 'record_fallback', fallback)
+
+    def pipeline_with_outage(*args, **kwargs):
+        pipe = real_pipeline(*args, **kwargs)
+        real_eval = pipe.eval
+
+        def eval_with_outage(script, nkeys, key, *rest):
+            if script == projection_shards._TAKE_LUA and key == shards._lane_key(failed_lane, 0):
+                raise ConnectionError('take unavailable')
+            return real_eval(script, nkeys, key, *rest)
+
+        monkeypatch.setattr(pipe, 'eval', eval_with_outage)
+        return pipe
+
+    monkeypatch.setattr(client, 'pipeline', pipeline_with_outage)
+    assert asyncio.run(pump.tick()) == 0
+    assert not pump.engaged and not shards.held and drains.requested == []
+    assert client.get(shards._lease_key(0)) is None
+    fallback.assert_called_once()
+    monkeypatch.setattr(client, 'pipeline', real_pipeline)
+    assert asyncio.run(pump.tick()) == 2
+    assert pump.engaged and set(drains.requested) == {FRESH, BACKLOG}
+
+
+@pytest.mark.parametrize('operation', ['heartbeat', 'acquire', 'renew', 'rebalance', 'observer_release'])
+def test_lease_write_errors_fail_open_and_recover(server, blocking_inline, monkeypatch, operation):
+    pump, shards, _ = pump_for(server, count=4)
+    assert asyncio.run(pump.tick()) == 0 and pump.engaged
+    client = shards._client()
+    real_client = shards._client
+    real_eval, real_set = client.eval, client.set
+    fallback = Mock()
+    monkeypatch.setattr(projection_shard_pump, 'record_fallback', fallback)
+    if operation == 'acquire':
+        shards.release()
+    elif operation == 'rebalance':
+        client.zadd(shards._members_key(), {'other-member': shards.clock()})
+    elif operation == 'observer_release':
+        shards.member = False
+    shards.refreshed_at = None
+
+    def unavailable(*args, **kwargs):
+        raise ConnectionError('lease write unavailable')
+
+    def eval_with_outage(script, *args):
+        failed_script = projection_shards._RENEW_LUA if operation == 'renew' else projection_shards._RELEASE_LUA
+        if script == failed_script:
+            raise ConnectionError('lease write unavailable')
+        return real_eval(script, *args)
+
+    with monkeypatch.context() as outage:
+        if operation == 'heartbeat':
+            outage.setattr(shards, '_client', unavailable)
+        elif operation == 'acquire':
+            outage.setattr(client, 'set', unavailable)
+        else:
+            outage.setattr(client, 'eval', eval_with_outage)
+        assert asyncio.run(pump.tick()) == 0
+        assert not pump.engaged and not shards.healthy and not shards.held
+        fallback.assert_called_once()
+    assert shards._client == real_client and client.set == real_set
+    assert asyncio.run(pump.tick()) == 0 and pump.engaged
+    assert bool(shards.held) is shards.member
+
+
+def test_release_error_leaves_shards_inactive_and_rejoins_safely(server, blocking_inline, monkeypatch):
+    pump, shards, _ = pump_for(server, limit=1)
+    assert asyncio.run(pump.tick()) == 0
+    client = shards._client()
+    real_eval = client.eval
+
+    def unavailable(*args):
+        raise ConnectionError('release unavailable')
+
+    monkeypatch.setattr(client, 'eval', unavailable)
+    shards.release()
+    assert not shards.active and not shards.healthy and not shards.held
+    assert shards.refresh_due()
+    # A failed release leaves a bounded lease, owned by the same holder.
+    assert client.get(shards._lease_key(0)).decode() == shards.holder
+    monkeypatch.setattr(client, 'eval', real_eval)
+    assert asyncio.run(pump.tick()) == 0 and pump.engaged
+    assert shards.held == {0}
+
+
 def test_deferral_survives_full_redis_outage_and_a_new_notification(server, blocking_inline, monkeypatch):
     pump, shards, drains = pump_for(server, limit=1)
     assert shards.push('a', owner_key('a'), FRESH, 5.0)
@@ -691,6 +892,7 @@ def test_a_wake_pushed_during_the_drain_survives_the_settle(server, blocking_inl
     drains.finish('a', 'end')
     asyncio.run(pump.tick())
     assert drains.requested == ['a', 'a']
+    assert pump.engaged and pump.settling == []
 
 
 def test_owner_in_both_lanes_drains_once_and_settles_both(server, blocking_inline):

@@ -108,3 +108,15 @@ even if Redis committed a write but its reply was lost. A superseded sequence
 alone is not an outage. During an outage, durable result-log discovery remains
 the recovery backstop; persisted retry scores govern replacement holders once
 Redis returns. No new flag, retry duration or capacity accompanies this path.
+
+Settlement errors follow the same fail-open contract: keep the full pending
+settlement batch, release leases, and record the legacy-sweep fallback before
+any further shard admission. Successful writes and lost replies are safe to
+replay under the existing sequence checks; a stale-sequence False remains
+healthy. Pending deferrals keep their order and deadlines during that fallback.
+Redis push failures also mark shards unhealthy and release leases while
+retaining local-drain intent. A failed take disengages the entire pass,
+including wakes read successfully from the other lane. Lease-pass errors
+already clear health; the pump now shares the lease-release/fallback telemetry
+path for them too. Release errors remain inactive with bounded lease expiry.
+Gauge-only depth reads do not govern admission or write Redis state.

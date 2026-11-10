@@ -138,6 +138,8 @@ class ShardPump:
             lane, score = BACKLOG, float(committed_at)
         pushed = self.shards.push(owner_id, key, lane, score, discovery=discovery)
         PROJECTION_SHARD_WAKES.labels(lane=lane, outcome='pushed' if pushed else 'push_failed').inc()
+        if not pushed:
+            self.release_unhealthy()
         return pushed
 
     def committed(self, owner_id: str, entries: list[dict]) -> None:
@@ -247,9 +249,14 @@ class ShardPump:
         if self.settling:
             settling, self.settling = self.settling, []
             settled = await run_blocking(db_executor, lambda: [shards.settle(w) for w in settling])
-            for wake, done in zip(settling, settled):
-                PROJECTION_SHARD_WAKES.labels(lane=wake.lane, outcome='settled' if done else 'repushed').inc()
-        if self.deferring:
+            if not shards.healthy:
+                # Replay the whole batch, including successful writes and lost
+                # replies. Sequence checks preserve newer notifications.
+                self.settling[:0] = settling
+            else:
+                for wake, done in zip(settling, settled):
+                    PROJECTION_SHARD_WAKES.labels(lane=wake.lane, outcome='settled' if done else 'repushed').inc()
+        if self.deferring and shards.healthy:
             deferring, self.deferring = self.deferring, []
             await run_blocking(db_executor, lambda: [shards.defer(w, score) for w, score in deferring])
             if not shards.healthy:
@@ -257,16 +264,8 @@ class ShardPump:
                 # Sequence checks make replay (including lost replies) safe;
                 # stale takes return False without making shards unhealthy.
                 self.deferring[:0] = deferring
-                await run_blocking(db_executor, shards.release)
-                PROJECTION_SHARDS_HELD.set(0)
-                record_fallback(
-                    component='other',
-                    from_mode='projection_shards',
-                    to_mode='legacy_sweep',
-                    reason='unavailable',
-                    outcome='degraded',
-                    log=logger,
-                )
+        if not shards.healthy:
+            await run_blocking(db_executor, self.release_unhealthy)
         projector = self.projector
         if projector.owes_drains:
             # Local requests: unheld-shard fallback and Redis failures.
@@ -287,6 +286,11 @@ class ShardPump:
         fresh, backlog = await run_blocking(
             db_executor, lambda: (shards.take(FRESH, fetch), shards.take(BACKLOG, fetch))
         )
+        if not shards.healthy:
+            # One lane may answer after the other failed. Neither result may
+            # admit work from a pass that has disengaged sharded serving.
+            await run_blocking(db_executor, self.release_unhealthy)
+            return 0
         picked = self.pick(fresh, backlog, free, drains)
         for owner, wakes in picked.items():
             self.inflight[owner] = wakes
@@ -294,6 +298,19 @@ class ShardPump:
         if picked:
             drains.request(list(picked))
         return len(picked)
+
+    def release_unhealthy(self) -> None:
+        """Hand leases back and expose Redis failures through the shared fallback."""
+        self.shards.release()
+        PROJECTION_SHARDS_HELD.set(0)
+        record_fallback(
+            component='other',
+            from_mode='projection_shards',
+            to_mode='legacy_sweep',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
 
     def pick(self, fresh: list[Wake], backlog: list[Wake], free: int, drains) -> dict[str, list[Wake]]:
         """Fresh first, keeping ``backlog_reserve`` slots for waiting backlog."""
