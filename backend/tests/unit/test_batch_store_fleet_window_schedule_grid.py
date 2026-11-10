@@ -10315,7 +10315,7 @@ def test_adopt_decay_v0p125_f0p0_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p0_w1():
@@ -10325,7 +10325,7 @@ def test_adopt_decay_v0p125_f0p0_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p05_w0():
@@ -10335,7 +10335,7 @@ def test_adopt_decay_v0p125_f0p05_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.00625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.11875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p05_w1():
@@ -10345,7 +10345,7 @@ def test_adopt_decay_v0p125_f0p05_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.00625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.11875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p1_w0():
@@ -10355,7 +10355,7 @@ def test_adopt_decay_v0p125_f0p1_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p1_w1():
@@ -10365,7 +10365,7 @@ def test_adopt_decay_v0p125_f0p1_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p15_w0():
@@ -10375,7 +10375,7 @@ def test_adopt_decay_v0p125_f0p15_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.01875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.10625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p15_w1():
@@ -10385,7 +10385,7 @@ def test_adopt_decay_v0p125_f0p15_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.01875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.10625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p2_w0():
@@ -10395,7 +10395,7 @@ def test_adopt_decay_v0p125_f0p2_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.025)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p2_w1():
@@ -10405,7 +10405,7 @@ def test_adopt_decay_v0p125_f0p2_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.025)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p25_w0():
@@ -10415,7 +10415,7 @@ def test_adopt_decay_v0p125_f0p25_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.03125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.09375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p25_w1():
@@ -10425,7 +10425,7 @@ def test_adopt_decay_v0p125_f0p25_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.03125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.09375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p3_w0():
@@ -10435,7 +10435,7 @@ def test_adopt_decay_v0p125_f0p3_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p3_w1():
@@ -10445,7 +10445,7 @@ def test_adopt_decay_v0p125_f0p3_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p35_w0():
@@ -10455,7 +10455,7 @@ def test_adopt_decay_v0p125_f0p35_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.04375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.08125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p35_w1():
@@ -10465,7 +10465,7 @@ def test_adopt_decay_v0p125_f0p35_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.04375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.08125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p4_w0():
@@ -10475,7 +10475,7 @@ def test_adopt_decay_v0p125_f0p4_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.075, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p4_w1():
@@ -10485,7 +10485,7 @@ def test_adopt_decay_v0p125_f0p4_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.075, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p45_w0():
@@ -10495,7 +10495,7 @@ def test_adopt_decay_v0p125_f0p45_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.05625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.06875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p45_w1():
@@ -10505,7 +10505,7 @@ def test_adopt_decay_v0p125_f0p45_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.05625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.06875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p5_w0():
@@ -10515,7 +10515,7 @@ def test_adopt_decay_v0p125_f0p5_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p5_w1():
@@ -10525,7 +10525,7 @@ def test_adopt_decay_v0p125_f0p5_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p55_w0():
@@ -10535,7 +10535,7 @@ def test_adopt_decay_v0p125_f0p55_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.06875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p55_w1():
@@ -10545,7 +10545,7 @@ def test_adopt_decay_v0p125_f0p55_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.06875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p6_w0():
@@ -10555,7 +10555,7 @@ def test_adopt_decay_v0p125_f0p6_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.075)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p6_w1():
@@ -10565,7 +10565,7 @@ def test_adopt_decay_v0p125_f0p6_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.075)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p65_w0():
@@ -10575,7 +10575,7 @@ def test_adopt_decay_v0p125_f0p65_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.08125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.04375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p65_w1():
@@ -10585,7 +10585,7 @@ def test_adopt_decay_v0p125_f0p65_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.08125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.04375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p7_w0():
@@ -10595,7 +10595,7 @@ def test_adopt_decay_v0p125_f0p7_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p7_w1():
@@ -10605,7 +10605,7 @@ def test_adopt_decay_v0p125_f0p7_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.0875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p75_w0():
@@ -10615,7 +10615,7 @@ def test_adopt_decay_v0p125_f0p75_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.09375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.03125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p75_w1():
@@ -10625,7 +10625,7 @@ def test_adopt_decay_v0p125_f0p75_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.09375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.03125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p8_w0():
@@ -10635,7 +10635,7 @@ def test_adopt_decay_v0p125_f0p8_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.025, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p8_w1():
@@ -10645,7 +10645,7 @@ def test_adopt_decay_v0p125_f0p8_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.025, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p85_w0():
@@ -10655,7 +10655,7 @@ def test_adopt_decay_v0p125_f0p85_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.10625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.01875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p85_w1():
@@ -10665,7 +10665,7 @@ def test_adopt_decay_v0p125_f0p85_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.10625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.01875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p9_w0():
@@ -10675,7 +10675,7 @@ def test_adopt_decay_v0p125_f0p9_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.1125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p9_w1():
@@ -10685,7 +10685,7 @@ def test_adopt_decay_v0p125_f0p9_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.1125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p95_w0():
@@ -10695,7 +10695,7 @@ def test_adopt_decay_v0p125_f0p95_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.11875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.00625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f0p95_w1():
@@ -10705,7 +10705,7 @@ def test_adopt_decay_v0p125_f0p95_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.11875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.00625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f1p0_w0():
@@ -10715,7 +10715,7 @@ def test_adopt_decay_v0p125_f1p0_w0():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p125_f1p0_w1():
@@ -10725,7 +10725,7 @@ def test_adopt_decay_v0p125_f1p0_w1():
     window.publish('batch_merge', 0.125, client=client)
     wall.advance(0.125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p0_w0():
@@ -10735,7 +10735,7 @@ def test_adopt_decay_v0p25_f0p0_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.25, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p0_w1():
@@ -10745,7 +10745,7 @@ def test_adopt_decay_v0p25_f0p0_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.25, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p05_w0():
@@ -10755,7 +10755,7 @@ def test_adopt_decay_v0p25_f0p05_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p05_w1():
@@ -10765,7 +10765,7 @@ def test_adopt_decay_v0p25_f0p05_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p1_w0():
@@ -10775,7 +10775,7 @@ def test_adopt_decay_v0p25_f0p1_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.025)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.225, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p1_w1():
@@ -10785,7 +10785,7 @@ def test_adopt_decay_v0p25_f0p1_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.025)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.225, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p15_w0():
@@ -10795,7 +10795,7 @@ def test_adopt_decay_v0p25_f0p15_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p15_w1():
@@ -10805,7 +10805,7 @@ def test_adopt_decay_v0p25_f0p15_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p2_w0():
@@ -10815,7 +10815,7 @@ def test_adopt_decay_v0p25_f0p2_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p2_w1():
@@ -10825,7 +10825,7 @@ def test_adopt_decay_v0p25_f0p2_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p25_w0():
@@ -10835,7 +10835,7 @@ def test_adopt_decay_v0p25_f0p25_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p25_w1():
@@ -10845,7 +10845,7 @@ def test_adopt_decay_v0p25_f0p25_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p3_w0():
@@ -10855,7 +10855,7 @@ def test_adopt_decay_v0p25_f0p3_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.075)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.175, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p3_w1():
@@ -10865,7 +10865,7 @@ def test_adopt_decay_v0p25_f0p3_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.075)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.175, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p35_w0():
@@ -10875,7 +10875,7 @@ def test_adopt_decay_v0p25_f0p35_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p35_w1():
@@ -10885,7 +10885,7 @@ def test_adopt_decay_v0p25_f0p35_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.0875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p4_w0():
@@ -10895,7 +10895,7 @@ def test_adopt_decay_v0p25_f0p4_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.15, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p4_w1():
@@ -10905,7 +10905,7 @@ def test_adopt_decay_v0p25_f0p4_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.15, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p45_w0():
@@ -10915,7 +10915,7 @@ def test_adopt_decay_v0p25_f0p45_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p45_w1():
@@ -10925,7 +10925,7 @@ def test_adopt_decay_v0p25_f0p45_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p5_w0():
@@ -10935,7 +10935,7 @@ def test_adopt_decay_v0p25_f0p5_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p5_w1():
@@ -10945,7 +10945,7 @@ def test_adopt_decay_v0p25_f0p5_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p55_w0():
@@ -10955,7 +10955,7 @@ def test_adopt_decay_v0p25_f0p55_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p55_w1():
@@ -10965,7 +10965,7 @@ def test_adopt_decay_v0p25_f0p55_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p6_w0():
@@ -10975,7 +10975,7 @@ def test_adopt_decay_v0p25_f0p6_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.15)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p6_w1():
@@ -10985,7 +10985,7 @@ def test_adopt_decay_v0p25_f0p6_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.15)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p65_w0():
@@ -10995,7 +10995,7 @@ def test_adopt_decay_v0p25_f0p65_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p65_w1():
@@ -11005,7 +11005,7 @@ def test_adopt_decay_v0p25_f0p65_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1625)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0875, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p7_w0():
@@ -11015,7 +11015,7 @@ def test_adopt_decay_v0p25_f0p7_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.175)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.075, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p7_w1():
@@ -11025,7 +11025,7 @@ def test_adopt_decay_v0p25_f0p7_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.175)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.075, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p75_w0():
@@ -11035,7 +11035,7 @@ def test_adopt_decay_v0p25_f0p75_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p75_w1():
@@ -11045,7 +11045,7 @@ def test_adopt_decay_v0p25_f0p75_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.1875)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0625, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p8_w0():
@@ -11055,7 +11055,7 @@ def test_adopt_decay_v0p25_f0p8_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p8_w1():
@@ -11065,7 +11065,7 @@ def test_adopt_decay_v0p25_f0p8_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p85_w0():
@@ -11075,7 +11075,7 @@ def test_adopt_decay_v0p25_f0p85_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.2125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p85_w1():
@@ -11085,7 +11085,7 @@ def test_adopt_decay_v0p25_f0p85_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.2125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p9_w0():
@@ -11095,7 +11095,7 @@ def test_adopt_decay_v0p25_f0p9_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.225)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.025, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p9_w1():
@@ -11105,7 +11105,7 @@ def test_adopt_decay_v0p25_f0p9_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.225)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.025, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p95_w0():
@@ -11115,7 +11115,7 @@ def test_adopt_decay_v0p25_f0p95_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.2375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f0p95_w1():
@@ -11125,7 +11125,7 @@ def test_adopt_decay_v0p25_f0p95_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.2375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f1p0_w0():
@@ -11135,7 +11135,7 @@ def test_adopt_decay_v0p25_f1p0_w0():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.25)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p25_f1p0_w1():
@@ -11145,7 +11145,7 @@ def test_adopt_decay_v0p25_f1p0_w1():
     window.publish('batch_merge', 0.25, client=client)
     wall.advance(0.25)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p0_w0():
@@ -11155,7 +11155,7 @@ def test_adopt_decay_v0p5_f0p0_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p0_w1():
@@ -11165,7 +11165,7 @@ def test_adopt_decay_v0p5_f0p0_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p05_w0():
@@ -11175,7 +11175,7 @@ def test_adopt_decay_v0p5_f0p05_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.025)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.475, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p05_w1():
@@ -11185,7 +11185,7 @@ def test_adopt_decay_v0p5_f0p05_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.025)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.475, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p1_w0():
@@ -11195,7 +11195,7 @@ def test_adopt_decay_v0p5_f0p1_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.45, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p1_w1():
@@ -11205,7 +11205,7 @@ def test_adopt_decay_v0p5_f0p1_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.45, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p15_w0():
@@ -11215,7 +11215,7 @@ def test_adopt_decay_v0p5_f0p15_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.075)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.425, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p15_w1():
@@ -11225,7 +11225,7 @@ def test_adopt_decay_v0p5_f0p15_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.075)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.425, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p2_w0():
@@ -11235,7 +11235,7 @@ def test_adopt_decay_v0p5_f0p2_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p2_w1():
@@ -11245,7 +11245,7 @@ def test_adopt_decay_v0p5_f0p2_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p25_w0():
@@ -11255,7 +11255,7 @@ def test_adopt_decay_v0p5_f0p25_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p25_w1():
@@ -11265,7 +11265,7 @@ def test_adopt_decay_v0p5_f0p25_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.125)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.375, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p3_w0():
@@ -11275,7 +11275,7 @@ def test_adopt_decay_v0p5_f0p3_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.15)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.35, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p3_w1():
@@ -11285,7 +11285,7 @@ def test_adopt_decay_v0p5_f0p3_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.15)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.35, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p35_w0():
@@ -11295,7 +11295,7 @@ def test_adopt_decay_v0p5_f0p35_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.175)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.325, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p35_w1():
@@ -11305,7 +11305,7 @@ def test_adopt_decay_v0p5_f0p35_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.175)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.325, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p4_w0():
@@ -11315,7 +11315,7 @@ def test_adopt_decay_v0p5_f0p4_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.3, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p4_w1():
@@ -11325,7 +11325,7 @@ def test_adopt_decay_v0p5_f0p4_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.3, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p45_w0():
@@ -11335,7 +11335,7 @@ def test_adopt_decay_v0p5_f0p45_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.225)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.275, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p45_w1():
@@ -11345,7 +11345,7 @@ def test_adopt_decay_v0p5_f0p45_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.225)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.275, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p5_w0():
@@ -11355,7 +11355,7 @@ def test_adopt_decay_v0p5_f0p5_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.25)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.25, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p5_w1():
@@ -11365,7 +11365,7 @@ def test_adopt_decay_v0p5_f0p5_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.25)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.25, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p55_w0():
@@ -11375,7 +11375,7 @@ def test_adopt_decay_v0p5_f0p55_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.275)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.225, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p55_w1():
@@ -11385,7 +11385,7 @@ def test_adopt_decay_v0p5_f0p55_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.275)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.225, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p6_w0():
@@ -11395,7 +11395,7 @@ def test_adopt_decay_v0p5_f0p6_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p6_w1():
@@ -11405,7 +11405,7 @@ def test_adopt_decay_v0p5_f0p6_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p65_w0():
@@ -11415,7 +11415,7 @@ def test_adopt_decay_v0p5_f0p65_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.325)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.175, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p65_w1():
@@ -11425,7 +11425,7 @@ def test_adopt_decay_v0p5_f0p65_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.325)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.175, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p7_w0():
@@ -11435,7 +11435,7 @@ def test_adopt_decay_v0p5_f0p7_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.35)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.15, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p7_w1():
@@ -11445,7 +11445,7 @@ def test_adopt_decay_v0p5_f0p7_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.35)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.15, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p75_w0():
@@ -11455,7 +11455,7 @@ def test_adopt_decay_v0p5_f0p75_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p75_w1():
@@ -11465,7 +11465,7 @@ def test_adopt_decay_v0p5_f0p75_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.375)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.125, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p8_w0():
@@ -11475,7 +11475,7 @@ def test_adopt_decay_v0p5_f0p8_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p8_w1():
@@ -11485,7 +11485,7 @@ def test_adopt_decay_v0p5_f0p8_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p85_w0():
@@ -11495,7 +11495,7 @@ def test_adopt_decay_v0p5_f0p85_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.425)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.075, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p85_w1():
@@ -11505,7 +11505,7 @@ def test_adopt_decay_v0p5_f0p85_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.425)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.075, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p9_w0():
@@ -11515,7 +11515,7 @@ def test_adopt_decay_v0p5_f0p9_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.45)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p9_w1():
@@ -11525,7 +11525,7 @@ def test_adopt_decay_v0p5_f0p9_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.45)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p95_w0():
@@ -11535,7 +11535,7 @@ def test_adopt_decay_v0p5_f0p95_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.475)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.025, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f0p95_w1():
@@ -11545,7 +11545,7 @@ def test_adopt_decay_v0p5_f0p95_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.475)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.025, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f1p0_w0():
@@ -11555,7 +11555,7 @@ def test_adopt_decay_v0p5_f1p0_w0():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v0p5_f1p0_w1():
@@ -11565,7 +11565,7 @@ def test_adopt_decay_v0p5_f1p0_w1():
     window.publish('batch_merge', 0.5, client=client)
     wall.advance(0.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p0_w0():
@@ -11575,7 +11575,7 @@ def test_adopt_decay_v1p0_f0p0_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p0_w1():
@@ -11585,7 +11585,7 @@ def test_adopt_decay_v1p0_f0p0_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p05_w0():
@@ -11595,7 +11595,7 @@ def test_adopt_decay_v1p0_f0p05_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.95, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p05_w1():
@@ -11605,7 +11605,7 @@ def test_adopt_decay_v1p0_f0p05_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.05)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.95, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p1_w0():
@@ -11615,7 +11615,7 @@ def test_adopt_decay_v1p0_f0p1_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.9, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p1_w1():
@@ -11625,7 +11625,7 @@ def test_adopt_decay_v1p0_f0p1_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.9, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p15_w0():
@@ -11635,7 +11635,7 @@ def test_adopt_decay_v1p0_f0p15_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.15)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.85, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p15_w1():
@@ -11645,7 +11645,7 @@ def test_adopt_decay_v1p0_f0p15_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.15)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.85, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p2_w0():
@@ -11655,7 +11655,7 @@ def test_adopt_decay_v1p0_f0p2_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.8, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p2_w1():
@@ -11665,7 +11665,7 @@ def test_adopt_decay_v1p0_f0p2_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.8, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p25_w0():
@@ -11675,7 +11675,7 @@ def test_adopt_decay_v1p0_f0p25_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.25)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.75, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p25_w1():
@@ -11685,7 +11685,7 @@ def test_adopt_decay_v1p0_f0p25_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.25)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.75, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p3_w0():
@@ -11695,7 +11695,7 @@ def test_adopt_decay_v1p0_f0p3_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.7, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p3_w1():
@@ -11705,7 +11705,7 @@ def test_adopt_decay_v1p0_f0p3_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.7, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p35_w0():
@@ -11715,7 +11715,7 @@ def test_adopt_decay_v1p0_f0p35_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.35)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.65, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p35_w1():
@@ -11725,7 +11725,7 @@ def test_adopt_decay_v1p0_f0p35_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.35)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.65, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p4_w0():
@@ -11735,7 +11735,7 @@ def test_adopt_decay_v1p0_f0p4_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.6, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p4_w1():
@@ -11745,7 +11745,7 @@ def test_adopt_decay_v1p0_f0p4_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.6, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p45_w0():
@@ -11755,7 +11755,7 @@ def test_adopt_decay_v1p0_f0p45_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.45)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.55, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p45_w1():
@@ -11765,7 +11765,7 @@ def test_adopt_decay_v1p0_f0p45_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.45)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.55, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p5_w0():
@@ -11775,7 +11775,7 @@ def test_adopt_decay_v1p0_f0p5_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p5_w1():
@@ -11785,7 +11785,7 @@ def test_adopt_decay_v1p0_f0p5_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p55_w0():
@@ -11795,7 +11795,7 @@ def test_adopt_decay_v1p0_f0p55_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.55)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.45, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p55_w1():
@@ -11805,7 +11805,7 @@ def test_adopt_decay_v1p0_f0p55_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.55)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.45, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p6_w0():
@@ -11815,7 +11815,7 @@ def test_adopt_decay_v1p0_f0p6_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p6_w1():
@@ -11825,7 +11825,7 @@ def test_adopt_decay_v1p0_f0p6_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p65_w0():
@@ -11835,7 +11835,7 @@ def test_adopt_decay_v1p0_f0p65_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.65)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.35, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p65_w1():
@@ -11845,7 +11845,7 @@ def test_adopt_decay_v1p0_f0p65_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.65)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.35, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p7_w0():
@@ -11855,7 +11855,7 @@ def test_adopt_decay_v1p0_f0p7_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.7)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.3, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p7_w1():
@@ -11865,7 +11865,7 @@ def test_adopt_decay_v1p0_f0p7_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.7)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.3, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p75_w0():
@@ -11875,7 +11875,7 @@ def test_adopt_decay_v1p0_f0p75_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.75)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.25, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p75_w1():
@@ -11885,7 +11885,7 @@ def test_adopt_decay_v1p0_f0p75_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.75)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.25, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p8_w0():
@@ -11895,7 +11895,7 @@ def test_adopt_decay_v1p0_f0p8_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p8_w1():
@@ -11905,7 +11905,7 @@ def test_adopt_decay_v1p0_f0p8_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p85_w0():
@@ -11915,7 +11915,7 @@ def test_adopt_decay_v1p0_f0p85_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.85)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.15, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p85_w1():
@@ -11925,7 +11925,7 @@ def test_adopt_decay_v1p0_f0p85_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.85)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.15, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p9_w0():
@@ -11935,7 +11935,7 @@ def test_adopt_decay_v1p0_f0p9_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.9)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p9_w1():
@@ -11945,7 +11945,7 @@ def test_adopt_decay_v1p0_f0p9_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.9)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p95_w0():
@@ -11955,7 +11955,7 @@ def test_adopt_decay_v1p0_f0p95_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.95)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f0p95_w1():
@@ -11965,7 +11965,7 @@ def test_adopt_decay_v1p0_f0p95_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(0.95)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.05, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v1p0_f1p0_w0():
@@ -11975,7 +11975,7 @@ def test_adopt_decay_v1p0_f1p0_w0():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(1.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v1p0_f1p0_w1():
@@ -11985,7 +11985,7 @@ def test_adopt_decay_v1p0_f1p0_w1():
     window.publish('batch_merge', 1.0, client=client)
     wall.advance(1.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p0_w0():
@@ -11995,7 +11995,7 @@ def test_adopt_decay_v2p0_f0p0_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p0_w1():
@@ -12005,7 +12005,7 @@ def test_adopt_decay_v2p0_f0p0_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p05_w0():
@@ -12015,7 +12015,7 @@ def test_adopt_decay_v2p0_f0p05_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.9, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p05_w1():
@@ -12025,7 +12025,7 @@ def test_adopt_decay_v2p0_f0p05_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.9, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p1_w0():
@@ -12035,7 +12035,7 @@ def test_adopt_decay_v2p0_f0p1_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.8, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p1_w1():
@@ -12045,7 +12045,7 @@ def test_adopt_decay_v2p0_f0p1_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.8, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p15_w0():
@@ -12055,7 +12055,7 @@ def test_adopt_decay_v2p0_f0p15_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.7, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p15_w1():
@@ -12065,7 +12065,7 @@ def test_adopt_decay_v2p0_f0p15_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.7, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p2_w0():
@@ -12075,7 +12075,7 @@ def test_adopt_decay_v2p0_f0p2_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.6, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p2_w1():
@@ -12085,7 +12085,7 @@ def test_adopt_decay_v2p0_f0p2_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.6, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p25_w0():
@@ -12095,7 +12095,7 @@ def test_adopt_decay_v2p0_f0p25_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.5, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p25_w1():
@@ -12105,7 +12105,7 @@ def test_adopt_decay_v2p0_f0p25_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.5, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p3_w0():
@@ -12115,7 +12115,7 @@ def test_adopt_decay_v2p0_f0p3_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p3_w1():
@@ -12125,7 +12125,7 @@ def test_adopt_decay_v2p0_f0p3_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p35_w0():
@@ -12135,7 +12135,7 @@ def test_adopt_decay_v2p0_f0p35_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.7)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.3, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p35_w1():
@@ -12145,7 +12145,7 @@ def test_adopt_decay_v2p0_f0p35_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.7)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.3, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p4_w0():
@@ -12155,7 +12155,7 @@ def test_adopt_decay_v2p0_f0p4_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p4_w1():
@@ -12165,7 +12165,7 @@ def test_adopt_decay_v2p0_f0p4_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p45_w0():
@@ -12175,7 +12175,7 @@ def test_adopt_decay_v2p0_f0p45_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.9)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p45_w1():
@@ -12185,7 +12185,7 @@ def test_adopt_decay_v2p0_f0p45_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(0.9)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.1, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v2p0_f0p5_w0():
@@ -12195,7 +12195,7 @@ def test_adopt_decay_v2p0_f0p5_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p5_w1():
@@ -12205,7 +12205,7 @@ def test_adopt_decay_v2p0_f0p5_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p55_w0():
@@ -12215,7 +12215,7 @@ def test_adopt_decay_v2p0_f0p55_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.9, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p55_w1():
@@ -12225,7 +12225,7 @@ def test_adopt_decay_v2p0_f0p55_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.1)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.9, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p6_w0():
@@ -12235,7 +12235,7 @@ def test_adopt_decay_v2p0_f0p6_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p6_w1():
@@ -12245,7 +12245,7 @@ def test_adopt_decay_v2p0_f0p6_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p65_w0():
@@ -12255,7 +12255,7 @@ def test_adopt_decay_v2p0_f0p65_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.7, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p65_w1():
@@ -12265,7 +12265,7 @@ def test_adopt_decay_v2p0_f0p65_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.3)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.7, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p7_w0():
@@ -12275,7 +12275,7 @@ def test_adopt_decay_v2p0_f0p7_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p7_w1():
@@ -12285,7 +12285,7 @@ def test_adopt_decay_v2p0_f0p7_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p75_w0():
@@ -12295,7 +12295,7 @@ def test_adopt_decay_v2p0_f0p75_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p75_w1():
@@ -12305,7 +12305,7 @@ def test_adopt_decay_v2p0_f0p75_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.5)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p8_w0():
@@ -12315,7 +12315,7 @@ def test_adopt_decay_v2p0_f0p8_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p8_w1():
@@ -12325,7 +12325,7 @@ def test_adopt_decay_v2p0_f0p8_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p85_w0():
@@ -12335,7 +12335,7 @@ def test_adopt_decay_v2p0_f0p85_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.7)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.3, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p85_w1():
@@ -12345,7 +12345,7 @@ def test_adopt_decay_v2p0_f0p85_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.7)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.3, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p9_w0():
@@ -12355,7 +12355,7 @@ def test_adopt_decay_v2p0_f0p9_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p9_w1():
@@ -12365,7 +12365,7 @@ def test_adopt_decay_v2p0_f0p9_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p95_w0():
@@ -12375,7 +12375,7 @@ def test_adopt_decay_v2p0_f0p95_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.9)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f0p95_w1():
@@ -12385,7 +12385,7 @@ def test_adopt_decay_v2p0_f0p95_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(1.9)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.1, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f1p0_w0():
@@ -12395,7 +12395,7 @@ def test_adopt_decay_v2p0_f1p0_w0():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(2.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v2p0_f1p0_w1():
@@ -12405,7 +12405,7 @@ def test_adopt_decay_v2p0_f1p0_w1():
     window.publish('batch_merge', 2.0, client=client)
     wall.advance(2.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p0_w0():
@@ -12415,7 +12415,7 @@ def test_adopt_decay_v4p0_f0p0_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(4.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p0_w1():
@@ -12425,7 +12425,7 @@ def test_adopt_decay_v4p0_f0p0_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(4.0, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p05_w0():
@@ -12435,7 +12435,7 @@ def test_adopt_decay_v4p0_f0p05_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.8, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p05_w1():
@@ -12445,7 +12445,7 @@ def test_adopt_decay_v4p0_f0p05_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.8, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p1_w0():
@@ -12455,7 +12455,7 @@ def test_adopt_decay_v4p0_f0p1_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.6, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p1_w1():
@@ -12465,7 +12465,7 @@ def test_adopt_decay_v4p0_f0p1_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.6, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p15_w0():
@@ -12475,7 +12475,7 @@ def test_adopt_decay_v4p0_f0p15_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p15_w1():
@@ -12485,7 +12485,7 @@ def test_adopt_decay_v4p0_f0p15_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.4, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p2_w0():
@@ -12495,7 +12495,7 @@ def test_adopt_decay_v4p0_f0p2_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p2_w1():
@@ -12505,7 +12505,7 @@ def test_adopt_decay_v4p0_f0p2_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(0.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.2, abs=1e-6)
-    assert len(client.get_calls) == 0  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 1  # the publish's floor read; the mirror answers within the TTL
 
 
 def test_adopt_decay_v4p0_f0p25_w0():
@@ -12515,7 +12515,7 @@ def test_adopt_decay_v4p0_f0p25_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p25_w1():
@@ -12525,7 +12525,7 @@ def test_adopt_decay_v4p0_f0p25_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(3.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p3_w0():
@@ -12535,7 +12535,7 @@ def test_adopt_decay_v4p0_f0p3_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p3_w1():
@@ -12545,7 +12545,7 @@ def test_adopt_decay_v4p0_f0p3_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p35_w0():
@@ -12555,7 +12555,7 @@ def test_adopt_decay_v4p0_f0p35_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p35_w1():
@@ -12565,7 +12565,7 @@ def test_adopt_decay_v4p0_f0p35_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p4_w0():
@@ -12575,7 +12575,7 @@ def test_adopt_decay_v4p0_f0p4_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p4_w1():
@@ -12585,7 +12585,7 @@ def test_adopt_decay_v4p0_f0p4_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p45_w0():
@@ -12595,7 +12595,7 @@ def test_adopt_decay_v4p0_f0p45_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p45_w1():
@@ -12605,7 +12605,7 @@ def test_adopt_decay_v4p0_f0p45_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(1.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p5_w0():
@@ -12615,7 +12615,7 @@ def test_adopt_decay_v4p0_f0p5_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p5_w1():
@@ -12625,7 +12625,7 @@ def test_adopt_decay_v4p0_f0p5_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(2.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p55_w0():
@@ -12635,7 +12635,7 @@ def test_adopt_decay_v4p0_f0p55_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p55_w1():
@@ -12645,7 +12645,7 @@ def test_adopt_decay_v4p0_f0p55_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p6_w0():
@@ -12655,7 +12655,7 @@ def test_adopt_decay_v4p0_f0p6_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p6_w1():
@@ -12665,7 +12665,7 @@ def test_adopt_decay_v4p0_f0p6_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p65_w0():
@@ -12675,7 +12675,7 @@ def test_adopt_decay_v4p0_f0p65_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p65_w1():
@@ -12685,7 +12685,7 @@ def test_adopt_decay_v4p0_f0p65_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p7_w0():
@@ -12695,7 +12695,7 @@ def test_adopt_decay_v4p0_f0p7_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p7_w1():
@@ -12705,7 +12705,7 @@ def test_adopt_decay_v4p0_f0p7_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(2.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p75_w0():
@@ -12715,7 +12715,7 @@ def test_adopt_decay_v4p0_f0p75_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p75_w1():
@@ -12725,7 +12725,7 @@ def test_adopt_decay_v4p0_f0p75_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(1.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p8_w0():
@@ -12735,7 +12735,7 @@ def test_adopt_decay_v4p0_f0p8_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p8_w1():
@@ -12745,7 +12745,7 @@ def test_adopt_decay_v4p0_f0p8_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.2)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.8, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p85_w0():
@@ -12755,7 +12755,7 @@ def test_adopt_decay_v4p0_f0p85_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p85_w1():
@@ -12765,7 +12765,7 @@ def test_adopt_decay_v4p0_f0p85_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.4)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.6, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p9_w0():
@@ -12775,7 +12775,7 @@ def test_adopt_decay_v4p0_f0p9_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p9_w1():
@@ -12785,7 +12785,7 @@ def test_adopt_decay_v4p0_f0p9_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.6)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.4, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p95_w0():
@@ -12795,7 +12795,7 @@ def test_adopt_decay_v4p0_f0p95_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f0p95_w1():
@@ -12805,7 +12805,7 @@ def test_adopt_decay_v4p0_f0p95_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(3.8)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.2, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f1p0_w0():
@@ -12815,7 +12815,7 @@ def test_adopt_decay_v4p0_f1p0_w0():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(4.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 def test_adopt_decay_v4p0_f1p0_w1():
@@ -12825,7 +12825,7 @@ def test_adopt_decay_v4p0_f1p0_w1():
     window.publish('batch_merge', 4.0, client=client)
     wall.advance(4.0)
     assert window.peek('batch_merge', client=client) == pytest.approx(0.0, abs=1e-6)
-    assert len(client.get_calls) == 1  # mirror answers within the TTL; a decayed mirror re-reads
+    assert len(client.get_calls) == 2  # the publish's floor read plus the decayed mirror's re-read
 
 
 # --------------------------------------------------------------------------

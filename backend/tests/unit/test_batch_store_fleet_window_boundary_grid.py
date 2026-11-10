@@ -1390,7 +1390,7 @@ def test_label_grammar_fit_batch_merge():
     window.publish('batch_merge', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_merge'
     assert window.peek('batch_merge', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_defer():
@@ -1401,7 +1401,7 @@ def test_label_grammar_fit_batch_defer():
     window.publish('batch_defer', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_defer'
     assert window.peek('batch_defer', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_recover():
@@ -1412,7 +1412,7 @@ def test_label_grammar_fit_batch_recover():
     window.publish('batch_recover', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_recover'
     assert window.peek('batch_recover', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_release():
@@ -1423,7 +1423,7 @@ def test_label_grammar_fit_batch_release():
     window.publish('batch_release', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_release'
     assert window.peek('batch_release', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_offer():
@@ -1434,7 +1434,7 @@ def test_label_grammar_fit_batch_offer():
     window.publish('batch_offer', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_offer'
     assert window.peek('batch_offer', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_finish():
@@ -1445,7 +1445,7 @@ def test_label_grammar_fit_batch_finish():
     window.publish('batch_finish', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_finish'
     assert window.peek('batch_finish', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_reserve():
@@ -1456,7 +1456,7 @@ def test_label_grammar_fit_batch_reserve():
     window.publish('batch_reserve', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_reserve'
     assert window.peek('batch_reserve', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_ready():
@@ -1467,7 +1467,7 @@ def test_label_grammar_fit_batch_ready():
     window.publish('batch_ready', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_ready'
     assert window.peek('batch_ready', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_take():
@@ -1478,7 +1478,7 @@ def test_label_grammar_fit_batch_take():
     window.publish('batch_take', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_take'
     assert window.peek('batch_take', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_paid():
@@ -1489,7 +1489,7 @@ def test_label_grammar_fit_batch_paid():
     window.publish('batch_paid', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_paid'
     assert window.peek('batch_paid', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_handoff():
@@ -1500,7 +1500,7 @@ def test_label_grammar_fit_batch_handoff():
     window.publish('batch_handoff', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_handoff'
     assert window.peek('batch_handoff', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_reap():
@@ -1511,7 +1511,7 @@ def test_label_grammar_fit_batch_reap():
     window.publish('batch_reap', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_reap'
     assert window.peek('batch_reap', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_start_recovery():
@@ -1522,7 +1522,7 @@ def test_label_grammar_fit_batch_start_recovery():
     window.publish('batch_start_recovery', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_start_recovery'
     assert window.peek('batch_start_recovery', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_recovery_transport_failed():
@@ -1533,7 +1533,7 @@ def test_label_grammar_fit_batch_recovery_transport_failed():
     window.publish('batch_recovery_transport_failed', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_recovery_transport_failed'
     assert window.peek('batch_recovery_transport_failed', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_projection_input():
@@ -1544,7 +1544,7 @@ def test_label_grammar_fit_batch_projection_input():
     window.publish('batch_projection_input', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_projection_input'
     assert window.peek('batch_projection_input', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_a():
@@ -1555,7 +1555,7 @@ def test_label_grammar_fit_a():
     window.publish('a', 0.5, client=client)
     assert client.set_calls[0][1] == 'a'
     assert window.peek('a', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_z9_():
@@ -1566,7 +1566,7 @@ def test_label_grammar_fit_z9_():
     window.publish('z9_', 0.5, client=client)
     assert client.set_calls[0][1] == 'z9_'
     assert window.peek('z9_', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_batch_store_backoff_probe():
@@ -1577,7 +1577,7 @@ def test_label_grammar_fit_batch_store_backoff_probe():
     window.publish('batch_store_backoff_probe', 0.5, client=client)
     assert client.set_calls[0][1] == 'batch_store_backoff_probe'
     assert window.peek('batch_store_backoff_probe', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_shadow_offer_stage():
@@ -1588,7 +1588,7 @@ def test_label_grammar_fit_shadow_offer_stage():
     window.publish('shadow_offer_stage', 0.5, client=client)
     assert client.set_calls[0][1] == 'shadow_offer_stage'
     assert window.peek('shadow_offer_stage', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_fit_record_seal_claim():
@@ -1599,7 +1599,7 @@ def test_label_grammar_fit_record_seal_claim():
     window.publish('record_seal_claim', 0.5, client=client)
     assert client.set_calls[0][1] == 'record_seal_claim'
     assert window.peek('record_seal_claim', client=client) == pytest.approx(0.5)
-    assert client.get_calls == []  # publish warmed the mirror
+    assert len(client.get_calls) == 1  # the publish's floor read warmed the mirror
 
 
 def test_label_grammar_unfit_00():
@@ -2171,7 +2171,7 @@ def test_mirror_eviction_overflow_10():
     assert window.cached_labels() == cap
 
 
-def test_mirror_evicted_label_publishes_without_reading():
+def test_mirror_evicted_label_publishes_through_the_floor_read():
     wall = FakeWall(now=50.0)
     window = fresh_window(wall=wall)
     client = StormDocsClient()
@@ -2179,9 +2179,11 @@ def test_mirror_evicted_label_publishes_without_reading():
     for index in range(cap):
         window.publish(f'batch_label_{index:04d}', 1.0, client=client)
     reads_before = len(client.get_calls)
+    sets_before = len(client.set_calls)
     wall.advance(0.5)
-    window.publish('batch_label_0000', 2.0, client=client)  # evicted: writes without reading
-    assert len(client.get_calls) == reads_before  # the publish path never reads
+    window.publish('batch_label_0000', 2.0, client=client)  # evicted: floor read, then write
+    assert len(client.get_calls) == reads_before + 1  # the evicted label's mirror is cold
+    assert len(client.set_calls) == sets_before + 1  # and the window still publishes
 
 
 # --------------------------------------------------------------------------

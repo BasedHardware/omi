@@ -429,8 +429,11 @@ class _FleetStormWindow:
     and adopts sibling pods' windows on entry, so the FIRST pod through a
     storm spaces the fleet's next entries, not just its own process.
 
-    Everything here is advisory and fail-open: the publish is a single merge
-    set with no SDK retry and a bounded call timeout, every Firestore fault
+    Everything here is advisory and fail-open: the publish is guarded by one
+    bounded floor read when the mirror does not already cover the window (a
+    broadcast never lowers a deeper sibling measurement) and is otherwise a
+    single merge set with no SDK retry and a bounded call timeout; every
+    Firestore fault
     collapses to "no fleet window", a missing or malformed document reads as
     residual ``0.0``, and per-label results are mirrored for
     ``CACHE_TTL_SECONDS`` so adoption never amplifies reads on the entry
@@ -448,9 +451,10 @@ class _FleetStormWindow:
     # literals, but the bound mirrors the damper's label cap (fail-open past
     # it: the oldest mirror entry is evicted rather than growing forever).
     MAX_CACHED_LABELS = 128
-    # The publish and the adopt each get one bounded call budget; a hanging
-    # Firestore call must not extend the entry path the way an unbounded
-    # read would. Well above a healthy call, far below the damper cap.
+    # The publish's floor read, the publish's write and the adopt each get one
+    # bounded call budget; a hanging Firestore call must not extend any lane
+    # the way an unbounded read would. Well above a healthy call, far below
+    # the damper cap.
     CALL_TIMEOUT_SECONDS = 1.0
 
     def __init__(self, namespace: str, *, wall_now: Callable[[], float] = time.time):
@@ -465,6 +469,7 @@ class _FleetStormWindow:
         self.failed_reads = 0
         self.publishes = 0
         self.publish_skips = 0
+        self.publish_floor_skips = 0
         self.publish_failures = 0
         self.unfit_labels = 0
 
@@ -529,10 +534,22 @@ class _FleetStormWindow:
 
         A window already covered by the mirror is skipped — during a
         lockstep burst every sibling would otherwise rewrite the same
-        document with a window the first publisher already broadcast. The
-        skip is advisory: it compares against what THIS process last saw,
-        and a skipped window costs at most the residual the mirror already
-        carries.
+        document with a window the first publisher already broadcast. A
+        window the FLEET already covers is skipped too: when the mirror
+        does not already cover the window, one bounded read refreshes the
+        mirror from the live document first, and a deeper sibling window
+        stands. Without that floor, a cold sibling's shallow first rung
+        (or a mirror that went stale inside the TTL while a deeper window
+        landed behind it) wrote straight over the storm the fleet had
+        already measured, and every adopter re-entered the storm early —
+        the damping collapsed to the shallowest sibling's rung exactly
+        when the storm was hottest. The extra read rides the exhaustion
+        lane only (publishes are proportional to exhaustions, the thing
+        the damper family eliminates) and fails open exactly like an
+        adopt read: a fault proceeds to the write, degrading to the
+        pre-floor behavior. Both skips are advisory: they compare against
+        what THIS process last saw or just fetched, and a skipped window
+        costs at most the residual the mirror already carries.
         """
         if client is None:
             return
@@ -549,6 +566,13 @@ class _FleetStormWindow:
         if known >= float(window_seconds):
             with self._lock:
                 self.publish_skips += 1
+            return
+        live_until = self._fetch_until_wall(doc_id, client, now)
+        self._remember(label, live_until, now)
+        if live_until - now >= float(window_seconds):
+            with self._lock:
+                self.publish_skips += 1
+                self.publish_floor_skips += 1
             return
         until_wall = now + float(window_seconds)
         try:

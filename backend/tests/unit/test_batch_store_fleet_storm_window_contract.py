@@ -14,7 +14,9 @@ whole fleet's next entries. This suite pins that contract end to end:
    ``{namespace}_storm_dampers/{doc_id}`` with the wall-clock deadline the
    entry would wait; the broadcast is skipped without a client, for
    non-finite or non-positive windows, when the mirror already covers the
-   window, and on any Firestore fault (counted, never raised).
+   window, when one bounded floor read shows the fleet already covers it
+   (a broadcast never lowers a deeper sibling measurement), and on any
+   Firestore fault (counted, never raised).
 2. Adopt: a cold entry sleeps the sibling pods' residual exactly once per
    mirror TTL, the longer of the process's own and the fleet's window wins,
    a stale/malformed/missing document and a read fault all read as no
@@ -316,7 +318,7 @@ def test_publish_warms_the_mirror_so_the_publisher_never_re_reads():
     window.publish('batch_merge', 1.0, client=client)
     residual = window.peek('batch_merge', client=client)
     assert residual == pytest.approx(1.0)
-    assert client.get_calls == []  # the broadcast is its own truth
+    assert len(client.get_calls) == 1  # the floor read; the broadcast is its own truth after it
 
 
 # --------------------------------------------------------------------------
@@ -611,9 +613,10 @@ def test_mid_ladder_peek_stays_process_local():
     damper, window, clock, wall = adopt_clocks('batch_pipeline_dev')
     client = StormDocsClient()
     window.publish('batch_merge', 2.0, client=client)
+    reads_after_publish = window.reads
     residual, generation = damper.peek('batch_merge')
     assert (residual, generation) == (0.0, 0)  # the gate reads the process only
-    assert client.get_calls == []
+    assert window.reads == reads_after_publish  # the gate adds no fleet read
 
 
 # --------------------------------------------------------------------------
