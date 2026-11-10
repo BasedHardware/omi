@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from contextlib import nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
@@ -26,6 +27,10 @@ from config.episodes import (
 from config.firestore_read_levers import lever_enabled
 from database import conversations, episodes
 from database._client import get_firestore_client
+from database.firestore_cache_metrics import record_request
+from database.firestore_retry import FIRESTORE_NO_RETRY
+from database.firestore_read_origin import read_origin
+from utils.read_cache_shadow import compare_hit
 from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc, idle_close_due
 from models.episode import EpisodeCloseReason
@@ -140,7 +145,6 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
     This memo is only a read projection, never authority for a mutation.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    root = client.collection('users').document(uid).collection('conversations')
     all_ids: list[str] = []
     for row in rows:
         row_ids: list[str] = row.get('conversation_ids') or []
@@ -155,18 +159,21 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
             cached = _members_cache.pop(cache_key, None)
             if cached is not None and time.monotonic() < cached[0]:
                 _members_cache[cache_key] = cached
-                return deepcopy(cached[1])
-    members: dict[str, dict[str, Any]] = {}
-    for offset in range(0, len(ids), episodes.MEMBERSHIP_BATCH_LIMIT):
-        refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
-        for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
-            if snapshot.exists:
-                members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
-    result = {
-        cid: row
-        for cid, raw in members.items()
-        if (row := conversations.prepare_conversation_for_read(raw, uid)) is not None
-    }
+            else:
+                cached = None
+        if cached is not None:
+            try:
+                record_request('fsr_s4_episode_members_cache', 'hit')
+            except Exception:
+                pass
+            try:
+                compare_hit(
+                    'episode_members', cached[1], lambda timeout: _fetch_members(uid, ids, client, timeout=timeout)
+                )
+            except Exception:
+                pass  # Even broken observation must preserve the cached response.
+            return deepcopy(cached[1])
+    result = _fetch_members(uid, ids, client)
     if cache_key is not None:
         with _members_cache_lock:
             # Count read/prepare latency against the TTL, so a slow fetch never
@@ -177,6 +184,38 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
                 while len(_members_cache) > MEMBERS_CACHE_MAX_ENTRIES:
                     _members_cache.popitem(last=False)
     return result
+
+
+def _fetch_members(uid, ids, client, *, timeout=None):
+    root = client.collection('users').document(uid).collection('conversations')
+    deadline = time.monotonic() + timeout if timeout is not None else None
+    members: dict[str, dict[str, Any]] = {}
+    for offset in range(0, len(ids), episodes.MEMBERSHIP_BATCH_LIMIT):
+        options = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('shadow read deadline')
+            options = {'timeout': remaining, 'retry': FIRESTORE_NO_RETRY}
+        refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
+        with read_origin('job:read_cache_shadow') if deadline is not None else nullcontext():
+            for snapshot in client.get_all(refs, field_paths=[] if deadline is not None else MEMBER_FIELDS, **options):
+                if snapshot.exists:
+                    members[snapshot.id] = (
+                        {} if deadline is not None else dict(snapshot.to_dict() or {}, id=snapshot.id)
+                    )
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError('shadow read deadline')
+    if deadline is not None:
+        # MEMBER_FIELDS excludes transcripts: prepare cannot drop an extant row
+        # via blob/decode/decrypt failures. Display visibility is applied later,
+        # not by this cache: even deleted rows retain their keys here.
+        return members
+    return {
+        cid: row
+        for cid, raw in members.items()
+        if (row := conversations.prepare_conversation_for_read(raw, uid)) is not None
+    }
 
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
