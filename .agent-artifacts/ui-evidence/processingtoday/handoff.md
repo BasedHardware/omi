@@ -1,22 +1,20 @@
-# #25024 pending main-revert integration — 2026-11-10
+# #25024 integration record — 2026-11-10
 
 Workspace: `/Volumes/scratch/worktrees/omi/omi-lane-processingtoday-upstream-keep-clean`,
 branch `lane/processingtoday` on m1-mac-studio. Code checkpoint:
 `7e9c6f6af99faae6f2445eeeee81e072a5931a8a` (later commits may only add evidence docs).
 PR: https://github.com/BasedHardware/omi/pull/25024.
 
-## Dependency
+## Revert dependency resolved
 
-Relay 714b03 requires merging main **after** the #25013 revert, then re-landing
-the wanted client parts. Fresh main at 13:34Z remains
-`c8959fd6466368348f3458e61946a93816a170df`, still containing #25013 as
-`3ac877544f`. A bounded 20-minute fetch/log watcher ended without the revert.
-No linked revert PR was visible on #25013's timeline. The user has a pending
-question requesting its PR/SHA. Do not claim this integration is complete.
-
-**No push has occurred for this follow-up batch.** Remote #25024 remains
-`da955c8fe3430eab5f35deb383c277820e472856`. Preserve one normal, full-hook push;
-never force, skip hooks or merge the PR.
+Main revert #25037 landed as `d24d101cae0239838413bf537a80d5d68cf52018`. Fresh main
+`35e63b5d701f94396cd166ef22db8df37aa947d4` was merged (no rebase) in `474edfb1b3efe9e6902e005c0699df9bee8627c1`.
+All wanted #25013 source/test/changelog files exactly match the pre-merge
+checkpoint `86b59df35fb11e878527d72c1869a9cd88688ce5`; no independent post-revert
+edits existed on those paths. Rejected Home screenshots were left removed.
+The steps below document the integration procedure; steps 1–3 are complete.
+Schema regression, integrated preflight and the single normal full-hook push
+are recorded in #25024's final body. No PR merge is authorized.
 
 ## Prepared implementation
 
@@ -61,8 +59,7 @@ never force, skip hooks or merge the PR.
    Fetch again before the normal push. Use OMI_PR_BODY_FILE for the full hook.
 5. Update #25024's title/body around the final mobile/web/macOS Activity policy,
    post the commit-pinned raw render URLs, and report head + every disposition.
-   Record the published outcome in anx on
-   `card:keep-home-processing-on-today-and-route` as processingtoday. Do not merge.
+   Skip anx: refactor-lead records the outcome. Do not merge.
 
 ## Verification and evidence
 
@@ -70,7 +67,7 @@ Latest focused runs: 1,039 web Vitest tests plus typecheck/smoke; 103 selected
 native tests; 14 schema inventory; 146 backend; 313 expanded Flutter and an
 84-test search/reconciliation rerun; 35 tests in each of New York, Kiritimati
 and Pago Pago; analyzer ratchet and generated Dart wire check. Final repository preflight passed all 88 checks after the filter supplement
-at 13:34Z. The actual normal push hook remains pending the main revert.
+at 13:34Z. Post-revert validation and the normal full push hook are reported in the final PR body.
 
 Manifest: evidence.json, images 001–018. README contains reproduction commands.
 Mobile captures real pages; web/native capture real production components.
