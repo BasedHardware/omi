@@ -1345,7 +1345,9 @@ def _compose(
     permitted_turns = (COMPOSER_NOTES_FIRST_MAX_TURNS if notes_first else 1) + int(keep_paid)
     now = datetime.now(timezone.utc)
     lease_token = uuid4().hex
-    lease_until = now + timedelta(seconds=permitted_turns * COMPOSER_CALL_BUDGET_SECONDS + 60)
+    lease_until = now + timedelta(
+        seconds=min(COMPOSER_LEASE_SECONDS, permitted_turns * COMPOSER_CALL_BUDGET_SECONDS + 60)
+    )
 
     def lease_guard(current: Mapping[str, Any]) -> Optional[str]:
         lease = current.get('compose_lease') or {}
@@ -1387,7 +1389,7 @@ def _compose(
         nonlocal input_tokens, output_tokens, paid_calls
         # Do not start a turn unless both provider attempts fit inside our claim.
         if (
-            paid_calls >= permitted_turns
+            paid_calls >= min(COMPOSER_MAX_PAID_TURNS, permitted_turns)
             or datetime.now(timezone.utc) + timedelta(seconds=COMPOSER_CALL_BUDGET_SECONDS) > lease_until
         ):
             raise ComposeFailed('compose_deadline')
