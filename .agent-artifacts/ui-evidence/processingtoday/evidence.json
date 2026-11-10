@@ -128,6 +128,6 @@
       "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-10T12:45:48.396594+00:00",
+  "captured_at_utc": "2026-11-10T13:04:37Z",
   "method": "Real Flutter page RepaintBoundary; real web tabs/gallery/tiles via hermetic headless Chromium; native production SwiftUI components via ImageRenderer. Synthetic fixtures, real fonts, no remote backend."
 }
