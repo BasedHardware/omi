@@ -42,7 +42,7 @@ history, binding and privacy generation. It refuses active tokens/leases,
 open operator/paid intents, privacy refusals and lost content ownership.
 `record_pending` and provider-STT rows do not enter this path.
 
-Before the ordinary held name-cursor page, each five-minute sweep tick reads
+Before the ordinary held name-cursor page, **every serving maintenance tick** reads
 oldest-first cutoff pages for `enqueued_at` (legacy objects) and `audio_staged_at`
 (replacements), **128 rows per indexed query**, at most 256 candidates total.
 The enqueue stream excludes only replacements with valid staging clocks;
@@ -53,12 +53,24 @@ current object clock. Separate durable age cursors advance even over fresh
 restages, malformed rows and transaction refusals, so none can pin a prefix.
 Neither urgency cursor depends on the ordinary held name cursor. Crash replay
 and competing sweeps retain the existing idempotent transaction/checkpoint CAS.
+Urgency also runs while the ordinary pass's `next_at` is in the future. Such a
+tick checkpoints only `input_after`, preserving `next_at`, `held_after` and all
+redrive state. Only the ordinary name page and nightly dead-held pass honor
+`next_at`; the input kill disables urgency queries and cursor writes.
 
-For the supplied review's 22,583-row cohort, an urgency pass takes at most
-`ceil(22583 / 128) * 300 = 53,100 seconds` (14h45m), inside the day-29/day-30
-window. Per-stream capacity is 36,864 rows/day; this is a bounded sweep, not an
-unlimited throughput claim. The 300-second cadence and ordinary 32-row page
-are unchanged. Missing indexes fail the urgency scan rather than silently
+For the supplied review's dated 22,583-row cohort, allow one maintenance interval
+plus a page drain: `(1 + ceil(22583 / 128)) * T = 178 * T`, per stream. Both
+streams advance in the same tick. `config/batch_pipeline.py:serving_tick_seconds`
+defaults to a 20-second sleep and caps configured sleep at 60 seconds. Thus the
+cadence component is **3,560 seconds (59m20s)** by default, or **10,680 seconds
+(2h58m)** at the maximum configured sleep. Add maintenance, query and transaction
+runtime; the sleep alone is not a wall-clock SLA. A conservative **300-second
+completed-maintenance-tick budget** yields **53,400 seconds (14h50m)**, including
+the initial wait; the previous 14h45m estimate omitted it. Meeting that budget
+requires successful ticks within 300 seconds and no more than the cited cohort
+per stream. Outages, transaction refusals or a growing backlog invalidate that
+assumption. The ordinary 300-second throttle, 32-row page and all timer settings
+are unchanged. Missing indexes fail urgency discovery rather than silently
 falling back to the slow name cursor.
 
 The legacy stream reuses `*_batch_timeliness_assignment_held`. Replacement
