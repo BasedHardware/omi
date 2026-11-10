@@ -522,3 +522,102 @@ def test_mixed_value_types_against_loopback_firestore(monkeypatch):
             assert refs[f'{kind}-future'].get().to_dict()['summary_due_at'] == due_value(100, kind)
     finally:
         client.close()
+
+
+@pytest.mark.parametrize('old_temp_kind', ['symlink', 'permissive_file'])
+def test_checkpoint_ignores_old_predictable_temp_path(tmp_path, old_temp_kind):
+    import json
+
+    checkpoint = tmp_path / 'cursor.json'
+    old_temp = tmp_path / 'cursor.json.tmp'
+    target = tmp_path / 'public.json'
+    target.write_text('public content')
+    if old_temp_kind == 'symlink':
+        old_temp.symlink_to(target)
+    else:
+        old_temp.write_text('existing permissive file')
+        old_temp.chmod(0o666)
+    before = old_temp.read_bytes()
+    cursor = {'pass': 'numeric', 'due': 10, '__name__': 'private/document/path'}
+    backfill._checkpoint(checkpoint, cursor)
+    assert json.loads(checkpoint.read_text()) == cursor
+    assert checkpoint.stat().st_mode & 0o777 == 0o600
+    assert old_temp.read_bytes() == before
+    assert old_temp.is_symlink() == (old_temp_kind == 'symlink')
+    assert target.read_text() == 'public content'
+    assert not list(tmp_path.glob('.cursor.json.*.tmp'))
+
+
+def test_checkpoint_enforces_private_mode_under_permissive_umask(tmp_path, monkeypatch):
+    import os
+
+    checkpoint = tmp_path / 'cursor.json'
+    checkpoint.write_text('old public checkpoint')
+    checkpoint.chmod(0o666)
+    fchmod = backfill.os.fchmod
+    modes = []
+
+    def enforce(fd, mode):
+        modes.append(mode)
+        return fchmod(fd, mode)
+
+    monkeypatch.setattr(backfill.os, 'fchmod', enforce)
+    previous_umask = os.umask(0)
+    try:
+        backfill._checkpoint(checkpoint, {'pass': 'numeric', 'due': 10, '__name__': 'private/path'})
+    finally:
+        os.umask(previous_umask)
+    assert modes == [0o600]
+    assert checkpoint.stat().st_mode & 0o777 == 0o600
+    assert list(tmp_path.iterdir()) == [checkpoint]
+
+
+@pytest.mark.parametrize('failure', ['write', 'fsync', 'replace', 'fchmod'])
+def test_checkpoint_failure_keeps_previous_file_and_cleans_temp(tmp_path, monkeypatch, failure):
+    checkpoint = tmp_path / 'cursor.json'
+    checkpoint.write_bytes(b'previous valid checkpoint')
+    checkpoint.chmod(0o600)
+    before = checkpoint.stat()
+    mkstemp = backfill.tempfile.mkstemp
+    opened = []
+
+    def capture(**kwargs):
+        fd, temporary = mkstemp(**kwargs)
+        opened.append((fd, temporary))
+        assert kwargs['dir'] == tmp_path
+        return fd, temporary
+
+    def fail(*args):
+        if failure == 'write':
+            args[1].write('partially written private cursor')
+        raise OSError('synthetic checkpoint failure')
+
+    monkeypatch.setattr(backfill.tempfile, 'mkstemp', capture)
+    if failure == 'write':
+        monkeypatch.setattr(backfill.json, 'dump', fail)
+    else:
+        monkeypatch.setattr(backfill.os, failure, fail)
+    with pytest.raises(OSError, match='synthetic checkpoint failure'):
+        backfill._checkpoint(checkpoint, {'pass': 'numeric', 'due': 10, '__name__': 'private/path'})
+    assert checkpoint.read_bytes() == b'previous valid checkpoint'
+    assert checkpoint.stat().st_ino == before.st_ino
+    assert checkpoint.stat().st_mode & 0o777 == 0o600
+    assert list(tmp_path.iterdir()) == [checkpoint]
+    assert len(opened) == 1
+    with pytest.raises(OSError):
+        backfill.os.fstat(opened[0][0])
+
+
+def test_checkpoint_atomic_replace_does_not_follow_final_symlink(tmp_path):
+    import json
+
+    target = tmp_path / 'public.json'
+    target.write_text('public content')
+    checkpoint = tmp_path / 'cursor.json'
+    checkpoint.symlink_to(target)
+    cursor = {'pass': 'timestamp', 'due': None, '__name__': None}
+    backfill._checkpoint(checkpoint, cursor)
+    assert not checkpoint.is_symlink()
+    assert json.loads(checkpoint.read_text()) == cursor
+    assert checkpoint.stat().st_mode & 0o777 == 0o600
+    assert target.read_text() == 'public content'

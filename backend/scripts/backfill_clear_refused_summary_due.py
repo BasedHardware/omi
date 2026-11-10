@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -135,11 +136,19 @@ def _checkpoint(path: Path, cursor: dict[str, Any]) -> None:
                 else DatetimeWithNanoseconds.fromisoformat(due.isoformat()).timestamp_pb()
             ).rfc3339()
         }
-    temporary = path.with_name(path.name + '.tmp')
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, 'w') as output:
-        json.dump(cursor, output)
-    temporary.replace(path)
+    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.tmp', dir=path.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, 'w') as output:
+            fd = -1  # The stream owns the descriptor, including on write failure.
+            json.dump(cursor, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        Path(temporary).unlink(missing_ok=True)
 
 
 def run_backfill(
