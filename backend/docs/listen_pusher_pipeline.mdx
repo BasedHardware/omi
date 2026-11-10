@@ -6687,8 +6687,8 @@ defaults to30 minutes;0 disables new priority admission. Unknown/future clocks
 or a failed two-second metadata lookup keep work on the established queue.
 Older backlog retains its drain capacity. Active leases, custom identities,
 background backfill and lazy effects are preserved. Queue/token changes share
-the existing CAS fence. Production ops reconciles fresh capacity at5 concurrent
-deliveries/2 per second; staging mirrors this as `staging-enrichment-fresh`,
+the existing CAS fence. Production ops reconciles fresh capacity at30 concurrent
+deliveries/10 per second; staging intentionally stays at5/2 as `staging-enrichment-fresh`,
 provisioned by its queue bootstrap helper before deployment.
 Existing valid bindings survive rollback; leave both queues running to drain.
 See [the rollout note](listen_pusher_pipeline/changes/2026-11-04-fresh-title-priority.md).
