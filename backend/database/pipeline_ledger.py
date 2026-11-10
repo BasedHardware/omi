@@ -399,6 +399,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
 
 
 CENSUS_FIELDS = (
+    'schema_version',
     'owner_key',
     'stage',
     'entered_at',
@@ -423,7 +424,13 @@ CENSUS_FIELDS = (
 
 
 def iter_window(
-    start: Any, end: Any, *, uid: str, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
+    start: Any,
+    end: Any,
+    *,
+    uid: str,
+    limit: int = DEFAULT_WINDOW_LIMIT,
+    firestore_client: Any = None,
+    include_key: bool = False,
 ) -> Iterator[dict[str, Any]]:
     """Yield one owner's ledger rows with ``admitted_at`` in ``[start, end)``.
 
@@ -434,6 +441,11 @@ def iter_window(
     materialized before the first yield, so a truncated window raises
     :class:`LedgerWindowTruncated` without handing the caller a prefix. C2 must
     read through this helper, never the private store.
+
+    ``include_key`` adds the document id (the conversation id) as
+    ``capture_id`` so the operator census can join the conversation row for the
+    Home-visible predicate. It is off by default: the aggregate census never
+    needs it, and the operator route never returns it.
     """
     start_epoch, end_epoch = _epoch(start), _epoch(end)
     if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
@@ -452,11 +464,29 @@ def iter_window(
         raise LedgerWindowTruncated(f'ledger window exceeded {limit} rows')
     for snapshot in snapshots:
         doc = snapshot.to_dict() or {}
-        yield {key: doc.get(key) for key in CENSUS_FIELDS}
+        row = {key: doc.get(key) for key in CENSUS_FIELDS}
+        if include_key:
+            row['capture_id'] = snapshot.id
+        yield row
 
 
 def census_window(
-    start: Any, end: Any, *, uid: str, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
+    start: Any,
+    end: Any,
+    *,
+    uid: str,
+    limit: int = DEFAULT_WINDOW_LIMIT,
+    firestore_client: Any = None,
+    include_key: bool = False,
 ) -> list[dict[str, Any]]:
     """Materialized :func:`iter_window`; raises on truncation."""
-    return list(iter_window(start, end, uid=uid, limit=limit, firestore_client=firestore_client))
+    return list(
+        iter_window(
+            start,
+            end,
+            uid=uid,
+            limit=limit,
+            firestore_client=firestore_client,
+            include_key=include_key,
+        )
+    )
