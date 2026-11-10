@@ -40,6 +40,7 @@ def test_documented_flags_exist_in_runtime_and_registry():
         'config/batch_pipeline.py',
         'database/conversations.py',
         'config/policy/kill_switches.py',
+        'config/refactor_modes.py',  # new refactor switches are declared here (BATCH_INPUT_EXPIRING_ENABLED)
         'config/batch_pipeline_vendor_failover.py',
         'config/listen_finalization.py',
         'config/record_seal_rules.py',

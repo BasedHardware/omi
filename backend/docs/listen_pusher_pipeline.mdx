@@ -9562,3 +9562,36 @@ Successful final rebuild or permanent owner revocation clears only the observed
 marker version; a replacement marker always wins. No PCM or audio-object
 mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
 records scope and verification limits.
+
+### Held staging input expiry
+
+`BATCH_INPUT_EXPIRING_ENABLED` defaults on via `config/refactor_modes.py`;
+`false` is the kill for new day-29 transitions in the existing held sweep.
+Eligible GPU-quarantined and assignment-held staging inputs use `audio_staged_at`
+for replacement objects with a finite positive numeric clock, else `enqueued_at`
+as the earlier admission/staging proxy, including when the replacement clock is
+present but malformed. Two unusable clocks never authorize `input_expiring`.
+Exact-bundle repair stamps the new object time without changing original enqueue.
+The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
+results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
+with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
+Before the ordinary held name page, two indexed urgency streams (legacy enqueue
+and current restage clocks, limit 128 each) use independent age cursors. The
+restage-clock composites are declared in the index registry and generated
+manifest; index readiness precedes rollout. No legacy backfill, record-pending
+or sweep cadence change is involved. The existing
+`BATCH_HELD_DEAD_LETTER_ENABLED` sweep kill also remains effective.
+
+The existing `failed/batch_artifact_missing` upload wire shape and exact-bundle
+custody-repair protocol carry needs-attention and GPU re-upload; legacy readers
+retain their existing custody-safe response. Checked operator GPU requeue or
+target-restorable assignment release is the manual exit, even with the new kill
+off. Status polling and nightly held-expired redrive never reopen this reason.
+`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 21 days with
+fresh sample evidence. The 30-day privacy ceiling is unchanged. See the
+[operator runbook](runbooks/held-staging-inputs.md) for approved manual execution.
+`omi_batch_staged_input_clock_invalid_total` counts malformed clock observations
+in completed bounded age samples and existing held sweep pages, including
+missing clocks excluded by age ordering. Neither clock usable in an age sample also sets
+`omi_batch_timeliness_scan_truncated{leg="staged_input"}` to 1 for the existing
+scan-blind warning. These observations are not a distinct-row fleet census.
