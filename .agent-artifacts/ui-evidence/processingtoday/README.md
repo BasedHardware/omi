@@ -76,3 +76,5 @@ PROCESSING_TODAY_RENDER_OUTPUT="$PWD/../../.agent-artifacts/ui-evidence/processi
 ```
 
 No bundle launch/signing/TCC changes. Native tests cover exclusive placement, missing/false/true wire fields, failed reads, double-tap/error retry, search-only reachability, completion and account clearing. Web typecheck/full suite pass; final counts and full hook are recorded in the PR body. Backend schema inventory regression: `backend/.venv/bin/python -m pytest backend/tests/unit/test_app_client_schema_inventory.py -q` passes all 14 tests after moving generated search decoding back to the API route (no test weakening).
+
+Web retry results now replace known list/search rows and their list cache before refresh. A generation fence rejects a response started before that replacement, so failed refreshes and older reads cannot resurrect the completed Activity item. Tests cover failed refresh, cache remount and older list/search responses. The off path retains the previous status-only Home tile. Native Activity observes shared conversation updates and its spine receives the emitted confirmation value (Published emits before assignment), so placements update together.

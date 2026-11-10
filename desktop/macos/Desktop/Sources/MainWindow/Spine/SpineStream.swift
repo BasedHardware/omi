@@ -152,7 +152,7 @@ struct SpineStream: View {
     }
     .onDisappear { hydrator.stop() }
     .onReceive(appState.$conversations) { _ in ingest() }
-    .onReceive(HomeFailurePlacementStore.shared.$enabled) { _ in ingest() }
+    .onReceive(HomeFailurePlacementStore.shared.$enabled) { confirmed in ingest(confirmedPlacement: confirmed) }
     .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
     .onReceive(tasksStore.$incompleteTasks) { _ in ingest() }
     .onChange(of: request) { _, newValue in
@@ -161,10 +161,10 @@ struct SpineStream: View {
     }
   }
 
-  private func ingest() {
+  private func ingest(confirmedPlacement: Bool? = nil) {
     store.ingest(
       conversations: ConversationFailurePlacement.home(
-        appState.conversations, confirmed: HomeFailurePlacementStore.shared.enabled),
+        appState.conversations, confirmed: confirmedPlacement ?? HomeFailurePlacementStore.shared.enabled),
       memories: memoriesViewModel.streamMemories,
       tasks: tasksStore.incompleteTasks
     )

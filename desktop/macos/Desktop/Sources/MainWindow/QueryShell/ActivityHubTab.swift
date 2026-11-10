@@ -10,7 +10,7 @@ import SwiftUI
 /// and mounts the one composer. This host has no composer and no answer mode — it is the `.results`
 /// body only, so the hub cannot grow a second chat.
 struct ActivityHubTab: View {
-  let appState: AppState
+  @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   let onOpenConversation: (ServerConversation) -> Void
   let onOpenMemory: (SpineMemory) -> Void
