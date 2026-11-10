@@ -31,6 +31,7 @@ from utils.conversations import merge_conversations_job
 
 from database import conversations as conversations_db
 from database import no_speech_terminal as no_speech_terminal_db
+from utils.conversations.no_speech_restore import restore_no_speech_capture as restore_no_speech_capture
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database import sync_cap_recovery
@@ -1370,23 +1371,5 @@ def close_no_speech_capture(
         run_id=run_id,
         speech_seconds=speech_seconds,
         audio_seconds=audio_seconds,
-        firestore_client=firestore_client,
-    )
-
-
-def restore_no_speech_capture(
-    uid: str,
-    conversation_id: str,
-    *,
-    expected_closed_revision: str,
-    run_id: str,
-    firestore_client: Any = None,
-) -> None:
-    """Restore only the unchanged generation this run closed."""
-    no_speech_terminal_db.restore_no_speech(
-        uid,
-        conversation_id,
-        expected_closed_revision=expected_closed_revision,
-        run_id=run_id,
         firestore_client=firestore_client,
     )

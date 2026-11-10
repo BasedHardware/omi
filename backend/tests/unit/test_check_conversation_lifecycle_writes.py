@@ -170,3 +170,10 @@ def test_allowlisted_literal_completed_write_requires_atomic_decision():
             'requires relevance_decision' in e
             for e in violations("transaction.update(ref, {'status': 'completed'})", path)
         )
+
+
+def test_secret_free_restore_owner_is_narrowly_scoped():
+    path = 'backend/utils/conversations/no_speech_restore.py'
+    assert violations('no_speech_terminal_db.restore_no_speech(uid, cid)', path) == []
+    assert violations('no_speech_terminal_db.close_no_speech(uid, cid)', path)
+    assert violations('conversations_db.set_conversation_as_discarded(uid, cid)', path)
