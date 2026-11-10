@@ -32,9 +32,7 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize('lose_reply', [False, True])
-@pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
-async def _emulator_client():
+def _emulator_client():
     # Match the configured isolated project: a second project can require a
     # cold database bootstrap after the CLI has reported the emulator ready.
     project = os.environ.get('GOOGLE_CLOUD_PROJECT') or 'demo-omi-listen-stack'
@@ -43,7 +41,9 @@ async def _emulator_client():
     return firestore.Client(project=project, credentials=AnonymousCredentials())
 
 
-def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch, tmp_path, lose_reply, seal):
+@pytest.mark.parametrize('lose_reply', [False, True])
+@pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
+async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch, tmp_path, lose_reply, seal):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
