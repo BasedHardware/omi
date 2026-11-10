@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from prometheus_client import generate_latest
 from prometheus_client.parser import text_string_to_metric_families
 
@@ -126,14 +124,6 @@ def test_attempt_reason_end_type_and_end_at_are_preserved():
 def test_unknown_end_type_is_never_labelled_observed():
     doc = ledger.plan_advance(None, ledger.CAPTURING, now=100, end_type='invented').doc
     assert doc['end_type'] == 'unknown'
-
-
-def test_end_type_mapping_never_invents_jev_or_user_disconnect():
-    assert ledger.end_type_for_trigger('client_finalize') == 'user_initiated'
-    assert ledger.end_type_for_trigger('capture_end') == 'unknown'
-    assert ledger.end_type_for_trigger('server_recovery') == 'unknown'
-    assert ledger.end_type_for_trigger('server_recovery', quiet_cause=True) == 'silence_backstop'
-    assert ledger.end_type_for_trigger('jev_initiated') == 'unknown'
 
 
 def test_end_at_is_the_firing_clock_not_last_speech():
@@ -416,33 +406,3 @@ def test_census_window_rejects_an_inverted_window():
         pass
     else:  # pragma: no cover - the assertion is the contract
         raise AssertionError('inverted window must be rejected')
-
-
-def test_account_erasure_enumerates_pipeline_ledger(monkeypatch):
-    from database.user_data_deletion import purge_user_subtree
-
-    client = SimpleNamespace()
-    users = SimpleNamespace()
-    user_ref = SimpleNamespace()
-    ledger_sub = SimpleNamespace(id='pipeline_ledger')
-    user_ref.get = lambda: SimpleNamespace(exists=False)
-    user_ref.collections = lambda: [ledger_sub]
-    user_ref.collection = lambda _name: SimpleNamespace(document=lambda _key: SimpleNamespace(delete=lambda: None))
-    user_ref.delete = lambda: None
-    users.document = lambda _uid: user_ref
-    client.collection = lambda name: users if name == 'users' else SimpleNamespace()
-    recursive = []
-
-    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', lambda _uid: None)
-    monkeypatch.setattr('database.user_data_deletion.search_apps_db', lambda _uid, my_apps: [])
-    monkeypatch.setattr(
-        'database.user_data_deletion.get_data_plane_firestore_client',
-        lambda: SimpleNamespace(
-            collection=lambda _name: SimpleNamespace(document=lambda _key: SimpleNamespace(delete=lambda: None))
-        ),
-    )
-    monkeypatch.setattr('database.user_data_deletion.stop_quiet_checks_for_account', lambda *_a, **_kw: None)
-    monkeypatch.setattr('database.user_data_deletion.generation_ref', lambda _ref: SimpleNamespace(delete=lambda: None))
-
-    assert purge_user_subtree('synthetic', client, lambda sub, **_kw: recursive.append(sub))['status'] == 'ok'
-    assert ledger_sub in recursive

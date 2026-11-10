@@ -151,22 +151,6 @@ def terminal_ttl_seconds() -> int:
     return max(DEFAULT_TERMINAL_TTL_SECONDS, min(MAX_TERMINAL_TTL_SECONDS, value))
 
 
-def end_type_for_trigger(trigger: Any, *, quiet_cause: bool = False) -> str:
-    """Map an existing ``ProcessingTrigger`` to a bounded end type.
-
-    Only an observed trigger maps to a known type. A bare disconnect
-    (``capture_end``) or a generic recovery without a proven quiet cause stays
-    ``unknown``. There is no Jev finalizer on main, so ``jev_initiated`` is
-    never inferred.
-    """
-    value = getattr(trigger, 'value', trigger)
-    if value == 'client_finalize':
-        return 'user_initiated'
-    if value == 'server_recovery' and quiet_cause:
-        return 'silence_backstop'
-    return 'unknown'
-
-
 def _epoch(value: Any) -> float | None:
     if value is None:
         return None
