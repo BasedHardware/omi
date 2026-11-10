@@ -290,8 +290,11 @@ def test_finish_after_erasure_enumeration_cannot_create_an_orphan_receipt(monkey
         row.delete()
         user.delete()
         assert not receipt.get().exists
+        assert privacy.get().to_dict()['blocked']  # The erasure authority intentionally survives.
     finally:
-        for ref in (receipt, row, user, privacy):
+        # Main's privacy write fence forbids deleting an erasure authority.
+        # This synthetic owner's tombstone dies with the isolated emulator.
+        for ref in (receipt, row, user):
             ref.delete()
         client.close()
 
