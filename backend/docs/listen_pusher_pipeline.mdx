@@ -3196,6 +3196,14 @@ records the reader audit and unmeasured acceptance.
 
 ### Failure terminal summary recovery
 
+Processing-attention class 11 `recovery_structure_unavailable` items expire on
+read after seven days only while permanently non-retryable. The default-on
+`PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED` runtime/chart switch disables
+new expiry writes when `false`; retained inactive records never reactivate.
+Expiry transactionally checks the observed item version and retry claim before
+setting `expired_at` and `expiry_reason=non_retryable_ttl`. Timestamp handling,
+post-filter limits and endpoint contracts live in [pending work](pending-work.md).
+
 Only transient dead-letter failures with usable input and no prior
 summary get `summary_retryable=true`; enrichment and free-tier persistence clear
 it explicitly after funded work completes. Budget deferral retains the retry
