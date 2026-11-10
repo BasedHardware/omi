@@ -1,6 +1,6 @@
 {
   "about": "CI flag budget for the transcription pipeline env surface plus explicitly registered helper-backed kill switches (ADR 0006, backend/docs/adr/0006-pipeline-flag-budget.md). tests/unit/test_flag_budget.py fails when a read name is missing here, a registry entry drifts, or budget drifts.",
-  "as_of": "2026-10-29",
+  "as_of": "2026-11-10",
   "scope": [
     "utils/batch_pipeline/**/*.py",
     "diarizer/batch_pipeline*.py",
@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 263,
+  "count": 264,
   "names": {
+    "AUDIO_SILENCE_CENSUS_ENABLED": {"owner": "refactor-lead", "review_by": "2026-12-10", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
