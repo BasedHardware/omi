@@ -1,4 +1,4 @@
-"""Real finish receipt atomicity after a commit succeeds but its response is lost."""
+"""Real custody observations and finish receipts after committed reply loss."""
 
 import hashlib
 import os
@@ -13,7 +13,7 @@ import pytest
 from starlette.responses import JSONResponse
 
 from config.record_audio import record_identity
-from database import record_custody_append as custody, record_token_lease_metrics as metrics
+from database import record_custody_append as custody, record_token_lease_metrics as metrics, record_audio
 from database.batch_pipeline_record_lease_recovery import recovery_segment
 from utils.sync import record_token_lease as request
 
@@ -104,6 +104,86 @@ async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch,
             if (ref.get().to_dict() or {}).get('owner_id') == uid:
                 ref.delete()
         receipt.delete()
+        row.delete()
+        user.delete()
+        client.close()
+
+
+@pytest.mark.parametrize('lose_reply', [False, True])
+@pytest.mark.parametrize('transition', ['none', 'closed', 'lapsed'])
+async def test_shadow_observes_post_storage_state_through_real_renewal_reply_loss(
+    monkeypatch, tmp_path, lose_reply, transition
+):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    client = firestore.Client(project='demo-tokenlease-post-storage', credentials=AnonymousCredentials())
+    uid, cid = 'synthetic-post-storage-' + uuid.uuid4().hex, 'record'
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    user.set({'private_cloud_sync_enabled': True})
+    row.set(
+        {
+            'record_lane_owner': 'batch_live_v1',
+            'record_audio_closed': False,
+            'record_upload_revision': 7,
+            'record_upload_sessions': {},
+        }
+    )
+    monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(custody, 'get_firestore_client', lambda: client)
+    original_commit = client._firestore_api.commit
+    artifact = tmp_path / 'durable-shadow-audio'
+    lost = []
+
+    def commit_then_lose_reply(*args, **kwargs):
+        result = original_commit(*args, **kwargs)
+        if lose_reply and artifact.exists() and not lost:
+            lost.append(True)
+            raise ServiceUnavailable('synthetic renewal response lost after real commit')
+        return result
+
+    monkeypatch.setattr(client._firestore_api, 'commit', commit_then_lose_reply)
+    counter = metrics.LATE_APPEND._value.get()
+
+    def archive(owner, paths, metadata):
+        if transition == 'closed':
+            row.update({'record_audio_closed': True})  # Repair wins before bytes land.
+        elif transition == 'lapsed':
+            now = datetime.now(timezone.utc).timestamp()
+            row.update(
+                {
+                    'record_upload_sessions': {
+                        'older': {
+                            'pod': 'synthetic-pusher',
+                            'process_started_at': now - 86400,
+                            'last_signal_at': now - 7200,
+                            'lease_expires_at': now - 3600,
+                            'signal_source': 'frames',
+                        }
+                    }
+                }
+            )
+        artifact.write_bytes(b'synthetic durable shadow bytes')
+        assert metrics.LATE_APPEND._value.get() == counter
+        return [str(artifact)]
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload(uid, cid, 'shadow')
+        paths = ['local-audio']
+        archived = await request.archive(archive, uid, paths, {})
+        request.stored(paths, archived)
+        assert metrics.LATE_APPEND._value.get() == counter
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    try:
+        assert (await upload()).status_code == 202
+        assert lost == ([True] if lose_reply else [])
+        assert artifact.read_bytes() == b'synthetic durable shadow bytes'
+        assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
+        assert row.get().to_dict()['record_upload_revision'] == 7
+    finally:
+        # Exact synthetic owner only; this view creates no receipts or jobs.
+        monkeypatch.setattr(client._firestore_api, 'commit', original_commit)
         row.delete()
         user.delete()
         client.close()
