@@ -239,6 +239,19 @@ def retained_record_units(
         comparison_pcm = pcm
         source_digest = hashlib.sha256(pcm).hexdigest()
         source_skip = 0
+        raw_offset = chunk.get('raw_offset_samples')
+        if raw_offset is not None:
+            # A listed raw fragment selects its own samples from the unchanged
+            # pack. A gapped pack yields one fragment per contiguous run, so
+            # reading the whole pack for every fragment would duplicate audio
+            # and close the writer's gaps.
+            count = int((chunk.get('span') or {}).get('samples', 0))
+            if count <= 0:
+                raise ValueError('raw fragment has no sample span')
+            source_skip = int(raw_offset)
+            pcm = pcm[source_skip * 2 : (source_skip + count) * 2]
+            if len(pcm) != count * 2:
+                raise ValueError('raw fragment exceeds its source pack')
         capture = float(chunk['timestamp'])
         if capture_origin is None:
             capture_origin = capture
@@ -261,7 +274,7 @@ def retained_record_units(
                 raise ValueError('conflicting retained audio overlap')
             if divergent and diagnostics is not None:
                 diagnostics['trimmed_divergent_overlaps'] = diagnostics.get('trimmed_divergent_overlaps', 0) + 1
-            source_skip = overlap // 2
+            source_skip = source_skip + overlap // 2
             pcm, capture = pcm[overlap:], end
             if not pcm:
                 continue

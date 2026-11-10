@@ -10,11 +10,13 @@ from google.cloud.exceptions import NotFound
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
-from utils.other.raw_audio import decode_capture
+from utils.other.raw_audio import decode_capture, decode_capture_frames
 from utils.other.audio_frame_table import (
     FRAME_SCHEMA,
     committed_frames,
     entries,
+    media_name,
+    unframed_frames,
     validate_frames,
     receipt_frames,
     resampled_samples,
@@ -29,6 +31,7 @@ from utils.other.audio_raw_read_metrics import (
     record,
     log_failure,
 )
+from config.refactor_modes import raw_live_gapped_packs_enabled
 
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
@@ -46,6 +49,54 @@ def invalidate_pack_index(bucket, uid: str, conversation_id: str):
         _indexes.pop((getattr(bucket, 'name', ''), uid, conversation_id), None)
 
 
+def _gapped_unframed(metadata: dict) -> bool:
+    """A pack the writer recorded with gaps but without a declared frame schema."""
+    if metadata.get('frame_schema') == FRAME_SCHEMA:
+        return False
+    try:
+        return int(metadata['gap_count']) != 0
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _custody_manifests(bucket, uid: str, conversation_id: str, *, deadline=None, timeout=10, max_count=10000):
+    """Custody manifests written beside this conversation's unframed packs.
+
+    ``commit_capture`` names the manifest directory exactly like the media
+    directory, so one prefix listing maps every pack to its own manifest
+    without a per-pack list.
+    """
+    prefix = f'audio-outbox/{uid}/{conversation_id}/'
+    manifests = {}
+    for index, blob in enumerate(bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline, timeout), retry=None)):
+        if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
+            raise TimeoutError('raw capture manifest index budget exhausted')
+        if (blob.metadata or {}).get('format') != 'audio-custody-manifest-v1':
+            continue
+        manifests[f'{conversation_id}/{blob.name[len(prefix) :].rsplit("/", 1)[0]}'] = blob
+    return manifests
+
+
+def _pack_frames(bucket, blob, uid: str, *, deadline=None):
+    """The writer's own frame positions for one gapped, unframed pack."""
+    prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
+    candidates = [
+        candidate
+        for candidate in bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline), retry=None)
+        if (candidate.metadata or {}).get('format') == 'audio-custody-manifest-v1'
+    ]
+    if len(candidates) != 1:
+        raise ValueError('gapped capture has no unique custody manifest')
+    return unframed_frames(bucket, blob, uid, candidates[0].name, deadline=deadline)
+
+
+def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
+    """The writer counts a discontinuity and a retained zero-sample frame alike."""
+    return (
+        sum(frame['gap_before'] for frame in frames) + sum(1 for frame in frames if frame['samples'] == 0) == gap_count
+    )
+
+
 def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
     with _index_lock:
@@ -53,6 +104,8 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
         if not fresh and cached and cached[0] > time.monotonic():
             return cached[1]
     packs = []
+    gapped_enabled = raw_live_gapped_packs_enabled()
+    manifests = None
     for index, blob in enumerate(
         bucket.list_blobs(
             prefix=f'raw-live/{uid}/{conversation_id}/', timeout=io_timeout(deadline, timeout), retry=None
@@ -69,7 +122,8 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
         try:
             start, end = float(metadata['capture_start']), float(metadata['capture_end'])
             framed = metadata.get('frame_schema') == FRAME_SCHEMA
-            if (not framed and int(metadata['gap_count']) != 0) or end <= start or int(metadata['channels']) != 1:
+            gapped = not framed and int(metadata['gap_count']) != 0
+            if (gapped and not gapped_enabled) or end <= start or int(metadata['channels']) != 1:
                 continue
             if metadata['codec'] not in {'opus', 'flac', 'pcm16', 'pcm8'}:
                 continue
@@ -93,6 +147,25 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
                 if sum(frame['gap_before'] for frame in frames) != int(metadata['gap_count']):
                     raise CoverageMismatch('capture gap count differs from frame table')
                 packs.extend(entries(frames, rate, source))
+                if len(packs) > max_count:
+                    raise TimeoutError('raw capture index budget exhausted')
+            elif gapped:
+                # The writer kept the exact frame positions in the custody
+                # manifest even though the media metadata omits the frame
+                # schema. Without it the pack's internal gaps are unknowable,
+                # so an unresolvable manifest stays excluded rather than being
+                # decoded as one continuous stream.
+                if manifests is None:
+                    manifests = _custody_manifests(
+                        bucket, uid, conversation_id, deadline=deadline, timeout=timeout, max_count=max_count
+                    )
+                manifest = manifests.get(media_name(blob.name, uid))
+                if manifest is None:
+                    continue
+                frames, rate = unframed_frames(bucket, blob, uid, manifest.name, deadline=deadline)
+                if not _gap_count_matches(frames, int(metadata['gap_count'])):
+                    raise CoverageMismatch('capture gap count differs from frame table')
+                packs.extend(entries(frames, rate, source, allow_empty=True))
                 if len(packs) > max_count:
                     raise TimeoutError('raw capture index budget exhausted')
             else:
@@ -176,9 +249,15 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> b
     deadline = time.monotonic() + download_kwargs.get('timeout', 10)
     blob.reload(**(download_kwargs or {}))
     metadata = blob.metadata or {}
+    frames = None
     if metadata.get('frame_schema') == FRAME_SCHEMA:
         frames, rate = committed_frames(bucket, blob, uid, deadline=deadline)
         expected = resampled_samples(validate_frames(frames, rate), rate, sample_rate) * 2
+    elif _gapped_unframed(metadata) and raw_live_gapped_packs_enabled():
+        # A gapped pack's decoded length is the sum of its recorded frames, not
+        # its wall span. The manifest is the only truthful source for both.
+        frames, rate = _pack_frames(bucket, blob, uid, deadline=deadline)
+        expected = resampled_samples(sum(int(frame['samples']) for frame in frames), rate, sample_rate) * 2
     else:
         expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
     raw = blob.download_as_bytes(**{**download_kwargs, 'timeout': io_timeout(deadline)})
@@ -190,7 +269,10 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> b
     if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
         raise ChecksumMismatch('capture checksum mismatch')
     try:
-        pcm = decode_capture(raw, metadata, sample_rate)
+        if frames is not None and metadata.get('frame_schema') != FRAME_SCHEMA:
+            pcm = decode_capture_frames(raw, metadata, frames, sample_rate)
+        else:
+            pcm = decode_capture(raw, metadata, sample_rate)
     except Exception as error:
         raise DecodeError('capture decode failed') from error
     if abs(len(pcm) - expected) > 2:

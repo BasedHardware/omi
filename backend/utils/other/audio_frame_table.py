@@ -18,7 +18,14 @@ MAX_FRAMES = 4096
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 
 
-def validate_frames(frames: list[dict], sample_rate: int) -> int:
+def validate_frames(frames: list[dict], sample_rate: int, *, allow_empty: bool = False) -> int:
+    """Validate a frame table; ``allow_empty`` admits retained zero-sample frames.
+
+    A pack whose writer did not declare ``frame_schema`` may still carry a
+    custody manifest. Its frames can include zero-sample rows: the producer
+    retained an undecodable packet as a diagnostic, and the writer counted it
+    as a gap. Those rows carry no audio and contribute no samples.
+    """
     if not frames or len(frames) > MAX_FRAMES or sample_rate <= 0:
         raise ValueError('invalid capture frame table')
     total = 0
@@ -33,7 +40,8 @@ def validate_frames(frames: list[dict], sample_rate: int) -> int:
             or not math.isfinite(start)
             or not isinstance(samples, int)
             or isinstance(samples, bool)
-            or samples <= 0
+            or samples < 0
+            or (samples == 0 and not allow_empty)
             or not isinstance(sequence, int)
             or isinstance(sequence, bool)
             or (previous_sequence is not None and sequence <= previous_sequence)
@@ -62,7 +70,9 @@ def resampled_samples(samples: int, rate: int, output_rate: int = 16000) -> int:
     return ((samples - 1) * output_rate // rate + 1) if samples else 0
 
 
-def _manifest(bucket, uid: str, path: str, generation=None, digest=None, *, deadline=None) -> dict:
+def _manifest(
+    bucket, uid: str, path: str, generation=None, digest=None, *, deadline=None, require_frame_schema=True
+) -> dict:
     if not path.startswith(f'audio-outbox/{uid}/'):
         raise ValueError('frame manifest owner mismatch')
     blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
@@ -78,9 +88,14 @@ def _manifest(bucket, uid: str, path: str, generation=None, digest=None, *, dead
     if hashlib.sha256(raw).hexdigest() != (digest or (blob.metadata or {}).get('sha256')):
         raise ValueError('frame manifest checksum mismatch')
     manifest = json.loads(raw)
-    if manifest['schema'] != 'audio_custody_v1' or manifest['capture'].get('frame_schema') != FRAME_SCHEMA:
+    if manifest['schema'] != 'audio_custody_v1':
         raise ValueError('unknown capture frame schema')
-    validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']))
+    if require_frame_schema:
+        if manifest['capture'].get('frame_schema') != FRAME_SCHEMA:
+            raise ValueError('unknown capture frame schema')
+        validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']))
+    else:
+        validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']), allow_empty=True)
     return manifest
 
 
@@ -96,6 +111,36 @@ def committed_frames(bucket, blob, uid: str, *, deadline=None) -> tuple[list[dic
         raise ValueError('capture frame media mismatch')
     rate = int(manifest['capture']['sample_rate'])
     return manifest['frames'], rate
+
+
+def unframed_frames(bucket, blob, uid: str, manifest_path: str, *, deadline=None) -> tuple[list[dict], int]:
+    """Frame positions for a pack whose writer did not declare a frame schema.
+
+    ``commit_capture`` always writes the custody manifest beside the media, but
+    only a framed pack records ``custody_manifest_path`` in the media metadata.
+    The manifest is still the writer's own record of where each captured frame
+    sits on the capture clock, so it is the only truthful source for a gapped
+    pack's internal gap positions.
+    """
+    metadata = blob.metadata or {}
+    manifest = _manifest(bucket, uid, manifest_path, deadline=deadline, require_frame_schema=False)
+    if manifest['media'] != {
+        'bucket': bucket.name,
+        'path': blob.name,
+        'generation': str(blob.generation),
+        'sha256': metadata['sha256'],
+    }:
+        raise ValueError('capture frame media mismatch')
+    rate = int(manifest['capture']['sample_rate'])
+    return manifest['frames'], rate
+
+
+def media_name(blob_name: str, uid: str) -> str:
+    """The writer's shared name for a raw-live pack and its custody manifest."""
+    prefix = f'raw-live/{uid}/'
+    if not blob_name.startswith(prefix):
+        raise ValueError('capture pack owner mismatch')
+    return blob_name[len(prefix) :].rsplit('/', 1)[0]
 
 
 def receipt_frames(bucket, uid: str, receipt: dict, *, deadline=None) -> tuple[list[dict], int]:
@@ -117,14 +162,18 @@ def receipt_frames(bucket, uid: str, receipt: dict, *, deadline=None) -> tuple[l
     return manifest['frames'], rate
 
 
-def entries(frames: list[dict], rate: int, source: dict[str, Any]) -> list[dict]:
+def entries(frames: list[dict], rate: int, source: dict[str, Any], *, allow_empty: bool = False) -> list[dict]:
     """Walk original frames; coalesce only sample-contiguous rows, retaining every real gap."""
-    validate_frames(frames, rate)
+    validate_frames(frames, rate, allow_empty=allow_empty)
     result = []
     offset = 0
     for frame in frames:
         mapped_offset = resampled_samples(offset, rate)
         count = resampled_samples(offset + frame['samples'], rate) - mapped_offset
+        if frame['samples'] == 0:
+            # A retained zero-sample frame is a diagnostic, not audio. It still
+            # advances the capture clock, so the next frame keeps its position.
+            continue
         entry = {
             **source,
             'timestamp': frame['start'],
