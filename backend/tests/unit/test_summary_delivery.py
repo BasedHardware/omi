@@ -245,6 +245,19 @@ def test_repair_gauge_is_declared_for_production_scraping(gauge):
     assert metric.name in inventory['declared_metrics']
 
 
+def test_repair_counter_is_declared_for_production_scraping():
+    import json
+    from pathlib import Path
+
+    metric = next(iter(delivery.REPAIR.collect()))
+    assert metric.type == 'counter'
+    assert delivery.REPAIR._labelnames == ('outcome',)
+    inventory = json.loads(
+        (Path(__file__).resolve().parents[3] / 'backend/charts/monitoring/metric-inventory.prod.json').read_text()
+    )
+    assert metric.name + '_total' in inventory['declared_metrics']
+
+
 @pytest.mark.parametrize('hours', ['72', '1', '0'])
 @pytest.mark.parametrize('phase', ['near_expiry', 'newest'])
 @pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'current', 'wrong_phase', 'wrong_window'])

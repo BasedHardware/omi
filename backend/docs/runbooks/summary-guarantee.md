@@ -144,6 +144,15 @@ server-provenance debt only; unmarked historical rows are outside the numerator.
 No recurring COUNT scan was added. Process death after commit but before metric
 emission can lose a Prometheus observation; the durable metadata remains truth.
 
+`omi_summary_debt_repair_total{outcome}` accumulates completed-tick counts with
+exactly `scanned`, `admitted`, `error`, `expired_seen`, `near_expiry_admitted`.
+It increments after cursor completion, outside transactional callbacks; `error`
+maps to the returned `errors` count. Transaction retries never recount a tick.
+Unclaimed/disabled ticks return zero and add no counter increments. After deploy,
+read `rate(omi_summary_debt_repair_total{outcome="admitted"}[10m])` and the
+`near_expiry_admitted` outcome alongside release identity and summary receipts.
+These are repair redrive admissions, not completed summaries.
+
 The ASC `(summary_first_pending_at, summary_due_at, __name__)` composite remains
 for the expiry phase. The additional DESC/ASC/ASC collection-group composite
 must be **READY before deploying** this query change. Declare and provision it

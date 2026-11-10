@@ -1437,6 +1437,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_summary_debt_overdue',
         'omi_summary_debt_expired_seen',
         'omi_summary_debt_near_expiry_admitted',
+        'omi_summary_debt_repair_total',
         'omi_summary_debt_oldest_age_seconds',
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',

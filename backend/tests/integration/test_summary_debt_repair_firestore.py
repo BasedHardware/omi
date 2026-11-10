@@ -190,6 +190,8 @@ def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_
         return commit(transaction)
 
     monkeypatch.setattr(Transaction, '_commit', abort_once)
+    counter = Mock(wraps=delivery.REPAIR)
+    monkeypatch.setattr(delivery, 'REPAIR', counter)
     query = Mock(wraps=repair.due_conversations)
     monkeypatch.setattr(repair, 'due_conversations', query)
     gauge = Mock(wraps=delivery.EXPIRED_SEEN)
@@ -204,6 +206,7 @@ def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_
         }
         assert commit_attempts == ([2, 1] if retry_transaction == 0 else [1, 2])
         assert query.call_count == 2
+        assert counter.labels.call_count == 5
         gauge.set.assert_called_once_with(1)
         assert gauge._mock_wraps._value.get() == 1
         assert len(tasks) == 1
@@ -592,6 +595,50 @@ def test_expiry_band_boundary_goes_first_and_remaining_budget_goes_newest(debt_s
         assert admitted == ['band-0', 'band-1', 'band-3', 'band-2']
         assert counts['near_expiry_admitted'] == 2
         assert counts['admitted'] == counts['scanned'] == 4
+    finally:
+        for added in refs:
+            added.delete()
+
+
+def test_tick_repair_counter_matches_returned_counts_and_ignores_unclaimed_ticks(debt_store, monkeypatch):
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    cutoff = now - max_age_seconds()
+    refs = [ref.parent.document(name) for name in ('urgent-ok', 'urgent-error', 'newest-ok', 'created-old')]
+    ref.update({'summary_due_at': None})
+    keys = {
+        'scanned': 'scanned',
+        'admitted': 'admitted',
+        'error': 'errors',
+        'expired_seen': 'expired_seen',
+        'near_expiry_admitted': 'near_expiry_admitted',
+    }
+    before = {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys}
+
+    def redrive(_, owner, conversation_id, *, now):
+        if conversation_id == 'urgent-error':
+            raise RuntimeError('synthetic admission failure')
+        return True
+
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        for added, pending in zip(refs, (cutoff + 100, cutoff + 101, now - 1, now - 2)):
+            candidate = {**row, 'summary_first_pending_at': pending, 'summary_due_at': now - 1}
+            if added.id == 'created-old':
+                candidate['created_at'] = cutoff - 1
+            added.set(candidate)
+        counts = repair.tick(now=now, client=client)
+        assert counts == {'scanned': 4, 'admitted': 2, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 1}
+        after = {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys}
+        assert {outcome: after[outcome] - before[outcome] for outcome in keys} == {
+            outcome: counts[key] for outcome, key in keys.items()
+        }
+        assert {sample.labels['outcome'] for sample in next(iter(delivery.REPAIR.collect())).samples} == set(keys)
+        assert not any(repair.tick(now=now + 1, client=client).values())
+        assert {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys} == after
     finally:
         for added in refs:
             added.delete()
