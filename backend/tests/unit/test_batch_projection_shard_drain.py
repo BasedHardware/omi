@@ -206,14 +206,9 @@ async def test_delayed_drain_returns_shard_wake_for_retry(claims, monkeypatch, s
         await quiesce([projector])
         assert 'owner' in drains.delayed
         assert 'owner' not in pump.inflight
-        if stop == 'claim_held':
-            # Claims keep their lane position and only use the existing local
-            # cooldown; privacy retries use the durable backlog score below.
-            assert not pump.deferring
-            assert pump.cooldown['owner'] == now[0] + projection_shard_pump.CLAIM_RETRY_SECONDS
-            return
         assert pump.deferring
         retry_at = pump.deferring[0][1]
+        assert retry_at >= now[0] + drains.retry_delay('owner')
         assert await pump.tick() == 0
         assert client.zscore(shards._lane_key(BACKLOG, 0), 'owner') == retry_at
         # A replacement process has no local hold; the durable wake must wait
@@ -233,6 +228,81 @@ async def test_delayed_drain_returns_shard_wake_for_retry(claims, monkeypatch, s
         next_projector.ensure_drains().close()
     finally:
         drains.close()
+
+
+@pytest.mark.asyncio
+async def test_long_privacy_delay_does_not_hide_later_wakes_in_same_shard(claims, monkeypatch):
+    monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: 1.0)
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', 'on')
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    elapsed = [0.0]
+    monkeypatch.setattr(loop, 'time', lambda: started + elapsed[0])
+    wall = lambda: 1000.0 + elapsed[0]
+    client = fakeredis.FakeRedis()
+    # One free slot across many held shards gives a one-wake base fetch;
+    # a retained cooldown adds one candidate until the local hold expires.
+    shards = ProjectionShards('ns', count=16, client=lambda: client, clock=wall)
+    projector = projector_for(ResultLog())
+    drains = projector.ensure_drains()
+    pump = ShardPump(projector, shards, monotonic=loop.time)
+    turns = []
+
+    async def turn(owner):
+        turns.append(owner)
+        drains.turn_stops[owner] = 'end'
+        return False
+
+    monkeypatch.setattr(drains, 'run', turn)
+    monkeypatch.setattr(drains, 'privacy_head_unchanged', lambda owner: (True, False))
+    shards.refresh()
+    shard = shards.shard(owner_key('privacy'))
+    later = [f'later-{n}' for n in range(1000) if shards.shard(owner_key(f'later-{n}')) == shard][:3]
+    assert len(later) == 3
+    takes = []
+    real_take = shards.take
+
+    def take(lane, limit):
+        takes.append(limit)
+        return real_take(lane, limit)
+
+    monkeypatch.setattr(shards, 'take', take)
+    shards.push('privacy', owner_key('privacy'), FRESH, 990.0)
+    try:
+        assert await pump.tick() == 1
+        # An already-admitted task rechecks an unchanged head under a 300s hold.
+        # Passive expiry lets the pump perform the next ordinary admission.
+        drains.defer('privacy', delay=300, wake=False)
+        drains.privacy_heads['privacy'] = ('head', 'version')
+        await quiesce([projector])
+        assert turns == [] and 'privacy' in drains.delayed
+        assert await pump.tick() == 0  # Persist the retry score.
+        elapsed[0] = 150.0  # The old 120s pump retry is due; the local hold is not.
+        for owner in later:
+            shards.push(owner, owner_key(owner), BACKLOG, wall())
+        for _ in later:
+            assert await pump.tick() == 1
+            await quiesce([projector])
+        assert turns == later
+        assert 'privacy' in drains.delayed
+        assert takes[0] == 1 and max(takes) <= 2
+        elapsed[0] = 299.0
+        assert await pump.tick() == 0
+        elapsed[0] = 300.0
+        # Let the real TimerHandle expire on its own event-loop clock.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert 'privacy' not in drains.delayed
+        assert await pump.tick() == 1
+        await quiesce([projector])
+        assert turns == later + ['privacy']
+        await pump.tick()
+        assert pump.inflight == {}
+        assert shards.take(FRESH, 10) == shards.take(BACKLOG, 10) == []
+    finally:
+        drains.close()
+        await asyncio.gather(*list(drains.tasks.values()), return_exceptions=True)
 
 
 @pytest.mark.asyncio

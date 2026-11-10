@@ -429,6 +429,9 @@ class FakeDrains:
     def busy(self, owner):
         return owner in self.tasks or owner in self.queue or owner in self.delayed
 
+    def retry_delay(self, owner):
+        return 0.0
+
     def request(self, owners):
         for owner in owners:
             self.requested.append(owner)
@@ -546,13 +549,28 @@ def test_stuck_owners_cannot_fill_the_take_page(server, blocking_inline, monkeyp
     assert drains.requested.count('due') == 1
 
 
-def test_claim_busy_cools_without_losing_lane_position(server, blocking_inline):
+@pytest.mark.parametrize('stop', sorted(projection_shard_pump.CLAIM_STOPS))
+def test_claim_stops_defer_wakes_past_later_due_owners(server, blocking_inline, monkeypatch, stop):
+    monkeypatch.setattr(projection_shard_pump, 'MAX_TAKE', 1)
+    monkeypatch.setattr(projection_shard_pump.random, 'uniform', lambda a, b: 1.0)
     pump, shards, drains = pump_for(server, limit=1)
+    now = [1000.0]
+    shards.clock = pump.monotonic = lambda: now[0]
     shards.push('a', owner_key('a'), FRESH, 5.0)
-    asyncio.run(pump.tick())
-    drains.finish('a', 'claim_busy')
-    asyncio.run(pump.tick())
-    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('a', 5.0)]
+    assert asyncio.run(pump.tick()) == 1
+    drains.finish('a', stop)
+    for n in range(3):
+        shards.push(f'later-{n}', owner_key(f'later-{n}'), BACKLOG, 100.0 + n)
+    for n in range(3):
+        assert asyncio.run(pump.tick()) == 1
+        assert drains.requested[-1] == f'later-{n}'
+        drains.finish(f'later-{n}', 'end')
+    assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'a') == (
+        now[0] + projection_shard_pump.CLAIM_RETRY_SECONDS
+    )
+    now[0] += projection_shard_pump.CLAIM_RETRY_SECONDS
+    assert asyncio.run(pump.tick()) == 1
+    assert drains.requested == ['a', 'later-0', 'later-1', 'later-2', 'a']
 
 
 def test_defer_keeps_a_wake_that_was_pushed_since_the_take(server):
@@ -1219,7 +1237,8 @@ def test_overflow_preserves_passive_hold_and_uses_local_shard_intent(monkeypatch
     assert not drains.delayed
 
 
-def test_passive_live_target_hold_returns_and_persists_the_shard_wake(server, blocking_inline, monkeypatch):
+@pytest.mark.asyncio
+async def test_passive_live_target_hold_returns_and_persists_the_shard_wake(server, blocking_inline, monkeypatch):
     monkeypatch.setattr(projection_drain, '_recurring_sweep', 'serving')
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP', 'on')
     monkeypatch.setenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', 'on')
@@ -1228,16 +1247,16 @@ def test_passive_live_target_hold_returns_and_persists_the_shard_wake(server, bl
     shards.clock = lambda: now[0]
     pump.monotonic = lambda: now[0]
     shards.push('held', owner_key('held'), BACKLOG, 10.0)
-    assert asyncio.run(pump.tick()) == 1
+    assert await pump.tick() == 1
     drains = projection_drain.OwnerDrains(pump.projector)
     pump.projector.drains = drains
     pump.attach()
     holds = []
+    real_defer = drains.defer
 
     def hold(owner, *, delay, wake):
         holds.append((owner, delay, wake))
-        drains.delayed[owner] = Mock()
-        return True
+        return real_defer(owner, delay=delay, wake=wake)
 
     monkeypatch.setattr(drains, 'defer', hold)
     task = Mock()
@@ -1252,13 +1271,13 @@ def test_passive_live_target_hold_returns_and_persists_the_shard_wake(server, bl
     assert len(pump.deferring) == 1
     retry_at = pump.deferring[0][1]
     assert retry_at > now[0]
-    assert asyncio.run(pump.tick()) == 0
+    assert await pump.tick() == 0
     assert shards._client().zscore(shards._lane_key(BACKLOG, 0), 'held') == retry_at
     replacement_drains = FakeDrains()
     replacement = ShardPump(FakeProjector(replacement_drains), shards, monotonic=lambda: now[0])
     now[0] = retry_at - 0.001
-    assert asyncio.run(replacement.tick()) == 0
+    assert await replacement.tick() == 0
     now[0] = retry_at
-    assert asyncio.run(replacement.tick()) == 1
+    assert await replacement.tick() == 1
     assert replacement_drains.requested == ['held']
     drains.close()

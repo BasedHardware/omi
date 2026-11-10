@@ -86,7 +86,15 @@ pump still waits for that score; the local hold creates no extra request.
 
 Every delayed retry, including an unchanged privacy head or held claim, also
 hands back its shard inflight admission while retaining its local timer and
-the pump's existing durable retry policy. Drain requests from an event-loop
+the pump's existing durable retry policy. The durable retry score now uses the
+later of that policy and the remaining local timer deadline, measured on the
+timer's event-loop clock before conversion to Redis wall time. A 300-second
+privacy hold therefore cannot become due at the pump's shorter stuck retry
+and hide later backlog wakes. Claim refusals also move to backlog at their
+retry deadline instead of occupying the bounded due prefix while cooling.
+The sequence checks still preserve notifications pushed since admission.
+No retry constant, fetch limit, flag default or fail-open path changes.
+Drain requests from an event-loop
 caller route on `db_executor`; a Redis push failure still records local intent.
 That short routing handoff is only an advisory notification: process loss
 before it runs leaves the committed pending results for the resuming

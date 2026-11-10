@@ -112,6 +112,11 @@ class OwnerDrains:
     def busy(self, owner: str) -> bool:
         return owner in self.tasks or owner in self.queue or owner in self.delayed
 
+    def retry_delay(self, owner: str) -> float:
+        """Remaining local hold, measured on the timer's event-loop clock."""
+        handle = self.delayed.get(owner)
+        return max(0.0, handle.when() - asyncio.get_running_loop().time()) if handle is not None else 0.0
+
     def request(self, owners) -> None:
         if self.closed:
             return

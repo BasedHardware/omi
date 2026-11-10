@@ -211,15 +211,17 @@ class ShardPump:
             if stop == 'yielded'
             else (CLAIM_RETRY_SECONDS if stop in CLAIM_STOPS else STUCK_RETRY_SECONDS) * random.uniform(0.8, 1.2)
         )
+        # Local privacy/live-target holds can outlast the pump's backoff. Keep
+        # their wake out of the due prefix until the owner can actually run.
+        delay = max(delay, self.projector.ensure_drains().retry_delay(owner))
         if len(self.cooldown) < MAX_COOLDOWN:
             self.cooldown[owner] = self.monotonic() + delay
-        if stop not in CLAIM_STOPS:
-            # A stuck head keeps its wake but gives up its place in the lane, so
-            # stuck owners cannot fill the take pages ahead of due owners.
-            retry_at = self.shards.clock() + delay
-            # Defer the taken backlog wake before moving fresh into backlog:
-            # that move bumps the backlog sequence and would stale its take.
-            self.deferring.extend((wake, retry_at) for wake in sorted(wakes, key=lambda wake: wake.lane != BACKLOG))
+        # Every stopped owner, including claim refusals, gives up its place in
+        # the due prefix while cooling so later owners remain reachable.
+        retry_at = self.shards.clock() + delay
+        # Defer the taken backlog wake before moving fresh into backlog:
+        # that move bumps the backlog sequence and would stale its take.
+        self.deferring.extend((wake, retry_at) for wake in sorted(wakes, key=lambda wake: wake.lane != BACKLOG))
         PROJECTION_SHARD_WAKES.labels(lane=wakes[0].lane, outcome='cooled').inc()
 
     async def tick(self) -> int:
@@ -263,7 +265,7 @@ class ShardPump:
         if self.cooldown:
             self.cooldown = {owner: until for owner, until in self.cooldown.items() if until > now}
         # Per held shard: this pass's share of the slots, plus room to skip
-        # owners already draining or cooling (claim-busy owners keep their place).
+        # owners already draining or cooling.
         held = max(1, len(shards.held))
         fetch = min(MAX_TAKE, -(-free * 4 // held) + len(self.cooldown) + len(self.inflight))
         fresh, backlog = await run_blocking(
