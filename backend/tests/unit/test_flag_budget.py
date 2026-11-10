@@ -63,6 +63,7 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
+    'EPISODE_COMPOSE_SWEEP_ENABLED',
 }
 
 SCOPE = (
@@ -265,6 +266,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name == 'PROJECTION_DRAIN_CLAIM_AWARE':
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
+        elif name == 'EPISODE_COMPOSE_SWEEP_ENABLED':
+            assert entry['owner'] == 'refactor-lead'
+            assert entry['review_by'] == '2026-12-10'
         elif name == 'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF':
             assert entry['replaces'] == 'SYNC_BACKFILL_INFLIGHT_LIMIT'
             assert 'SYNC_BACKFILL_INFLIGHT_LIMIT' not in names

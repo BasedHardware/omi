@@ -162,7 +162,7 @@ def maintain(now: float) -> dict[str, int]:
     summary-debt tick holds its own cursor lease, so a second owner never double-admits.
     """
     from database.outbox_firestore import ENRICHMENT_OUTBOX
-    from services import summary_debt_repair
+    from services import episode_compose_sweep, summary_debt_repair
 
     from utils.conversations import final_pass_retry
 
@@ -183,6 +183,12 @@ def maintain(now: float) -> dict[str, int]:
         'summary_debt_admitted': 0,
         'summary_debt_errors': 0,
         'summary_debt_expired_seen': 0,
+        'episode_compose_scanned': 0,
+        'episode_compose_scheduled': 0,
+        'episode_compose_skipped_composed': 0,
+        'episode_compose_skipped_inflight': 0,
+        'episode_compose_budget_exhausted': 0,
+        'episode_compose_errors': 0,
     }
     # C8 provider-STT units rely on this sweep when a post-commit wake is lost (contract (b),
     # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
@@ -209,6 +215,20 @@ def maintain(now: float) -> dict[str, int]:
         summary_debt_admitted=summary['admitted'],
         summary_debt_errors=summary['errors'],
         summary_debt_expired_seen=summary['expired_seen'],
+    )
+    try:
+        episodes = episode_compose_sweep.tick(now=now)
+    except Exception as error:
+        logger.error('event=episode_compose_sweep outcome=maintenance_error exception_type=%s', type(error).__name__)
+        episodes = episode_compose_sweep.empty_counts()
+        episodes['errors'] = 1
+    counts.update(
+        episode_compose_scanned=episodes['scanned'],
+        episode_compose_scheduled=episodes['scheduled'],
+        episode_compose_skipped_composed=episodes['skipped_composed'],
+        episode_compose_skipped_inflight=episodes['skipped_inflight'],
+        episode_compose_budget_exhausted=episodes['budget_exhausted'],
+        episode_compose_errors=episodes['errors'],
     )
     return counts
 

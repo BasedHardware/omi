@@ -119,9 +119,11 @@ def store(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
     monkeypatch.setattr(composer, '_deferred', {})
+    monkeypatch.setattr(composer, '_deferred_deletion_fenced', set())
     monkeypatch.setattr(composer, '_foreground', set())
     monkeypatch.setattr(composer, '_recent', {})
     monkeypatch.setattr(composer, '_inflight', set())
+    monkeypatch.setattr(composer, '_inflight_deletion_fenced', set())
     monkeypatch.setattr(composer, '_rerun', set())
     rows = [_row('c1', T0, 180), _row('c2', T0 + timedelta(minutes=181), 8)]
     s = Store(_episode(), rows)
@@ -369,7 +371,7 @@ def test_a_trigger_during_a_run_composes_again(store, monkeypatch):
     outcomes = iter(['composed', 'unchanged'])
     seen = []
 
-    def fake_compose(uid, episode_id, collaborators=None, force=False, background=False):
+    def fake_compose(uid, episode_id, collaborators=None, force=False, background=False, deletion_fence=False):
         seen.append(episode_id)
         if len(seen) == 1:
             # A member finalize arrives while this run is in flight.
@@ -958,7 +960,15 @@ def test_read_recovers_persisted_pending_evidence_after_restart(store, monkeypat
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
     assert len(calls) == 1 and store.episode['compose_pending_since']
     # Keep only persisted state, as after an instance restart and optional rollback.
-    for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
+    for state in (
+        composer._deferred,
+        composer._deferred_deletion_fenced,
+        composer._recent,
+        composer._inflight,
+        composer._inflight_deletion_fenced,
+        composer._rerun,
+        composer._foreground,
+    ):
         state.clear()
     monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, enabled)
     assert composer.needs_compose(store.episode)
@@ -984,7 +994,15 @@ def test_later_trigger_after_restart_preserves_pending_cap_despite_new_speech(st
     store.episode['compose_pending_since'] -= timedelta(minutes=20)
     store.episode['compose_activity_at'] -= timedelta(minutes=2)
     first = store.episode['compose_pending_since']
-    for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
+    for state in (
+        composer._deferred,
+        composer._deferred_deletion_fenced,
+        composer._recent,
+        composer._inflight,
+        composer._inflight_deletion_fenced,
+        composer._rerun,
+        composer._foreground,
+    ):
         state.clear()
     store.rows['c1']['transcript_segments'][0]['text'] += ' Still uploading.'
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
@@ -1022,6 +1040,64 @@ def test_read_promotes_deferred_compose_even_inside_throttle_window(store, monke
     assert not calls
     assert composer.schedule(UID, 'ep1', collaborators=c, throttle=True)
     assert len(calls) == 1 and not composer._deferred
+
+
+def test_maintenance_throttle_preserves_settle_and_execution_deletion_fence(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    deleted = [False]
+    monkeypatch.setattr(composer, 'account_deletion_blocks_user_work', lambda *args, **kwargs: deleted[0])
+    _schedule_seam(store, monkeypatch)
+
+    assert composer.schedule(UID, 'ep1', collaborators=c, throttle=True, foreground=False, deletion_fence=True)
+    assert not calls and (UID, 'ep1') in composer._deferred
+    assert (UID, 'ep1') in composer._deferred_deletion_fenced
+    assert not composer.schedule(UID, 'ep1', collaborators=c, throttle=True, foreground=False, deletion_fence=True)
+
+    # The deletion marker can appear after discovery. The deferred worker must
+    # recheck it instead of reading members or invoking the paid model.
+    deleted[0] = True
+    composer._deferred[(UID, 'ep1')] = (0, c)
+    composer._schedule_due()
+    assert not calls and not composer._deferred_deletion_fenced
+    assert not store.episode.get('composed_fingerprint')
+    assert (UID, 'ep1') not in composer._inflight
+
+
+def test_due_fence_promotes_an_ordinary_inflight_worker_before_its_rerun(store, monkeypatch):
+    c = _c()
+    key = (UID, 'ep1')
+    workers = []
+    fences = []
+    monkeypatch.setattr(composer._executor, 'submit', workers.append)
+
+    def fake_compose(uid, episode_id, **kwargs):
+        fences.append(kwargs['deletion_fence'])
+        return 'unchanged'
+
+    monkeypatch.setattr(composer, 'compose', fake_compose)
+    composer._deferred[key] = (0, c)
+    composer._deferred_deletion_fenced.add(key)
+    schedule = composer.schedule
+    admitted = []
+
+    def racing_schedule(uid, episode_id, **kwargs):
+        if not admitted:
+            # Interleave after _schedule_due pops the row but before its fenced
+            # schedule acquires inflight ownership.
+            admitted.append(schedule(UID, 'ep1', collaborators=c))
+        return schedule(uid, episode_id, **kwargs)
+
+    monkeypatch.setattr(composer, 'schedule', racing_schedule)
+
+    # The fenced due worker loses admission to the ordinary inflight worker.
+    # Its fence and rerun must move into that worker rather than disappear.
+    composer._schedule_due()
+    assert admitted == [True]
+    assert len(workers) == 1 and key in composer._inflight_deletion_fenced
+    workers[0]()
+    assert fences == [True, True]
+    assert key not in composer._inflight_deletion_fenced
 
 
 def test_read_promotes_inflight_background_that_is_entering_settle(store, monkeypatch):

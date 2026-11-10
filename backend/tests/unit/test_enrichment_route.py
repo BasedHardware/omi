@@ -871,13 +871,25 @@ def _provider_sweep(monkeypatch, sweep):
 
 
 def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
-    from services import summary_debt_repair
+    from services import episode_compose_sweep, summary_debt_repair
     from database.outbox import SweepCounts
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
     _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(4, 1, 2, 1))
     monkeypatch.setattr(
         summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0, 'expired_seen': 2}
+    )
+    monkeypatch.setattr(
+        episode_compose_sweep,
+        'tick',
+        lambda *, now: {
+            'scanned': 6,
+            'scheduled': 2,
+            'skipped_composed': 1,
+            'skipped_inflight': 1,
+            'budget_exhausted': 2,
+            'errors': 0,
+        },
     )
     assert route.maintain(1000.0) == {
         'rewoken': 2,
@@ -890,6 +902,12 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
         'summary_debt_errors': 0,
+        'episode_compose_scanned': 6,
+        'episode_compose_scheduled': 2,
+        'episode_compose_skipped_composed': 1,
+        'episode_compose_skipped_inflight': 1,
+        'episode_compose_budget_exhausted': 2,
+        'episode_compose_errors': 0,
     }
 
 
@@ -918,6 +936,24 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
     assert counts['summary_debt_admitted'] == 1
+
+
+def test_maintenance_isolates_an_episode_compose_sweep_failure(rows, monkeypatch):
+    from services import episode_compose_sweep, summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(1, 0, 0, 0))
+    _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    monkeypatch.setattr(
+        summary_debt_repair, 'tick', lambda *, now: {'scanned': 1, 'admitted': 1, 'errors': 0, 'expired_seen': 0}
+    )
+    monkeypatch.setattr(episode_compose_sweep, 'tick', Mock(side_effect=RuntimeError('synthetic')))
+
+    counts = route.maintain(1000.0)
+
+    assert counts['rewoken'] == 1 and counts['summary_debt_admitted'] == 1
+    assert counts['episode_compose_errors'] == 1
+    assert counts['episode_compose_scheduled'] == 0
 
 
 def _oversized_write_rejection():

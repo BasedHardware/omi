@@ -16,6 +16,7 @@ from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from database.lifecycle_metrics_indexes import INDEX_REQUIREMENTS as LIFECYCLE_METRICS_INDEX_REQUIREMENTS
+from database.episode_compose_sweep_queries import EPISODE_COMPOSE_SWEEP_QUERY
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -2116,6 +2117,7 @@ QUERY_SPECS = (
     DAILY_SUMMARY_RECIPIENTS_QUERY,
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
+    EPISODE_COMPOSE_SWEEP_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
