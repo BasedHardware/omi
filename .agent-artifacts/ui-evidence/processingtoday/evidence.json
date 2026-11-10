@@ -57,5 +57,7 @@
       "captured_by": "agent",
       "source": "visual-audit"
     }
-  ]
+  ],
+  "captured_at_utc": "2026-11-10T07:56:33.859224+00:00",
+  "method": "Flutter widget-test RepaintBoundary, real production widgets, iOS theme, SF Pro fixtures; render-only Apple emoji font from this Mac, never bundled."
 }

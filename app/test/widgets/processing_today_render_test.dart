@@ -57,6 +57,14 @@ Future<void> _fonts() async {
     }
     await loader.load();
   }
+  // Render-only system font, never bundled in the app or required in CI.
+  // Widget tests otherwise substitute square glyphs for iOS emoji badges.
+  final emoji = File('/System/Library/Fonts/Apple Color Emoji.ttc');
+  if (_output.isNotEmpty && emoji.existsSync()) {
+    final loader = FontLoader('Evidence Emoji');
+    loader.addFont(emoji.readAsBytes().then((bytes) => ByteData.sublistView(bytes)));
+    await loader.load();
+  }
 }
 
 PendingWorkStore _store(bool enabled, List<PendingWorkItem> pending) => PendingWorkStore(
@@ -77,6 +85,8 @@ ServerConversation _conversation(String id, DateTime at, {String step = 'ready',
 ThemeData _theme() {
   final theme = buildOmiTheme(brightness: Brightness.light);
   return theme.copyWith(
+      textTheme: theme.textTheme
+          .copyWith(bodyMedium: theme.textTheme.bodyMedium?.copyWith(fontFamilyFallback: const ['Evidence Emoji'])),
       appBarTheme: theme.appBarTheme
           .copyWith(titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display')));
 }
