@@ -364,6 +364,10 @@ builds, the desktop app and web never call any `/v1/episodes` route.
 - `omi_episode_provisional_items_total{outcome}`
 - `omi_episode_wrapup_latency_seconds`
 - `omi_episode_boundary_total`
+- `omi_episode_f_gate_total{reason}`: first candidate privacy refusal at Variant F settlement;
+  `held|client_processing|deferred|local_pending|local_only|row_consent|user_consent|locked_discarded|owner|status|hidden|other`
+- `omi_episode_f_fallback_total{site}`: fallback attribution by distinct bounded call site;
+  existing shared fallback reason values stay unchanged
 - `omi_episode_moments_skipped_no_client_total{trigger}`: admitted moments (and
   finalization tails, `trigger=finalize`) skipped because no capable client was seen
 - `omi_episode_live_sessions_total{client_seen}`: admitted live conversations at
