@@ -222,7 +222,7 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     )
     fresh = queues['enrichment-fresh']
     assert fresh.enabled is True
-    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (30, 10.0)
+    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (15, 10.0)
     assert fresh.fields['max_attempts'] == -1
     provider = queues['provider-stt']
     assert provider.enabled is True
