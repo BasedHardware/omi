@@ -395,9 +395,8 @@ def test_membership_change_during_the_call_keeps_the_paid_result_pending(store):
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
     # The paid result is kept and the episode is pending, so a settled compose refreshes it.
-    assert store.episode['title'] == 'old'
-    assert not any('bullets' in write for write in store.writes)
-    assert store.episode['compose_lease'] is None
+    assert store.episode['title'] == 'Omi app bugs and labeling tool'
+    assert store.episode['compose_pending_since'] and store.episode['compose_lease'] is None
     assert composer.needs_compose(store.episode) is True
 
 
@@ -516,8 +515,9 @@ def test_discard_during_the_call_cannot_reintroduce_hidden_content(store):
         return _reply()
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
-    assert store.episode['title'] == 'Omi app bugs and labeling tool'
-    assert store.episode['compose_pending_since'] and store.episode['compose_lease'] is None
+    assert store.episode['title'] == 'old'
+    assert not any('bullets' in write for write in store.writes)
+    assert store.episode['compose_lease'] is None
 
 
 def test_same_shape_transcript_edit_recomposes(store):
@@ -1524,5 +1524,10 @@ def test_paid_result_never_reintroduces_a_member_hidden_during_the_call(store):
 
 def test_l8_off_drains_a_persisted_late_deferral(monkeypatch):
     monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
-    episode = {'id': 'late', 'status': 'closed', 'compose_deferred_at': datetime.now(timezone.utc)}
+    episode = {
+        'id': 'late',
+        'status': 'closed',
+        'closed_at': datetime.now(timezone.utc),
+        'compose_deferred_at': datetime.now(timezone.utc),
+    }
     assert composer.needs_compose(episode) is True
