@@ -284,7 +284,11 @@ db_executor = MonitoredThreadPoolExecutor(
 )
 # Optional read-cache checks cannot queue behind, or consume, serving DB workers.
 read_cache_shadow_executor = MonitoredThreadPoolExecutor(
-    name="read_cache_shadow", max_workers=2, max_queue_size=0, thread_name_prefix="read-cache-shadow"
+    name="read_cache_shadow",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,  # submit still raises immediately; suppress expected rejection warnings.
+    thread_name_prefix="read-cache-shadow",
 )
 record_barrier_executor = MonitoredThreadPoolExecutor(
     name="record_barrier",

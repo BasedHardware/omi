@@ -195,9 +195,16 @@ def _fetch_members(uid, ids, client, *, timeout=None):
                 raise TimeoutError('shadow read deadline')
             options = {'timeout': remaining, 'retry': FIRESTORE_NO_RETRY}
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
-        for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS, **options):
+        for snapshot in client.get_all(refs, field_paths=[] if deadline is not None else MEMBER_FIELDS, **options):
             if snapshot.exists:
-                members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
+                members[snapshot.id] = {} if deadline is not None else dict(snapshot.to_dict() or {}, id=snapshot.id)
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError('shadow read deadline')
+    if deadline is not None:
+        # MEMBER_FIELDS excludes transcripts: prepare cannot drop an extant row
+        # via blob/decode/decrypt failures. Display visibility is applied later,
+        # not by this cache: even deleted rows retain their keys here.
+        return members
     return {
         cid: row
         for cid, raw in members.items()

@@ -7,16 +7,20 @@ from collections.abc import Mapping
 
 from prometheus_client import Counter
 
+from database.monthly_usage_totals import FIELDS as USAGE_FIELDS
 from utils.episodes.metrics import reuse_or_create
 
 SHADOW = reuse_or_create(
     Counter,
     'omi_read_cache_shadow_total',
-    'Sampled read-cache agreement with fresh durable reads',
+    'Sampled read-cache agreement; episode_members compares keys only and cannot detect content staleness',
     ['cache', 'result'],
 )
-USAGE_FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
 READ_TIMEOUT_SECONDS = 5.0
+
+
+class ShadowSkipped(Exception):
+    """A bounded shadow read cannot produce a complete comparable value."""
 
 
 def _canonical(cache, value):
@@ -48,7 +52,12 @@ def compare_hit(cache, cached, fetch, *, sample=None):
         return
     try:
         rate = float(os.getenv('OMI_READ_CACHE_SHADOW_RATE', '0.01'))
-        if not math.isfinite(rate) or rate <= 0 or (sample or random.random)() >= min(rate, 1.0):
+    except (TypeError, ValueError):
+        return
+    if not math.isfinite(rate) or rate <= 0:
+        return
+    try:
+        if (sample or random.random)() >= min(rate, 1.0):
             return
         expected = _canonical(cache, cached)
 
@@ -58,12 +67,22 @@ def compare_hit(cache, cached, fetch, *, sample=None):
 
                 with fresh_reads():
                     actual = _canonical(cache, fetch(READ_TIMEOUT_SECONDS))
-                _record(cache, 'match' if expected == actual else 'mismatch')
+                agrees = (
+                    expected == actual
+                    if cache == 'episode_members'
+                    else all(math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-6) for a, b in zip(expected, actual))
+                )
+                _record(cache, 'match' if agrees else 'mismatch')
+            except ShadowSkipped:
+                _record(cache, 'skipped')
             except Exception:
                 _record(cache, 'error')
 
-        from utils.executors import read_cache_shadow_executor, submit_with_context
+        from utils.executors import ExecutorSaturatedError, read_cache_shadow_executor, submit_with_context
 
-        submit_with_context(read_cache_shadow_executor, compare)
+        try:
+            submit_with_context(read_cache_shadow_executor, compare)
+        except ExecutorSaturatedError:
+            _record(cache, 'skipped')
     except Exception:
         _record(cache, 'error')

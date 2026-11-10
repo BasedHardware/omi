@@ -18,7 +18,7 @@ from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import nest_usage_fields, resolve_usage_plan_id
 from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
-from utils.read_cache_shadow import compare_hit
+from utils.read_cache_shadow import ShadowSkipped, compare_hit
 
 logger = logging.getLogger(__name__)
 
@@ -593,9 +593,9 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
 
 
 def _s4_valid_month_stats(value) -> bool:
-    fields = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
     return isinstance(value, dict) and all(
-        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0 for key in fields
+        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0
+        for key in monthly_usage_totals.FIELDS
     )
 
 
@@ -640,7 +640,12 @@ def _fresh_month_stats(uid, date, start_date, timeout, *, firestore_client=None)
     if start_date is not None:
         start_id = f'{start_date.year}-{start_date.month:02d}-{start_date.day:02d}-00'
         query = query.where(filter=FieldFilter('id', '>=', start_id))
-    return _aggregate_stats_from_docs(query.stream(timeout=timeout, retry=FIRESTORE_NO_RETRY))
+    with read_origin('job:read_cache_shadow'):
+        stats, count = _aggregate_stats_with_count(query.limit(744).stream(timeout=timeout, retry=FIRESTORE_NO_RETRY))
+        record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, count)
+    if count >= 744:
+        raise ShadowSkipped('hourly document limit reached')
+    return stats
 
 
 @_s4_month_cache()

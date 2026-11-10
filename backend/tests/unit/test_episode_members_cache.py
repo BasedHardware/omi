@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from utils.episodes import home_read
+from database.conversations import prepare_conversation_for_read
 
 
 class Ref:
@@ -104,6 +105,7 @@ def test_shadow_bypasses_memo_without_republishing(memo, monkeypatch):
     monkeypatch.setattr(store, 'get_all', fresh_get_all)
     pending.pop()()
     assert options_seen == [(5.0, home_read.FIRESTORE_NO_RETRY)]
+    assert store.calls[-1][1] == []
     metric.labels.assert_called_with(cache='episode_members', result='mismatch')
     assert read() == expected
 
@@ -128,6 +130,22 @@ def test_shadow_batch_deadline_stops_before_another_rpc(memo, monkeypatch):
     with pytest.raises(TimeoutError, match='shadow read deadline'):
         home_read._fetch_members('u1', ['a', 'b'], store, timeout=5)
     assert len(store.calls) == 1
+
+
+@pytest.mark.parametrize('raw', [{}, {'deleted': True}, {'discarded': True}, {'data_protection_level': 'enhanced'}])
+def test_shadow_matches_real_prepared_key_set_without_preparing(memo, monkeypatch, raw):
+    store, _, prepare = memo
+    store.put('u1', 'a', **raw)
+    assert 'transcript_segments' not in home_read.MEMBER_FIELDS
+    prepared = prepare_conversation_for_read(dict(raw, id='a'), 'u1')
+    assert prepared is not None  # Includes deleted/discarded/enhanced rows at this stage.
+    original_get_all = store.get_all
+    monkeypatch.setattr(
+        store, 'get_all', lambda refs, *, field_paths, **options: original_get_all(refs, field_paths=field_paths)
+    )
+    prepare.side_effect = AssertionError('shadow must not prepare/decrypt/load transcripts')
+    assert set(home_read._fetch_members('u1', ['a', 'missing'], store, timeout=5)) == set({'a': prepared})
+    prepare.assert_not_called()
 
 
 def read(uid='u1', ids=('b', 'a', 'b'), **kwargs):

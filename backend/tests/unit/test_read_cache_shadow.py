@@ -51,7 +51,7 @@ def test_error_never_escapes_or_logs_values(queued, caplog):
     assert 'sensitive' not in caplog.text
 
 
-@pytest.mark.parametrize('rate', ['0', '-1', 'nan', 'inf'])
+@pytest.mark.parametrize('rate', ['0', '-1', 'nan', 'inf', 'abc', '', '1%'])
 def test_disabled(queued, monkeypatch, rate):
     monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', rate)
     sample = Mock(side_effect=AssertionError('must not sample'))
@@ -83,7 +83,13 @@ def test_admission_and_metric_errors_never_escape(queued, monkeypatch):
     shadow.compare_hit('usage_month', totals(), Mock(), sample=lambda: 0)
 
 
-def test_real_executor_is_bounded_and_does_not_wait(monkeypatch):
+def test_incomplete_read_is_skipped(queued):
+    shadow.compare_hit('usage_month', totals(), Mock(side_effect=shadow.ShadowSkipped()), sample=lambda: 0)
+    queued[0].pop()()
+    queued[1].labels.assert_called_once_with(cache='usage_month', result='skipped')
+
+
+def test_real_executor_is_bounded_and_does_not_wait(monkeypatch, caplog):
     monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
     entered = threading.Barrier(3)
     release = threading.Event()
@@ -112,7 +118,8 @@ def test_real_executor_is_bounded_and_does_not_wait(monkeypatch):
         shadow.compare_hit('usage_month', totals(), third, sample=lambda: 0)
         third.assert_not_called()
         assert len(completed) == 2
-        metric.labels.assert_called_with(cache='usage_month', result='error')
+        metric.labels.assert_called_with(cache='usage_month', result='skipped')
+        assert 'executor_saturated' not in caplog.text
     finally:
         release.set()
         for future in completed:

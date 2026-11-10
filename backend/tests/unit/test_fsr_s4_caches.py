@@ -319,6 +319,9 @@ def test_broken_hit_observer_does_not_fetch_or_change_response(env, monkeypatch)
 
 @pytest.mark.parametrize('start_day,expected', [(None, 17), (16, 16)])
 def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, start_day, expected):
+    from database import firestore_document_probe as probe
+    from database.firestore_read_origin import current_read_origin
+
     store, _ = env
     for day in (1, 16):
         key = f'2026-10-{day:02}-00'
@@ -329,18 +332,110 @@ def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, s
             'transcription_seconds': day,
         }
     options_seen = []
+    recorded = Mock()
+    monkeypatch.setattr(user_usage, 'record_firestore_read', recorded)
+    caller_counter = probe.FIRESTORE_BILLED_READS_BY_CALLER.labels(
+        collection='users/hourly_usage', kind='query', caller='database.user_usage:_fresh_month_stats'
+    )
+    origin_counter = probe.FIRESTORE_BILLED_READS_BY_ORIGIN.labels(
+        collection='users/hourly_usage', kind='query', origin='job:read_cache_shadow'
+    )
+    before_caller, before_origin = caller_counter._value.get(), origin_counter._value.get()
     stream = Ref.stream
 
     def bounded_stream(self, *, timeout, retry):
+        assert self.count == 744
+        assert current_read_origin() == 'job:read_cache_shadow'
         options_seen.append((timeout, retry))
         return stream(self)
 
-    monkeypatch.setattr(Ref, 'stream', bounded_stream)
+    monkeypatch.setattr(
+        Ref, '_parent', property(lambda self: SimpleNamespace(_path=tuple(self.path.split('/')))), raising=False
+    )
+    monkeypatch.setattr(Ref, 'stream', probe._wrap_query_stream(bounded_stream))
     date = datetime(2026, 10, 16, tzinfo=timezone.utc)
     start = date.replace(day=start_day) if start_day else None
     assert user_usage._fresh_month_stats('u', date, start, 5)['transcription_seconds'] == expected
     assert options_seen == [(5, user_usage.FIRESTORE_NO_RETRY)]
+    recorded.assert_called_once_with(
+        user_usage.FirestoreReadFamily.LISTEN_MONTHLY_USAGE,
+        user_usage.FirestoreReadMode.BOUNDED,
+        2 if start_day is None else 1,
+    )
+    count = 2 if start_day is None else 1
+    assert caller_counter._value.get() == before_caller + count
+    assert origin_counter._value.get() == before_origin + count
     assert not store.writes
+
+
+@pytest.mark.parametrize('since', [False, True])
+def test_real_projection_cache_compares_hourly_float_sums_as_match(env, monkeypatch, since):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _ = env
+    enable(monkeypatch, 'usage_month_cache', 'usage_month_total')
+    monkeypatch.setenv('FSR_USAGE_MONTH_TOTAL_EPOCH', 'v1')
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    values = [0.1, 0.2, 0.3]
+    total = sum(reversed(values))
+    assert total != sum(values)
+    projection = dict.fromkeys(user_usage.monthly_usage_totals.FIELDS, 3)
+    projection.update(transcription_seconds=total, speech_seconds=total)
+    store.docs['users/u/monthly_usage_totals/2026-10'] = {
+        'ready': True,
+        'schema_version': 1,
+        'epoch': 'v1',
+        'totals': projection,
+        'days': {'16': projection},
+    }
+    for hour, value in enumerate(values):
+        key = f'2026-10-16-{hour:02d}'
+        store.docs[f'users/u/hourly_usage/{key}'] = {
+            'id': key,
+            'year': 2026,
+            'month': 10,
+            **dict.fromkeys(shadow.USAGE_FIELDS, 1),
+            'transcription_seconds': value,
+            'speech_seconds': value,
+        }
+    stream = Ref.stream
+    monkeypatch.setattr(Ref, 'stream', lambda self, **options: stream(self))
+    pending, metric = [], Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    date = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    read = user_usage.get_monthly_usage_stats_since if since else user_usage.get_monthly_usage_stats
+    args = ('u', date, date) if since else ('u', date)
+    assert read(*args) == projection
+    assert not pending
+    assert read(*args) == projection
+    pending.pop()()
+    metric.labels.assert_called_once_with(cache='usage_month', result='match')
+    assert not store.writes
+
+
+@pytest.mark.parametrize('documents', [743, 744, 745])
+def test_usage_document_limit_is_bounded_and_skips_incomplete_comparison(env, monkeypatch, documents):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _ = env
+    for number in range(documents):
+        store.docs[f'users/u/hourly_usage/{number:04d}'] = {'year': 2026, 'month': 10}
+    stream = Ref.stream
+    monkeypatch.setattr(Ref, 'stream', lambda self, **options: stream(self))
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    pending, metric = [], Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    shadow.compare_hit(
+        'usage_month',
+        dict.fromkeys(shadow.USAGE_FIELDS, 0),
+        lambda timeout: user_usage._fresh_month_stats('u', datetime(2026, 10, 16), None, timeout),
+        sample=lambda: 0,
+    )
+    pending.pop()()
+    assert len(store.reads) == min(documents, 744)
+    metric.labels.assert_called_once_with(cache='usage_month', result='skipped' if documents >= 744 else 'match')
 
 
 def test_usage_month_and_launch_boundary_separate(env, monkeypatch):
