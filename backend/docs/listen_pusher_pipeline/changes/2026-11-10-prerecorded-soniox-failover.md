@@ -24,3 +24,9 @@ voice-message, Soniox batch and STT-policy suites, generated runtime-env validat
 and the repository preflight/pre-push contracts.
 
 Held-piece recovery and prompt-verification coordinators retain their existing single-provider attempt budgets. A prior failed Modulate POST suppresses cross-vendor failover even if a later retry receives a credit refusal. Direct authentication/client refusals do not fail over; a request refused locally by an open breaker can fail over as specified.
+
+The voice HTTP boundary accepts the existing `(text, language)` adapter result as
+well as the opt-in serving-metadata result. Default helper calls preserve the
+single-language provider's existing keyword contract; language detection and
+provider metadata are requested only when needed. These contracts are covered by
+the full desktop-transcription and messaging-modality suites.

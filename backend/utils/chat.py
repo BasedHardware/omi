@@ -190,7 +190,7 @@ def _transcribe_voice_message_url(
                 language=stt_language,
                 return_language=wants_language,
                 model=stt_model,
-                return_provider=return_provider,
+                **({"return_provider": True} if return_provider else {}),
             )
         if return_provider:
             words_result, served_provider, served_model = result
@@ -251,7 +251,7 @@ def transcribe_voice_message_segment(
             return None, detected_language, provider, provider_model
         return None, detected_language
 
-    return _transcribe_voice_message_url(url, path, language, return_provider=return_provider)
+    return _transcribe_voice_message_url(url, path, language, **({"return_provider": True} if return_provider else {}))
 
 
 def transcribe_pcm_bytes(
@@ -303,9 +303,9 @@ def transcribe_pcm_bytes(
                 channels=channels,
                 language=stt_language,
                 model=stt_model,
-                return_language=is_multi,
+                **({"return_language": True} if is_multi else {}),
                 keywords=keywords,
-                return_provider=return_provider,
+                **({"return_provider": True} if return_provider else {}),
             )
         if return_provider:
             words_result, served_provider, served_model = result

@@ -689,7 +689,12 @@ async def transcribe_voice_message(
                 keywords=context_keywords,
                 return_provider=True,
             )
-            transcript, detected_language, stt_provider, stt_model = transcription_result
+            # Legacy transcription adapters return (text, language). Provider
+            # metadata is optional; retain the selected provider when absent.
+            if len(transcription_result) == 4:
+                transcript, detected_language, stt_provider, stt_model = transcription_result
+            else:
+                transcript, detected_language = transcription_result
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
             parity_capture.observe(
                 "inbound",
@@ -815,10 +820,13 @@ async def transcribe_voice_message(
                 language=resolved_language,
                 return_provider=True,
             )
-            transcript, detected_language, segment_provider, segment_model = transcription_result
-            # A multipart response must disclose Soniox if any segment used it.
-            if stt_provider != 'soniox':
-                stt_provider, stt_model = segment_provider, segment_model
+            if len(transcription_result) == 4:
+                transcript, detected_language, segment_provider, segment_model = transcription_result
+                # A multipart response must disclose Soniox if any segment used it.
+                if stt_provider != 'soniox':
+                    stt_provider, stt_model = segment_provider, segment_model
+            else:
+                transcript, detected_language = transcription_result
             if transcript:
                 transcripts.append(transcript)
             if is_multi and detected_language:
