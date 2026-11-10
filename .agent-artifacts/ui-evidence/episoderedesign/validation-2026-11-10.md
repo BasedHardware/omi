@@ -38,3 +38,11 @@ scripts/pr-preflight --all --pr-body-file <PR-body.md>
 No live flag service, customer API, account data, device, deploy or merge used.
 The composer supplies episode-level follow-up text without per-item source ids;
 the task links to the first retained non-noise conversation (first retained fallback).
+
+## CI analyzer follow-up — 2026-11-10T09:48:59+00:00
+
+CI rejected one stale import in home_remaining_work_perf_test.dart after the row
+text helper extraction. Removed that unused import and ran the full app analyzer
+ratchet (`bash app/scripts/analyze_ratchet.sh`): passed without changing its baseline.
+Failure evidence: https://github.com/BasedHardware/omi/actions/runs/42792722161/job/129750626110
+No product behavior or render changed in this follow-up.
