@@ -4124,6 +4124,7 @@ export interface PendingWorkItem {
 export interface PendingWorkSnapshot {
   attention_unseen_count: number;
   enabled: boolean;
+  home_processing_today?: boolean;
   items: Array<PendingWorkItem>;
 }
 
