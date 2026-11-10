@@ -7,6 +7,7 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 from __future__ import annotations
 
 from config.refactor_modes import serving_for
+from config.llm_input_versions import prompt_version
 
 import dataclasses
 import hashlib
@@ -14,9 +15,6 @@ import json
 import os
 from datetime import date, datetime
 from enum import Enum
-from functools import lru_cache
-from importlib.metadata import version as distribution_version
-from pathlib import Path
 from typing import Any
 
 from prometheus_client import Counter
@@ -71,49 +69,15 @@ def canonical(value: Any) -> Any:
     raise TypeError(f'Unsupported LLM input type: {type(value).__name__}')
 
 
-@lru_cache(maxsize=2)
 def implementation_digest(feature: str) -> str:
-    # Invalidate persisted results on prompt/schema/orchestration edits as well
-    # as input changes. Read lazily: imports perform no filesystem/client IO.
-    root = Path(__file__).resolve().parents[1]
-    paths = [
-        'conversations/process_conversation.py',
-        'llm/jev_client.py',
-        'llm/model_config.py',
-        'llm/model_constants.py',
-        'llm/clients.py',
-        'llm/providers.py',
-        '../config/jev_decisions.py',
-        'llm/conversation_prompt_context.py',
-        'llm/memories.py',
-        'llm/working_observations.py',
-        'llm/conversation_processing.py',
-        'llm/conversation_notes_prompts.py',
-        'llm/notes_packet.py',
-        'llm/action_item_v2.py',
-        'llm/notes_output.py',
-        'llm/notes_lengths.py',
-        'llm/notes_effort.py',
-        'llm/notes_output_contract.py',
-        'llm/notes_identity.py',
-        'llm/output_language.py',
-        'llm/speaker_evidence_prompt.py',
-        'llm/notes_short_clip.py',
-        'llm/notes_language_inputs.py',
-        'llm/conversation_title_people.py',
-        'llm/meeting_notes_rich_prompts.py',
-        'llm/meeting_notes_presentation.py',
-        'llm/meeting_notes_validation.py',
-        'memory/rejected_memory_feedback.py',
-        'prompts.py',
-        '../models/structured.py',
-        '../models/structured_extraction.py',
-        '../models/memory_contracts.py',
-        '../models/conversation.py',
-        '../models/memories.py',
-    ]
-    dependencies = '|'.join(f'{name}:{distribution_version(name)}' for name in ('pydantic', 'langchain-core')).encode()
-    return hashlib.sha256(b''.join((root / path).read_bytes() for path in paths) + dependencies).hexdigest()
+    """The explicit prompt version that keys this feature's reuse.
+
+    A source-file digest here voided every stored hash on any deploy that
+    touched one of ~35 files, so unchanged input was re-bought after each
+    deploy. The version is bumped deliberately; the prompt-source digest that
+    guards the bump lives in the test, not on this runtime path.
+    """
+    return prompt_version(feature)
 
 
 def fingerprint(feature: str, inputs: Any) -> str:
