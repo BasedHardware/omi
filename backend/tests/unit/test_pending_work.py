@@ -215,6 +215,66 @@ def test_list_resolves_deleted_and_summarized_and_keeps_fallback_title(monkeypat
     items[3].reference.update.assert_not_called()
 
 
+@pytest.mark.parametrize('expiry_enabled', [True, False])
+def test_list_expires_only_old_non_retryable_items(monkeypatch, expiry_enabled):
+    collection = Mock()
+    collection.where.return_value = collection
+    definitions = [
+        ('expired', False, NOW - store.NON_RETRYABLE_ITEM_TTL),
+        ('retryable', True, NOW - timedelta(days=30)),
+        ('recent', False, NOW - store.NON_RETRYABLE_ITEM_TTL + timedelta(seconds=1)),
+    ]
+    snapshots = {}
+    conversations = {}
+    for cid, retryable, created_at in definitions:
+        item = {
+            'id': cid,
+            'conversation_id': cid,
+            'generation': store.generation(ROW),
+            'failure_code': 'recovery_structure_unavailable',
+            'active': True,
+            'created_at': created_at,
+            'retryable': retryable,
+            'seen': False,
+            'retry': {'state': 'none', 'operation_id': None},
+        }
+        snapshot = Mock()
+        snapshot.to_dict.return_value = item
+        snapshots[cid] = snapshot
+        conv = Mock(exists=True)
+        conv.to_dict.return_value = ROW
+        conv.reference.collection.return_value.document.return_value.get.return_value = Mock(exists=False)
+        conversations[cid] = SimpleNamespace(get=lambda conv=conv: conv)
+    collection.stream.return_value = list(snapshots.values())
+    monkeypatch.setattr(store, 'items_ref', lambda uid: collection)
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value.document.side_effect = (
+        conversations.get
+    )
+    monkeypatch.setattr(store, 'db', client)
+    monkeypatch.setattr(store, 'now_utc', lambda: NOW)
+    if expiry_enabled:
+        monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', 'false')
+
+    result = store.list_items(UID)
+
+    expected = ['retryable', 'recent'] if expiry_enabled else ['expired', 'retryable', 'recent']
+    assert [item['id'] for item in result] == expected
+    expiry_write = {
+        'active': False,
+        'expired_at': NOW,
+        'expiry_reason': 'non_retryable_ttl',
+    }
+    if expiry_enabled:
+        snapshots['expired'].reference.update.assert_called_once_with(expiry_write)
+    else:
+        snapshots['expired'].reference.update.assert_not_called()
+    snapshots['retryable'].reference.update.assert_not_called()
+    snapshots['recent'].reference.update.assert_not_called()
+
+
 def test_pending_sync_excludes_terminal_missing_and_foreign(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     from database import sync_jobs

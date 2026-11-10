@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -14,6 +15,16 @@ from utils.conversations import phase_shadow
 from database._client import db, run_transactional
 
 LIMIT = 100
+NON_RETRYABLE_ITEM_TTL = timedelta(days=7)
+
+
+def non_retryable_expiry_enabled() -> bool:
+    return os.getenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', 'true').strip().lower() != 'false'
+
+
+def expired_non_retryable(item: dict[str, Any], now: datetime) -> bool:
+    created_at = item.get('created_at')
+    return not item.get('retryable') and isinstance(created_at, datetime) and created_at <= now - NON_RETRYABLE_ITEM_TTL
 
 
 def items_ref(uid: str) -> Any:
@@ -80,6 +91,8 @@ def unresolved(row: dict[str, Any] | None) -> bool:
 
 def list_items(uid: str, limit: int | None = None) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
+    expiry_enabled = non_retryable_expiry_enabled()
+    now = now_utc()
     query = items_ref(uid).where(filter=FieldFilter('active', '==', True))
     if limit is not None:
         query = query.limit(limit)
@@ -99,6 +112,9 @@ def list_items(uid: str, limit: int | None = None) -> list[dict[str, Any]]:
             if operation['state'] == 'failed' and item.get('retry', {}).get('state') == 'failed':
                 item['retryable'] = True  # Repair items made permanently non-retryable by the old ledger.
             item['retry'] = {'state': operation['state'], 'operation_id': operation['operation_id']}
+        if expiry_enabled and expired_non_retryable(item, now):
+            snapshot.reference.update({'active': False, 'expired_at': now, 'expiry_reason': 'non_retryable_ttl'})
+            continue
         item['title'] = (row or {}).get('user_title') or ((row or {}).get('structured') or {}).get('title')
         item.pop('generation', None)
         item.pop('active', None)
