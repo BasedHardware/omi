@@ -799,7 +799,7 @@ def test_scan_budget_walks_refusals_in_bounded_chunks(debt_store, monkeypatch, m
         assert [limit for phase, limit in calls if phase == 'newest'] == [500, 500, 200]
         assert all(limit <= 500 for _, limit in calls)
         progress = client.document(repair.CURSOR).get().to_dict()['phases']['newest']
-        retained = 1199 if mode == 'refusals' else 2
+        retained = 1199
         assert progress['path'] == refs[retained].path
         assert (
             query(now=now, phase='newest', after=progress, limit=1, firestore_client=client)[0].reference
@@ -879,3 +879,75 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
             for added in refs[start : start + 500]:
                 batch.delete(added)
             batch.commit()
+
+
+@pytest.mark.parametrize('hours', [72, 0])
+def test_owner_deferral_continuation_discovers_other_owner_and_retries_all_debt_after_wrap(
+    debt_store, monkeypatch, hours
+):
+    """A failing urgent share must not pin discovery behind multiple scan budgets."""
+    from collections import Counter
+    from math import ceil
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', str(hours))
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 8)
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 3)
+    monkeypatch.setattr(repair, 'REPAIR_ADMISSION_LIMIT', 8)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    now = 1_800_000_000.0
+    urgent = [ref.parent.document(f'urgent-{i}') for i in range(3 if hours else 0)]
+    newest = [ref.parent.document(f'newest-{i:03}') for i in range(17)]
+    other = client.collection('users').document(uid + '-other').collection('conversations').document('other')
+    ref.update({'summary_due_at': None})
+    attempts, admitted = [], []
+    failing = True
+
+    def redrive(client, owner, cid, **kwargs):
+        attempts.append((owner, cid))
+        if failing and owner == uid:
+            raise RuntimeError('synthetic persistent admission failure')
+        admitted.append((owner, cid))
+        client.collection('users').document(owner).collection('conversations').document(cid).update(
+            {'summary_due_at': None}
+        )
+        return True
+
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        batch = client.batch()
+        for i, added in enumerate(urgent):
+            batch.set(added, {**row, 'summary_first_pending_at': now - hours * 3600 + 480 + i})
+        for i, added in enumerate(newest):
+            batch.set(added, {**row, 'summary_first_pending_at': now - i - 1})
+        batch.set(other, {**row, 'summary_first_pending_at': now - 1000})
+        batch.commit()
+        bound = ceil((len(newest) + 1) / (8 - len(urgent)))
+        for tick in range(bound):
+            start = len(attempts)
+            counts = repair.tick(now=now + tick * repair.REPAIR_INTERVAL_SECONDS, client=client)
+            assert counts['scanned'] <= 8 and len(attempts) - start <= 8
+            assert max(Counter(owner for owner, _ in attempts[start:]).values()) <= 3
+            if tick == 0:
+                progress = client.document(repair.CURSOR).get().to_dict()
+                cursor = progress['phases']['newest'] if hours else progress
+                assert cursor['path'] == newest[8 - len(urgent) - 1].path
+        assert admitted == [(uid + '-other', 'other')]
+        assert all(snapshot.to_dict()['summary_due_at'] == row['summary_due_at'] for snapshot in client.get_all(newest))
+        # Quota deferral changes no debt row. Once urgent failures are removed,
+        # wrapping the continuation must eventually admit every deferred row.
+        for added in urgent:
+            added.update({'summary_due_at': None})
+        failing = False
+        for tick in range(bound, bound + ceil(len(newest) / 3) + 2):
+            repair.tick(now=now + tick * repair.REPAIR_INTERVAL_SECONDS, client=client)
+            if len(admitted) == len(newest) + 1:
+                break
+        assert len(admitted) == len(set(admitted)) == len(newest) + 1
+        assert set(admitted) == {(uid, added.id) for added in newest} | {(uid + '-other', 'other')}
+        assert all(snapshot.to_dict()['summary_due_at'] is None for snapshot in client.get_all(newest + [other]))
+    finally:
+        batch = client.batch()
+        for added in urgent + newest + [other]:
+            batch.delete(added)
+        batch.commit()

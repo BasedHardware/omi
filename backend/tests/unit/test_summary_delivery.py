@@ -361,7 +361,8 @@ def test_gated_cursor_preserves_finite_nonpositive_due_and_datetime(monkeypatch,
         assert not shape.uses_cursors
 
 
-def test_newest_index_failure_finishes_near_expiry_progress_and_counts(monkeypatch, caplog):
+@pytest.mark.parametrize('urgent_count', [0, 2], ids=['empty-near-expiry', 'owner-deferral'])
+def test_newest_index_failure_finishes_near_expiry_progress_and_counts(monkeypatch, caplog, urgent_count):
     from google.api_core.exceptions import FailedPrecondition
     from services import summary_debt_repair as repair
     from tests.support.firestore_shape_recorder import (
@@ -391,7 +392,7 @@ def test_newest_index_failure_finishes_near_expiry_progress_and_counts(monkeypat
             f'users/synthetic/conversations/{name}',
             {**debt(), 'summary_first_pending_at': now - 72 * 3600 + 100 + i, 'summary_due_at': now - 1},
         )
-        for i, name in enumerate(('a', 'b'))
+        for i, name in enumerate(('a', 'b')[:urgent_count])
     ]
     client.queue_results(rows)
     client.queue_results([])
@@ -424,10 +425,18 @@ def test_newest_index_failure_finishes_near_expiry_progress_and_counts(monkeypat
     before = totals()
     with install_recorder(client):
         counts = repair.tick(now=now, client=client)
-    assert counts == {'scanned': 2, 'admitted': 1, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 0}
+    expected_admitted = int(bool(urgent_count))
+    assert counts == {
+        'scanned': urgent_count,
+        'admitted': expected_admitted,
+        'near_expiry_admitted': expected_admitted,
+        'errors': 1,
+        'expired_seen': 0,
+    }
     progress = client.documents[repair.CURSOR]
     assert progress['lease_until'] == 0
-    assert progress['phases']['near_expiry']['path'] == rows[0].reference.path
+    assert progress['next_at'] == now + repair.REPAIR_INTERVAL_SECONDS
+    assert progress['phases']['near_expiry'] is None  # Owner deferral does not pin discovery before exhaustion.
     assert progress['phases']['newest'] == prior
     assert (
         len(
@@ -441,9 +450,9 @@ def test_newest_index_failure_finishes_near_expiry_progress_and_counts(monkeypat
     )
     after = totals()
     assert {key: after[key] - before.get(key, 0) for key in after} == {
-        'scanned': 2,
-        'admitted': 1,
-        'near_expiry_admitted': 1,
+        'scanned': urgent_count,
+        'admitted': expected_admitted,
+        'near_expiry_admitted': expected_admitted,
         'error': 1,
         'expired_seen': 0,
     }
@@ -468,3 +477,124 @@ def test_query_errors_other_than_newest_precondition_propagate(monkeypatch, phas
     client = RecordingFirestore()
     with install_recorder(client), pytest.raises(error):
         repair.tick(now=1_800_000_000.0, client=client)
+
+
+@pytest.fixture
+def rotating_repair(monkeypatch):
+    from services import summary_debt_repair as repair
+    from tests.support.firestore_shape_recorder import RecordingFirestore, RecordingTransaction, install_recorder
+
+    client = RecordingFirestore()
+    phases = {'near_expiry': [], 'newest': []}
+    original_commit = RecordingTransaction._commit
+
+    def commit(transaction, *args, **kwargs):
+        for operation, ref, payload in transaction._write_ops:
+            assert operation in ('set', 'update')
+            existing = client.documents.get(ref.path, {}) if operation == 'update' else {}
+            client.documents[ref.path] = {**existing, **payload}
+        return original_commit(transaction, *args, **kwargs)
+
+    def query(*, phase, limit, after, **kwargs):
+        rows = phases[phase]
+        start = next((i + 1 for i, row in enumerate(rows) if after and row.reference.path == after['path']), 0)
+        return [row for row in rows[start:] if row.to_dict().get('summary_due_at') is not None][:limit]
+
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    monkeypatch.setattr(repair, 'due_conversations', query)
+    monkeypatch.setattr(RecordingTransaction, '_commit', commit)
+    with install_recorder(client):
+        yield repair, client, phases
+
+
+@pytest.mark.parametrize('hours', [72, 0])
+@pytest.mark.parametrize('scan_limit', [8, 100])
+def test_owner_deferrals_continue_across_ticks_and_all_debt_returns_after_wrap(
+    rotating_repair, monkeypatch, hours, scan_limit
+):
+    from math import ceil
+
+    repair, client, phases = rotating_repair
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', str(hours))
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', scan_limit)
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 3)
+    monkeypatch.setattr(repair, 'REPAIR_ADMISSION_LIMIT', 8)
+    now = 1_800_000_000.0
+    urgent = 3 if hours else 0
+    for i in range(urgent):
+        path = f'users/a/conversations/urgent-{i}'
+        client.documents[path] = {**debt(), 'summary_first_pending_at': now - hours * 3600 + 480 + i}
+        phases['near_expiry'].append(client.snapshot(path, client.documents[path]))
+    for i in range(2 * scan_limit + 1):
+        path = f'users/a/conversations/newest-{i:03}'
+        client.documents[path] = {**debt(), 'summary_first_pending_at': now - i - 1}
+        phases['newest'].append(client.snapshot(path, client.documents[path]))
+    other = 'users/b/conversations/other'
+    client.documents[other] = {**debt(), 'summary_first_pending_at': now - 1000}
+    phases['newest'].append(client.snapshot(other, client.documents[other]))
+    admitted = []
+    failing = True
+
+    def redrive(_, owner, cid, **kwargs):
+        path = f'users/{owner}/conversations/{cid}'
+        if failing and owner == 'a':
+            raise RuntimeError('synthetic persistent admission failure')
+        admitted.append(path)
+        client.documents[path]['summary_due_at'] = None
+        return True
+
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    bound = ceil(len(phases['newest']) / (scan_limit - urgent))
+    for tick in range(bound):
+        counts = repair.tick(now=now + tick * repair.REPAIR_INTERVAL_SECONDS, client=client)
+        assert counts['scanned'] <= scan_limit
+        assert counts['admitted'] + counts['errors'] <= 8
+        if tick == 0:
+            cursor = client.documents[repair.CURSOR]
+            progress = cursor['phases']['newest'] if hours else cursor
+            assert progress['path'] == phases['newest'][scan_limit - urgent - 1].reference.path
+    assert admitted == [other]  # B is discovered despite A consuming its quota every tick.
+    deferred = phases['newest'][scan_limit - urgent - 1].reference.path
+    assert client.documents[deferred]['summary_due_at'] == 220
+    # Remove the urgent obstruction; every deferred newest row must come back
+    # from the separate conversation debt store, including rows before wrap.
+    for snapshot in phases['near_expiry']:
+        client.documents[snapshot.reference.path]['summary_due_at'] = None
+    failing = False
+    for tick in range(bound, bound + ceil(len(phases['newest']) / 3) + 2):
+        repair.tick(now=now + tick * repair.REPAIR_INTERVAL_SECONDS, client=client)
+        if all(client.documents[row.reference.path]['summary_due_at'] is None for row in phases['newest']):
+            break
+    assert len(admitted) == len(set(admitted)) == len(phases['newest'])
+    assert set(admitted) == {row.reference.path for row in phases['newest']}
+
+
+@pytest.mark.parametrize('hours', [72, 0])
+def test_emitted_continuation_cursor_keeps_rollback_shapes(rotating_repair, monkeypatch, hours):
+    from database.summary_debt_queries import due_conversations
+
+    repair, client, phases = rotating_repair
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', str(hours))
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 1)
+    monkeypatch.setattr(repair, 'redrive', lambda *_args, **_kwargs: False)
+    now = 1_800_000_000.0
+    path = 'users/a/conversations/c'
+    phases['newest'].append(client.snapshot(path, {**debt(), 'summary_first_pending_at': now - 1}))
+    repair.tick(now=now, client=client)
+    cursor = client.documents[repair.CURSOR]
+    assert cursor['version'] == 2
+    if hours:
+        assert cursor['path'] is cursor['due'] is cursor['pending'] is None
+        after = cursor['phases']['newest']
+        assert set(after) == {'phase', 'window', 'path', 'due', 'pending'}
+        # Current v2 readers continue; the older flat-cursor reader rewinds.
+        due_conversations(now=now, after=after, firestore_client=client)
+        assert client.shapes[-1].uses_cursors
+        due_conversations(now=now, after=cursor, firestore_client=client)
+        assert not client.shapes[-1].uses_cursors
+    else:
+        assert cursor['phases'] == {} and cursor['pending'] is None
+        assert cursor['path'] == path and cursor['due'] == 220
+        due_conversations(now=now, after=cursor, firestore_client=client)
+        assert client.shapes[-1].uses_cursors

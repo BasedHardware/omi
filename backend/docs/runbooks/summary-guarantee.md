@@ -119,8 +119,14 @@ Both phases share this tick budget. Queries return at most 500 documents per
 chunk. Stop fetching at the admission-attempt cap, document budget, or a
 90-second scan-work budget checked between rows/chunks. An in-flight RPC can
 finish later; this is a soft deadline with headroom before the 120-second lease.
-The cursor retains any fetched but unattempted tail and the first owner deferral;
-a separate in-memory cursor advances through chunks to discover other owners.
+Each durable phase cursor continues after every examined row, including owner
+deferrals, across chunks and ticks, then rewinds when exhausted. Admission/time
+stops retain the fetched but unexamined tail. Deferred rows stay separately in
+the conversation debt store with their original `summary_due_at`; a later pass
+or wrap selects them again without a retry queue or a new debt generation.
+This keeps an owner quota from pinning discovery before another owner. The
+version-2 phase cursor and gate-disabled flat due/path shapes stay unchanged;
+older readers can continue them or safely rewind.
 
 At 720 ticks/day, each 100 returned documents/tick means 72,000 document
 reads/day at full scan utilization. The 2,800-row target means 2,800 document

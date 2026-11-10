@@ -168,7 +168,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             break
         walk = progress.get(phase)
         last = None
-        deferred = False
+        interrupted = False
         exhausted = False
         while (
             attempts < REPAIR_ADMISSION_LIMIT
@@ -192,11 +192,10 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             exhausted = len(page) < limit
             for snapshot in page:
                 if attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
-                    deferred = True
+                    interrupted = True
                     break
                 previous = last
-                if not deferred:
-                    last = snapshot
+                last = snapshot
                 row: Row = snapshot.to_dict() or {}
                 if delivery.refusal(row):
                     continue
@@ -215,14 +214,13 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 overdue += 1
                 oldest = max(oldest, current - row['summary_due_at'])
                 if owner_attempts.get(parts[1], 0) >= REPAIR_PER_OWNER_TICK_LIMIT:
-                    if not deferred:
-                        last = previous
-                        deferred = True
+                    # Discovery progress is independent of admission. Keep the
+                    # conversation's durable due debt for a later pass/wrap;
+                    # pinning this cursor here can hide every later owner.
                     continue
                 if _scan_clock() >= scan_deadline:
-                    if not deferred:
-                        last = previous
-                    deferred = True
+                    last = previous
+                    interrupted = True
                     break
                 attempts += 1
                 owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
@@ -234,31 +232,26 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 except Exception:
                     # Existing sweep owns retry. Do not print document contents/errors.
                     counts['errors'] += 1
+            # Every examined row advances discovery, including owner deferrals.
+            # Fetched rows left unexamined by admission/time limits do not.
+            # Use the last examined row, never a previous phase's page tail
+            # (which may be empty when a later phase query fails).
+            if last is not None:
+                row = last.to_dict() or {}
+                walk = {
+                    'phase': phase,
+                    'window': max_age_seconds(),
+                    'path': last.reference.path,
+                    'due': row.get('summary_due_at'),
+                    'pending': row.get('summary_first_pending_at') if window else None,
+                }
             if exhausted or attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
                 break
-            # Walk past this chunk in-memory even if owner fairness deferred a
-            # row. Durable progress remains before the first deferral below.
-            tail = page[-1]
-            row = tail.to_dict() or {}
-            walk = {
-                'phase': phase,
-                'window': max_age_seconds(),
-                'path': tail.reference.path,
-                'due': row.get('summary_due_at'),
-                'pending': row.get('summary_first_pending_at') if window else None,
-            }
-        if last is not None and (deferred or not exhausted):
-            row = last.to_dict() or {}
-            progress[phase] = {
-                'phase': phase,
-                'window': max_age_seconds(),
-                'path': last.reference.path,
-                'due': row.get('summary_due_at'),
-                'pending': row.get('summary_first_pending_at') if window else None,
-            }
-        elif exhausted and not deferred:
+        if last is not None and (interrupted or not exhausted):
+            progress[phase] = walk
+        elif exhausted and not interrupted:
             progress[phase] = None
-        # First-row deferral preserves the input cursor (or None on a rewind).
+        # A first-row interruption preserves the input cursor (or a rewind).
     delivery.DEBT.set(overdue)
     delivery.OLDEST.set(oldest)
     delivery.SAMPLED_AT.set(current)
