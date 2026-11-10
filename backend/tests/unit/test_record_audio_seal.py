@@ -591,9 +591,15 @@ def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, mo
     assert set_record_upload_pending('uid-at', 'record', 'old', False, firestore_client=records)
     assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
     assert row['record_audio_closed'] and row['record_seal_refused_at'] is None
-    assert [payload for _, payload in records.transactions[-1].updates] == [
-        {'record_audio_closed': True, 'record_seal_refused_at': None}
+    # The ledger writes in its own transaction after the seal commits, so find
+    # the seal transaction rather than assuming it is the last one.
+    seal_updates = [
+        payload
+        for transaction in records.transactions
+        for _, payload in transaction.updates
+        if payload.get('record_audio_closed') is True
     ]
+    assert seal_updates == [{'record_audio_closed': True, 'record_seal_refused_at': None}]
 
 
 def test_refusal_stamp_kill_switch_preserves_old_no_write_contract(records, monkeypatch):

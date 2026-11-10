@@ -1,6 +1,8 @@
-"""The in-flight ledger contract: table invariants, transitions and fail-open."""
+"""The in-flight ledger contract: table invariants, transitions, fail-open and privacy."""
 
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 from prometheus_client import generate_latest
 from prometheus_client.parser import text_string_to_metric_families
@@ -26,7 +28,7 @@ def test_forward_transitions_are_legal_and_ranked():
         doc = plan.doc
     assert doc['stage'] == ledger.DONE
     assert doc['deadline_at'] is None
-    assert doc['expires_at'] == 500 + ledger.TERMINAL_TTL_SECONDS
+    assert doc['expires_at'] == 500 + ledger.terminal_ttl_seconds()
 
 
 def test_forward_skip_is_legal_so_uninstrumented_stages_do_not_block():
@@ -48,9 +50,41 @@ def test_duplicate_advance_is_idempotent():
     assert plan.doc is None
 
 
-def test_terminal_is_final():
+def test_duplicate_same_revision_is_idempotent():
+    doc = ledger.plan_advance(None, ledger.SEALED, now=100, revision=1).doc
+    plan = ledger.plan_advance(doc, ledger.SEALED, now=200, revision=1)
+    assert plan.outcome == 'duplicate'
+    assert plan.doc is None
+
+
+def test_stale_revision_loses():
+    doc = ledger.plan_advance(None, ledger.SEALED, now=100, revision=2).doc
+    plan = ledger.plan_advance(doc, ledger.NOTED, now=200, revision=1)
+    assert plan.outcome == 'stale'
+    assert plan.doc is None
+
+
+def test_late_append_reopens_a_terminal_with_a_higher_revision():
+    doc = ledger.plan_advance(None, ledger.DONE, now=100, revision=4).doc
+    assert doc['terminal'] is True
+    plan = ledger.plan_advance(doc, ledger.NOTED, now=200, revision=5, reopen=True)
+    assert plan.outcome == 'written'
+    assert plan.doc['stage'] == ledger.NOTED
+    assert plan.doc['terminal'] is False
+    assert plan.doc['revision'] == 5
+
+
+def test_retry_reopens_a_failed_terminal_with_a_higher_revision():
+    doc = ledger.plan_advance(None, ledger.failed_stage('provider'), now=100, revision=2).doc
+    plan = ledger.plan_advance(doc, ledger.SEALED, now=200, revision=3, reopen=True)
+    assert plan.outcome == 'written'
+    assert plan.doc['stage'] == ledger.SEALED
+
+
+def test_terminal_is_final_without_a_higher_revision():
     doc = ledger.plan_advance(None, ledger.NO_SPEECH, now=100).doc
     assert ledger.plan_advance(doc, ledger.SEALED, now=200).outcome == 'terminal'
+    assert ledger.plan_advance(doc, ledger.NOTED, now=200, revision=2).outcome == 'terminal'
 
 
 def test_unknown_stage_is_illegal():
@@ -94,16 +128,165 @@ def test_unknown_end_type_is_never_labelled_observed():
     assert doc['end_type'] == 'unknown'
 
 
+def test_end_type_mapping_never_invents_jev_or_user_disconnect():
+    assert ledger.end_type_for_trigger('client_finalize') == 'user_initiated'
+    assert ledger.end_type_for_trigger('capture_end') == 'unknown'
+    assert ledger.end_type_for_trigger('server_recovery') == 'unknown'
+    assert ledger.end_type_for_trigger('server_recovery', quiet_cause=True) == 'silence_backstop'
+    assert ledger.end_type_for_trigger('jev_initiated') == 'unknown'
+
+
+def test_end_at_is_the_firing_clock_not_last_speech():
+    doc = ledger.plan_advance(
+        None,
+        ledger.NO_SPEECH,
+        now=1000,
+        end_type='silence_backstop',
+        end_at=1000,
+        last_speech_at=400,
+        quiet_due_at=900,
+    ).doc
+    assert doc['end_at'] == 1000
+    assert doc['last_speech_at'] == 400
+    assert doc['quiet_due_at'] == 900
+
+
 def test_failure_reason_is_bounded():
     assert ledger.failed_stage('timeout') == 'failed:timeout'
     assert ledger.failed_stage('a-user-supplied-string') == 'failed:other'
     assert ledger.stage_label('failed:timeout') == 'failed'
+    assert ledger.bounded_reason('a-user-supplied-string') == 'other'
+    assert ledger.bounded_reason('timeout') == 'timeout'
+
+
+def test_terminal_ttl_is_at_least_twenty_six_hours(monkeypatch):
+    monkeypatch.delenv('PIPELINE_LEDGER_TERMINAL_TTL_SECONDS', raising=False)
+    assert ledger.terminal_ttl_seconds() >= 26 * 3600
+    monkeypatch.setenv('PIPELINE_LEDGER_TERMINAL_TTL_SECONDS', '60')
+    assert ledger.terminal_ttl_seconds() >= 26 * 3600
+    monkeypatch.setenv('PIPELINE_LEDGER_TERMINAL_TTL_SECONDS', str(30 * 86400))
+    assert ledger.terminal_ttl_seconds() == ledger.MAX_TERMINAL_TTL_SECONDS
 
 
 def test_terminal_ttl_and_no_deadline():
     doc = ledger.plan_advance(None, ledger.failed_stage('provider'), now=100).doc
     assert doc['deadline_at'] is None
-    assert doc['expires_at'] == 100 + ledger.TERMINAL_TTL_SECONDS
+    assert doc['expires_at'] == 100 + ledger.terminal_ttl_seconds()
+    assert doc['terminal'] is True
+    assert doc['terminal_reason'] == 'failed:provider'
+
+
+def test_schema_fields_are_present_and_content_free():
+    doc = ledger.plan_advance(
+        None,
+        ledger.NOTED,
+        now=100,
+        speech_seconds=12.5,
+        has_speech=True,
+        speech_basis='vad',
+    ).doc
+    for field in (
+        'schema_version',
+        'capture_id',
+        'conversation_id',
+        'owner_key',
+        'stage',
+        'entered_at',
+        'deadline_at',
+        'attempt',
+        'reason',
+        'end_type',
+        'end_at',
+        'admitted_at',
+        'created_at',
+        'updated_at',
+        'revision',
+        'terminal',
+        'terminal_reason',
+        'speech_seconds',
+        'has_speech',
+        'speech_basis',
+        'home_ready_at',
+        'episode_done_at',
+        'transitions',
+        'expires_at',
+    ):
+        assert field in doc, field
+    assert doc['schema_version'] == 1
+    assert doc['speech_seconds'] == 12.5
+    assert doc['speech_basis'] == 'vad'
+    assert doc['home_ready_at'] == 100
+    for forbidden in ('title', 'overview', 'transcript', 'audio_path', 'email', 'device_id'):
+        assert forbidden not in doc
+
+
+def test_owner_key_is_a_truncated_hash_not_the_uid():
+    key = ledger.owner_key('uid-secret')
+    assert key != 'uid-secret'
+    assert len(key) == 16
+
+
+class _FakeSnapshot:
+    def __init__(self, data):
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return self._data
+
+
+class _FakeRef:
+    def __init__(self, store, path):
+        self.store = store
+        self.path = path
+
+    def collection(self, name):
+        return _FakeRef(self.store, f'{self.path}/{name}')
+
+    def document(self, name):
+        return _FakeRef(self.store, f'{self.path}/{name}')
+
+    def get(self, transaction=None):
+        return _FakeSnapshot(self.store.get(self.path))
+
+    def set(self, doc):
+        self.store[self.path] = doc
+
+
+class _FakeTransaction:
+    _read_only = False
+    _max_attempts = 1
+    _id = 'fake-transaction'
+    retry_id = None
+
+    def __init__(self, store):
+        self.store = store
+
+    def _begin(self, retry_id=None):
+        return None
+
+    def set(self, ref, doc):
+        self.store[ref.path] = doc
+
+    def _commit(self):
+        return None
+
+    def _rollback(self):
+        return None
+
+    def _clean_up(self):
+        return None
+
+
+class _FakeClient:
+    def __init__(self):
+        self.store = {}
+
+    def collection(self, name):
+        return _FakeRef(self.store, name)
+
+    def transaction(self):
+        return _FakeTransaction(self.store)
 
 
 class _BoomClient:
@@ -111,46 +294,35 @@ class _BoomClient:
         raise RuntimeError('synthetic ledger store failure')
 
 
-class _FakeSnapshot:
-    exists = False
-
-    def to_dict(self):
-        return None
-
-
-class _FakeClient:
-    def __init__(self):
-        self.written = None
-
-    def collection(self, *_args, **_kwargs):
-        return self
-
-    def document(self, *_args, **_kwargs):
-        return self
-
-    def get(self):
-        return _FakeSnapshot()
-
-    def set(self, doc):
-        self.written = doc
-
-
-def test_prepare_is_fail_open_on_store_error(monkeypatch):
+def test_advance_is_fail_open_on_store_error(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
-    assert ledger.prepare('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is None
+    assert ledger.advance('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is False
 
 
-def test_prepare_is_silent_when_disabled(monkeypatch):
+def test_advance_is_silent_when_disabled(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'off')
-    assert ledger.prepare('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is None
+    assert ledger.advance('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is False
 
 
 def test_advance_writes_the_planned_document(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     client = _FakeClient()
     assert ledger.advance('uid', 'capture', ledger.SEALED, now=100, firestore_client=client) is True
-    assert client.written['stage'] == ledger.SEALED
-    assert client.written['capture_id'] == 'capture'
+    doc = client.store['users/uid/pipeline_ledger/capture']
+    assert doc['stage'] == ledger.SEALED
+    assert doc['capture_id'] == 'capture'
+    assert doc['conversation_id'] == 'capture'
+    assert doc['owner_key'] == ledger.owner_key('uid')
+
+
+def test_advance_duplicate_does_not_double_count(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    assert ledger.advance('uid', 'capture', ledger.SEALED, now=100, firestore_client=client) is True
+    assert ledger.advance('uid', 'capture', ledger.SEALED, now=200, firestore_client=client) is False
+    doc = client.store['users/uid/pipeline_ledger/capture']
+    assert doc['attempt'] == 1
+    assert len(doc['transitions']) == 1
 
 
 def test_metrics_are_content_free(monkeypatch):
@@ -158,9 +330,125 @@ def test_metrics_are_content_free(monkeypatch):
     ledger.advance('uid-secret', 'capture-secret', ledger.SEALED, now=100, firestore_client=_FakeClient())
     exported = generate_latest().decode()
     families = {family.name: family for family in text_string_to_metric_families(exported)}
-    advance = families['omi_pipeline_ledger_advance']
-    assert all(set(sample.labels) == {'stage', 'outcome'} for sample in advance.samples)
+    write = families['omi_pipeline_ledger_write']
+    assert all(set(sample.labels) == {'outcome'} for sample in write.samples)
+    transition = families['omi_pipeline_ledger_transition']
+    assert all(set(sample.labels) == {'from', 'to'} for sample in transition.samples)
     stage_seconds = families['omi_pipeline_ledger_stage_seconds']
-    assert all(set(sample.labels) == {'stage'} for sample in stage_seconds.samples)
+    assert all(set(sample.labels) <= {'stage', 'le'} for sample in stage_seconds.samples)
     assert 'uid-secret' not in exported
     assert 'capture-secret' not in exported
+
+
+class _FakeFilter:
+    def __init__(self, field_path, op_string, value):
+        self.field_path = field_path
+        self.op_string = op_string
+        self.value = value
+
+
+class _FakeQuery:
+    def __init__(self, rows):
+        self.rows = rows
+        self.filters = []
+        self.limit_value = None
+
+    def where(self, filter=None, **_kwargs):
+        self.filters.append(filter)
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    def stream(self):
+        rows = list(self.rows)
+        for item in self.filters:
+            if item.op_string == '>=':
+                rows = [row for row in rows if row.get(item.field_path, 0) >= item.value]
+            elif item.op_string == '<':
+                rows = [row for row in rows if row.get(item.field_path, 0) < item.value]
+        if self.limit_value is not None:
+            rows = rows[: self.limit_value]
+        return [_FakeSnapshot(row) for row in rows]
+
+
+class _FakeWindowClient:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def collection_group(self, name):
+        assert name == ledger.COLLECTION
+        return _FakeQuery(self.rows)
+
+
+def test_census_window_is_bounded_and_read_only():
+    rows = [
+        {'admitted_at': 10, 'stage': ledger.SEALED},
+        {'admitted_at': 20, 'stage': ledger.NOTED},
+        {'admitted_at': 30, 'stage': ledger.DONE},
+    ]
+    client = _FakeWindowClient(rows)
+    assert [row['stage'] for row in ledger.census_window(15, 25, firestore_client=client)] == [ledger.NOTED]
+    assert [row['stage'] for row in ledger.iter_window(0, 100, firestore_client=client)] == [
+        ledger.SEALED,
+        ledger.NOTED,
+        ledger.DONE,
+    ]
+
+
+def test_census_window_fails_closed_when_truncated():
+    rows = [{'admitted_at': 10}, {'admitted_at': 20}]
+    client = _FakeWindowClient(rows)
+    try:
+        ledger.census_window(0, 100, limit=1, firestore_client=client)
+    except ledger.LedgerWindowTruncated:
+        pass
+    else:  # pragma: no cover - the assertion is the contract
+        raise AssertionError('truncated window must fail closed')
+
+
+def test_census_window_rejects_an_inverted_window():
+    client = _FakeWindowClient([])
+    try:
+        ledger.census_window(20, 10, firestore_client=client)
+    except ValueError:
+        pass
+    else:  # pragma: no cover - the assertion is the contract
+        raise AssertionError('inverted window must be rejected')
+
+
+def test_account_erasure_enumerates_pipeline_ledger(monkeypatch):
+    from database.user_data_deletion import purge_user_subtree
+
+    client = SimpleNamespace()
+    users = SimpleNamespace()
+    user_ref = SimpleNamespace()
+    ledger_sub = SimpleNamespace(id='pipeline_ledger')
+    user_ref.get = lambda: SimpleNamespace(exists=False)
+    user_ref.collections = lambda: [ledger_sub]
+    user_ref.collection = lambda _name: SimpleNamespace(document=lambda _key: SimpleNamespace(delete=lambda: None))
+    user_ref.delete = lambda: None
+    users.document = lambda _uid: user_ref
+    client.collection = lambda name: users if name == 'users' else SimpleNamespace()
+    recursive = []
+
+    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', lambda _uid: None)
+    monkeypatch.setattr('database.user_data_deletion.search_apps_db', lambda _uid, my_apps: [])
+    monkeypatch.setattr(
+        'database.user_data_deletion.get_data_plane_firestore_client',
+        lambda: SimpleNamespace(
+            collection=lambda _name: SimpleNamespace(document=lambda _key: SimpleNamespace(delete=lambda: None))
+        ),
+    )
+    monkeypatch.setattr('database.user_data_deletion.stop_quiet_checks_for_account', lambda *_a, **_kw: None)
+    monkeypatch.setattr('database.user_data_deletion.generation_ref', lambda _ref: SimpleNamespace(delete=lambda: None))
+
+    assert purge_user_subtree('synthetic', client, lambda sub, **_kw: recursive.append(sub))['status'] == 'ok'
+    assert ledger_sub in recursive
+
+
+def test_export_inventory_includes_pipeline_ledger():
+    from services.users import data_export
+
+    assert 'pipeline_ledger' in data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS

@@ -86,6 +86,11 @@ class _FakeTransaction:
     def _commit(self) -> None:
         if self._client.commit_errors:
             raise self._client.commit_errors.pop(0)
+        # The in-flight ledger writes in its own transaction after the real
+        # commit; keep it out of the real-transition commit assertions.
+        if isinstance(self.payload, dict) and self.payload.get('schema_version') == 1 and 'capture_id' in self.payload:
+            self._client.ledger_commits.append(self.payload)
+            return
         self._client.commits.append(self.payload)
 
 
@@ -94,6 +99,7 @@ class _FakeFirestoreClient:
         self.document = document
         self.commit_errors = list(commit_errors or [])
         self.commits: List[Dict[str, Any] | None] = []
+        self.ledger_commits: List[Dict[str, Any]] = []
         self.transactions: List[_FakeTransaction] = []
         self.doc_ref = _FakeDocumentReference(self, 'doc')
 

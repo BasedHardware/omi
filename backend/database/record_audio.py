@@ -26,12 +26,11 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
-    # Read the ledger before the transaction so the real transaction stays
-    # write-only. A ledger failure returns None and the seal proceeds unchanged.
-    ledger = pipeline_ledger.prepare(uid, conversation_id, pipeline_ledger.SEALED, firestore_client=client)
+    changed = False
 
     @firestore.transactional
     def commit(tx):
+        nonlocal changed
         row = ref.get(transaction=tx).to_dict() or {}
         if row.get('deleted') or not row:
             return 'deleted'
@@ -46,19 +45,35 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
         if row.get('record_audio_partial'):
             # A clean late producer certifies its drain, never an earlier
             # missing tail. Repair refreshes the separate partial barrier.
-            if ledger is not None:
-                tx.set(*ledger)
+            changed = True
             return None
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
             patch: dict[str, bool | None] = {'record_audio_closed': True}
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
             tx.update(ref, patch)
-        if ledger is not None:
-            tx.set(*ledger)
+            changed = True
         return None
 
-    return run_transactional(client, commit, transient=True)
+    result = run_transactional(client, commit, transient=True)
+    # The ledger is written after the real seal commits, in its own CAS
+    # transaction. A ledger failure can never fail the seal.
+    if changed:
+        pipeline_ledger.observe_admission()
+    if result is None:
+        pipeline_ledger.advance(uid, conversation_id, pipeline_ledger.SEALED, firestore_client=client)
+    elif result == 'upload_failed':
+        # A deleted capture gets no ledger row: erasure must not be followed by
+        # a new durable record.
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.failed_stage(result),
+            reason=result,
+            end_type='unknown',
+            firestore_client=client,
+        )
+    return result
 
 
 def set_record_upload_pending(
