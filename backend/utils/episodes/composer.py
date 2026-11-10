@@ -40,6 +40,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from langchain_core.messages import AIMessage, ToolMessage
 
 from utils.conversations import phase_shadow
 
@@ -65,8 +66,14 @@ from config.episodes import (
     COMPOSER_MIN_SECTION_SECONDS,
     COMPOSER_SHORT_EPISODE_SECONDS,
     COMPOSER_TIMEOUT_SECONDS,
+    COMPOSER_EXCERPT_MAX_CALLS,
+    COMPOSER_EXCERPT_MAX_CHARS,
+    COMPOSER_EXCERPT_MAX_SECONDS,
+    COMPOSER_EXCERPT_MAX_TOTAL_CHARS,
+    COMPOSER_NOTES_FIRST_MAX_TURNS,
     RECOVERY_NOTES_MIN_INTERVAL_SECONDS,
     COMPOSER_VERSION,
+    composer_notes_first_enabled,
     episode_composer_enabled,
     episode_single_member_compose_enabled,
     episode_late_compose_after_hours,
@@ -115,6 +122,33 @@ You get each recording's existing summary and action items, and the full transcr
 Write in {language}. """
     + _OUTPUT_RULES
 )
+
+NOTES_FIRST_SYSTEM_PROMPT = (
+    """You write the page people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer; call them {owner}, never "the user" or "someone".
+You get each recording's own notes: its title, overview, note sections, action items and clock times. Those notes were written from the transcript and are your map. You do not get the raw transcript by default. When a detail matters and the notes do not carry it, call get_transcript_excerpt with the recording number and a clock range; it returns at most {excerpt_chars} characters from at most {excerpt_minutes} minutes, and you may call it at most {max_calls} times. Never ask for a whole recording. Use the notes for the shape of the page and the excerpts only to confirm names, numbers, decisions and exact wording.
+Write in {language}. """
+    + _OUTPUT_RULES
+)
+
+TRANSCRIPT_EXCERPT_TOOL = {
+    'type': 'function',
+    'function': {
+        'name': 'get_transcript_excerpt',
+        'description': (
+            'Read raw transcript lines from one recording between two local clock times. '
+            'Use it only to confirm a detail the notes do not carry. Bounded per call and per compose.'
+        ),
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'recording': {'type': 'integer', 'description': '1-based recording number from the prompt.'},
+                'start': {'type': 'string', 'description': 'Local start clock, HH:MM or HH:MM:SS.'},
+                'end': {'type': 'string', 'description': 'Local end clock, HH:MM or HH:MM:SS.'},
+            },
+            'required': ['recording', 'start', 'end'],
+        },
+    },
+}
 
 
 class ComposeFailed(RuntimeError):
@@ -320,6 +354,72 @@ def build_repair_messages(content: str) -> list[tuple[str, str]]:
     return [('system', REPAIR_SYSTEM_PROMPT.format()), ('human', str(content or ''))]
 
 
+def _sections_text(structured: Mapping[str, Any]) -> str:
+    """Render a member's stored note sections the way the conversation page shows them."""
+    rendered = []
+    for section in structured.get('sections') or []:
+        if not isinstance(section, Mapping):
+            continue
+        heading = str(section.get('heading') or '').strip()
+        body = str(section.get('body_markdown') or section.get('body') or '').strip()
+        if heading and body:
+            rendered.append(f'## {heading}\n{body}')
+        elif body:
+            rendered.append(body)
+    return '\n\n'.join(rendered)
+
+
+def _notes_block(index: int, row: Mapping[str, Any], owner: str, tz: ZoneInfo, *, transcript_budget: int) -> str:
+    """One member's notes, with the raw transcript only when it has no notes to read."""
+    structured = row.get('structured') or {}
+    start, end = _span(row)
+    when = f'{start.astimezone(tz):%H:%M}-{end.astimezone(tz):%H:%M}' if start and end else 'time unknown'
+    items = [
+        (item.get('description') if isinstance(item, Mapping) else str(item))
+        for item in structured.get('action_items') or []
+    ]
+    sections = _sections_text(structured)
+    readable_notes = bool(
+        str(structured.get('overview') or '').strip() or str(structured.get('gist') or '').strip() or sections
+    )
+    lines = [
+        f'=== Recording {index + 1} ({when}) ===',
+        f'Title: {structured.get("title") or ""}',
+        f'Overview: {structured.get("overview") or ""}',
+        f'Gist: {structured.get("gist") or ""}',
+    ]
+    if sections:
+        lines.append(f'Sections:\n{sections}')
+    lines.append(f'Action items: {json.dumps([i for i in items if i], ensure_ascii=False)}')
+    if readable_notes:
+        lines.append(
+            'Transcript: not included. Call get_transcript_excerpt(recording=N, start=HH:MM:SS, end=HH:MM:SS) '
+            'for exact detail.'
+        )
+    else:
+        # No notes to read: send this member's transcript, bounded like the full path.
+        text = '\n'.join(_fit(transcript_lines(row, owner, tz), transcript_budget)) or '(no speech)'
+        lines.append(f'Transcript:\n{text}')
+    return '\n'.join(lines)
+
+
+def build_notes_first_messages(
+    members: Sequence[Mapping[str, Any]], *, owner: str, tz: ZoneInfo, language: str
+) -> list[tuple[str, str]]:
+    """Notes-first prompt: member notes by default, raw transcript only on demand or when absent."""
+    per_member = max(4000, COMPOSER_MAX_TRANSCRIPT_CHARS // max(1, len(members)))
+    blocks = [_notes_block(index, row, owner, tz, transcript_budget=per_member) for index, row in enumerate(members)]
+    system = NOTES_FIRST_SYSTEM_PROMPT.format(
+        owner=owner,
+        language=language,
+        max_chapters=COMPOSER_MAX_CHAPTERS,
+        excerpt_chars=COMPOSER_EXCERPT_MAX_CHARS,
+        excerpt_minutes=COMPOSER_EXCERPT_MAX_SECONDS // 60,
+        max_calls=COMPOSER_EXCERPT_MAX_CALLS,
+    )
+    return [('system', system), ('human', '\n\n'.join(blocks))]
+
+
 def _content(reply: Any) -> str:
     content = getattr(reply, 'content', reply)
     if isinstance(content, list):
@@ -343,6 +443,131 @@ def _short_episode(members: Sequence[Mapping[str, Any]]) -> bool:
         and all(all(_span(row)) for row in members)
         and _recorded_seconds(members) <= COMPOSER_SHORT_EPISODE_SECONDS
     )
+
+
+def _tool_calls(reply: Any) -> list[tuple[str, str, Mapping[str, Any]]]:
+    """Normalize a provider turn's tool calls to (id, name, arguments)."""
+    out = []
+    for call in getattr(reply, 'tool_calls', None) or []:
+        if isinstance(call, Mapping):
+            name, arguments, call_id = call.get('name'), call.get('args') or {}, call.get('id') or ''
+        else:
+            name = getattr(call, 'name', None)
+            arguments = getattr(call, 'args', {}) or {}
+            call_id = getattr(call, 'id', '') or ''
+        if name:
+            out.append((str(call_id), str(name), arguments if isinstance(arguments, Mapping) else {}))
+    return out
+
+
+def _excerpt(
+    members: Sequence[Mapping[str, Any]],
+    owner: str,
+    tz: ZoneInfo,
+    arguments: Mapping[str, Any],
+    *,
+    remaining_chars: int,
+) -> tuple[str, int]:
+    """One bounded transcript excerpt. Returns (text, characters spent)."""
+    raw_recording = arguments.get('recording')
+    if isinstance(raw_recording, bool) or not isinstance(raw_recording, (int, str)):
+        return 'error: recording must be an integer', 0
+    try:
+        index = int(raw_recording) - 1
+    except (TypeError, ValueError):
+        return 'error: recording must be an integer', 0
+    if index < 0 or index >= len(members):
+        return f'error: recording must be between 1 and {len(members)}', 0
+    lines = transcript_lines(members[index], owner, tz)
+    if not lines:
+        return '(no speech in that recording)', 0
+    lo, hi = line_span(lines)
+    if lo is None or hi is None:
+        return '(no speech in that recording)', 0
+    start = _clock(arguments.get('start'), lo, hi, tz)
+    end = _clock(arguments.get('end'), lo, hi, tz)
+    if start is None or end is None:
+        return 'error: start and end must be local clock times inside the recording', 0
+    if end < start:
+        start, end = end, start
+    if (end - start).total_seconds() > COMPOSER_EXCERPT_MAX_SECONDS:
+        end = start + timedelta(seconds=COMPOSER_EXCERPT_MAX_SECONDS)
+    picked = [text for at, text in lines if start <= at <= end]
+    if not picked:
+        return '(no speech in that range)', 0
+    limit = min(COMPOSER_EXCERPT_MAX_CHARS, max(0, remaining_chars))
+    if limit <= 0:
+        return 'error: excerpt budget exhausted', 0
+    text = '\n'.join(picked)
+    if len(text) > limit:
+        marker = '\n[... excerpt truncated ...]'
+        if limit < len(marker):
+            return 'error: excerpt budget exhausted', 0
+        head = text[: max(0, limit - len(marker))]
+        text = ((head.rsplit('\n', 1)[0] or head) + marker)[:limit]
+    return text, len(text)
+
+
+def _compose_notes_first(
+    uid: str,
+    members: Sequence[Mapping[str, Any]],
+    *,
+    owner: str,
+    tz: ZoneInfo,
+    language: str,
+    invoke: Callable[..., Any],
+    parse_reply: Optional[Callable[[Any], dict[str, Any]]] = None,
+    trigger: str = 'close',
+) -> tuple[dict[str, Any], Any, int, int, int]:
+    """Notes-first compose with the bounded excerpt tool.
+
+    Returns (parsed output, last reply, input tokens, output tokens, tool calls).
+    The last turn is sent without tools, so the model must answer inside the turn cap.
+    """
+    messages: list[Any] = list(build_notes_first_messages(members, owner=owner, tz=tz, language=language))
+    input_tokens = output_tokens = tool_calls = used_chars = 0
+    reply: Any = None
+    for turn in range(COMPOSER_NOTES_FIRST_MAX_TURNS):
+        last = turn == COMPOSER_NOTES_FIRST_MAX_TURNS - 1
+        reply = invoke(uid, messages, tools=None if last else [TRANSCRIPT_EXCERPT_TOOL])
+        turn_in, turn_out = _usage(reply)
+        input_tokens += turn_in
+        output_tokens += turn_out
+        calls = [] if last else _tool_calls(reply)
+        if not calls:
+            break
+        metrics.record_compose_call(trigger, 'ok')
+        # A provider that omits a call id still needs one to pair the tool result.
+        calls = [
+            (call_id or f'call_{turn}_{index}', name, arguments)
+            for index, (call_id, name, arguments) in enumerate(calls)
+        ]
+        messages.append(
+            AIMessage(
+                content=_content(reply),
+                tool_calls=[
+                    {'name': name, 'args': dict(arguments), 'id': call_id} for call_id, name, arguments in calls
+                ],
+            )
+        )
+        for call_id, name, arguments in calls:
+            if name != 'get_transcript_excerpt':
+                result = 'error: unknown tool'
+            elif tool_calls >= COMPOSER_EXCERPT_MAX_CALLS:
+                result = 'error: excerpt call budget exhausted'
+            else:
+                result, spent = _excerpt(
+                    members,
+                    owner,
+                    tz,
+                    arguments,
+                    remaining_chars=COMPOSER_EXCERPT_MAX_TOTAL_CHARS - used_chars,
+                )
+                used_chars += spent
+                tool_calls += 1
+            messages.append(ToolMessage(content=result, tool_call_id=call_id))
+    data = parse_reply(reply) if parse_reply is not None else parse(_content(reply))
+    return data, reply, input_tokens, output_tokens, tool_calls
 
 
 def parse(content: str) -> dict[str, Any]:
@@ -1150,7 +1375,8 @@ def _compose(
     named = members  # already carry stored person names (``_members``)
     language = str(episode.get('output_language') or 'English')
     language = {'en': 'English'}.get(language, language)
-    mode = 'full'
+    notes_first = composer_notes_first_enabled(uid)
+    mode = 'notes_first' if notes_first else 'full'
     keep_paid = episode_compose_keep_paid_enabled()
     call_started = datetime.now(timezone.utc)
     input_tokens = output_tokens = tool_calls = paid_calls = 0
@@ -1188,8 +1414,20 @@ def _compose(
             return parse(_content(call(build_repair_messages(content))))
 
     try:
-        reply = call(build_messages(named, owner=owner, tz=tz, language=language))
-        data = parse_or_repair(reply)
+        if notes_first:
+            data, reply, _, _, tool_calls = _compose_notes_first(
+                uid,
+                named,
+                owner=owner,
+                tz=tz,
+                language=language,
+                invoke=lambda uid_, payload, **kwargs: call(payload, **kwargs),
+                parse_reply=parse_or_repair,
+                trigger=trigger,
+            )
+        else:
+            reply = call(build_messages(named, owner=owner, tz=tz, language=language))
+            data = parse_or_repair(reply)
         metrics.record_compose_tools(mode, tool_calls)
         times = {str(row['id']): speech_times(row) for row in members}
         spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
