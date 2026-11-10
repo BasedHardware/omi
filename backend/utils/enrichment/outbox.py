@@ -33,14 +33,13 @@ from config import enrichment as enrichment_config
 from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
-    enabled as summary_enabled,
     first_summary_pending,
     preserves_admitted,
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
-from config.repeat_work import revision_reuse
+
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
@@ -474,7 +473,7 @@ def mark_update(
         from config.demand_processing import enabled
 
         demand_enabled = enabled(uid)
-        if demand_enabled or revision_reuse():
+        if demand_enabled:
             # Keep demand's processing headroom when both policies are enabled;
             # revision reuse alone retains its upstream one-hour ceiling.
             row['first_pending_at'] = row.get('first_pending_at', current)
@@ -534,7 +533,7 @@ def summary_policy_for(row: Row) -> bool:
     snapshot = row.get('first_summary_policy')
     if snapshot is not None:
         return FirstSummaryPolicy.from_dict(snapshot).first_summary_enabled
-    return summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
+    return True
 
 
 def stamp_claim_policy(row: Row, cache: dict[str, FirstSummaryPolicy], stamps: list[tuple[str, str]]) -> None:

@@ -17,6 +17,7 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
@@ -36,12 +37,6 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 )
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
-)
-
-OMI_FLAG_DUAL_READ_TOTAL = Counter(
-    'omi_flag_dual_read_total',
-    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
-    ['flag', 'outcome'],
 )
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
@@ -1326,16 +1321,6 @@ OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
     'omi_listen_deferred_stream_opened_total',
     'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
     ['deferred_by'],
-)
-
-OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL = Counter(
-    'omi_listen_visible_restore_streams_total',
-    'Batch-only visible Modulate preview stream attempts by bounded outcome',
-    ['outcome'],
-)
-OMI_LISTEN_VISIBLE_RESTORE_SECONDS_TOTAL = Counter(
-    'omi_listen_visible_restore_seconds_total',
-    'Visible wall seconds served by batch-only Modulate preview streams',
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(

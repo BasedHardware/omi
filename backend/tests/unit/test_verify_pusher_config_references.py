@@ -193,13 +193,13 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_TERMINAL_FAMILY_MODE": "on",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
+        "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
         "STT_CAP_DISPATCH_ENFORCEMENT": "false",
         "STT_CAP_DISPATCH_COHORT": "",
         "STT_CAP_DISPATCH_LANES": "live",
         "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
-        "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
         "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": "false",
         "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": "false",
         "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT": "g1",
@@ -212,19 +212,16 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "DEMAND_PROCESSING_UID_ALLOWLIST": "",
         "DEMAND_PROCESSING_PERCENT": "0",
         "PLAYBACK_ON_DEMAND_ENABLED": "true",
-        "REPEAT_WORK_LLM_VERSION": "2026-10-16-v1",
         "SYNC_POLL_BACKOFF_ENABLED": "false",
         "AUDIO_ARCHIVE_LIVE_ENABLED": "true",
         "AUDIO_ARCHIVE_READ_ENABLED": "true",
         "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
         "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
         "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
-        "AUDIO_ARCHIVE_COALESCE_ENABLED": "true",
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
         "AUDIO_ARCHIVE_STOP_PCM_PERCENT": "0",
         "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT": "0",
-        "AUDIO_ARCHIVE_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
@@ -260,8 +257,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
-        "LIVE_CAPTURE_WINDOW_RETENTION": "false",
-        "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": "false",
         "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
         "LIVE_CAPTURE_WINDOW_MERGE_UNION": "false",
         "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
@@ -334,7 +329,7 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
 
     # Deepgram retired 2026-08-27: the cloud credential binding is gone too.
     assert "DEEPGRAM_API_KEY" not in bindings
-    assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
+    assert "SPEAKER_MATCH_SCORES_ENABLED" not in literals
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     for retired in (
         "CONVERSATION_RELEVANCE_JEV_ENABLED",

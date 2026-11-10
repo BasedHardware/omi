@@ -1,0 +1,15 @@
+id: safe/settings-hang-crash-loop
+summary: >
+  app_settings_init() hangs: the fourth boot reaches SAFE without loading
+  application settings.
+committee: [1]
+tags: [guard]
+build: settings-hang
+timeline: []
+end: 130000
+expect:
+  boots:
+    - {exit: watchdog, log: ["FAULT_INJECT: app settings init hang"]}
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: stop, safe: true, latch_reason: 1, not_log: ["FAULT_INJECT", "Settings initialized"]}

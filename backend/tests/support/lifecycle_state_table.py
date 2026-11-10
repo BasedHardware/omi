@@ -10,6 +10,7 @@ It proves ownership/field coverage, not execution or bounded liveness (WP-B2).
 
 from dataclasses import dataclass
 import math
+from typing import cast
 
 from tests.support.lifecycle_ast import EntryPath, builders
 from tests.support.lifecycle_writer_inventory import FIELD_SITES
@@ -232,6 +233,13 @@ DEADLINE_ENTRIES = {
         entry(
             'database/conversation_finalization_jobs.py',
             '_complete_server_batch_capture_txn',
+            'home_transcription_pending_at',
+        ),
+        # The reviewed orphan owner stamps the same bounded Home hold in its
+        # canonical registration transaction, without finalization fanout.
+        entry(
+            'utils/conversations/lifecycle.py',
+            'complete_orphan_batch_capture',
             'home_transcription_pending_at',
         ),
     ),
@@ -677,7 +685,7 @@ STATES = (
             metric='omi_batch_held_expired_units',
             alert=Alert('omi-batch-held-expired-volume', 'agent'),
             alert_required=True,
-            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue. Record reason record_barrier_aged retains merge_pending=false, record_dead_letter_deadline_at and record_dead_letter_at; omi_batch_record_dead_letter_units and omi-batch-record-dead-letter-volume (agent); private OIDC requeue-record only.',
+            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue. Reason input_expiring is retained at audio_staged_at (else legacy enqueued_at) + 29d for staging GPU/assignment holds under BATCH_INPUT_EXPIRING_ENABLED (default on); no nightly/poll exit. Only checked operator GPU requeue, target-restorable assignment release, or exact-bundle GPU re-upload exits it; the preterminal staged_input age warning fires above 21d. Record reason record_barrier_aged retains merge_pending=false, record_dead_letter_deadline_at and record_dead_letter_at; omi_batch_record_dead_letter_units and omi-batch-record-dead-letter-volume (agent); private OIDC requeue-record only.',
         ),
     )
     + tuple(
@@ -773,7 +781,7 @@ def durable_titling_rearm(before, after):
         and isinstance(row.get('task_token'), str)
         and row['task_token']
         and type(due) in (int, float)
-        and math.isfinite(due)
+        and math.isfinite(cast(float, due))
     )
 
 

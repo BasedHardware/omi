@@ -123,6 +123,12 @@ FIELD_SITES = {
         (
             'ArtifactMissingStore.restore_reupload.commit',
             'state',
+            "'quarantined'",
+            ('merge_pending', 'recovery_state', 'state'),
+        ),
+        (
+            'ArtifactMissingStore.restore_reupload.commit',
+            'state',
             "'restored'",
             ('restored_at', 'restored_uri_sha256', 'state'),
         ),
@@ -208,6 +214,7 @@ FIELD_SITES = {
             "'ready'",
             ('ghost_settled_cohort', 'projection_state'),
         ),
+        ('ProjectionReleaseStore.release.commit', 'state', "'committed'", ('dead_letter_reason', 'state')),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),
@@ -315,6 +322,12 @@ FIELD_SITES = {
             'state',
             "'dead'",
             ('dead_letter_reason', 'held_expired_at', 'merge_pending', 'state'),
+        ),
+        (
+            'expire_input_in_transaction',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'input_expiring_at', 'input_expiring_leg', 'merge_pending', 'state'),
         ),
     ],
     'database/batch_pipeline_recovery.py': [
@@ -1216,9 +1229,18 @@ FIELD_SITES = {
         ('_complete_unstampable_orphan_conversation_txn', 'status', "'completed'", ('status',)),
     ],
     'database/conversation_quiet_checks.py': [
+        # Dark quiet-check retirement names the orphan-repair exit; it does
+        # not terminalize the capture or create another arm site.
+        ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('exit', 'reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('status',)),
+        (
+            '_evaluate_quiet_check.evaluate',
+            'status',
+            "'quiet_done'",
+            ('last_failure_code', 'reconcile_after_at', 'status', 'updated_at'),
+        ),
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
@@ -2051,7 +2073,9 @@ FIELD_SITES = {
         ('_close_txn', 'status', "'completed'", ('discarded', 'status', 'stuck_noise_close'))
     ],
     'database/summary_debt_queries.py': [
-        ('due_conversations', 'summary_due_at', "after['due']", ('__name__', 'summary_due_at'))
+        ('due_conversations', 'summary_due_at', "after['due']", ('__name__', 'summary_due_at')),
+        # Query cursor only: this map is passed to start_after, never a storage write.
+        ('due_conversations', 'summary_first_pending_at', 'pending', ('summary_first_pending_at',)),
     ],
     'database/summary_processing.py': [
         (
@@ -2443,6 +2467,25 @@ FIELD_SITES = {
         (
             'durable_status.read',
             'status',
+            "'failed'",
+            (
+                'errors',
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'reason_code',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+        (
+            'durable_status.read',
+            'status',
             "'processing'",
             (
                 'errors',
@@ -2718,6 +2761,27 @@ FIELD_SITES = {
         ('_load_admitted_conversation', 'status', 'ConversationStatus.processing', ('status',))
     ],
     'utils/conversations/lifecycle.py': [
+        # Reviewed orphan completion: one in-memory relevance snapshot and
+        # one persisted patch with bounded Home-pending metadata.
+        (
+            'complete_orphan_batch_capture',
+            'home_transcription_deadline_at',
+            'now + timedelta(seconds=home_transcription_deadline_seconds())',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        (
+            'complete_orphan_batch_capture',
+            'home_transcription_pending_at',
+            'now',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        (
+            'complete_orphan_batch_capture',
+            'status',
+            "'completed'",
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        ('complete_orphan_batch_capture', 'status', "'completed'", ('status',)),
         (
             'get_finalization_status',
             'status',
@@ -2733,7 +2797,7 @@ FIELD_SITES = {
                 'terminal',
                 'terminal_outcome',
             ),
-        )
+        ),
     ],
     'utils/conversations/late_meeting_notes.py': [
         (
@@ -2789,7 +2853,6 @@ FIELD_SITES = {
         ('summary_read_payload', 'status', "row.get('status') or 'generated'", ('status',))
     ],
     'utils/dream_agent.py': [
-        ('<module>', 'status', "'elided'", ('note', 'status')),
         ('drain', 'status', "'deadline'", ('status',)),
         ('drain', 'status', "'waiting'", ('reason', 'status')),
         ('drain.worker', 'status', "'failed'", ('error_code', 'error_type', 'status')),
@@ -4146,6 +4209,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('database/stuck_backfill.py', '_close_txn'): 'unclassified',
         ('utils/conversations/late_meeting_notes.py', 'refresh_notes_after_evidence'): 'unclassified',
         ('utils/conversations/lifecycle.py', 'complete'): 'owner',
+        ('utils/conversations/lifecycle.py', 'complete_orphan_batch_capture'): 'owner',
         ('utils/conversations/lifecycle.py', 'fail_and_discard_processing'): 'owner',
         ('utils/conversations/lifecycle.py', 'transition'): 'owner',
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',

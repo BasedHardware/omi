@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
-from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
@@ -30,7 +29,7 @@ from utils.conversations.finalizer import (
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
@@ -119,7 +118,7 @@ async def run_listen_finalization_job(
         if set(payload) != {'kind', 'key', 'task_token'}:
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         try:
-            executor = postprocess_executor if summary_deadline_enabled() else sync_executor
+            executor = postprocess_executor
             status = await run_blocking(executor, run_enrichment, payload['key'], payload['task_token'])
             if status == 'busy':
                 logger.info('event=conversation_finalization_sync_reprocess outcome=busy')

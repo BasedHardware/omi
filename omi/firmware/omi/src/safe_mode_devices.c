@@ -1,14 +1,11 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
+#include <zephyr/storage/disk_access.h>
 
 #include "boot_telemetry.h"
 #include "safe_mode.h"
-#ifndef CONFIG_OMI_NATIVE_SIM
-#include <zephyr/storage/disk_access.h>
-
 #include "wdog_facade.h"
-#endif
 
 #ifdef CONFIG_OMI_FAULT_INJECT_DRIVER_HANG
 /* A real deferred device: device_init() invokes the hang, not a latch-aware
@@ -18,7 +15,11 @@ static int fault_init(const struct device *dev)
 {
     ARG_UNUSED(dev);
     printk("FAULT_INJECT: driver init hang\n");
-    for (;;) {}
+    /* Spin without feeding WDT; busy-waiting lets simulated time (and the
+     * simulator's watchdog) advance on native_sim too. */
+    for (;;) {
+        k_busy_wait(1000);
+    }
     return 0;
 }
 DEVICE_DT_DEFINE(DT_NODELABEL(safe_mode_fault),
@@ -75,7 +76,6 @@ int safe_mode_devices_init(void)
     return 0;
 }
 
-#ifndef CONFIG_OMI_NATIVE_SIM
 void safe_mode_sd_bus_init(void)
 {
     /* Deliberately separate from deferred[]: never initialize safe_mode_fault.
@@ -106,4 +106,3 @@ void safe_mode_sd_bus_init(void)
     watchdog_feed();
 #endif
 }
-#endif

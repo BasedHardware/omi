@@ -22,7 +22,7 @@ def enabled(monkeypatch):
 def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
     from models.conversation import Structured
 
-    generate = Mock(return_value=Structured(title='Saved title'))
+    generate = Mock(return_value=Structured(title='Saved title', overview='Saved summary'))
     inputs = dict(
         language_code='en',
         tz='UTC',
@@ -71,21 +71,6 @@ def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
     ]:
         changed, matched = dedupe.l1_input('u', enabled, {**inputs, name: value})
         assert changed != digest and not matched
-
-
-def test_memory_l1_route_retarget_alone_invalidates_successful_hash(monkeypatch):
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    routes = {'memory_l1': 'old-model', 'memories': 'unchanged-model', 'conv_structure': 'notes-model'}
-    monkeypatch.setattr(dedupe, 'get_route_ref', lambda feature: {'feature': feature, 'model': routes[feature]})
-    conversation = SimpleNamespace(id='c', sync_content_revision=1)
-    inputs = {'transcript': 'synthetic input', 'language': 'en'}
-    digest, matched = dedupe.l1_input('u', conversation, inputs)
-    assert digest and not matched
-    conversation.l1_llm_input_hash = digest
-    assert dedupe.l1_input('u', conversation, inputs) == (digest, True)
-    routes['memory_l1'] = 'new-model'
-    changed, matched = dedupe.l1_input('u', conversation, inputs)
-    assert changed != digest and not matched
 
 
 def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypatch):
@@ -240,7 +225,7 @@ def test_evaluation_counters_report_hit_miss_and_checkpoint_error(enabled, monke
     errors = _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes')
     l1_misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'l1')
 
-    generate = Mock(return_value=Structured(title='Fresh'))
+    generate = Mock(return_value=Structured(title='Fresh', overview='Fresh summary'))
     hashes = {}
     dedupe.notes('u', enabled, 'input', generate, hashes)
     assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
@@ -309,16 +294,13 @@ def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, 
         dedupe.implementation_digest.cache_clear()
 
 
-@pytest.mark.parametrize('summary_gate', [False, True])
-def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summary_gate):
+def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock
     from models.structured import Structured
     from utils.conversations import llm_input_dedupe as target
 
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     empty = Structured(title='Server transcript title', overview='')
     rich = Structured(title='Generated title', overview='A supported synthetic summary')
@@ -336,12 +318,8 @@ def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summar
     monkeypatch.setattr(target, 'record_feature', lambda *_: None)
     generate = Mock(return_value=rich)
     output = target.notes('u', SimpleNamespace(id='c'), [], generate, {})
-    if summary_gate:
-        generate.assert_called_once()
-        assert output.overview == rich.overview
-    else:
-        generate.assert_not_called()
-        assert output.overview == ''
+    generate.assert_called_once()
+    assert output.overview == rich.overview
 
 
 def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled, monkeypatch):

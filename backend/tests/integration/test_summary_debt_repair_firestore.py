@@ -15,8 +15,6 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def debt_store(store, monkeypatch):
     client, uid, tasks = store
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
     user = client.collection('users').document(uid)
     user.set({'data_protection_level': 'standard'})
@@ -140,9 +138,72 @@ def test_null_settled_due_is_excluded_from_numeric_sweep(debt_store):
 def test_repair_tick_global_lease_and_bounded_cursor(debt_store):
     client, uid, tasks, ref, row = debt_store
     first = repair.tick(now=220, client=client)
-    assert first == {'scanned': 1, 'admitted': 1, 'errors': 0}
-    assert repair.tick(now=221, client=client) == {'scanned': 0, 'admitted': 0, 'errors': 0}
+    assert first == {'scanned': 1, 'admitted': 1, 'errors': 0, 'expired_seen': 0}
+    assert repair.tick(now=221, client=client) == {'scanned': 0, 'admitted': 0, 'errors': 0, 'expired_seen': 0}
     assert len(tasks) == 1
+
+
+@pytest.mark.parametrize('retry_transaction', [0, 1], ids=['claim', 'finish'])
+def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_store, monkeypatch, retry_transaction):
+    from unittest.mock import Mock
+    from google.api_core.exceptions import Aborted
+    from google.cloud.firestore_v1.transaction import Transaction
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    pending = now - 100
+    ref.update({'summary_first_pending_at': pending, 'summary_due_at': now - 1})
+    expired_ref = ref.parent.document('created-old')
+    expired_row = {
+        **row,
+        'summary_first_pending_at': pending,
+        'summary_due_at': now - 1,
+        'created_at': now - max_age_seconds() - 1,
+    }
+    expired_ref.set(expired_row)
+    commit = Transaction._commit
+    cursor_transactions = []
+    commit_attempts = []
+
+    def abort_once(transaction):
+        # Exercise the SDK's actual transactional retry loop against the
+        # emulator, rejecting one cursor commit before it reaches storage.
+        if any(write.update.name.endswith('/' + repair.CURSOR) for write in transaction._write_pbs):
+            if transaction not in cursor_transactions:
+                cursor_transactions.append(transaction)
+                commit_attempts.append(0)
+            index = cursor_transactions.index(transaction)
+            commit_attempts[index] += 1
+            if index == retry_transaction and commit_attempts[index] == 1:
+                # A server abort releases read locks. A client-only exception
+                # would leave the emulator transaction open across the retry.
+                transaction._rollback()
+                raise Aborted('synthetic cursor contention')
+        return commit(transaction)
+
+    monkeypatch.setattr(Transaction, '_commit', abort_once)
+    query = Mock(wraps=repair.due_conversations)
+    monkeypatch.setattr(repair, 'due_conversations', query)
+    gauge = Mock(wraps=delivery.EXPIRED_SEEN)
+    monkeypatch.setattr(delivery, 'EXPIRED_SEEN', gauge)
+    try:
+        assert repair.tick(now=now, client=client) == {
+            'scanned': 2,
+            'admitted': 1,
+            'errors': 0,
+            'expired_seen': 1,
+        }
+        assert commit_attempts == ([2, 1] if retry_transaction == 0 else [1, 2])
+        query.assert_called_once()
+        gauge.set.assert_called_once_with(1)
+        assert gauge._mock_wraps._value.get() == 1
+        assert len(tasks) == 1
+        assert expired_ref.get().to_dict() == expired_row
+        assert not client.collection(reprocess.COLLECTION).document(reprocess.key(uid, expired_ref.id)).get().exists
+    finally:
+        expired_ref.delete()
 
 
 def test_short_lease_replaced_owner_cannot_durably_write(debt_store, monkeypatch):
@@ -292,3 +353,121 @@ def test_empty_failure_from_replaced_owner_or_token_does_not_record_or_block(deb
     )
     assert outbox.get().to_dict() == {**before, 'summary_empty_outcome': 'owner_mismatch'}
     assert ref.get().to_dict()['summary_due_at'] == row['summary_due_at']
+
+
+@pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'none'])
+def test_window_reaches_fresh_debt_behind_expired_history_in_one_tick(debt_store, monkeypatch, cursor_kind):
+    """Real query ordering/filtering, not a fake pre-filtered page."""
+    from unittest.mock import Mock
+    from utils.enrichment.age_gate import max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    cutoff = now - max_age_seconds()
+    expired = {**row, 'summary_first_pending_at': cutoff - 1000, 'summary_due_at': cutoff - 880}
+    refs = [ref.parent.document(f'expired-{i:04}') for i in range(1200)]
+    # Fresh pending but historical creation still fails the second arm of the
+    # age gate. It must be counted without touching conversation/outbox state.
+    created_old = ref.parent.document('created-old')
+    created_old_row = {**row, 'summary_first_pending_at': cutoff, 'summary_due_at': now - 5, 'created_at': cutoff - 1}
+    fresh = {**row, 'summary_first_pending_at': cutoff, 'summary_due_at': cutoff - 1}
+    ref.set(fresh)  # Deliberately no due >= pending assumption.
+    created_old.set(created_old_row)
+    redrive = Mock(return_value=True)
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        for start in range(0, len(refs), 400):
+            batch = client.batch()
+            for added in refs[start : start + 400]:
+                batch.set(added, expired)
+            batch.commit()
+        if cursor_kind != 'none':
+            cursor = {'due': expired['summary_due_at'], 'path': refs[599].path}
+            if cursor_kind == 'expired':
+                cursor['pending'] = expired['summary_first_pending_at']
+            client.document(repair.CURSOR).set(cursor)
+        assert repair.tick(now=now, client=client) == {
+            'scanned': 2,
+            'admitted': 1,
+            'errors': 0,
+            'expired_seen': 1,
+        }
+        redrive.assert_called_once_with(client, uid, 'c', now=now)
+        assert delivery.DEBT._value.get() == 1
+        assert delivery.EXPIRED_SEEN._value.get() == 1
+        assert delivery.SAMPLED_AT._value.get() == now
+        assert created_old.get().to_dict() == created_old_row
+        assert ref.get().to_dict() == fresh
+        assert all(snapshot.to_dict() == expired for snapshot in client.get_all(refs))
+        assert not list(client.collection(reprocess.COLLECTION).where('uid', '==', uid).stream())
+        assert not tasks
+    finally:
+        for start in range(0, len(refs), 400):
+            batch = client.batch()
+            for added in refs[start : start + 400]:
+                batch.delete(added)
+            batch.commit()
+        created_old.delete()
+
+
+@pytest.mark.parametrize('hours', [1, 72, 0])
+def test_window_preserves_every_non_expired_row_and_disabled_gate(debt_store, monkeypatch, hours):
+    from utils.enrichment.age_gate import expired, max_age_seconds
+
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', str(hours))
+    now = 1_800_000_000.0
+    cutoff = now - max_age_seconds()
+    pending_times = [cutoff - 1, cutoff, cutoff + 1, now - 1]
+    refs = [ref.parent.document(f'boundary-{i}') for i in range(len(pending_times))]
+    candidates = [
+        {**row, 'summary_first_pending_at': pending, 'summary_due_at': now - 10000} for pending in pending_times
+    ]
+    ref.update({'summary_due_at': None})
+    try:
+        for added, candidate in zip(refs, candidates):
+            added.set(candidate)
+        page = repair.due_conversations(now=now, firestore_client=client)
+        paths = {snapshot.reference.path for snapshot in page}
+        expected = {
+            added.path
+            for added, candidate in zip(refs, candidates)
+            if not expired({'first_pending_at': candidate['summary_first_pending_at']}, now=now)
+        }
+        assert paths == expected
+    finally:
+        for added in refs:
+            added.delete()
+
+
+def test_window_cursor_paginates_equal_timestamps_and_resets_on_mode_changes(debt_store, monkeypatch):
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    refs = [ref.parent.document(name) for name in ('a', 'b')]
+    for added in refs:
+        added.set(row)
+    try:
+        first = repair.due_conversations(now=220, limit=1, firestore_client=client)[0]
+        cursor = {'due': 220, 'pending': 100, 'path': first.reference.path}
+        second = repair.due_conversations(now=220, limit=1, after=cursor, firestore_client=client)[0]
+        assert second.reference.path != first.reference.path
+        monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+        # The old ordering cannot be reused after disabling the gate.
+        assert (
+            repair.due_conversations(now=220, limit=1, after=cursor, firestore_client=client)[0].reference
+            == first.reference
+        )
+        legacy = {'due': 220, 'path': first.reference.path}
+        assert (
+            repair.due_conversations(now=220, limit=1, after=legacy, firestore_client=client)[0].reference
+            == second.reference
+        )
+        monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+        assert (
+            repair.due_conversations(now=220, limit=1, after=legacy, firestore_client=client)[0].reference
+            == first.reference
+        )
+    finally:
+        for added in refs:
+            added.delete()

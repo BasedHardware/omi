@@ -174,6 +174,11 @@ class QueueMetrics:
             'Unix timestamp of the last completed projection pump tick, including failed ticks; zero before first tick',
             registry=registry,
         )
+        self.projection_pump_last_success = Gauge(
+            'omi_batch_projection_pump_last_success_seconds',
+            'Unix timestamp of the last successful projection pump tick; zero before first success',
+            registry=registry,
+        )
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
             'Oldest unfinished committed projection age, including held content; alarm above 900s',
@@ -205,6 +210,11 @@ class QueueMetrics:
             registry=registry,
             fresh=self._timeliness_sample_visible,
         )
+        self.staged_input_clock_invalid = Counter(
+            'omi_batch_staged_input_clock_invalid_total',
+            'Malformed clock observations in bounded held pages and age samples; repeated observations count again',
+            registry=registry,
+        )
         self.timeliness_over_sla = _FreshQueueGauge(
             'omi_batch_timeliness_new_over_sla_units',
             'Units admitted at or after the epoch and still unpublished past the 2h SLA, by counted leg',
@@ -230,7 +240,7 @@ class QueueMetrics:
         )
         self.timeliness_truncated = _FreshQueueGauge(
             'omi_batch_timeliness_scan_truncated',
-            '1 when a leg\'s bounded walk may hide an older unpublished unit',
+            '1 when a leg\'s bounded walk or unusable clock may hide an older unpublished unit',
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
@@ -517,6 +527,7 @@ class QueueMetrics:
                 'event=batch_timeliness_sample outcome=unavailable exception_type=%s', type(error).__name__
             )
             return
+        self.staged_input_clock_invalid.inc(sample.get('staged_input_clock_invalid', 0))
         self.drain_age.set(age_seconds(sample['drain_oldest'], now))
         for leg, started in sample['held_oldest'].items():
             self.held_age.labels(leg).set(age_seconds(started, now))

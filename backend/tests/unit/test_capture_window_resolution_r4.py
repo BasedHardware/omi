@@ -110,7 +110,7 @@ def _assert_base_identity_projection(candidate, baseline, *, rejected_owner=Fals
     # Owner diagnostics are likewise internal, excluded from JSON/schema and
     # covered by their own metadata-contract suite; keep all identity checks.
     assert baseline.speaker_match_scores is None
-    if stage.match_scores.enabled() and rejected_owner:
+    if rejected_owner:
         assert len(candidate.speaker_match_scores) == 1
         row = candidate.speaker_match_scores[0]
         assert row['stage'] == 'resolution'
@@ -118,19 +118,15 @@ def _assert_base_identity_projection(candidate, baseline, *, rejected_owner=Fals
         assert row['evidence_seconds'] == 6.0
         assert not any(s.is_user for s in candidate.transcript_segments)
     else:
-        assert candidate.speaker_match_scores == ([] if stage.match_scores.enabled() else None)
+        assert candidate.speaker_match_scores == []
     assert candidate.model_dump(
         exclude={'speaker_match_scores', 'owner_recognition_diagnostics'}
     ) == baseline.model_dump(exclude={'speaker_match_scores', 'owner_recognition_diagnostics'})
 
 
-@pytest.mark.parametrize('scores_enabled', [False, True])
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])
 @pytest.mark.parametrize('seed', range(64))
-def test_randomized_base_embedding_is_byte_identical(
-    env, verified_audio, base_stage, monkeypatch, scope, seed, scores_enabled
-):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', str(scores_enabled).lower())
+def test_randomized_base_embedding_is_byte_identical(env, verified_audio, base_stage, monkeypatch, scope, seed):
 
     rng = random.Random(seed)
     extents = []
@@ -168,13 +164,11 @@ def test_randomized_base_embedding_is_byte_identical(
     _assert_base_identity_projection(conversation, old)
 
 
-@pytest.mark.parametrize('scores_enabled', [False, True])
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])
 @pytest.mark.parametrize('extents', [[(0, 1.3), (1.3005, 2.4)], [(0, 6), (6, 12)]])
 def test_base_resolved_identity_survives_legacy_evidence_refresh_and_cache_miss(
-    env, verified_audio, base_stage, monkeypatch, scope, extents, scores_enabled
+    env, verified_audio, base_stage, monkeypatch, scope, extents
 ):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', str(scores_enabled).lower())
 
     conversation = _scoped_input(scope, extents[-1][1])
     session = verified_audio(conversation, extents)

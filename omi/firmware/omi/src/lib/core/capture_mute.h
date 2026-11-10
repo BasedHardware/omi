@@ -7,8 +7,9 @@
  * Pause/mute contract for CV1 (issue #5054).
  *
  * The pendant is the source of truth. BLE disconnect must not resume
- * capture. Only an explicit unmute (app write or offline double-tap)
- * resumes it.
+ * capture. Only an explicit unmute from the app resumes it. Mute fails
+ * closed: an unreadable or unloadable setting, or a mute whose NVS write
+ * fails, leaves capture off (3.0.24).
  */
 
 /** Persist mute and apply runtime side effects (SD write pause). */

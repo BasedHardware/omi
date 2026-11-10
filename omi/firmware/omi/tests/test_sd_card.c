@@ -32,6 +32,8 @@ static int z_read_fail_batch_calls;
 static int z_rand_fail;
 static uint64_t z_rand_counter;
 static int z_pm_fail;
+static int z_init_fail_remaining; /* CTRL_INIT failures before the card answers; <0 forever */
+static int z_init_calls;
 static bool z_rtc_valid;
 static uint32_t z_utc;
 
@@ -118,7 +120,17 @@ int disk_access_ioctl(const char *pdrv, uint8_t cmd, void *buff)
         *(uint32_t *) buff = 512;
         return 0;
     }
-    if (cmd == DISK_IOCTL_CTRL_INIT || cmd == DISK_IOCTL_CTRL_DEINIT) {
+    if (cmd == DISK_IOCTL_CTRL_INIT) {
+        z_init_calls++;
+        if (z_init_fail_remaining != 0) {
+            if (z_init_fail_remaining > 0) {
+                z_init_fail_remaining--;
+            }
+            return -ETIMEDOUT;
+        }
+        return 0;
+    }
+    if (cmd == DISK_IOCTL_CTRL_DEINIT) {
         return 0;
     }
     return -EINVAL;
@@ -755,9 +767,79 @@ static void test_advance_rules(void)
     printf("advance_rules ok\n");
 }
 
+/* Committee item 4: a card that is slow to answer at boot must not cost the
+ * whole boot's offline storage, and a dead card must never be hammered. */
+static void test_boot_mount_retries_with_backoff(void)
+{
+    disk_reset();
+    ram_reset();
+    sd_mount_backoff_ms = 0;
+    sd_shutdown_in_progress = false;
+    z_init_calls = 0;
+    z_init_fail_remaining = 12; /* five tries per mount: fails twice, then answers */
+    int64_t start = z_stub_now_ms;
+    CHECK(sd_boot_mount() == 0);
+    CHECK(is_mounted);
+    CHECK(sd_mount_backoff_ms == 0);
+    CHECK(z_init_calls == 13);
+    CHECK(z_stub_now_ms - start >= SD_MOUNT_RETRY_MIN_MS * 3);
+
+    /* Dead card: attempts stay spaced by the capped exponential backoff. */
+    ram_reset();
+    sd_mount_backoff_ms = 0;
+    z_init_fail_remaining = -1;
+    z_init_calls = 0;
+    start = z_stub_now_ms;
+    int attempts = 0;
+    while (z_stub_now_ms - start < 10 * 60 * 1000) {
+        int rc = sd_mount_gated(false);
+        CHECK(rc != 0);
+        if (rc != -EAGAIN) {
+            attempts++;
+        }
+        z_stub_now_ms += 50; /* an audio write every 50 ms asks again */
+    }
+    /* 1+2+4+...+60 s: at most ~16 mounts in 10 min, not one per write. */
+    CHECK(attempts > 5 && attempts <= 16);
+    CHECK(sd_mount_backoff_ms == SD_MOUNT_RETRY_MAX_MS);
+    CHECK(z_init_calls == attempts * 5);
+
+    /* Shutdown ends the boot retry without another attempt. */
+    sd_shutdown_in_progress = true;
+    int before = z_init_calls;
+    CHECK(sd_boot_mount() == -ESHUTDOWN);
+    CHECK(z_init_calls == before);
+    sd_shutdown_in_progress = false;
+
+    /* Review finding: the card is powered off between failed retries, so
+     * is_sd_on() is false and shutdown used to skip app_sd_off(). The gate
+     * itself must close: no write, power-on or boot path may mount after
+     * sd_begin_shutdown(), even once the backoff has expired. */
+    CHECK(!is_sd_on());
+    sd_begin_shutdown();
+    z_stub_now_ms = sd_mount_retry_at_ms + 1;
+    before = z_init_calls;
+    CHECK(sd_mount_gated(true) == -ESHUTDOWN);
+    CHECK(sd_mount_gated(false) == -ESHUTDOWN);
+    CHECK(sd_boot_mount() == -ESHUTDOWN);
+    CHECK(z_init_calls == before);
+    /* An attempt already inside sd_mount() stops before its next power-on. */
+    CHECK(sd_mount() == -ESHUTDOWN);
+    CHECK(z_init_calls == before);
+    sd_shutdown_in_progress = false;
+
+    /* Recovery resets the backoff. */
+    z_init_fail_remaining = 0;
+    z_stub_now_ms = sd_mount_retry_at_ms;
+    CHECK(sd_mount_gated(false) == 0);
+    CHECK(sd_mount_backoff_ms == 0);
+    printf("boot_mount_retries_with_backoff ok\n");
+}
+
 int main(void)
 {
     test_fresh_mount();
+    test_boot_mount_retries_with_backoff();
     test_v1_migration();
     test_clear_rotates_ids();
     test_commit_order();

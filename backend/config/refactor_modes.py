@@ -119,9 +119,24 @@ def default_off(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
     return False
 
 
+def quiet_empty_exit_enabled() -> bool:
+    """Dark empty-row cleanup; uncertain server custody exits via orphan repair."""
+    return default_off('QUIET_EMPTY_EXIT_ENABLED')
+
+
+def batch_live_orphan_repair_enabled() -> bool:
+    """Dark operator repair; retained audio exits via batch, empty rows via fenced cleanup."""
+    return default_off('BATCH_LIVE_ORPHAN_REPAIR_ENABLED')
+
+
 def record_seal_repair_age_order() -> bool:
     """Prefer oldest pending records; off restores the name-ordered repair scan."""
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
+
+
+def batch_input_expiring_enabled() -> bool:
+    """Stop held staging inputs at day 29; off restores the existing held lifecycle."""
+    return default_on('BATCH_INPUT_EXPIRING_ENABLED')
 
 
 def uid_digest(uid: str) -> str:

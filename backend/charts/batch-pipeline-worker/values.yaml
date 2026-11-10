@@ -50,6 +50,7 @@ borrowedNodePools:
   priority: -1
 worker:
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
   servingMetricsMinRefreshSeconds: 30
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
@@ -74,7 +75,6 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
-  ladderBudgetEnforcement: false
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""
@@ -138,7 +138,6 @@ worker:
   diarizeSpeechOnlyEnabled: true
   # Default off until a paired run on the prod pyannote revision qualifies it
   # (see backend/diarizer/batch_pipeline_runtime.md).
-  shortSpeechSingleEnabled: false
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.

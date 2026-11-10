@@ -18,6 +18,20 @@ Explicit stack recovery and local conversation rotation retain
 services. Deferred recovery carries its scope with its reason, and a queued
 full recovery cannot be downgraded by a later microphone-only request.
 
+## Sleep and DarkWake handoff
+
+`AppState` remembers capture intent when sleep stops a recording. Its delayed
+DarkWake probe retries always-on capture while the process remains scheduled.
+The probe retains that intent until a full wake consumes it, so a refused start
+or a session that fails during DarkWake can still recover on full wake. Full
+wake cancels the delayed probe and checks the current recording state to avoid
+starting a second session. Recording Off always prevents a restart.
+
+`SleepCaptureRearmPolicyTests` exercises the production AppState handoff after
+a failed start, after a successful start, and when full wake cancels a pending
+probe. Capture state is synthetic; the tests do not sleep the Mac or open a
+microphone.
+
 ## Silent input is evidence, not a hardware diagnosis
 
 The watchdog observes two consecutive quiet PCM windows (peak at or below five

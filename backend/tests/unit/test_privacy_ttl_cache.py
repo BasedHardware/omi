@@ -1,7 +1,8 @@
-"""60s-bounded privacy decision reuse (David ruling 2026-11-04): levers privacy_ttl60 and bpp_decision_cache."""
+"""Token-certified privacy reuse: a 60s upper bound never substitutes for the revoke fence."""
 
 from datetime import datetime, timezone, timedelta
 import json
+from types import SimpleNamespace
 
 import fakeredis
 import pytest
@@ -113,23 +114,22 @@ def test_cache_is_lru_bounded():
 # --- tombstones -------------------------------------------------------------------
 
 
-def test_tombstone_clear_is_reused_then_deletion_takes_effect_within_sixty_seconds(world, monkeypatch):
-    db, reads, _, clock = world
+def test_tombstone_clear_requires_current_token_even_within_sixty_seconds(world, monkeypatch):
+    db, reads, revision, clock = world
     enable(monkeypatch, 'privacy_ttl60')
     assert not tombstones.is_deleted(UID, 'source')
-    assert len(reads) == 1
+    assert len(reads) == 2
     assert not tombstones.is_deleted(UID, 'source')
-    assert len(reads) == 1  # reused, no token read either
+    assert len(reads) == 3  # reuse still reads the authority token
     db.rows[TOMBSTONE] = {}
-    clock.now += 59
-    assert not tombstones.is_deleted(UID, 'source')  # accepted staleness, < 60s
+    db.rows[TOKEN]['memo_token'] = 'b' * 32
+    revision[0] += timedelta(seconds=1)
     clock.now += 1
     assert tombstones.is_deleted(UID, 'source')
-    # A deleted answer is never cached.
     reads.clear()
     assert tombstones.is_deleted(UID, 'source')
     assert tombstones.is_deleted(UID, 'source')
-    assert len(reads) == 2
+    assert reads == [TOKEN, TOMBSTONE] * 2  # BLOCK is never stored
 
 
 def test_tombstone_cache_never_answers_for_another_conversation_or_plane(world, monkeypatch):
@@ -141,7 +141,7 @@ def test_tombstone_cache_never_answers_for_another_conversation_or_plane(world, 
     assert tombstones.is_deleted(UID, 'other')
     assert not tombstones.is_deleted(UID, 'source')
     other_plane = StrictFirestore({})
-    assert ttl_cache.DECISIONS.get(negative._ttl_key('tombstone', UID, db, 'source'))[0] is True
+    assert ttl_cache.DECISIONS.get(negative._ttl_key('tombstone', UID, db, 'source'))[0]['clear'] is True
     assert ttl_cache.is_missing(ttl_cache.DECISIONS.get(negative._ttl_key('tombstone', UID, other_plane, 'source'))[0])
 
 
@@ -159,16 +159,16 @@ def test_external_fence_reuses_clear_and_never_caches_a_block(world, monkeypatch
     db, reads, _, clock = world
     enable(monkeypatch, 'privacy_ttl60')
     assert external(db)
-    assert len(reads) == 2
+    assert len(reads) == 3
     assert external(db)
-    assert len(reads) == 2
+    assert len(reads) == 4
     db.rows[MARKER] = {'wipe_status': 'pending'}
     clock.now += 60
     reads.clear()
     for _ in range(2):
         with pytest.raises(legal_holds.DestructiveOperationInProgress):
             external(db)
-    assert len(reads) == 2  # each blocked decision re-read the marker
+    assert len(reads) == 4  # every blocked decision reads token plus marker
 
 
 def test_external_fence_inside_a_transaction_always_reads_live(world, monkeypatch):
@@ -201,33 +201,68 @@ def test_gate_owner_pass_is_never_cached_for_other_writers(world, monkeypatch):
             reads.clear()
             with pytest.raises(legal_holds.DestructiveOperationInProgress):
                 contextvars.Context().run(fresh_writer)
-            assert len(reads) == 2  # live marker + gate reads every time: no cached owner pass
+            # Live marker + gate reads every time: no cached owner pass.
+            assert MARKER in reads and ('legal_hold_deletion_gates', UID) in reads
+
+
+@pytest.mark.parametrize('cache_lever', ['legal_hold_fence_cache', 'privacy_ttl60'])
+def test_external_revoke_then_check_blocks_cached_allow_within_ttl(world, monkeypatch, cache_lever):
+    """P0 qualification: a committed revoke must fence an already cached ALLOW."""
+    db, reads, revision, clock = world
+    enable(monkeypatch, cache_lever)
+    assert external(db)
+    # Prime and prove reuse before revocation, without depending on Redis TTL time.
+    reads.clear()
+    assert external(db)
+    assert reads == [TOKEN]
+
+    # Model the completed authority commit, including the writer's same-commit
+    # token rotation and a new server revision. No write is left in flight.
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    db.rows[TOKEN] = {**db.rows[TOKEN], 'memo_token': 'b' * 32, 'generation': 8}
+    revision[0] += timedelta(seconds=1)
+    clock.now += 1
+
+    # Control: the real live fence sees this marker and blocks immediately.
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        with legal_holds.external_write_fence(UID, firestore_client=db, transaction=db.transaction()):
+            pytest.fail('live authority incorrectly allowed the revoked account')
+
+    reads.clear()
+    try:
+        external(db)
+    except legal_holds.DestructiveOperationInProgress:
+        assert MARKER in reads
+    else:
+        pytest.fail(
+            f'{cache_lever} returned cached ALLOW 1s after revoke despite rotated token/generation; '
+            f'authority reads after revoke: {len(reads)}'
+        )
 
 
 # --- deletion marker ----------------------------------------------------------
 
 
-def test_shadow_keeps_live_authority_and_labels_within_bound_staleness(world, monkeypatch):
-    db, reads, _, clock = world
+def test_shadow_rejects_rotated_token_within_bound_and_emits_cache_evidence(world, monkeypatch):
+    db, _, revision, clock = world
     enable(monkeypatch, 'privacy_checks_shadow', 'privacy_ttl60')
-    within = metrics.DECISION_MISMATCH.labels('tombstone', 'stale_within_ttl')._value.get()
-    stale = metrics.DECISION_MISMATCH.labels('tombstone', 'stale_allow')._value.get()
     assert not tombstones.is_deleted(UID, 'source')
-    assert not tombstones.is_deleted(UID, 'source')
-    assert len(reads) == 2  # shadow: live decides every time, and costs no extra read
     db.rows[TOMBSTONE] = {}
+    db.rows[TOKEN]['memo_token'] = 'b' * 32
+    revision[0] += timedelta(seconds=1)
     clock.now += 30
-    assert tombstones.is_deleted(UID, 'source')  # live authority wins in shadow
-    assert metrics.DECISION_MISMATCH.labels('tombstone', 'stale_within_ttl')._value.get() == within + 1
-    assert metrics.DECISION_MISMATCH.labels('tombstone', 'stale_allow')._value.get() == stale
-    clock.now += 31
+    counter = metrics.COMPARISONS.labels(
+        'tombstone', 'match', 'fresh_read', '30_60s', 'same', 'same', 'false', 'mismatch'
+    )
+    before = counter._value.get()
     assert tombstones.is_deleted(UID, 'source')
-    assert metrics.DECISION_MISMATCH.labels('tombstone', 'stale_within_ttl')._value.get() == within + 1
+    assert counter._value.get() == before + 1
 
 
-def test_compare_counts_a_stale_allow_older_than_the_bound_as_a_real_mismatch():
+@pytest.mark.parametrize('age', [1, 60.5])
+def test_compare_never_excuses_a_stale_allow_based_on_age(age):
     before = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')._value.get()
-    metrics.compare('external', 'destructive_operation', 'allow', cached_age=60.5)
+    metrics.compare('external', 'destructive_operation', 'allow', cached_age=age)
     assert metrics.DECISION_MISMATCH.labels('external', 'stale_allow')._value.get() == before + 1
 
 
@@ -348,3 +383,229 @@ def test_privacy_ttl60_leaves_the_deletion_marker_on_its_shared_redis_cache(worl
         assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
     assert len(reads) == 1  # the Redis negative cache answered the repeats
     assert len(ttl_cache.DECISIONS) == 0
+
+
+@pytest.mark.parametrize('change', ['missing', 'malformed', 'unreadable', 'revision', 'generation', 'legacy'])
+def test_uncertified_ttl_allow_falls_through_to_live_block(world, monkeypatch, change):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'privacy_ttl60')
+    assert external(db)
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    if change == 'missing':
+        del db.rows[TOKEN]
+    elif change == 'malformed':
+        db.rows[TOKEN]['memo_token'] = 'bad'
+    elif change == 'unreadable':
+
+        def broken(*args):
+            raise RuntimeError('synthetic token read outage')
+
+        monkeypatch.setattr(negative, '_certificate', broken)
+    elif change == 'revision':
+        revision[0] += timedelta(seconds=1)  # same opaque token, new server revision
+    elif change == 'generation':
+        db.rows[TOKEN]['generation'] = 8  # mutation proof even if the revision fake is unchanged
+    else:
+        ttl_cache.DECISIONS.put(negative._ttl_key('external', UID, db, 'external'), True, started=clock.now)
+    clock.now += 1
+    reads.clear()
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        external(db)
+    assert MARKER in reads
+
+
+@pytest.mark.parametrize('first_block', [True, False])
+def test_fresh_comparison_race_preserves_live_and_labels_marker_transition(world, monkeypatch, caplog, first_block):
+    db, _, revision, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow')
+    if first_block:
+        db.rows[MARKER] = {'wipe_status': 'pending'}
+    original = StrictFirestoreDocument.get
+    changed = False
+
+    def get(ref, **kwargs):
+        nonlocal changed
+        snapshot = original(ref, **kwargs)
+        if ref.path == MARKER and not changed:
+            changed = True
+            if first_block:
+                db.rows.pop(MARKER)
+            else:
+                db.rows[MARKER] = {'wipe_status': 'pending'}
+            db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+            revision[0] += timedelta(seconds=1)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    labels = ('external', 'mismatch', 'fresh_read', 'unknown', 'changed', 'changed', 'true', 'miss')
+    counter = metrics.COMPARISONS.labels(*labels)
+    before = counter._value.get()
+    metrics._LOG_AT.clear()
+    with caplog.at_level('WARNING'):
+        if first_block:
+            with pytest.raises(legal_holds.DestructiveOperationInProgress):
+                external(db)
+        else:
+            assert external(db)
+    assert counter._value.get() == before + 1
+    assert ('reason=stale_allow' if first_block else 'reason=stale_block') in caplog.text
+    for field in (
+        'candidate_source=fresh_read',
+        'cache_age=unknown',
+        'token_versions=changed',
+        'generation_versions=changed',
+        'marker_changed=true',
+        'cache_certification=miss',
+    ):
+        assert field in caplog.text
+    assert UID not in caplog.text and 'b' * 32 not in caplog.text
+
+
+@pytest.mark.parametrize('source', ['ttl_hit', 'token_hit', 'session_hit'])
+def test_cached_comparison_evidence_and_rate_limit_for_unfenced_writer(world, monkeypatch, caplog, source):
+    db, _, _, clock = world
+    enable(monkeypatch, 'privacy_checks_shadow', *(['privacy_ttl60'] if source == 'ttl_hit' else []))
+    monkeypatch.setattr(negative, 'time', SimpleNamespace(time=clock))
+    holder = metrics.SessionCensus('listen') if source == 'session_hit' else None
+    token = metrics._SESSION.set(holder)
+    try:
+        assert external(db)
+        # Deliberately bypass the mandatory Commit token hook: shadow must
+        # expose a genuine cached stale ALLOW, never excuse it due to age.
+        db.rows[MARKER] = {'wipe_status': 'pending'}
+        clock.now += 2
+        counter = metrics.COMPARISONS.labels('external', 'mismatch', source, '1_10s', 'same', 'same', 'true', 'matched')
+        before = counter._value.get()
+        metrics._LOG_AT.clear()
+        with caplog.at_level('WARNING'):
+            for _ in range(2):
+                with pytest.raises(legal_holds.DestructiveOperationInProgress):
+                    external(db)
+        assert counter._value.get() == before + 2
+        assert caplog.text.count('privacy shadow decision_mismatch') == 1
+        assert f'candidate_source={source}' in caplog.text
+        assert 'reason=stale_allow' in caplog.text and 'marker_changed=true' in caplog.text
+        assert UID not in caplog.text and 'a' * 32 not in caplog.text
+    finally:
+        if holder:
+            holder.memo.close()
+        metrics._SESSION.reset(token)
+
+
+@pytest.mark.parametrize('invalid', [True, (None, 7), ('legacy', 7), ({'bad': True}, 7, {})])
+def test_batch_uncertified_process_entry_cannot_allow_revoked_owner(world, monkeypatch, invalid):
+    db, reads, _, clock = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    key = (db, UID, frozenset({'source'}))
+    privacy.PROCESS_DECISIONS.put(key, invalid, started=clock.now)
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    with batch_privacy_attempt(), pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert TOKEN in reads and MARKER in reads
+
+
+def test_batch_revoke_within_ttl_is_a_live_block_after_token_rotation(world, monkeypatch):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+    revision[0] += timedelta(seconds=1)
+    clock.now += 1
+    reads.clear()
+    with batch_privacy_attempt(), pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+
+
+def test_batch_certificate_outage_falls_through_to_live_marker(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    original = StrictFirestoreDocument.get
+
+    def get(ref, **kwargs):
+        if ref.path == TOKEN:
+            reads.append(ref.path)
+            raise RuntimeError('synthetic certificate outage')
+        return original(ref, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    reads.clear()
+    with batch_privacy_attempt(), pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+
+
+def test_evidence_fields_never_emit_supplied_identifiers(caplog):
+    unsafe = 'owner@example.test/raw-token-or-document-path'
+    evidence = metrics.DecisionEvidence(
+        source=unsafe, certification=unsafe, token_seen=True, token=unsafe, generation=unsafe, markers={unsafe: unsafe}
+    )
+    metrics._LOG_AT.clear()
+    with caplog.at_level('WARNING'):
+        metrics.compare(unsafe, unsafe, 'allow', live_evidence=evidence, candidate_evidence=evidence)
+    assert unsafe not in caplog.text
+    assert unsafe not in repr(metrics.COMPARISONS.collect())
+    assert 'candidate_source=unknown' in caplog.text
+    assert 'token_versions=same' in caplog.text and 'generation_versions=same' in caplog.text
+
+
+def test_session_allow_reuse_has_a_sixty_second_upper_bound(world, monkeypatch):
+    db, reads, _, clock = world
+    enable(monkeypatch, 'privacy_session_token')
+    wall = [1000.0]
+    monkeypatch.setattr(negative, 'time', SimpleNamespace(time=lambda: wall[0]))
+    holder = metrics.SessionCensus('listen')
+    token = metrics._SESSION.set(holder)
+    try:
+        assert external(db)
+        clock.now += 60
+        wall[0] -= 3600  # a backwards wall clock must not extend authorization
+        # Force Redis unavailable so an expired session entry must read live.
+        monkeypatch.setattr(cache, '_redis', lambda: None)
+        reads.clear()
+        assert external(db)
+        assert MARKER in reads
+    finally:
+        holder.memo.close()
+        metrics._SESSION.reset(token)
+
+
+@pytest.mark.parametrize('token', [None, {}, {'memo_token': 'bad', 'memo_schema': 1}])
+def test_ttl_missing_certificate_allows_only_fresh_authority_and_never_stores(world, monkeypatch, token):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'privacy_ttl60')
+    if token is None:
+        db.rows.pop(TOKEN)
+    else:
+        db.rows[TOKEN] = token
+    assert external(db) and external(db)
+    assert reads == [TOKEN, MARKER, ('legal_hold_deletion_gates', UID)] * 2
+    assert len(ttl_cache.DECISIONS) == 0
+
+
+def test_delayed_redis_hit_cannot_extend_the_sixty_second_bound(world, monkeypatch):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'legal_hold_fence_cache')
+    assert external(db)
+    original = negative.cached_read
+
+    def delayed(*args, **kwargs):
+        value = original(*args, **kwargs)
+        # The server returned the old clear before this completed revoke, but
+        # its reply reaches the caller another 30 seconds later.
+        db.rows[MARKER] = {'wipe_status': 'pending'}
+        db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+        revision[0] += timedelta(seconds=1)
+        clock.now += 30
+        return value
+
+    monkeypatch.setattr(negative, 'cached_read', delayed)
+    reads.clear()
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        external(db)
+    assert reads == [TOKEN, MARKER]
