@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.lifecycle_metrics import COHORT_SECONDS, SILENCE_CENSUS_SOURCES, SILENCE_CENSUS_STATES, seconds
@@ -145,7 +146,7 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
             client.collection_group('conversations')
             .where(filter=FieldFilter('created_at', '>=', after_datetime))
             .where(filter=FieldFilter('created_at', '<=', current_datetime))
-            .order_by('created_at')
+            .order_by('created_at', direction=firestore.Query.DESCENDING)
             .order_by('__name__')
             .select(('created_at', 'source', 'server_batch_audio_received', 'record_upload_sessions')),
         )

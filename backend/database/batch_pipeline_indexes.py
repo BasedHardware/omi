@@ -21,15 +21,6 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     ),
     *(
         FirestoreIndexRequirement(
-            f'{namespace}_audio_silence_window',
-            f'{namespace}_jobs',
-            'COLLECTION',
-            (_asc('enqueued_at'), _asc('__name__')),
-        )
-        for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
-    ),
-    *(
-        FirestoreIndexRequirement(
             f'{namespace}_seal_pending_finished',
             f'{namespace}_jobs',
             'COLLECTION',

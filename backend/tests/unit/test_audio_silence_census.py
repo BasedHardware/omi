@@ -35,8 +35,8 @@ class Query:
     def where(self, *, filter):
         return replace(self, filters=(*self.filters, filter))
 
-    def order_by(self, field):
-        return replace(self, orders=(*self.orders, field))
+    def order_by(self, field, direction=None):
+        return replace(self, orders=(*self.orders, (field, direction)))
 
     def select(self, _fields):
         return self
@@ -70,8 +70,11 @@ class Query:
                 for condition in self.filters
             ):
                 rows.append((path, row))
-        for order in reversed(self.orders):
-            rows.sort(key=(lambda pair: pair[0]) if order == '__name__' else (lambda pair: pair[1][order]))
+        for order, direction in reversed(self.orders):
+            rows.sort(
+                key=(lambda pair: pair[0]) if order == '__name__' else (lambda pair: pair[1][order]),
+                reverse=direction == 'DESCENDING',
+            )
         assert self.cap is not None, 'unbounded query'
         return rows[: self.cap]
 
@@ -177,9 +180,9 @@ def test_unseen_upload_sessions_never_become_false_silence():
 def test_candidate_aggregates_join_audio_and_app_evidence_outside_the_page():
     rows = dict(
         [
-            conversation('received', 'silent', created_at=NOW - 3600),
+            conversation('received', 'silent', created_at=NOW - 3400),
             conversation('received', 'received', created_at=NOW - 3500, server_batch_audio_received=True),
-            conversation('outbox-app', 'hidden', created_at=NOW - 3400),
+            conversation('outbox-app', 'hidden', created_at=NOW - 3600),
         ]
     )
     rows['sync_reprocess_outbox/app'] = {'uid': 'outbox-app', 'first_pending_at': NOW}

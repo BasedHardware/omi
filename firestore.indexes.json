@@ -96,7 +96,7 @@
       "fields": [
         {
           "fieldPath": "created_at",
-          "order": "ASCENDING"
+          "order": "DESCENDING"
         },
         {
           "fieldPath": "__name__",
@@ -114,20 +114,6 @@
         },
         {
           "fieldPath": "created_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "sync_reprocess_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "first_pending_at",
           "order": "ASCENDING"
         },
         {
@@ -180,34 +166,6 @@
           "fieldPath": "state",
           "order": "ASCENDING"
         },
-        {
-          "fieldPath": "enqueued_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_prod_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "enqueued_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
         {
           "fieldPath": "enqueued_at",
           "order": "ASCENDING"
