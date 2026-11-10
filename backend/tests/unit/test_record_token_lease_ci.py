@@ -58,10 +58,26 @@ def test_standalone_and_stack_deploys_bind_the_same_rollout_inputs():
     )
     assert 'GITHUB_ENV' in binding['run']
     for workflow in ('gcp_backend_pusher.yml', 'gcp_backend_listen_helm.yml'):
-        env = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())['env']
-        for key in keys:
-            assert env[key] == binding['env'][key]
-            assert 'vars.' + key in env[key]
+        config = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
+        # Protected environment variables become available after the runner
+        # declares the environment. Workflow-scope defaults can mask the ramp.
+        assert not set(keys).intersection(config['env'])
+        writers = 0
+        for job in config['jobs'].values():
+            steps = job.get('steps', [])
+            writes = [
+                i for i, step in enumerate(steps) if 'backend/scripts/deploy-backend-config.sh' in step.get('run', '')
+            ]
+            if not writes:
+                continue
+            writers += 1
+            assert job['environment']
+            index, actual = next((i, step) for i, step in enumerate(steps) if step.get('name') == binding['name'])
+            assert index < min(writes)
+            assert actual['env'] == binding['env'] and actual['run'] == binding['run']
+            for key in keys:
+                assert 'vars.' + key in actual['env'][key]
+        assert writers, 'standalone workflow no longer exercises the runtime ConfigMap writer'
 
 
 @pytest.mark.parametrize('mode,epoch', [('off', '0'), ('shadow', '2000000000'), ('serve', '2000000000')])
