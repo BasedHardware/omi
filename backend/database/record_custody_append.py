@@ -2,6 +2,7 @@
 
 import hashlib
 import time
+import uuid
 
 from google.cloud import firestore
 
@@ -94,22 +95,26 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
     receipt = _receipt(ref, session)
+    # Stable across retries of this call, distinct from a later finish replay.
+    attempt = uuid.uuid4().hex
 
     @firestore.transactional
     def commit(tx):
         # A response lost after commit must not masquerade as a cleared fence.
         # Read before every potential write, including continuation creation.
-        if receipt.get(transaction=tx).exists:
-            return False
+        previous = receipt.get(transaction=tx)
+        if previous.exists:
+            recorded = previous.to_dict() or {}
+            return bool(recorded.get('late')), recorded.get('finish_attempt') == attempt
         row = ref.get(transaction=tx).to_dict() or {}
         sessions = dict(row.get('record_upload_sessions') or {})
         token = sessions.get(session)
         if not isinstance(token, dict) or token.get('signal_source') != 'custody_append':
             if accepted:
                 raise RecordCustodyFenceLost('retain WAL and retry custody with a fresh fence')
-            return False
+            return False, False
         sessions.pop(session)
-        patch = {'record_upload_sessions': sessions}
+        patch: dict[str, object] = {'record_upload_sessions': sessions}
         recovery = None
         late = bool(token.get('append_late'))
         eligible = not row.get('deleted') and row.get('record_lane_owner') in {None, 'batch_live_v1', 'batch_sync_v1'}
@@ -130,12 +135,14 @@ def finish(uid, cid, session, *, accepted, firestore_client=None):
                 'upload_revision': patch.get('record_upload_revision', row.get('record_upload_revision', 0)),
                 'recorded_at': time.time(),
                 'accepted': accepted and eligible,
+                'late': accepted and late and eligible,
+                'finish_attempt': attempt,
             },
         )
-        return accepted and late and eligible
+        return accepted and late and eligible, True
 
-    late = run_transactional(client, commit, transient=True)
-    if late:
+    late, own_attempt = run_transactional(client, commit, transient=True)
+    if late and own_attempt:
         metrics.LATE_APPEND.inc()
     return late
 
@@ -150,11 +157,15 @@ def recover_committed(uid, cid, session, *, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
     receipt = _receipt(ref, session)
+    attempt = uuid.uuid4().hex
 
     @firestore.transactional
     def commit(tx):
-        if receipt.get(transaction=tx).exists:
-            return False
+        previous = receipt.get(transaction=tx)
+        if previous.exists:
+            recorded = previous.to_dict() or {}
+            own_attempt = recorded.get('finish_attempt') == attempt
+            return own_attempt, own_attempt and bool(recorded.get('late'))
         row = ref.get(transaction=tx).to_dict() or {}
         if (
             not row
@@ -173,11 +184,20 @@ def recover_committed(uid, cid, session, *, firestore_client=None):
         if recovery:
             tx.set(*recovery)
         tx.update(ref, patch)
-        tx.set(receipt, {'upload_revision': revision, 'recorded_at': now})
-        return True
+        tx.set(
+            receipt,
+            {
+                'upload_revision': revision,
+                'recorded_at': now,
+                'accepted': True,
+                'late': True,
+                'finish_attempt': attempt,
+            },
+        )
+        return True, True
 
-    recovered = run_transactional(client, commit, transient=True)
-    if recovered:
+    recovered, count_late = run_transactional(client, commit, transient=True)
+    if count_late:
         metrics.LATE_APPEND.inc()
     return recovered
 

@@ -36,8 +36,8 @@ def retain(uid, cid, row, paths):
     protection = row.get('data_protection_level') or gap.users_db.get_data_protection_level(uid)
     bucket = gap.gap_fill_bucket(uid, client)
     budget = MAX_FILL_SECONDS * gap.RATE
-    for unit in gap._source_units(paths):
-        pcm = gap._pcm(unit.wav)
+    for unit in gap.source_units(paths):
+        pcm = gap.wav_pcm(unit.wav)
         first = max(0, math.ceil((start - unit.capture_at) * gap.RATE))
         last = min(len(pcm) // 2, math.floor((finish - unit.capture_at) * gap.RATE))
         if first >= last:

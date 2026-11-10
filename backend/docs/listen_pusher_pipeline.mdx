@@ -210,7 +210,9 @@ and partial continuation transactionally, with an idempotent per-request receipt
 under the conversation's `record_custody_recoveries` subcollection. Privacy gates
 remain authoritative. Normal finish writes the same terminal per-upload receipt
 inside the revision transaction, so an ambiguous committed finish retries without
-a second bump, continuation or late-append count. Before staging, an upload with
+a second bump or continuation. The receipt retains the late decision and winning
+completion attempt: a lost commit reply still counts once, while a separate finish
+replay stays read-only and adds no late-append count. Before staging, an upload with
 only `recording_session_id` resolves its user-scoped conversation through the same
 resolver as record admission and fences that target. If the session does not
 resolve, the original archive/admission response remains unchanged and there is
@@ -219,6 +221,8 @@ no custody append for an unknown target. Captured native input pins
 A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.
 Frame late-append counting follows successful durable window/object commit.
+This includes a new pusher session's first durable frame when an older token on
+the still-open row has lapsed; registration alone never increments the counter.
 The active repair CronJob exports the sampled oldest-unsealed age and child
 probe counters on `/metrics`, scraped every 15s, without enabling the idle worker.
 Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames

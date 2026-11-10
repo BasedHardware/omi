@@ -336,8 +336,11 @@ def test_custody_exact_clear_and_late_counter_follow_acceptance(enabled, accepte
     assert record_audio.lease_metrics.LATE_APPEND._value.get() == before + accepted
     # A repeated/lost completion response cannot double-count or bump again.
     snapshot = deepcopy(enabled.rows)
-    assert not record_custody_append.finish(
-        'synthetic', 'record', 'custody:first', accepted=accepted, firestore_client=enabled
+    assert (
+        record_custody_append.finish(
+            'synthetic', 'record', 'custody:first', accepted=accepted, firestore_client=enabled
+        )
+        is accepted
     )
     assert enabled.rows == snapshot
     assert not enabled.transactions[-1].has_written
@@ -413,3 +416,21 @@ def test_off_custody_begin_has_no_io(enabled, monkeypatch):
     before = deepcopy(enabled.rows)
     assert not record_custody_append.begin('synthetic', 'record', 'custody:upload')
     assert enabled.rows == before
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('expired', [False, True])
+def test_new_frame_token_observes_older_lease_before_replacing_custody(enabled, monkeypatch, mode, expired):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    old = {**TOKEN, 'lease_expires_at': NOW - 1 if expired else NOW + 3600}
+    enabled.rows[PATH].update(record_upload_sessions={'old': old}, record_audio_closed=False)
+    observed = {}
+    counter = record_audio.lease_metrics.LATE_APPEND._value.get()
+    assert record_audio.set_record_upload_pending(
+        'synthetic', 'record', 'new', True, producer=POD, firestore_client=enabled, late_observation=observed
+    )
+    assert observed['late'] is (expired and mode != 'off')
+    assert enabled.rows[PATH]['record_upload_sessions']['old'] == old
+    assert enabled.rows[PATH]['record_upload_revision'] == 8
+    assert not enabled.rows[PATH].get('record_audio_partial')
+    assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter  # no durable frame yet

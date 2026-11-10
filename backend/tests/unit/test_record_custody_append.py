@@ -328,18 +328,22 @@ def test_finish_receipt_makes_repeated_completion_read_only(monkeypatch, late):
     assert database.finish('synthetic', 'record', session, accepted=True, firestore_client=client) is late
     assert client.rows[PATH]['record_upload_revision'] == 8
     before = deepcopy(client.rows)
-    assert not database.finish('synthetic', 'record', session, accepted=True, firestore_client=client)
+    assert database.finish('synthetic', 'record', session, accepted=True, firestore_client=client) is late
     assert not database.recover_committed('synthetic', 'record', session, firestore_client=client)
     assert client.rows == before
     assert not client.transactions[-1].has_written
     assert metrics.LATE_APPEND._value.get() == counter + int(late)
 
 
-async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(monkeypatch):
+@pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
+async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(monkeypatch, seal):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    client = StrictFirestore({PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': False}})
+    row = {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': seal == 'closed'}
+    if seal == 'partial':
+        row['record_audio_partial'] = {'version': 1, 'upload_revision': 7}
+    client = StrictFirestore({PATH: row, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
     recovery = Mock(side_effect=AssertionError('committed finish was misclassified as lost custody'))
     monkeypatch.setattr(database, 'recover_committed', recovery)
@@ -365,7 +369,49 @@ async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(
     assert lost == [True]
     assert client.rows[PATH]['record_upload_revision'] == 8
     assert not client.rows[PATH]['record_upload_sessions']
-    assert not client.rows[PATH].get('record_audio_partial')
+    assert bool(client.rows[PATH].get('record_audio_partial')) is (seal != 'open')
+    jobs = [value for path, value in client.rows.items() if path[0] == 'batch_pipeline_dev_jobs']
+    assert len(jobs) == (seal != 'open')
+    before = deepcopy(client.rows)
+    assert database.finish('synthetic', 'record', 'custody:ambiguous', accepted=True, firestore_client=client) is (
+        seal != 'open'
+    )
+    assert client.rows == before
+    receipt = next(value for path, value in client.rows.items() if path[-2] == 'record_custody_recoveries')
+    assert receipt['late'] is (seal != 'open')
     recovery.assert_not_called()
-    assert metrics.LATE_APPEND._value.get() == counter
+    assert metrics.LATE_APPEND._value.get() == counter + (seal != 'open')
+    assert not client.transactions[-1].has_written
+
+
+@pytest.mark.parametrize('lose_reply', [False, True])
+def test_recovery_receipt_counts_once_after_a_committed_reply_is_lost(monkeypatch, lose_reply):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client = StrictFirestore(
+        {
+            PATH: {**ROW, 'record_audio_closed': True, 'record_upload_sessions': {}},
+            ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
+        }
+    )
+    original_commit = StrictFirestoreTransaction._commit
+    lost = []
+
+    def commit_then_lose_reply(tx):
+        original_commit(tx)
+        if lose_reply and not lost and any(path[-2] == 'record_custody_recoveries' for path, _ in tx.sets):
+            lost.append(True)
+            raise ServiceUnavailable('synthetic recovery response lost after commit')
+
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit_then_lose_reply)
+    counter = metrics.LATE_APPEND._value.get()
+    assert database.recover_committed('synthetic', 'record', 'custody:lost', firestore_client=client)
+    before = deepcopy(client.rows)
+    assert not database.recover_committed('synthetic', 'record', 'custody:lost', firestore_client=client)
+    assert client.rows == before
+    assert client.rows[PATH]['record_upload_revision'] == 8
+    assert len([path for path in client.rows if path[0] == 'batch_pipeline_dev_jobs']) == 1
+    assert lost == ([True] if lose_reply else [])
+    assert metrics.LATE_APPEND._value.get() == counter + 1
     assert not client.transactions[-1].has_written

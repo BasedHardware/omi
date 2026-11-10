@@ -97,15 +97,17 @@ def set_record_upload_pending(
                     'lease_expires_at': now + record_seal_rules.token_lease_seconds(),
                     'signal_source': 'frames',
                 }
+            late = record_seal_rules.token_lease_mode() != 'off' and (
+                bool(row.get('record_audio_closed') or row.get('record_audio_partial'))
+                or any(record_seal_rules.token_lease_lapsed(token, time.time(), row=row) for token in sessions.values())
+            )
             sessions[session] = value
             patch = {
                 'record_upload_sessions': sessions,
                 'record_audio_closed': False,
                 'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
             }
-            observed['late'] = record_seal_rules.token_lease_mode() != 'off' and bool(
-                row.get('record_audio_closed') or row.get('record_audio_partial')
-            )
+            observed['late'] = late
             if record_seal_rules.token_lease_serving(uid):
                 from database.batch_pipeline_record_lease_recovery import prepare_recovery
 

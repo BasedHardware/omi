@@ -97,8 +97,11 @@ def prepare_recovery(client, tx, uid, cid, row, revision, now):
         'lease_recovery': ref != original_ref,
         'partial_reason': mark['reason'],
     }
-    if job.get('partial_run'):
-        run = dict(job['partial_run'])
+    partial_run = job.get('partial_run')
+    if partial_run:
+        if not isinstance(partial_run, dict):
+            raise ValueError('partial recovery run must be a mapping')
+        run = dict(partial_run)
         run.pop('retired_at', None)
         run.update(next_inventory_at=now, inventory_changed_at=now, complete=True, fingerprint='')
         job['partial_run'] = run

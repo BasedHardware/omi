@@ -148,14 +148,15 @@ async def test_empty_window_does_not_observe_or_submit(monkeypatch):
 
 @pytest.mark.parametrize('writer', ['begin', 'renew'])
 @pytest.mark.parametrize('outcome', ['success', 'exception', 'refused'])
-async def test_late_append_counts_only_after_durable_commit(monkeypatch, writer, outcome):
+@pytest.mark.parametrize('closed', [False, True])
+async def test_late_append_counts_only_after_durable_commit(monkeypatch, writer, outcome, closed):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setattr(record_audio.time, 'time', lambda: NOW)
     client = StrictFirestore(
         {
-            PATH: {**ROW, 'record_audio_closed': True},
+            PATH: {**ROW, 'record_audio_closed': closed},
             ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
         }
     )

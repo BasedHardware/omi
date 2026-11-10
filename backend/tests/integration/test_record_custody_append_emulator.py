@@ -27,7 +27,8 @@ pytestmark = [
 
 
 @pytest.mark.parametrize('lose_reply', [False, True])
-async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch, tmp_path, lose_reply):
+@pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
+async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch, tmp_path, lose_reply, seal):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
@@ -42,7 +43,8 @@ async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch,
             'record_lane_owner': 'batch_live_v1',
             'status': 'completed',
             'private_cloud_sync_enabled': True,
-            'record_audio_closed': False,
+            'record_audio_closed': seal == 'closed',
+            'record_audio_partial': {'version': 1, 'upload_revision': 7} if seal == 'partial' else None,
             'record_upload_revision': 7,
             'record_upload_sessions': {},
             'finished_at': datetime.now(timezone.utc),
@@ -81,14 +83,20 @@ async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch,
         assert await upload() is response
         current = row.get().to_dict()
         assert current['record_upload_revision'] == 8
-        assert not current['record_upload_sessions'] and not current.get('record_audio_partial')
+        assert not current['record_upload_sessions']
+        assert bool(current.get('record_audio_partial')) is (seal != 'open')
         assert receipt.get().to_dict()['upload_revision'] == 8
+        assert receipt.get().to_dict()['late'] is (seal != 'open')
+        continuation = client.collection('batch_pipeline_dev_jobs').document(recovery_segment(uid, cid)).get()
+        assert continuation.exists is (seal != 'open')
+        continuation_before = continuation.to_dict()
         assert lost == ([True] if lose_reply else [])
         assert artifact.read_bytes() == b'synthetic retained audio'
-        assert not custody.finish(uid, cid, session, accepted=True, firestore_client=client)
+        assert custody.finish(uid, cid, session, accepted=True, firestore_client=client) is (seal != 'open')
         assert row.get().to_dict() == current
+        assert continuation.reference.get().to_dict() == continuation_before
         recovery.assert_not_called()
-        assert metrics.LATE_APPEND._value.get() == counter
+        assert metrics.LATE_APPEND._value.get() == counter + (seal != 'open')
     finally:
         # Only this test's exact synthetic owner and document ids are removed.
         for job_id in (record_identity(uid, cid)[1], recovery_segment(uid, cid)):

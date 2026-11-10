@@ -153,7 +153,7 @@ def _seconds_bucket(seconds: float) -> str:
     return '600+'
 
 
-def _pcm(wav: bytes) -> bytes:
+def wav_pcm(wav: bytes) -> bytes:
     with wave.open(io.BytesIO(wav), 'rb') as stream:
         return stream.readframes(stream.getnframes())
 
@@ -176,7 +176,7 @@ def retained_end(uid, conversation_id, chunks, client, key) -> float | None:
     return end
 
 
-def _source_units(paths):
+def source_units(paths):
     """Decode each WAL file on its own, in capture order.
 
     ``decode_units`` joins files up to 30 s apart with zero PCM. Here that
@@ -201,10 +201,10 @@ def _write_window(uid, conversation_id, paths, lower, upper, anchor, tolerance, 
     budget = MAX_FILL_SECONDS * RATE
     expected = anchor
     gapped = False
-    for unit in _source_units(paths):
+    for unit in source_units(paths):
         if budget <= 0:
             break
-        pcm = _pcm(unit.wav)
+        pcm = wav_pcm(unit.wav)
         frames = len(pcm) // 2
         # ``first`` is the first WAL sample at or after the retained end, so a
         # fill object never starts before it under any sample rounding.
