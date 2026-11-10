@@ -259,6 +259,27 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
             return terminal
         result = ledger.get('result')
+        from utils.batch_pipeline.input_retention import input_expiring
+
+        expiring = sum(input_expiring(job) for job in jobs)
+        if expiring:
+            # Existing failed-upload UI keeps local custody and offers retry.
+            # This precedes completion/partial receipts and the legacy polling redrive.
+            projected = sum(job.get('state') == 'committed' for job in jobs)
+            return {
+                'job_id': job_id,
+                'status': 'failed',
+                'reason_code': REASON_CODE,
+                'lane': intake['lane'],
+                'total_files': intake['total_files'],
+                'total_segments': len(jobs),
+                'processed_segments': projected,
+                'successful_segments': projected,
+                'failed_segments': expiring,
+                'errors': ['batch_worker_quarantined'],
+                'result': result if is_valid_partial_sync_content_result(result) else None,
+                'poll_after_ms': 0,
+            }
         missing = sum(artifact_missing(job) for job in jobs)
         if missing:
             # Must precede both all-success and held-partial completion. Phones

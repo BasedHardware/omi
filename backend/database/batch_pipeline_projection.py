@@ -526,7 +526,9 @@ class ProjectionStore:
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
-                if artifact_missing(job):
+                from utils.batch_pipeline.input_retention import input_expiring
+
+                if artifact_missing(job) or input_expiring(job):
                     return None, False, 0
                 if entry.get('projection_state') == 'erased':
                     if entry.get('owner_key') != owner_key(binding.owner_id) or entry.get('segment_id') != sibling:
@@ -889,7 +891,7 @@ def held_without_recovery(job: dict) -> bool:
     """
     from config.policy import RecoveryPolicy
 
-    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') in {'held_expired', 'input_expiring'}
     if (job.get('state') != 'quarantined' and not retained_dead) or job.get('result'):
         return False
     if any(

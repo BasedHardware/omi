@@ -186,7 +186,16 @@ class ProjectionReleaseStore:
         transaction.update(self.store.ref('results', segment_id), expiry)
         return 'expired'
 
-    def release(self, segment_id: str, now: float, *, dead_before: float | None = None) -> bool:
+    def release(
+        self,
+        segment_id: str,
+        now: float,
+        *,
+        dead_before: float | None = None,
+        operator: bool = False,
+        expected_job=None,
+        expected_entry=None,
+    ) -> bool:
         """Reset one held unit to pending iff its record target was restored."""
         released_owner: list[str] = []
 
@@ -194,10 +203,20 @@ class ProjectionReleaseStore:
         def commit(transaction):
             job = self.store.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
+            from utils.batch_pipeline.input_retention import input_expiring
+
+            terminal_input = input_expiring(job)
+            if (
+                (terminal_input and (not operator or job.get('input_expiring_leg') != 'assignment'))
+                or (expected_job is not None and job != expected_job)
+                or (expected_entry is not None and entry != expected_entry)
+            ):
+                return False
             # Re-read the stamp inside each transaction: the other scan leg
             # may already have expired this row and reset its attempt count.
             if (
                 dead_before is None
+                and not (terminal_input and operator)
                 and entry.get('held_expired_at') is not None
                 and projection_restorable_cap_expiry_enabled()
             ):
@@ -346,7 +365,13 @@ class ProjectionReleaseStore:
                     if part.get('state') != 'quarantined'
                 }
             transaction.update(self.store.ref('results', segment_id), reset)
-            transaction.update(self.store.ref('jobs', segment_id), {'recovery_state': None})
+            transaction.update(
+                self.store.ref('jobs', segment_id),
+                {
+                    'recovery_state': None,
+                    **({'state': 'committed', 'dead_letter_reason': None} if terminal_input else {}),
+                },
+            )
             released_owner.append(binding.owner_id)
             return True
 
