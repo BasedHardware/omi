@@ -41,12 +41,10 @@ def collection_name(name: str) -> str:
 
 
 def require_http_stage() -> None:
-    # Imported here, not at module scope: this module is reachable from the
-    # record-seal row process (database.batch_pipeline_store), which must not
-    # pay the fastapi/pydantic import. Only the HTTP dependency needs it.
-    from fastapi import HTTPException
-
     try:
         current_stage()
     except InvalidSyncStage as error:
+        # Successful stage checks and seal rows never need the HTTP framework.
+        from fastapi import HTTPException
+
         raise HTTPException(status_code=503, detail='Sync runtime stage is unavailable') from error

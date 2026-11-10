@@ -160,13 +160,9 @@ def _build_fakes() -> dict:
 
     fakes['stripe'] = ModuleType('stripe')
 
-    python_multipart = ModuleType('python_multipart')
-    python_multipart.__version__ = '0.0.99'
-    fakes['python_multipart'] = python_multipart
-
-    python_multipart_parser = ModuleType('python_multipart.multipart')
-    python_multipart_parser.parse_options_header = MagicMock(return_value={})
-    fakes['python_multipart.multipart'] = python_multipart_parser
+    # Keep the installed lightweight multipart package real: routers.sync also
+    # imports utils.multipart, which needs python_multipart.exceptions. A plain
+    # ModuleType here hides that submodule even inside this restored fixture.
 
     # utils heavy/optional modules
     process_conversation = ModuleType('utils.conversations.process_conversation')

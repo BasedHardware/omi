@@ -109,7 +109,6 @@ jobs:
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout immutable Firestore gate controls
-        if: env.SERVICE == 'batch-pipeline-worker'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
@@ -122,7 +121,6 @@ jobs:
             backend/database
 
       - name: Verify serving Firestore indexes
-        if: env.SERVICE == 'batch-pipeline-worker'
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
           source_sha: ${{ steps.vars.outputs.source_sha }}

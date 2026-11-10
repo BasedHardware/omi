@@ -303,12 +303,13 @@ def test_worker_deploy_gates_selected_source_before_build_or_helm():
     gate_index, gate = next(
         (i, step) for i, step in enumerate(steps) if step.get('name') == 'Verify serving Firestore indexes'
     )
-    assert gate['if'] == "env.SERVICE == 'batch-pipeline-worker'"
+    assert 'if' not in gate
     assert gate['uses'] == './.github/firestore-workflow/.github/actions/firestore-readiness'
     assert not gate.get('continue-on-error', False)
     assert gate['with']['source_sha'] == '${{ steps.vars.outputs.source_sha }}'
     assert gate['with']['project_id'] == '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
     controls = steps[gate_index - 1]
+    assert 'if' not in controls
     assert controls['with']['ref'] == '${{ github.workflow_sha }}'
     assert controls['with']['path'] == '.github/firestore-workflow'
     source = next(step for step in steps if step.get('id') == 'vars')

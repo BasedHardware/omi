@@ -71,3 +71,15 @@ def test_sync_stage_http_dependency_still_raises_http_exception():
     assert result.returncode != 0
     assert 'HTTPException' in result.stderr
     assert '503' in result.stderr
+
+
+def test_successful_sync_stage_check_does_not_import_the_web_framework():
+    result = _run(
+        'import os, sys;'
+        " os.environ['OMI_ENV_STAGE'] = 'prod';"
+        ' from utils.sync.stage import require_http_stage;'
+        ' require_http_stage();'
+        " print('fastapi' in sys.modules, 'pydantic' in sys.modules, 'starlette' in sys.modules)"
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'False False False', result.stdout
