@@ -5,6 +5,7 @@ sources, route sources and locked pydantic/langchain-core versions. No data read
 These aliases preserve stored work at deploy and rollback, not older semantics.
 """
 
+LEGACY_DEPENDENCY_VERSIONS = (('pydantic', '2.11.10'), ('langchain-core', '1.3.3'))
 LEGACY_ROUTING = 'f2b6c4c57af68c1e606b96e001a69919a5e34fb642126273209dff3d39ecb7b6'
 LEGACY_IMPLEMENTATIONS = {
     'notes': (

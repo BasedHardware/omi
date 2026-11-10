@@ -10,7 +10,8 @@ prompt text, output schema, or the deterministic shaping that feeds the prompt.
 per version and fails when they change without a bump, so a missed bump is a red
 test rather than stale notes in production.
 
-Model routing is hashed independently at runtime and always invalidates reuse.
+Model routing and installed pydantic/langchain-core versions are included
+independently at runtime and always invalidate reuse when they change.
 Do not bump for changes that cannot change the output (logging, metrics, client
 construction): those must not re-buy anything.
 """

@@ -3,8 +3,9 @@
 The digest lives here, not on the runtime path. A prompt edit must fail this
 test until the author bumps the version in ``config/llm_input_versions.py`` and
 records the new digest, because a missed bump would serve stale notes or
-memories for unchanged input. The runtime key is the version alone, so a deploy
-that touches unrelated code no longer re-buys unchanged input.
+memories for unchanged input. The runtime key combines that explicit version
+with routing and installed dependency versions; unrelated deploy edits do not
+re-buy unchanged input.
 """
 
 from __future__ import annotations

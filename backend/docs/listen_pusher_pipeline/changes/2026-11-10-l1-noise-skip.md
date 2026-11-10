@@ -32,3 +32,14 @@ wire payloads and deployment bindings are unchanged.
 ## Review dispositions (L8a)
 
 The independent EPISODE_COMPOSER_REUSE kill switch restores source-derived key writes and L1 admission. Both modes accept current stable keys and compatible pre-deploy source keys, so toggles do not buy unchanged eligible work. Historical aliases are pinned from main source history with identical prompt and routing sources and locked dependencies; changed inputs and unusable outputs still miss. Routing bytes independently invalidate stable keys. No backfill or forced gist regeneration. Normal gates, then watch exact-input misses/skips and memory yield; refactor-lead owns rollback.
+
+Installed `pydantic` and `langchain-core` versions are read once at import and
+included in both key modes. Historical aliases additionally require the exact
+recorded versions (`2.11.10` and `1.3.3`), preserving deploy reuse at today's
+locks. A future dependency bump deliberately invalidates prior checkpoints:
+on next processing, unchanged input needs one successful notes recomputation
+and one successful L1 recomputation if admitted, then reuses again. This is
+bounded to work actually reprocessed, with no proactive backfill; existing
+provider retries and concurrent processing can add calls before success is
+persisted. Regression tests cover both dependency upgrades, locked-version
+aliases, kill-switch flips and repeated processing after recomputation.
