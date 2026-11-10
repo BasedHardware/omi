@@ -122,6 +122,8 @@ env:
   # Prod stays '0' (off). Rollback: set back to '0'. Gate: dev mem p99 <75% and no kills over 30 min.
   - name: PUSHER_STORAGE_PCM_BUDGET_MB
     value: '512'
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

@@ -119,6 +119,8 @@ env:
   # Default off. 512 MiB is a proposed canary size, not enabled here.
   - name: PUSHER_STORAGE_PCM_BUDGET_MB
     value: '0'
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

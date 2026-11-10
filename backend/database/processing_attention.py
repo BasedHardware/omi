@@ -16,6 +16,7 @@ from database._client import db, run_transactional
 
 LIMIT = 100
 NON_RETRYABLE_ITEM_TTL = timedelta(days=7)
+PERMANENTLY_NON_RETRYABLE_FAILURE_CODES = frozenset({'recovery_structure_unavailable'})
 
 
 def non_retryable_expiry_enabled() -> bool:
@@ -24,7 +25,49 @@ def non_retryable_expiry_enabled() -> bool:
 
 def expired_non_retryable(item: dict[str, Any], now: datetime) -> bool:
     created_at = item.get('created_at')
-    return not item.get('retryable') and isinstance(created_at, datetime) and created_at <= now - NON_RETRYABLE_ITEM_TTL
+    if isinstance(created_at, str):
+        try:
+            created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        except ValueError:
+            return False
+    if not isinstance(created_at, datetime):
+        return False
+    created_at = (
+        created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at.astimezone(timezone.utc)
+    )
+    return (
+        item.get('failure_code') in PERMANENTLY_NON_RETRYABLE_FAILURE_CODES
+        and not item.get('retryable')
+        and item.get('retry', {}).get('state') != 'in_progress'
+        and created_at <= now - NON_RETRYABLE_ITEM_TTL
+    )
+
+
+def expire_in_transaction(transaction: Any, observed: Any, now: datetime) -> bool:
+    """Expire only the exact observed version; retries and deletes win over a stale poll."""
+    current = observed.reference.get(transaction=transaction)
+    item = current.to_dict() or {}
+    if (
+        not current.exists
+        or item != observed.to_dict()
+        or getattr(current, 'update_time', None) != getattr(observed, 'update_time', None)
+        or not item.get('active')
+        or not expired_non_retryable(item, now)
+    ):
+        return False
+    claim_ref = (
+        observed.reference.parent.parent.collection('conversations')
+        .document(item['conversation_id'])
+        .collection('processing_retry_claims')
+        .document(claim_id(item['conversation_id'], item['generation']))
+    )
+    operation = claim_ref.get(transaction=transaction).to_dict() or {}
+    if operation.get('state') == 'in_progress' or (
+        operation.get('state') == 'failed' and item.get('retry', {}).get('state') == 'failed'
+    ):
+        return False
+    transaction.update(observed.reference, {'active': False, 'expired_at': now, 'expiry_reason': 'non_retryable_ttl'})
+    return True
 
 
 def items_ref(uid: str) -> Any:
@@ -94,16 +137,15 @@ def list_items(uid: str, limit: int | None = None) -> list[dict[str, Any]]:
     expiry_enabled = non_retryable_expiry_enabled()
     now = now_utc()
     query = items_ref(uid).where(filter=FieldFilter('active', '==', True))
-    if limit is not None:
-        query = query.limit(limit)
     for snapshot in query.stream():
         item = snapshot.to_dict() or {}
-        conv = db.collection('users').document(uid).collection('conversations').document(item['conversation_id']).get()
+        conv_ref = db.collection('users').document(uid).collection('conversations').document(item['conversation_id'])
+        conv = conv_ref.get()
         row = conv.to_dict() if conv.exists else None
         if not unresolved(row):
             snapshot.reference.update({'active': False, 'resolved_at': datetime.now(timezone.utc)})
             continue
-        claim_ref = conv.reference.collection('processing_retry_claims').document(
+        claim_ref = conv_ref.collection('processing_retry_claims').document(
             claim_id(item['conversation_id'], item['generation'])
         )
         claim_snapshot = claim_ref.get()
@@ -113,12 +155,14 @@ def list_items(uid: str, limit: int | None = None) -> list[dict[str, Any]]:
                 item['retryable'] = True  # Repair items made permanently non-retryable by the old ledger.
             item['retry'] = {'state': operation['state'], 'operation_id': operation['operation_id']}
         if expiry_enabled and expired_non_retryable(item, now):
-            snapshot.reference.update({'active': False, 'expired_at': now, 'expiry_reason': 'non_retryable_ttl'})
-            continue
+            if run_transactional(db, firestore.transactional(expire_in_transaction), snapshot, now):
+                continue
         item['title'] = (row or {}).get('user_title') or ((row or {}).get('structured') or {}).get('title')
         item.pop('generation', None)
         item.pop('active', None)
         result.append(item)
+        if limit is not None and len(result) >= limit:
+            break
     return result
 
 
