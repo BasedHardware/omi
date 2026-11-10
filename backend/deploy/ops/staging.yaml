@@ -1,6 +1,7 @@
 # Staging ops values (B4), contract (i). Mirrors prod.yaml; the differences are
 # names (the `-staging` services and `staging-` queues in based-hardware-dev)
-# and the bounded backfill controller, which staging does not run.
+# and the bounded backfill controller, which staging does not run. Intentional
+# queue-capacity divergence: enrichment stays 50/25 and enrichment-fresh stays 5/2.
 # test_config_train.py asserts every prod key has a staging counterpart.
 schema: omi.ops/v1
 environment: staging
@@ -96,14 +97,14 @@ cloud_tasks:
     max_backoff: 60s
     log_sampling_ratio: 0.1
   staging-enrichment:
-    # Mirrors prod's enrichment queue (mirror test enforces it); create_queues.sh already made it.
+    # Intentional staging capacity: 50/25; prod's 300/25 live-drift reconciliation is prod-only.
     max_concurrent_dispatches: 50
     max_dispatches_per_second: 25
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
   staging-enrichment-fresh:
-    # Keep the reserved queue contract mirrored with production.
+    # Intentional staging capacity: 5/2; prod's permanent 30/10 catch-up setting is prod-only.
     max_concurrent_dispatches: 5
     max_dispatches_per_second: 2
     max_attempts: -1
