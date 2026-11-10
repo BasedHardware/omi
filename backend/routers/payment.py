@@ -45,7 +45,7 @@ from utils.billing_currency import (
     subscription_currency,
 )
 from utils.storefront_copy import format_money
-from utils.billing_flags import webhook_ledger_enabled
+from utils.billing_flags import payment_recovery_notification_enabled, webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
@@ -1161,7 +1161,8 @@ async def _schedule_payment_recovery_notification(
 ) -> None:
     """Schedule only after persistence; provider lookup failures remain webhook-retryable."""
     if (
-        not billing_owner_confirmed
+        not payment_recovery_notification_enabled()
+        or not billing_owner_confirmed
         or persisted_subscription.stripe_subscription_id != subscription_obj.get('id')
         or not billing_recovery.payment_recovery_transition(subscription_obj, previous_attributes)
     ):

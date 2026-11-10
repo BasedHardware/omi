@@ -336,6 +336,7 @@ def _recovery_event(status='past_due', previous_status='active', previous_invoic
 
 @pytest.fixture
 def recovery_lane(monkeypatch):
+    monkeypatch.delenv('PAYMENT_RECOVERY_NOTIFICATION_ENABLED', raising=False)
     state = SimpleNamespace(
         calls=[],
         notifications=[],
@@ -388,7 +389,7 @@ def recovery_lane(monkeypatch):
     return state
 
 
-def test_payment_recovery_push_is_scheduled_after_persistence(recovery_lane):
+def test_payment_recovery_push_defaults_on_and_is_scheduled_after_persistence(recovery_lane):
     async def run():
         tasks = BackgroundTasks()
         await payment._handle_stripe_event(_recovery_event(), tasks)
@@ -404,6 +405,23 @@ def test_payment_recovery_push_is_scheduled_after_persistence(recovery_lane):
                 'data': {'type': 'payment_issue', 'navigate_to': '/conversations'},
             }
         ]
+
+    asyncio.run(run())
+
+
+def test_payment_recovery_push_off_preserves_persistence_without_invoice_retrieval(recovery_lane, monkeypatch):
+    monkeypatch.setenv('PAYMENT_RECOVERY_NOTIFICATION_ENABLED', 'off')
+
+    async def run():
+        tasks = BackgroundTasks()
+        result = await payment._handle_stripe_event(_recovery_event(), tasks)
+
+        assert result == {'status': 'success'}
+        assert recovery_lane.current.plan == PlanType.basic
+        assert recovery_lane.current.stripe_subscription_id == 'sub-fixture'
+        assert recovery_lane.calls == [('write', 'user-fixture')]
+        await tasks()
+        assert recovery_lane.notifications == []
 
     asyncio.run(run())
 
