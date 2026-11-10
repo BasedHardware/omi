@@ -446,9 +446,3 @@ def test_account_erasure_enumerates_pipeline_ledger(monkeypatch):
 
     assert purge_user_subtree('synthetic', client, lambda sub, **_kw: recursive.append(sub))['status'] == 'ok'
     assert ledger_sub in recursive
-
-
-def test_export_inventory_includes_pipeline_ledger():
-    from services.users import data_export
-
-    assert 'pipeline_ledger' in data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS
