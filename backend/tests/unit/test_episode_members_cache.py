@@ -9,6 +9,7 @@ import pytest
 
 from utils.episodes import home_read
 from database.conversations import prepare_conversation_for_read
+from database.firestore_read_origin import current_read_origin, read_origin
 
 
 class Ref:
@@ -108,6 +109,40 @@ def test_shadow_bypasses_memo_without_republishing(memo, monkeypatch):
     assert store.calls[-1][1] == []
     metric.labels.assert_called_with(cache='episode_members', result='mismatch')
     assert read() == expected
+
+
+@pytest.mark.parametrize('fails', [False, True])
+def test_shadow_origin_is_scoped_to_fetch_and_snapshot_is_private(memo, monkeypatch, fails):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _, _ = memo
+    pending = []
+    metric = Mock()
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    origins = []
+    original = store.get_all
+
+    def get_all(refs, *, field_paths, **options):
+        origins.append(current_read_origin())
+        for snapshot in original(refs, field_paths=field_paths):
+            # Check lazy iteration as well as RPC creation.
+            assert current_read_origin() == origins[-1]
+            if fails and options:
+                raise RuntimeError('shadow failed')
+            yield snapshot
+
+    monkeypatch.setattr(store, 'get_all', get_all)
+    store.put('u1', 'a')
+    with read_origin('job:test_serving'):
+        read()
+        response = read()
+        response.clear()  # The retained raw cache snapshot is never caller-owned.
+        pending.pop()()
+        assert current_read_origin() == 'job:test_serving'
+    assert origins == ['job:test_serving', 'job:read_cache_shadow']
+    metric.labels.assert_called_once_with(cache='episode_members', result='error' if fails else 'match')
 
 
 def test_broken_shadow_observer_preserves_member_hit(memo, monkeypatch):

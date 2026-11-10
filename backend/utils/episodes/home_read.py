@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from contextlib import nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
@@ -27,6 +28,7 @@ from database import conversations, episodes
 from database._client import get_firestore_client
 from database.firestore_cache_metrics import record_request
 from database.firestore_retry import FIRESTORE_NO_RETRY
+from database.firestore_read_origin import read_origin
 from utils.read_cache_shadow import compare_hit
 from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc, idle_close_due
@@ -195,9 +197,12 @@ def _fetch_members(uid, ids, client, *, timeout=None):
                 raise TimeoutError('shadow read deadline')
             options = {'timeout': remaining, 'retry': FIRESTORE_NO_RETRY}
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
-        for snapshot in client.get_all(refs, field_paths=[] if deadline is not None else MEMBER_FIELDS, **options):
-            if snapshot.exists:
-                members[snapshot.id] = {} if deadline is not None else dict(snapshot.to_dict() or {}, id=snapshot.id)
+        with read_origin('job:read_cache_shadow') if deadline is not None else nullcontext():
+            for snapshot in client.get_all(refs, field_paths=[] if deadline is not None else MEMBER_FIELDS, **options):
+                if snapshot.exists:
+                    members[snapshot.id] = (
+                        {} if deadline is not None else dict(snapshot.to_dict() or {}, id=snapshot.id)
+                    )
         if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError('shadow read deadline')
     if deadline is not None:

@@ -46,7 +46,7 @@ def compare_hit(cache, cached, fetch, *, sample=None):
 
     The dedicated executor admits at most two outstanding comparisons per process
     and has no queue. Sampling and telemetry failures never escape to the reader.
-    Canonicalize before returning so caller mutations cannot change the baseline.
+    Callers pass private cache snapshots; returned responses are deep copies.
     """
     if cache not in {'usage_month', 'episode_members'}:
         return
@@ -59,12 +59,14 @@ def compare_hit(cache, cached, fetch, *, sample=None):
     try:
         if (sample or random.random)() >= min(rate, 1.0):
             return
-        expected = _canonical(cache, cached)
+        # Retain the raw private snapshot: callers cannot mutate it, and sorting
+        # or projecting it belongs entirely to the background worker.
 
         def compare():
             try:
                 from database.fsr_read_cache import fresh_reads
 
+                expected = _canonical(cache, cached)
                 with fresh_reads():
                     actual = _canonical(cache, fetch(READ_TIMEOUT_SECONDS))
                 agrees = (

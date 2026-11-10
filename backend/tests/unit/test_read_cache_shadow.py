@@ -69,12 +69,16 @@ def test_default_sampling_boundary_is_injectable(queued, monkeypatch):
     assert len(queued[0]) == 1
 
 
-def test_caller_mutation_does_not_change_comparison(queued):
-    cached = totals(1)
-    shadow.compare_hit('usage_month', cached, lambda timeout: totals(1), sample=lambda: 0)
-    cached['speech_seconds'] = 99
+@pytest.mark.parametrize('cache,cached', [('usage_month', totals(1)), ('episode_members', {'b': {}, 'a': {}})])
+def test_canonicalization_runs_only_in_worker_with_raw_snapshot(queued, monkeypatch, cache, cached):
+    canonical = Mock(wraps=shadow._canonical)
+    monkeypatch.setattr(shadow, '_canonical', canonical)
+    shadow.compare_hit(cache, cached, lambda timeout: cached, sample=lambda: 0)
+    canonical.assert_not_called()
     queued[0].pop()()
-    queued[1].labels.assert_called_once_with(cache='usage_month', result='match')
+    assert canonical.call_count == 2
+    assert canonical.call_args_list[0].args[1] is cached
+    queued[1].labels.assert_called_once_with(cache=cache, result='match')
 
 
 def test_admission_and_metric_errors_never_escape(queued, monkeypatch):
