@@ -388,7 +388,13 @@ _add(
 )
 
 # Authenticated pending-work projections use bounded, single-field owner queries.
-_add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
+_add(
+    DriverEntry(
+        'database.processing_attention.list_items',
+        base={'uid': UID},
+        domains={'limit': [None, 100], 'start_after': [None, 'doc-1']},
+    )
+)
 
 
 def _pending_owned_page(client, combo, trial):

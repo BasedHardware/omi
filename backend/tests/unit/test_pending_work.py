@@ -227,6 +227,8 @@ def attention_query(database, monkeypatch, ids):
         snapshots.append(snapshot)
     query = Mock()
     query.where.return_value = query
+    query.limit.return_value = query
+    query.start_after.return_value = query
     query.stream.return_value = snapshots
     query.document.side_effect = (
         database.collection('users').document(UID).collection('processing_attention_items').document
@@ -381,6 +383,25 @@ def test_attention_limit_is_after_expiry_filter(database, http_client, monkeypat
     monkeypatch.setattr(routes.sync_jobs, 'pending_sync_jobs', lambda uid: [])
     monkeypatch.setattr(routes, 'ownership_enabled', lambda uid: False)
     assert http_client.get('/v1/pending-work').json()['attention_unseen_count'] == 2
+
+
+def test_attention_zero_limit_returns_nothing(database, monkeypatch):
+    item_id, path = permanent_item(database)
+    attention_query(database, monkeypatch, [item_id])
+    assert store.list_items(UID, limit=0) == []
+    assert store.list_items(UID, limit=-1) == []
+    assert database.rows[path]['active'] is True
+    assert not any(tx.updates for tx in database.transactions)
+
+
+def test_attention_scan_is_bounded_and_paginates(database, monkeypatch):
+    item_id, _ = permanent_item(database)
+    attention_query(database, monkeypatch, [item_id])
+    query = store.items_ref(UID)
+    cursor = object()
+    assert store.list_items(UID, start_after=cursor) == []
+    query.limit.assert_called_once_with(store.SCAN_LIMIT)
+    query.start_after.assert_called_once_with(cursor)
 
 
 def test_pending_sync_excludes_terminal_missing_and_foreign(monkeypatch):
