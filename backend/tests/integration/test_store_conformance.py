@@ -582,6 +582,104 @@ def test_fresh_pending_returns_the_earliest_fresh_rows_in_any_state(h):
     assert [row['segment_id'] for row in h.store.fresh_pending(key, 10)] == ['b', 'e', 'a']
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monkeypatch, enabled):
+    from config.batch_pipeline import MERGE_POLL_STATES
+    from utils.batch_pipeline.merge import _fresh_pick
+
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    terminals = ('committed', 'dead', 'quarantined', 'privacy_blocked')
+    for state in (*terminals, *MERGE_POLL_STATES):
+        put_all(h, [_pending(h, state, capture_at=0.0 if state in terminals else 1.0, fresh_capture=True, state=state)])
+    key = owner_key(h.uid('o'))
+    rows = h.store.fresh_pending(key, 32)
+    expected = set(MERGE_POLL_STATES) | (set() if enabled else set(terminals))
+    assert {r['state'] for r in rows} == expected
+    assert h.store.run(lambda tx: tx.first_pending(key))['state'] == rows[0]['state']
+
+    # Isolate a decisionless allowance retry ahead of a completed fresh result.
+    for state in (*terminals, *MERGE_POLL_STATES):
+
+        def remove(tx):
+            current = tx.get('jobs', state)
+            tx.put('jobs', state, {**current, 'merge_pending': False})
+
+        h.store.run(remove)
+    put_all(
+        h,
+        [
+            _pending(
+                h,
+                'waiting',
+                capture_at=1.0,
+                state='retry',
+                fresh_capture=True,
+                available_at=10.0,
+                last_policy_hold={'reason': 'allowance_exhausted'},
+            ),
+            _pending(h, 'done', capture_at=2.0, state='result_ready', fresh_capture=True, ready_at=10.0),
+        ],
+    )
+    rows = h.store.fresh_pending(key, 32)
+    assert [r['segment_id'] for r in rows] == ['waiting', 'done']
+    assert h.store.run(lambda tx: tx.first_pending(key))['segment_id'] == 'waiting'
+    assert _fresh_pick(rows, 100, 300) == (None, None)
+    assert _fresh_pick(rows, 311, 300)[1]['segment_ids'] == ['waiting']
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, monkeypatch, enabled):
+    from utils.batch_pipeline.contracts import WorkResult
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.retry_policy import quarantine_job
+
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    queue = Scheduler(h.store)
+    uid = h.uid('o')
+    assert queue.enqueue(WorkItem('recover-me', uid, 1, 'gs://synthetic/input', 30, Priority.FRESH), 100)
+    lease = queue.pull(101)[0]
+    assert queue.defer('recover-me', lease.token, 102, 30, held_reason='allowance_exhausted')
+    assert h.store.due('retry', 133, 10) == ['recover-me']
+    assert queue.recover(133) == 1
+    lease = queue.pull(134)[0]
+    assert queue.complete(WorkResult('recover-me', 'gs://synthetic/result'), lease.token, 135)
+    assert OrderedMerge(h.store).commit_next(uid, 136) is not None
+    assert h.store.run(lambda tx: tx.get('jobs', 'recover-me'))['state'] == 'committed'
+
+    assert queue.enqueue(WorkItem('fail-me', uid, 2, 'gs://synthetic/input2', 30, Priority.FRESH), 140)
+
+    def quarantine(tx):
+        current = tx.get('jobs', 'fail-me')
+        quarantine_job(tx, current, 141, 'worker_failed')
+        tx.put('jobs', 'fail-me', current)
+
+    h.store.run(quarantine)
+    assert h.store.run(lambda tx: tx.get('jobs', 'fail-me'))['state'] == 'quarantined'
+
+    # Retained terminal rows remain directly addressable for fenced redrive.
+    def expire(tx):
+        current = tx.get('jobs', 'fail-me')
+        tx.put(
+            'jobs',
+            'fail-me',
+            {**current, 'state': 'dead', 'merge_pending': True, 'dead_letter_reason': 'synthetic_failure'},
+        )
+
+    h.store.run(expire)
+    assert h.store.run(lambda tx: tx.get('jobs', 'fail-me'))['state'] == 'dead'
+    assert h.store.run(lambda tx: queue.redrive_in_transaction(tx, tx.get('jobs', 'fail-me'), 142, operator=True))
+    assert h.store.run(lambda tx: tx.get('jobs', 'fail-me'))['state'] == 'ready'
+
+    assert queue.enqueue(WorkItem('fenced', h.uid('p'), 3, 'gs://synthetic/private', 30, Priority.FRESH), 150)
+    assert 'fenced' in {lease.item.segment_id for lease in queue.pull(151, 2)}
+    h.customer.block_privacy(h.uid('p'))
+    assert h.store.quarantine_fenced('fenced', 152)
+    fenced = h.store.run(lambda tx: tx.get('jobs', 'fenced'))
+    assert fenced['state'] == 'privacy_blocked' and fenced['merge_pending'] is True
+    pending = h.store.run(lambda tx: tx.first_pending(fenced['owner_key']))
+    assert (pending is None) if enabled else pending['segment_id'] == 'fenced'
+
+
 def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h):
     held = owner_key(h.uid('o'))
     put_all(

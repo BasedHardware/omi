@@ -17,7 +17,12 @@ from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
 from config.firestore_read_levers import lever_enabled
-from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
+from config.batch_pipeline import (
+    contention_retry_enabled,
+    control_candidate_fanout,
+    held_poll_skip_enabled,
+    MERGE_POLL_STATES,
+)
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed
@@ -445,15 +450,12 @@ def projection_successor(client: Any, namespace: str, owner_key: str, previous: 
 
 
 def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
-    docs = list(
-        client.collection(f'{namespace}_jobs')
-        .where('owner_key', '==', owner_key)
-        .where('merge_pending', '==', True)
-        .order_by('capture_at')
-        .order_by('segment_id')
-        .limit(1)
-        .stream(transaction=transaction)
+    query = (
+        client.collection(f'{namespace}_jobs').where('owner_key', '==', owner_key).where('merge_pending', '==', True)
     )
+    if held_poll_skip_enabled():
+        query = query.where('state', 'in', list(MERGE_POLL_STATES))
+    docs = list(query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
     return docs[0].to_dict() if docs else None
 
 
@@ -515,16 +517,15 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
 
     Non-transactional discovery hint: it takes no transactional query lock.
     """
-    docs = (
+    query = (
         client.collection(f'{namespace}_jobs')
         .where('owner_key', '==', owner_key)
         .where('merge_pending', '==', True)
         .where('fresh_capture', '==', True)
-        .order_by('capture_at')
-        .order_by('segment_id')
-        .limit(max(1, min(limit, 32)))
-        .stream()
     )
+    if held_poll_skip_enabled():
+        query = query.where('state', 'in', list(MERGE_POLL_STATES))
+    docs = query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
     return [doc.to_dict() for doc in docs]
 
 

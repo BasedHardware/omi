@@ -29,6 +29,8 @@ from copy import deepcopy
 import hashlib
 from typing import Any, Callable, TypeVar
 
+from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_STATES
+
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
     BatchPrivacyBlocked,
@@ -337,9 +339,12 @@ class SimStore:
 
     # -- Query helpers --------------------------------------------------
     def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
+        skip = not ready_only and held_poll_skip_enabled()
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
+            if skip and row.get('state') not in MERGE_POLL_STATES:
+                continue
             if ready_only and row.get('state') != 'result_ready':
                 continue
             candidate = (row['capture_at'], segment_id)
@@ -407,10 +412,12 @@ class SimStore:
         return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        skip = held_poll_skip_enabled()
         rows = sorted(
             (row['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
+            and (not skip or row.get('state') in MERGE_POLL_STATES)
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 

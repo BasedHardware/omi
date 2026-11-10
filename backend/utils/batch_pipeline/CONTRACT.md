@@ -623,3 +623,21 @@ extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
 No enablement is included: the lead owns a separate canary and expansion
 proposal after review. Rollback: set each switch to `false`; logs stop and the
 companion series disappears on collection. No data migration or cleanup.
+
+## Terminal-only merge polling (dark)
+
+`BATCH_HELD_POLL_SKIP_ENABLED` defaults off. On, `fresh_pending` and
+`first_pending` use the existing `state` field to skip the queue-dispositioned
+states in `batch_pipeline_store.is_queue_dispositioned`: committed, dead,
+quarantined and privacy_blocked. Dead held-expiry/input-expiry and GPU privacy
+fences can retain merge_pending=true; this filter changes discovery, never
+their durable transition or recovery route. Held ready/retry/vendor_held heads
+remain in capture order, including decisionless rows. Fresh-head waiting is
+unchanged. The simulator and Postgres adapter implement the same gated contract.
+
+Add any new nonterminal job state to `config.batch_pipeline.MERGE_POLL_STATES`
+alongside its writer. This positive indexed filter covers current supported
+states; unknown future states require that coordinated change before enablement.
+Build both declared poll indexes (prod and dev) before enabling. Off restores
+the previous query and read sequence. This switch does not replace another flag.
+Oldest, held SLA sampling and stale-vendor watchdog queries remain independent.

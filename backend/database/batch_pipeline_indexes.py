@@ -12,6 +12,24 @@ def _desc(field):
 
 
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
+    # Dark terminal-only fresh probe. first_pending reuses the merge_ready index.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_fresh_pending_nonterminal',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (
+                _asc('owner_key'),
+                _asc('merge_pending'),
+                _asc('fresh_capture'),
+                _asc('state'),
+                _asc('capture_at'),
+                _asc('segment_id'),
+                _asc('__name__'),
+            ),
+        )
+        for stage in ('prod', 'dev')
+    ),
     # Shared by result-ready draining and oldest-first record-pending repair.
     # Moved from sync_pipeline_indexes; retain its existing registry identity.
     *(
