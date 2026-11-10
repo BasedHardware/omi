@@ -45,3 +45,9 @@ presentation. HOME_STEP_PROJECTION=off in the backend restores prior placement v
 the additive home_processing_today response field. Pending response limit remains
 100; loaded Home rows supplement it in Activity. Live-account query latency and
 physical-device behavior were not measured on this headless host. No merge or deploy.
+
+Compatibility follow-up (2026-11-10): 135 focused backend tests and 91 focused
+Flutter tests pass. An unfinished stored job remains in pending work after its
+Home presentation deadline. Stale supplemental candidates do not trigger history
+pagination; pagination remains only for the existing live-owner exclusion.
+The four TypeScript clients were regenerated for the additive optional field.

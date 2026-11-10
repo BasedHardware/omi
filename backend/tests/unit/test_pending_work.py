@@ -847,3 +847,22 @@ def test_pending_exposes_existing_home_kill_switch(http_client, monkeypatch, set
     monkeypatch.setattr(store, 'pending_conversations', lambda *a, **k: [])
     monkeypatch.setattr(routes.sync_jobs, 'pending_sync_jobs', lambda *a, **k: [])
     assert http_client.get('/v1/pending-work').json()['home_processing_today'] is expected
+
+
+def test_pending_keeps_unfinished_jobs_past_home_deadline_and_bounds_stale_candidates(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'on')
+    old = dict(ROW, status='processing', summary_retryable=False)
+    queued = SimpleNamespace(id='queued', to_dict=lambda: old)
+    stale = [SimpleNamespace(id=str(i), to_dict=lambda: dict(ROW, status='completed')) for i in range(store.LIMIT)]
+    query = Mock()
+    query.where.return_value = query
+    query.limit.return_value = query
+    # Stale summary-debt candidates must not cause an account-history walk.
+    query.stream.side_effect = [[queued], [], stale]
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value = query
+    monkeypatch.setattr(store, 'db', client)
+    result = store.pending_conversations(UID)
+    assert [item['id'] for item in result] == ['conv:queued']
+    assert query.stream.call_count == 3
+    query.start_after.assert_not_called()

@@ -33,6 +33,13 @@ List<ServerConversation> pastProcessingConversations({
     }
   }
   for (final conversation in conversations) {
+    // An expired Home wait is not a terminal job. Keep the server's pending
+    // link until completion or the attention ledger takes ownership.
+    if (byId.containsKey(conversation.id) &&
+        homeStepOf(conversation) == HomeStep.failed &&
+        (conversation.status == ConversationStatus.processing || conversation.status == ConversationStatus.merging)) {
+      continue;
+    }
     byId[conversation.id] = conversation;
   }
   // An episode can still owe its composed notes after every member finished.

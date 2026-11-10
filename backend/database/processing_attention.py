@@ -321,8 +321,8 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
     """Filter-independent pending Home rows, without deciding the viewer's local day.
 
     Single-field indexes bound each candidate page; no account-history scan.
-    Debt timestamps are cleared by successful summary processing. Classification
-    rechecks completion, noise and expiry before a candidate reaches Activity.
+    Debt timestamps are cleared by successful summary processing. Supplemental
+    captures use Home classification; its deadline never completes a stored job.
     """
     collection = db.collection('users').document(uid).collection('conversations')
     today_only = home_step_projection_enabled()
@@ -344,6 +344,7 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
         query = collection.where(filter=candidate_filter).limit(LIMIT)
         while True:
             page = list(query.stream())
+            owned_excluded = False
             for snapshot in page:
                 if snapshot.id in seen:
                     continue
@@ -351,13 +352,21 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
                 row = snapshot.to_dict() or {}
                 excluded = bool(row.get('deleted') or row.get('is_deleted') or row.get('discarded'))
                 step = home_step.classify(row) if today_only and not excluded else None
+                # Home's age bound is presentation, not job completion. Preserve
+                # the existing pending-work consumers until the job is terminal.
+                stored_pending = row.get('status') in {'processing', 'merging'} and row.get(
+                    'finalization_status'
+                ) not in {'dead_letter', 'completed'}
                 excluded = excluded or (
-                    step not in {home_step.TRANSCRIBING, home_step.WRITING_NOTES}
+                    not stored_pending and step not in {home_step.TRANSCRIBING, home_step.WRITING_NOTES}
                     if today_only
                     else row.get('finalization_status') in {'dead_letter', 'completed'}
                 )
                 phase_shadow.observe('processing_attention', row, not excluded)
-                if excluded or (exclude is not None and exclude(dict(row, id=snapshot.id))):
+                if excluded:
+                    continue
+                if exclude is not None and exclude(dict(row, id=snapshot.id)):
+                    owned_excluded = True
                     continue
                 result.append(
                     {
@@ -377,7 +386,9 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
                 )
             if len(result) >= LIMIT:
                 return result[:LIMIT]
-            if len(page) < LIMIT:
+            # Keep the existing owner-gap pagination, but never page through
+            # history just because stale candidates failed Home classification.
+            if len(page) < LIMIT or not owned_excluded:
                 break
             query = query.start_after(page[-1])
     return result

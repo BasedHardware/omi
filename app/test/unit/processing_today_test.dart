@@ -34,6 +34,14 @@ void main() {
           id: 'conv:old', kind: 'conversation', state: 'transcribing', conversationIds: ['old'], startedAt: at.toUtc())
     ];
     expect(pastProcessingConversations(pending: pending, conversations: [], now: midnight).single.id, 'old');
+    final expiredWait = ServerConversation(
+        id: 'old',
+        createdAt: at,
+        startedAt: at,
+        structured: Structured('', ''),
+        status: ConversationStatus.processing,
+        homeStep: 'failed');
+    expect(pastProcessingConversations(pending: pending, conversations: [expiredWait], now: midnight).single.id, 'old');
     expect(pastProcessingConversations(pending: pending, conversations: [row('old', at, 'ready')], now: midnight),
         isEmpty);
     expect(pastProcessingConversations(pending: pending, conversations: [], attentionIds: {'old'}, now: midnight),
