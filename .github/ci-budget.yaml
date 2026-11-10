@@ -2168,6 +2168,7 @@
         "sdk-cpp",
         "sdk-dart",
         "sdk-rust",
+        "spraay-pay-ci",
         "web-checks",
         "windows-preflight-portability"
       ],
@@ -2292,6 +2293,25 @@
         "linux": 1
       },
       "runs_on": "ubuntu-latest"
+    },
+    "main_nightly_full.yml/spraay-pay-ci": {
+      "budget_p50_minutes": 5,
+      "display_name": "spraay-pay-ci",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/spraay-pay-ci.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
     },
     "main_nightly_full.yml/web-checks": {
       "budget_p50_minutes": 5,
@@ -3133,6 +3153,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "spraay-pay-ci.yml/tests": {
+      "budget_p50_minutes": 5,
+      "display_name": "Linux / Python 3.12",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Single standard-Ubuntu job; the offline plugin suite (all x402 calls mocked) runs in seconds, so the 5-minute p50 is a conservative placeholder.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -6184,6 +6222,41 @@
           "paths": [
             "sdks/rust/**",
             ".github/workflows/sdk-rust.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "spraay-pay-ci.yml": {
+      "name": "Spraay Pay Plugin",
+      "owner": "CI maintainers",
+      "rationale": "Path-filtered to plugins/spraay-pay/**; runs only when the Spraay Pay plugin or this workflow changes.",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "plugins/spraay-pay/**",
+            ".github/workflows/spraay-pay-ci.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "plugins/spraay-pay/**",
+            ".github/workflows/spraay-pay-ci.yml"
           ]
         },
         "workflow_call": {

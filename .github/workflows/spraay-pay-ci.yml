@@ -1,0 +1,64 @@
+name: Spraay Pay Plugin
+
+on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/spraay-pay/**'
+      - '.github/workflows/spraay-pay-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/spraay-pay/**'
+      - '.github/workflows/spraay-pay-ci.yml'
+
+concurrency:
+  # PRs cancel their own older runs; main pushes let the running suite finish.
+  group: spraay-pay-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: plugins/spraay-pay
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  tests:
+    name: Linux / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: plugins/spraay-pay/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # No wallet key or network access is needed: the tests mock every x402 call.
+      - name: Run tests
+        run: python -m pytest -v -o asyncio_mode=auto
