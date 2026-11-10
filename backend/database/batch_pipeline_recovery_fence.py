@@ -7,7 +7,7 @@ verify held grants without importing the recovery provider/projection stack.
 from typing import Any
 
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
-from database.sync_ledger import batch_projection_ledger_owner_matches
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.sync.capture import chunk_identity
 
 
