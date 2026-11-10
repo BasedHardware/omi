@@ -397,6 +397,7 @@ def test_lease_dead_plan_and_shadow_dispositions(source, monkeypatch, mode, disp
 def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, monkeypatch):
 
     store, client, _ = source
+    client.rows[('users', 'synthetic')] = {'private_cloud_sync_enabled': True}
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
