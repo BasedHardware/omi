@@ -9160,7 +9160,7 @@ A clip's self-created singleton never proves relevance. Episode API projections
 hide episodes whose members are all discarded, deleted or absorbed, including
 when a relevance decision arrives after the episode poll cache was populated.
 Retained episode members additionally expose `overview`, `home_step` (the existing
-Home classifier), and `title_provenance`; no transcript is added to this payload.
+Home classifier), `title_provenance` and `is_locked`; no transcript is added to this payload.
 Detail reads retain short clips that the Home projection omits.
 This visibility rule also applies with occasion relevance disabled. Episode
 activity tracks retained members separately; a later discard removes its clock

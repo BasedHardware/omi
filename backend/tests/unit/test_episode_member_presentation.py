@@ -32,6 +32,7 @@ def episode():
         ({'summary_blocked_reason': 'content_below_floor'}, 'noise'),
         ({'summary_blocked_reason': 'content_below_floor', 'starred': True}, 'ready'),
         ({'summary_retryable': True}, 'failed'),
+        ({'is_locked': True}, 'ready'),
     ],
 )
 def test_projection_reuses_classifier_and_preserves_gist(monkeypatch, changes, step):
@@ -49,6 +50,7 @@ def test_projection_reuses_classifier_and_preserves_gist(monkeypatch, changes, s
     wire = home_read.project_episode('synthetic-user', episode(), members={'conversation-1': row})
     member = Episode.model_validate(wire).members[0]
     assert member.home_step == step
+    assert member.is_locked is bool(row.get('is_locked'))
     assert member.overview == row['structured'].get('overview', '')
     assert member.title_provenance == row['structured'].get('title_provenance')
     assert row == original

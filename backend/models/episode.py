@@ -66,6 +66,7 @@ class EpisodeMember(BaseModel):
     finished_at: Optional[datetime] = None
     status: str = 'completed'
     overview: str = ''
+    is_locked: bool = False
     home_step: Optional[str] = None
     title_provenance: Optional[str] = None
 

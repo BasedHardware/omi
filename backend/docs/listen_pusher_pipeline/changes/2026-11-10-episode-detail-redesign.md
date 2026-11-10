@@ -2,7 +2,8 @@
 
 David approved PR #25022 via relay-cl1 c3ee4c: full notes expanded, no Summary label,
 follow-ups add canonical tasks. Member metadata carries the existing Home classifier
-and structured overview, before neutralizing minimum titles. No new classifier,
+and structured overview, before neutralizing minimum titles. The existing lock bit
+also travels with members so a direct detail read retains locked-row behavior. No new classifier,
 query, index or task store. Contract: [episode projection](../../listen_pusher_pipeline.mdx).
 
 The client reads full retained membership on opening detail so Home's below-floor

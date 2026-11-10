@@ -33,7 +33,14 @@ void main() {
             'started_at': at,
             'last_activity_at': at,
             'members': [
-              {'id': 'ready', 'title': 'Plans', 'overview': 'Reuse the trays.', 'home_step': 'ready', 'started_at': at},
+              {
+                'id': 'ready',
+                'title': 'Plans',
+                'overview': 'Reuse the trays.',
+                'home_step': 'ready',
+                'is_locked': true,
+                'started_at': at
+              },
               {
                 'id': 'noise',
                 'title': 'Recording',
@@ -49,6 +56,7 @@ void main() {
     final episode = (result as ApiSuccess<Episode>).data;
     expect(episode.members[0].structured.overview, 'Reuse the trays.');
     expect(episode.members[0].homeStep, 'ready');
+    expect(episode.members[0].isLocked, isTrue);
     expect(episode.members[1].homeStep, 'noise');
     expect(episode.members[1].structured.titleProvenance, 'server_minimum');
     expect(episode.members[2].homeStep, isNull);

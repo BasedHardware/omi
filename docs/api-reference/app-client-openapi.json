@@ -16561,6 +16561,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
           "overview": {
             "default": "",
             "title": "Overview",
