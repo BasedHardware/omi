@@ -1342,12 +1342,18 @@ def _load_sync_router_for_fast_path():
         ctx = contextvars.copy_context()
         return executor.submit(ctx.run, fn, *args, **kwargs)
 
+    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
     mock_executors = MagicMock()
     mock_executors.critical_executor = MagicMock()
     mock_executors.sync_executor = MagicMock()
     mock_executors.postprocess_executor = MagicMock()
     mock_executors.storage_executor = MagicMock()
     mock_executors.submit_with_context = _submit_with_context
+    # Imported helpers also await this API. Installing the async contract before
+    # router import keeps their executor seam identical to the router's seam.
+    mock_executors.run_blocking = _passthrough_run_blocking
     saved_modules['utils.executors'] = sys.modules.get('utils.executors')
     sys.modules['utils.executors'] = mock_executors
 
@@ -1553,9 +1559,6 @@ def _load_sync_router_for_fast_path():
         and isinstance(payload, dict)
         and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
     )
-
-    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
 
     module.run_blocking = _passthrough_run_blocking
     module._retrieve_file_paths_v2 = MagicMock(return_value=['syncing/test-uid/job-1/file.bin'])
