@@ -363,6 +363,34 @@ def test_finish_receipt_makes_repeated_completion_read_only(monkeypatch, late):
     assert metrics.LATE_APPEND._value.get() == counter + int(late)
 
 
+def test_begin_after_accepted_finish_replays_without_fencing_seal(monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = custody_client({PATH: {**ROW, 'record_upload_sessions': {}}})
+    session = 'custody:retry-job'
+    job = {'state': 'record_pending', 'record_content_id': 'synthetic', 'owner_id': 'synthetic'}
+
+    assert database.begin('synthetic', 'record', session, firestore_client=client)
+    assert seal_refusal(job, client.rows[PATH]) == 'upload_pending'
+    assert not database.finish('synthetic', 'record', session, accepted=True, firestore_client=client)
+    assert not client.rows[PATH]['record_upload_sessions']
+    assert seal_refusal(job, client.rows[PATH]) is None
+    before = deepcopy(client.rows)
+    counter = metrics.LATE_APPEND._value.get()
+
+    assert database.begin('synthetic', 'record', session, firestore_client=client)
+    assert not client.transactions[-1].has_written
+    assert not database.finish('synthetic', 'record', session, accepted=True, firestore_client=client)
+    assert not client.transactions[-1].has_written
+    assert client.rows == before
+    assert not client.rows[PATH]['record_upload_sessions']
+    assert client.rows[PATH]['record_upload_revision'] == 8
+    assert seal_refusal(job, client.rows[PATH]) is None
+    assert metrics.LATE_APPEND._value.get() == counter
+
+
 @pytest.mark.parametrize('transition_after_begin', [False, True])
 @pytest.mark.parametrize('seal', ['open', 'closed', 'partial'])
 async def test_finish_commit_succeeded_but_response_lost_does_not_recover_twice(

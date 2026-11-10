@@ -74,6 +74,10 @@ def begin(uid, cid, session, *, firestore_client=None):
             }
         ):
             return False
+        previous = _receipt(ref, session).get(transaction=tx).to_dict() or {}
+        if previous.get('accepted'):
+            # Keep finish's receipt replay path without reacquiring its fence.
+            return True
         sessions = dict(row.get('record_upload_sessions') or {})
         if session in sessions:
             return True
