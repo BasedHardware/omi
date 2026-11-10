@@ -4,6 +4,22 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  record_token_lease_mode:
+    description: 'Caller-supplied record token lease mode'
+    required: false
+    default: 'off'
+  record_token_lease_mode_serve_percent:
+    description: 'Caller-supplied record token lease serve percentage'
+    required: false
+    default: '0'
+  record_token_lease_seconds:
+    description: 'Caller-supplied record token lease duration in seconds'
+    required: false
+    default: '3600'
+  record_token_lease_deployed_at:
+    description: 'Caller-supplied pinned record token lease release epoch'
+    required: false
+    default: '0'
   backend_sync_memory:
     description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/5Gi/8Gi trial values; dev callers keep 8Gi'
     required: false
@@ -115,10 +131,10 @@ runs:
     - name: Bind shared record token lease rollout inputs
       shell: bash
       env:
-        RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
-        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
-        RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
-        RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
+        RECORD_TOKEN_LEASE_MODE: ${{ inputs.record_token_lease_mode }}
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ inputs.record_token_lease_mode_serve_percent }}
+        RECORD_TOKEN_LEASE_SECONDS: ${{ inputs.record_token_lease_seconds }}
+        RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ inputs.record_token_lease_deployed_at }}
       run: |
         python3 - <<'PYTHON'
         import math, os

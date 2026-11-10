@@ -538,3 +538,38 @@ async def test_background_failure_keeps_application_classification_when_receiver
         if not handler.done():
             handler.cancel()
         await asyncio.gather(handler, return_exceptions=True)
+
+
+async def test_lease_failure_keeps_tail_unstored_and_unacknowledged(inline_session, remote, monkeypatch):
+    from database import record_audio
+
+    client, path, barrier, projected = inline_session
+    client.rows[('users', 'owner')] = {'private_cloud_sync_enabled': True}
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    begin = barrier.begin_recording
+
+    async def expired_begin(cid):
+        await begin(cid)
+        barrier.lease_renewed_at[cid] -= 7200
+
+    monkeypatch.setattr(barrier, 'begin_recording', expired_begin)
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', MagicMock(side_effect=OSError('unavailable')))
+    windows = []
+    retained = pusher.RetainedPcmWindow
+
+    def retain(*args):
+        window = retained(*args)
+        windows.append(window)
+        return window
+
+    monkeypatch.setattr(pusher, 'RetainedPcmWindow', retain)
+    pcm = b'\x01\x00' * 160
+    sock = Socket(_audio_frames('conversation', [pcm]))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
+    assert not _sent_receipts(sock) and not projected
+    assert len(windows) == 1 and bytes(windows[0].payload) == pcm
+    assert windows[0].frames
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path].get('record_audio_closed')

@@ -970,7 +970,8 @@ async def _run_websocket_util_trigger(
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
-                await record_barrier.renew_recording(conv_id)
+                if not await record_barrier.renew_recording(conv_id):
+                    raise RuntimeError('record lease unavailable; requeue frame batch')
                 late_append = conv_id in record_barrier.late_appends
                 upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
                 if batch.get('span'):
@@ -1341,7 +1342,8 @@ async def _run_websocket_util_trigger(
                 window.frames.clear()
 
             if window.conversation_id and window.payload:
-                await record_barrier.renew_recording(window.conversation_id)
+                if not await record_barrier.renew_recording(window.conversation_id):
+                    return None  # Keep this window and its WAL unacknowledged.
                 late_append = window.conversation_id in record_barrier.late_appends
             try:
                 return await _commit_durable_audio_window(

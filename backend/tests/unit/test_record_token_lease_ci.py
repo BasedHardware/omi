@@ -77,13 +77,24 @@ def test_standalone_and_stack_deploys_bind_the_same_rollout_inputs():
             assert job['environment']
             index, actual = next((i, step) for i, step in enumerate(steps) if step.get('name') == binding['name'])
             assert index < min(writes)
-            assert actual['env'] == binding['env'] and actual['run'] == binding['run']
+            assert actual['run'] == binding['run']
             for key in keys:
                 assert 'vars.' + key in actual['env'][key]
+                name = key.lower()
+                assert binding['env'][key] == '${{ inputs.' + name + ' }}'
+                assert (
+                    action['inputs'][name]['default']
+                    == {
+                        'RECORD_TOKEN_LEASE_MODE': 'off',
+                        'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '0',
+                        'RECORD_TOKEN_LEASE_SECONDS': '3600',
+                        'RECORD_TOKEN_LEASE_DEPLOYED_AT': '0',
+                    }[key]
+                )
         assert writers, 'standalone workflow no longer exercises the runtime ConfigMap writer'
 
 
-@pytest.mark.parametrize('mode,epoch', [('off', '0'), ('shadow', '2000000000'), ('serve', '2000000000')])
+@pytest.mark.parametrize('mode,epoch', [(None, None), ('off', '0'), ('shadow', '2000000000'), ('serve', '2000000000')])
 def test_shared_binding_materializes_the_validated_vector(monkeypatch, tmp_path, mode, epoch):
     action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
     step = next(
@@ -95,6 +106,8 @@ def test_shared_binding_materializes_the_validated_vector(monkeypatch, tmp_path,
         'RECORD_TOKEN_LEASE_SECONDS': '3600',
         'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch,
     }
+    if mode is None:
+        values = {key: action['inputs'][key.lower()]['default'] for key in values}
     for key, value in values.items():
         monkeypatch.setenv(key, value)
     target = tmp_path / 'github-env'

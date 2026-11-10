@@ -3216,7 +3216,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
-      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus \u2014 use Cloud Logging",
+      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus — use Cloud Logging",
       "threshold": "0.2 (20% enqueue uncertainty)",
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "3",
@@ -7034,7 +7034,7 @@
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "5",
-      "summary": "Parakeet receiving zero traffic for 10+ minutes \u2014 possible ILB connectivity or config issue (previous incident: https\u2192http misconfiguration caused 8h outage)",
+      "summary": "Parakeet receiving zero traffic for 10+ minutes — possible ILB connectivity or config issue (previous incident: https→http misconfiguration caused 8h outage)",
       "threshold": "< 0.001 rps (effectively zero)",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi speech processing production service path.",
@@ -7163,7 +7163,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "17",
-      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes \u2014 transcription pipeline may be down",
+      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes — transcription pipeline may be down",
       "threshold": "< 0.001 rps (effectively zero)",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi live transcription production service path.",
@@ -7292,7 +7292,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
+      "summary": "Backend-listen has zero ready pods — all replicas are down or failing health checks",
       "threshold": "< 1 ready pod",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi live transcription production service path.",
@@ -7421,7 +7421,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "86",
-      "summary": "Pusher has zero active WebSocket connections for 10+ minutes \u2014 live transcription pipeline broken",
+      "summary": "Pusher has zero active WebSocket connections for 10+ minutes — live transcription pipeline broken",
       "threshold": "< 1 active connection",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi live transcription production service path.",
@@ -7550,7 +7550,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "82",
-      "summary": "Backend-listen active WS connections dropped below 10 for 5+ minutes \u2014 clients disconnecting, likely backend-listen failure (3-day baseline: min=52, avg=218, max=365)",
+      "summary": "Backend-listen active WS connections dropped below 10 for 5+ minutes — clients disconnecting, likely backend-listen failure (3-day baseline: min=52, avg=218, max=365)",
       "threshold": "< 10 active connections",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi live transcription production service path.",
@@ -7702,7 +7702,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "3",
-      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes \u2014 API may be unreachable",
+      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes — API may be unreachable",
       "threshold": "< 0.001 rps (effectively zero)",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi API production service path.",
@@ -7832,7 +7832,7 @@
     "annotations": {
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "severity": "ticket",
-      "summary": "Dependency health \u2014 elevated LLM gateway fallback rate, not a product outage by itself",
+      "summary": "Dependency health — elevated LLM gateway fallback rate, not a product outage by itself",
       "threshold": "0.05 (5% fallback share over 30m)",
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "5",
@@ -13659,7 +13659,7 @@
       "threshold": "exhausted / listen-accepted > 0.35 with >= 50 accepted sockets in 5m, for 10m",
       "user_impact": "Live transcription is failing for a large minority of sessions; clients reconnect and audio falls to offline sync. This is the standing 16-25% degradation becoming worse, not yet the 2026-09-19 outage.",
       "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge — increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
       "safe_next_action": "Confirm the ratio on Resilience / Fallbacks panel 15, then inspect which to_mode is exhausting (panel 16) before changing provider credentials or capacity.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
       "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
@@ -13813,7 +13813,7 @@
       "threshold": "exhausted / listen-accepted > 0.60 with >= 50 accepted sockets in 5m, for 5m",
       "user_impact": "Most live sessions die in initialize_stt(); clients reconnect every ~35s and conversations fragment. This is the 2026-09-19 04:40Z failure class (82-89%), separated from the 16-25% standing baseline.",
       "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge — increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
       "safe_next_action": "Confirm panel 15 is above 0.60, then check Deepgram/Parakeet fallback-leg health on panel 16 and the live-STT failure-ratio panel before rolling credentials or disabling a provider.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
       "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
@@ -13967,8 +13967,8 @@
       "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus replay 2026-10-13 (30m steps, 10 days, after excluding unavailable and retired legs): one real episode, to_mode=parakeet 10-06 13:43 to 10-07 04:13 (capacity_full exhaustion during the L4 stockout), plus two single samples.",
       "safe_next_action": "Identify the to_mode on panel 16. For budget exhaustion see panel 18 and raise the vendor cap. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
-      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m \u2014 after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus replay 2026-10-13 confirmed (see verification).",
-      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window \u2014 that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus replay 2026-10-13 confirmed (see verification)."
+      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus replay 2026-10-13 confirmed (see verification).",
+      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus replay 2026-10-13 confirmed (see verification)."
     },
     "labels": {
       "alert_identity": "omi-stt-fallback-leg-dead",
@@ -14480,7 +14480,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Parakeet canary capacity_full \u2014 roll allocation back if sustained",
+    "title": "Parakeet canary capacity_full — roll allocation back if sustained",
     "condition": "D",
     "data": [
       {
@@ -15511,7 +15511,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Modulate failing \u2014 traffic on Soniox",
+    "title": "Modulate failing — traffic on Soniox",
     "condition": "D",
     "data": [
       {
@@ -15624,7 +15624,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Modulate failing \u2014 traffic on Soniox. Watch Soniox availability and provider outcome SLI.",
+      "summary": "Modulate failing — traffic on Soniox. Watch Soniox availability and provider outcome SLI.",
       "user_impact": "Modulate connection failures are sending live sessions to Soniox; paid fallback volume and cost may rise.",
       "scope": "backend-listen provider connection outcomes only; bounded provider/outcome labels.",
       "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
@@ -16429,7 +16429,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Soniox balance exhausted \u2014 top up now",
+    "title": "Soniox balance exhausted — top up now",
     "condition": "D",
     "data": [
       {
@@ -16522,7 +16522,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Soniox balance exhausted \u2014 top up now",
+      "summary": "Soniox balance exhausted — top up now",
       "user_impact": "Soniox refused a live stream because its organization balance or project budget is exhausted; sessions depending on Soniox may lose transcription.",
       "scope": "backend-listen omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}; one or more closes in the rolling 5m window.",
       "verification": "Local rule contract only; no production Prometheus evaluation or notification delivery performed.",
@@ -24855,7 +24855,7 @@
       "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for fifteen minutes.",
       "user_impact": "Late batch transcripts may go unnoticed while a bounded scan is saturated or the worker sample is unavailable.",
       "scope": "Production queue freshness and oldest/retry NaN samples. A saturated exempt prefix is incomplete, never proven late work or a healthy empty queue.",
-      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05\u201314:59Z; the prior 120s arm falsely paged between healthy samples.",
+      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05–14:59Z; the prior 120s arm falsely paged between healthy samples.",
       "safe_next_action": "Classify the saturated prefix and real overdue work; retain all held audio and custody. Do not delete rows, reset paid intents, or waive allowance to silence the alarm.",
       "runbook": "backend/docs/runbooks/batch-queue-safety.md",
       "threshold": "$A > 0 for 5m; stale means at least 900s",

@@ -15,6 +15,7 @@ from tests.unit.test_record_seal_cluster_repair_deploy import documents
 from tests.unit.test_record_seal_sweeper_deploy import render
 from utils.observability import firestore_probe_export as probe
 from config import record_seal_rules as lease
+from scripts.cross_service_checks import staging as staging_check
 
 
 def containers(docs):
@@ -30,6 +31,9 @@ def production_render_inputs(monkeypatch):
     manifest = root / 'backend/deploy/runtime_env.yaml'
     renderer = runpy.run_path(str(root / 'backend/scripts/render_backend_runtime_env.py'))
     parsed = renderer['_load_yaml'](manifest)
+    composer = staging_check._load_composer(root)
+    staging = composer.compose_staging(inputs={'STAGING_REDIS_HOST': '10.0.0.7'})
+    return_inputs = (root, manifest, renderer, staging)
     # Match the canonical renderer suite: parse real source during setup, then
     # exercise main and all emitted artifacts in the guarded test call.
     monkeypatch.setitem(renderer['main'].__globals__, '_load_yaml', lambda path: parsed)
@@ -48,7 +52,7 @@ def production_render_inputs(monkeypatch):
     for key, entry in parsed['environments']['prod']['gke']['config_map']['entries'].items():
         if entry.get('source') == 'environment':
             monkeypatch.setenv(key, str(entry.get('default', 'synthetic-gke-value')))
-    return root, manifest, renderer
+    return return_inputs
 
 
 @pytest.mark.parametrize('frame_seconds', ['1800', '3600', '7200'])
@@ -56,7 +60,7 @@ def test_custody_lease_covers_the_rendered_sync_request_timeout(
     monkeypatch, tmp_path, production_render_inputs, frame_seconds
 ):
     # Actual production renderer outputs and action consumption; no cloud CLI.
-    root, manifest, renderer = production_render_inputs
+    root, manifest, renderer, staging = production_render_inputs
     workflow_output = tmp_path / 'github-output'
     state_output = tmp_path / 'state.json'
     monkeypatch.setenv('GITHUB_OUTPUT', str(workflow_output))
@@ -184,7 +188,7 @@ def test_prod_active_repair_scrapes_age_and_release_counters_without_enabling_id
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, production_render_inputs, mode):
-    root, manifest, renderer = production_render_inputs
+    root, manifest, renderer, staging = production_render_inputs
     expected = {
         'RECORD_TOKEN_LEASE_MODE': mode,
         'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '10',
@@ -193,6 +197,17 @@ def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, 
     }
     for key, value in expected.items():
         monkeypatch.setenv(key, value)
+    expected_staging = {
+        'RECORD_TOKEN_LEASE_MODE': 'off',
+        'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '0',
+        'RECORD_TOKEN_LEASE_SECONDS': '3600',
+        'RECORD_TOKEN_LEASE_DEPLOYED_AT': '1794268800',
+    }
+    assert {key for key in staging_check.STAGING_DIFF_ALLOWLIST if key.startswith('RECORD_TOKEN_LEASE_')} == set(
+        expected_staging
+    )
+    for service in staging['cloud_run']['services'].values():
+        assert {key: service['env'][key]['value'] for key in expected_staging} == expected_staging
     parsed = renderer['_load_yaml'](manifest)
     state = renderer['_render_cloud_run_state'](parsed['environments']['prod'])
     sync_env = {entry['name']: entry.get('value') for entry in state['services']['backend-sync']['env']}
@@ -201,6 +216,18 @@ def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, 
     monkeypatch.setitem(config_renderer['config_map_entries'].__globals__, '_load_yaml', lambda path: parsed)
     name, config = config_renderer['config_map_entries']('prod', manifest)
     assert {key: config[key] for key in expected} == expected
+    if mode == 'off':
+        assert_producer_chart_refs(root, name, expected)
+    # Repair deliberately has separately typed values.
+    docs = documents(
+        '--set', f'recordTokenLease.mode={mode},recordTokenLease.servePercent=10,recordTokenLease.deployedAt=2000000000'
+    )
+    for container in containers(docs):
+        env = {entry['name']: entry.get('value') for entry in container['env']}
+        assert {key: env[key] for key in expected} == expected
+
+
+def assert_producer_chart_refs(root, name, expected):
     for chart, values in [
         ('pusher', 'prod_omi_pusher_values.yaml'),
         ('backend-listen', 'prod_omi_backend_listen_values.yaml'),
@@ -229,11 +256,3 @@ def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, 
         for key in expected:
             assert env[key]['valueFrom']['configMapKeyRef'] == {'name': name, 'key': key}
             assert 'value' not in env[key]
-    # Repair deliberately has separately typed values. The release procedure
-    # supplies the same vector only after every producer has rolled.
-    docs = documents(
-        '--set', f'recordTokenLease.mode={mode},recordTokenLease.servePercent=10,recordTokenLease.deployedAt=2000000000'
-    )
-    for container in containers(docs):
-        env = {entry['name']: entry.get('value') for entry in container['env']}
-        assert {key: env[key] for key in expected} == expected

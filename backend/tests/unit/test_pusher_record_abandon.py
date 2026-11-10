@@ -456,3 +456,22 @@ async def test_projection_after_partial_clear_restores_its_exact_producer(record
     assert records.rows[PATH]['record_upload_revision'] == revision + 1
     await barrier.finish_recording('record')
     assert not records.rows[PATH].get('record_audio_closed')  # Partial is never a complete seal.
+
+
+async def test_failed_renewal_retains_fence_across_rollback(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    barrier.lease_renewed_at['record'] -= 7200
+    real = record_audio.renew_record_token_lease
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', Mock(side_effect=OSError('unavailable')))
+    try:
+        assert not await barrier.renew_recording('record')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+        assert not await barrier.renew_recording('record')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        monkeypatch.setattr(record_audio, 'renew_record_token_lease', real)
+        assert await barrier.renew_recording('record')
+    finally:
+        barrier._forget_lease('record')
