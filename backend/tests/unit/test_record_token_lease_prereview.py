@@ -281,3 +281,27 @@ def test_active_repair_promotion_does_not_depend_on_enabling_the_idle_worker():
     assert repair['enabled'] and repair['runtimeEnabled'] and not repair['suspend']
     assert repair['mode'] == 'apply' and repair['serverFlags']
     assert worker['runtimeEnabled'] is False and worker['serverFlags'] == {}
+
+
+def test_custody_heartbeat_cannot_renew_a_previously_mislabelled_pusher(world):
+    # Older manifest code overwrote signal_source even on a pod-owned token.
+    # Identity, not that mutable label alone, distinguishes a custody fence.
+    frame = {**POD, 'last_signal_at': NOW - 7200, 'lease_expires_at': NOW - 3600, 'signal_source': 'custody_append'}
+    fence = {
+        'pod': '',
+        'process_started_at': NOW - 2000,
+        'last_signal_at': NOW - 2000,
+        'lease_expires_at': NOW + 1900,
+        'signal_source': 'custody_append',
+    }
+    world.rows[PATH].update(
+        record_audio_closed=False,
+        record_audio_partial=None,
+        record_upload_sessions={'old-frame': frame, 'custody:live': fence},
+    )
+    assert record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append', firestore_client=world)
+    tokens = world.rows[PATH]['record_upload_sessions']
+    assert tokens['old-frame'] == frame
+    assert tokens['custody:live']['last_signal_at'] == NOW
+    assert tokens['custody:live']['lease_expires_at'] == NOW + lease.custody_token_lease_seconds()
+    assert world.rows[PATH]['record_upload_revision'] == 7

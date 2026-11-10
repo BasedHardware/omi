@@ -234,7 +234,9 @@ def renew_record_token_lease(
             for key, token in sessions.items()
             if isinstance(token, dict)
             and (session is None or key == session)
-            and (source != 'custody_append' or token.get('signal_source') == 'custody_append')
+            and (
+                source != 'custody_append' or token.get('signal_source') == 'custody_append' and token.get('pod') == ''
+            )
         ]
         if source == 'custody_append':
             late |= any(record_seal_rules.token_lease_lapsed(token, now, row=row) for token in identified)
@@ -273,7 +275,9 @@ def renew_record_token_lease(
                 continue
             if not isinstance(token, dict):
                 continue
-            if source == 'custody_append' and token.get('signal_source') != 'custody_append':
+            if source == 'custody_append' and (
+                token.get('signal_source') != 'custody_append' or token.get('pod') != ''
+            ):
                 continue
             clocks = record_seal_rules.token_lease_clocks(token, row=row)
             lapsed = record_seal_rules.token_lease_lapsed(token, now, row=row)
