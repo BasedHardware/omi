@@ -6,11 +6,12 @@ calendar events alone never discharge the summary obligation.
 
 from __future__ import annotations
 
+import math
 import time
 import os
 from copy import deepcopy
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, cast
 from utils.conversations import phase_shadow
 
@@ -20,7 +21,6 @@ from prometheus_client import Counter, Gauge, Histogram
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
-from utils.enrichment.age_gate import expired
 
 Row = dict[str, Any]
 PROJECTION_DEBT_ENV = 'SUMMARY_PROJECTION_DEBT_ENABLED'
@@ -166,6 +166,45 @@ def projection_debt_enabled() -> bool:
     return default_on(PROJECTION_DEBT_ENV)
 
 
+def _past_age_gate(created_at: Any, *, now: float) -> bool:
+    """Mirror ``utils.enrichment.age_gate.expired`` for the created-at clock.
+
+    Importing ``age_gate`` here would pull its lazy parking import into the
+    batch worker's static source closure, and that path reaches a testing-only
+    module the worker image does not ship. The cutoff and config are the same.
+    """
+    from config import enrichment as enrichment_config
+
+    try:
+        hours = float(enrichment_config.max_age_hours())
+        seconds = hours * 3600
+        if hours < 0 or not math.isfinite(seconds):
+            seconds = 72 * 3600
+    except ValueError:
+        seconds = 72 * 3600
+    if seconds == 0:
+        return False
+    cutoff = now - seconds
+    value = created_at
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        value = value.timestamp()
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            value = parsed.replace(tzinfo=timezone.utc).timestamp() if parsed.tzinfo is None else parsed.timestamp()
+        except ValueError:
+            return False
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+        and value < cutoff
+    )
+
+
 def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     """Stamp first-summary debt when a batch projection lands a transcript on an untitled row.
 
@@ -228,7 +267,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     if _refusal(candidate) is not None:
         return False
     write['summary_title_provenance'] = 'server_minimum'
-    if expired({'first_pending_at': current}, write.get('created_at'), now=current):
+    if _past_age_gate(write.get('created_at'), now=current):
         return False
     write['summary_first_pending_at'] = current
     write['summary_due_at'] = current + deadline_seconds()
