@@ -52,6 +52,7 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_SINGLE_MEMBER_COMPOSE_ENV = 'EPISODE_SINGLE_MEMBER_COMPOSE'
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -159,6 +160,15 @@ def episode_composer_enabled() -> bool:
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_single_member_compose_enabled() -> bool:
+    """Default-on: a one-conversation episode is built from that conversation's notes in code.
+
+    Off restores the paid composer for single-member episodes. The shortcut never
+    calls a model, so it has no lease, backoff or settle window.
+    """
+    return modes_default_on(EPISODE_SINGLE_MEMBER_COMPOSE_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:

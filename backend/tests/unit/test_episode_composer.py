@@ -118,6 +118,8 @@ def _reply(**over):
 def store(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
+    # This file pins the paid composer path; the one-conversation shortcut has its own file.
+    monkeypatch.setenv(config.EPISODE_SINGLE_MEMBER_COMPOSE_ENV, 'false')
     monkeypatch.setattr(composer, '_deferred', {})
     monkeypatch.setattr(composer, '_foreground', set())
     monkeypatch.setattr(composer, '_recent', {})
