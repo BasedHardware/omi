@@ -142,6 +142,9 @@ env:
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
     value: 'true'
+  # Quiet-check empty exit; mirrors backend-listen (co-host env parity, lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
