@@ -12,8 +12,9 @@
   whether the user's client was seen (``omi_episode_live_sessions_total``)
 - episodes API calls by client channel and admission outcome
   (``omi_episode_client_requests_total``)
-- closed-episode composer runs by outcome and their latency
-  (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
+- closed-episode composer runs by outcome and trigger, their latency, and the
+  paid model calls inside them (``omi_episode_compose_total``,
+  ``omi_episode_compose_seconds``, ``omi_episode_compose_calls_total``)
 - Home attach-gap read observations (``omi_episode_home_attach_gap_total``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
@@ -206,18 +207,30 @@ COMPOSE_OUTCOMES = frozenset(
         'error',
     }
 )
+# What asked for the compose. Bounded, never a uid: a close, a Home/page read, a
+# member finalize, or the settle timer draining deferred work.
+COMPOSE_TRIGGERS = frozenset({'close', 'read', 'member_final', 'settle'})
+# Paid model calls inside a compose: the run's trigger, plus the one repair retry.
+COMPOSE_CALL_TRIGGERS = COMPOSE_TRIGGERS | {'repair'}
+COMPOSE_CALL_OUTCOMES = frozenset({'ok', 'parse_error', 'no_sections', 'error'})
 EPISODE_COMPOSE_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_total',
-    'Closed-episode composer runs by outcome. Never labeled by uid.',
-    ['outcome'],
+    'Closed-episode composer runs by outcome and trigger. Never labeled by uid.',
+    ['outcome', 'trigger'],
 )
 EPISODE_COMPOSE_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_compose_seconds',
-    'Wall time of a composer run, including its model call.',
-    ['outcome'],
+    'Wall time of a composer run, including its model call, by outcome and trigger.',
+    ['outcome', 'trigger'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
+)
+EPISODE_COMPOSE_CALLS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_calls_total',
+    'Paid composer model calls by trigger (close|read|member_final|settle|repair) and outcome. Never labeled by uid.',
+    ['trigger', 'outcome'],
 )
 COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
 EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
@@ -280,8 +293,14 @@ def _prime() -> None:
             EPISODE_CLOSED_MEMBERS.labels(arm=arm)
             EPISODE_CLOSED_SPAN_SECONDS.labels(arm=arm)
         for outcome in COMPOSE_OUTCOMES:
-            EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
-            EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+            for trigger in COMPOSE_TRIGGERS:
+                EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger)
+                EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger)
+        for trigger in COMPOSE_CALL_TRIGGERS:
+            for outcome in COMPOSE_CALL_OUTCOMES:
+                EPISODE_COMPOSE_CALLS_TOTAL.labels(
+                    trigger=_label(trigger, COMPOSE_CALL_TRIGGERS), outcome=_label(outcome, COMPOSE_CALL_OUTCOMES)
+                )
         for reason in COMPOSE_SKIP_REASONS:
             EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
         for outcome in HOME_MEMBER_OUTCOMES:
@@ -399,10 +418,22 @@ def record_compose_trigger_skipped(reason: str) -> None:
         pass
 
 
-def record_compose(outcome: str, seconds: float) -> None:
+def record_compose(outcome: str, seconds: float, trigger: str = 'close') -> None:
     try:
-        EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
-        EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
+        outcome_label = _label(outcome, COMPOSE_OUTCOMES)
+        trigger_label = _label(trigger, COMPOSE_TRIGGERS)
+        EPISODE_COMPOSE_TOTAL.labels(outcome=outcome_label, trigger=trigger_label).inc()
+        EPISODE_COMPOSE_SECONDS.labels(outcome=outcome_label, trigger=trigger_label).observe(max(0.0, seconds))
+    except Exception:
+        pass
+
+
+def record_compose_call(trigger: str, outcome: str) -> None:
+    """One paid composer model call, including the repair retry."""
+    try:
+        EPISODE_COMPOSE_CALLS_TOTAL.labels(
+            trigger=_label(trigger, COMPOSE_CALL_TRIGGERS), outcome=_label(outcome, COMPOSE_CALL_OUTCOMES)
+        ).inc()
     except Exception:
         pass
 
