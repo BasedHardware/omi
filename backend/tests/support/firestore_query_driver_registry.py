@@ -3930,6 +3930,13 @@ _add(
             'after': [
                 None,
                 {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
+                {
+                    'phase': 'newest',
+                    'window': 0,
+                    'pending': None,
+                    'due': T0.timestamp(),
+                    'path': 'users/synthetic/conversations/c',
+                },
                 {'due': T0.timestamp(), 'pending': T0.timestamp() - 60, 'path': 'users/synthetic/conversations/c'},
                 {
                     'due': T0.timestamp() - 300000,

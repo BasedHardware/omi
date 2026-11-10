@@ -258,7 +258,7 @@ def test_repair_counter_is_declared_for_production_scraping():
     assert metric.name + '_total' in inventory['declared_metrics']
 
 
-@pytest.mark.parametrize('hours', ['72', '1', '0'])
+@pytest.mark.parametrize('hours', ['72', '1'])
 @pytest.mark.parametrize('phase', ['near_expiry', 'newest'])
 @pytest.mark.parametrize('cursor_kind', ['legacy', 'expired', 'current', 'wrong_phase', 'wrong_window'])
 def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase, cursor_kind):
@@ -282,9 +282,6 @@ def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase
     client = RecordingFirestore()
     with install_recorder(client), client.recording_context('database.summary_debt_queries.due_conversations', {}):
         due_conversations(now=now, phase=phase, limit=1000, after=after, firestore_client=client)
-    if not window and phase == 'near_expiry':
-        assert not client.shapes
-        return
     shape = client.shapes[0]
     assert shape.limit == 500
     filters = {(f.field, f.operator, f.value) for f in shape.filters}
@@ -294,13 +291,39 @@ def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase
         ('summary_due_at', 'ASCENDING'),
         ('__name__', 'ASCENDING'),
     )
-    if window:
-        assert ('summary_first_pending_at', '>=', now - window) in filters
-        assert (
-            'summary_first_pending_at',
-            '<=' if phase == 'near_expiry' else '>',
-            now - window + flags.REPAIR_NEAR_EXPIRY_SECONDS,
-        ) in filters
-    else:
-        assert len(filters) == 1
-    assert shape.uses_cursors is (cursor_kind == 'current' or (not window and cursor_kind == 'expired'))
+    assert ('summary_first_pending_at', '>=', now - window) in filters
+    assert (
+        'summary_first_pending_at',
+        '<=' if phase == 'near_expiry' else '>',
+        now - window + flags.REPAIR_NEAR_EXPIRY_SECONDS,
+    ) in filters
+    assert shape.uses_cursors is (cursor_kind == 'current')
+
+
+@pytest.mark.parametrize('cursor_kind', ['legacy', 'gated', 'old_disabled_phase'])
+def test_disabled_gate_scans_and_admits_missing_pending_with_legacy_query(monkeypatch, cursor_kind):
+    from services import summary_debt_repair as repair
+    from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    cursor = {'due': 219, 'path': 'users/synthetic/conversations/previous'}
+    if cursor_kind != 'legacy':
+        cursor.update(version=2, pending=100, phase='newest', window=72 * 3600 if cursor_kind == 'gated' else 0)
+    client = RecordingFirestore({repair.CURSOR: cursor})
+    row = {**debt(), 'summary_due_at': 220}
+    del row['summary_first_pending_at']
+    snapshot = client.snapshot('users/synthetic/conversations/c', row)
+    client.queue_results([snapshot])
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    admitted = []
+    monkeypatch.setattr(repair, 'redrive', lambda *args, **kwargs: admitted.append(args[2]) or True)
+    with install_recorder(client):
+        counts = repair.tick(now=220, client=client)
+    assert counts == {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0}
+    assert admitted == ['c']
+    assert len(client.shapes) == 1  # No expiry-phase query when the gate is off.
+    shape = client.shapes[0]
+    assert [(f.field, f.operator, f.value) for f in shape.filters] == [('summary_due_at', '<=', 220)]
+    assert shape.orders == (('summary_due_at', 'ASCENDING'), ('__name__', 'ASCENDING'))
+    assert shape.uses_cursors is (cursor_kind == 'legacy')

@@ -31,14 +31,18 @@ def due_conversations(
         query = query.where(
             filter=firestore.FieldFilter('summary_first_pending_at', '<=' if phase == 'near_expiry' else '>', boundary)
         )
-    direction = firestore.Query.ASCENDING if phase == 'near_expiry' else firestore.Query.DESCENDING
-    query = (
-        query.order_by('summary_first_pending_at', direction=direction).order_by('summary_due_at').order_by('__name__')
-    )
-    if after and after.get('phase') == phase and after.get('window') == window and after.get('path'):
+        direction = firestore.Query.ASCENDING if phase == 'near_expiry' else firestore.Query.DESCENDING
+        query = query.order_by('summary_first_pending_at', direction=direction)
+    query = query.order_by('summary_due_at').order_by('__name__')
+    if not window:
+        # Preserve the legacy due-only order and cursor, including debt with
+        # no pending timestamp. A pending-time cursor belongs to another order.
+        if after and after.get('path') and isinstance(after.get('due'), (float, int)) and after.get('pending') is None:
+            query = query.start_after({'summary_due_at': after['due'], '__name__': client.document(after['path'])})
+    elif after and after.get('phase') == phase and after.get('window') == window and after.get('path'):
         pending, due = timestamp(after.get('pending')), timestamp(after.get('due'))
         in_band = pending is not None and (
-            not window or (cutoff <= pending <= boundary if phase == 'near_expiry' else pending > boundary)
+            cutoff <= pending <= boundary if phase == 'near_expiry' else pending > boundary
         )
         if in_band and due is not None:
             query = query.start_after(

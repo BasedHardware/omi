@@ -476,7 +476,7 @@ def test_window_cursor_paginates_equal_timestamps_and_resets_on_mode_changes(deb
         legacy = {'due': 220, 'path': first.reference.path}
         assert (
             repair.due_conversations(now=220, limit=1, after=legacy, firestore_client=client)[0].reference
-            == first.reference
+            == second.reference
         )
         monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
         assert (
@@ -486,6 +486,35 @@ def test_window_cursor_paginates_equal_timestamps_and_resets_on_mode_changes(deb
     finally:
         for added in refs:
             added.delete()
+
+
+@pytest.mark.parametrize('cursor_kind', ['legacy', 'old_disabled_phase'])
+def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(debt_store, monkeypatch, cursor_kind):
+    client, uid, tasks, ref, row = debt_store
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 1)
+    missing = ref.parent.document('missing-pending')
+    candidate = {**row, 'summary_due_at': 219}
+    del candidate['summary_first_pending_at']
+    missing.set(candidate)
+    cursor = {'due': 218, 'path': ref.path}
+    if cursor_kind == 'old_disabled_phase':
+        cursor = {'version': 2, 'phases': {'newest': {**cursor, 'phase': 'newest', 'window': 0, 'pending': 100}}}
+    client.document(repair.CURSOR).set(cursor)
+    try:
+        counts = repair.tick(now=220, client=client)
+        assert counts == {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0}
+        obligation = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, missing.id)).get().to_dict()
+        assert obligation['first_pending_at'] == obligation['summary_deadline_at'] == obligation['due_at'] == 219
+        assert missing.get().to_dict() == candidate
+        progress = client.document(repair.CURSOR).get().to_dict()
+        assert progress['path'] == missing.path and progress['due'] == 219 and progress['pending'] is None
+        assert progress['phases'] == {}
+        counts = repair.tick(now=340, client=client)
+        assert counts['scanned'] == counts['admitted'] == 1 and counts['errors'] == 0
+        assert client.document(repair.CURSOR).get().to_dict()['path'] == ref.path
+    finally:
+        missing.delete()
 
 
 def test_newest_phase_orders_pending_desc_then_due_and_name(debt_store, monkeypatch):

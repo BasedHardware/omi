@@ -76,7 +76,10 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
                 # matching dormant outbox in this same admission transaction.
                 old = {**old, 'summary_blocked_reason': None, 'summary_empty_failures': 0}
             new, _ = operation(old)
-            new['first_pending_at'] = min(new['first_pending_at'], row['summary_first_pending_at'])
+            # With the age gate off, legacy due-only debt may lack pending
+            # metadata. Its existing due time conservatively bounds the wake.
+            pending = row['summary_first_pending_at'] if max_age_seconds() else row.get('summary_first_pending_at', due)
+            new['first_pending_at'] = min(new['first_pending_at'], pending)
             new['summary_deadline_at'] = min(new.get('summary_deadline_at', due), due)
             new['due_at'] = min(new['due_at'], due)
             new['language'] = row.get('language') or (old.get('language') if old else None) or 'en'
@@ -139,6 +142,11 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     # Versioned nested cursors coexist with the legacy flat fields. An old
     # ASC cursor must never be reused for the new DESC phase.
     progress: Row = dict(cursor.get('phases') or {}) if cursor.get('version') == 2 else {}
+    window = max_age_seconds()
+    if not window:
+        # Gate-off pagination retains the legacy flat due/name cursor. Never
+        # reinterpret the newer pending-time phase cursor in this order.
+        progress = {'newest': cursor if cursor.get('pending') is None else None}
     attempts = 0
     owner_attempts: dict[str, int] = {}
     overdue = 0
@@ -220,7 +228,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 'window': max_age_seconds(),
                 'path': tail.reference.path,
                 'due': row.get('summary_due_at'),
-                'pending': row.get('summary_first_pending_at'),
+                'pending': row.get('summary_first_pending_at') if window else None,
             }
         if last is not None and (deferred or not exhausted):
             row = last.to_dict() or {}
@@ -229,7 +237,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 'window': max_age_seconds(),
                 'path': last.reference.path,
                 'due': row.get('summary_due_at'),
-                'pending': row.get('summary_first_pending_at'),
+                'pending': row.get('summary_first_pending_at') if window else None,
             }
         elif exhausted and not deferred:
             progress[phase] = None
@@ -250,9 +258,9 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             {
                 'lease_until': 0,
                 'version': 2,
-                'phases': progress,
-                'path': None,
-                'due': None,
+                'phases': progress if window else {},
+                'path': (progress.get('newest') or {}).get('path') if not window else None,
+                'due': (progress.get('newest') or {}).get('due') if not window else None,
                 'pending': None,
             },
         )

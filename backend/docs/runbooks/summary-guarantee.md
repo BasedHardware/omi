@@ -78,7 +78,9 @@ by default** per winning tick shared across two phases. First scan pending times
 oldest-first; then scan the rest of the window newest-first. The named margin is
 five intervals (600 seconds), allowing up to 40 admission attempts before expiry
 at the default cap and configured cadence. This is headroom, not a guarantee
-under overload or blocked admissions. With the age gate disabled there is only the newest phase.
+under overload or blocked admissions. With the age gate disabled, preserve the
+legacy due-time/name order and flat cursor, including due rows with no pending
+timestamp; admission uses their existing due time as the pending-time fallback.
 Both order by due time then document name to break pending-time ties.
 
 Version 2 of the same cursor document stores independent `near_expiry` and
