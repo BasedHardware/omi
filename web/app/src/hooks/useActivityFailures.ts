@@ -11,6 +11,7 @@ export function useActivityFailures(
 ) {
   const identity = useRef(owner);
   const removed = useRef(new Set<string>());
+  const settled = useRef(new Map<string, Set<Conversation>>());
   const blocked = useRef<{ home: Conversation[]; search: Conversation[] } | null>(null);
   const [known, setKnown] = useState<Conversation[]>([]);
   useEffect(() => {
@@ -18,6 +19,7 @@ export function useActivityFailures(
       identity.current = owner;
       blocked.current = { home, search };
       removed.current.clear();
+      settled.current.clear();
       setKnown([]);
       return;
     }
@@ -28,6 +30,9 @@ export function useActivityFailures(
     setKnown((previous) => {
       const byId = new Map(previous.map((row) => [row.id, row]));
       for (const row of incoming) {
+        // A retry can resolve an off-page row while the old loaded arrays remain.
+        // Ignore those snapshots, but allow a fresh failure from a later read.
+        if (settled.current.get(row.id)?.has(row)) continue;
         if (isFailedConversation(row) && !row.discarded && !removed.current.has(row.id))
           byId.set(row.id, row);
         else byId.delete(row.id);
@@ -43,5 +48,16 @@ export function useActivityFailures(
     ids.forEach((id) => removed.current.add(id));
     setKnown((rows) => rows.filter((row) => !removed.current.has(row.id)));
   }, []);
-  return { failures: identity.current === owner ? known : [], forget };
+  const resolveRetry = useCallback(
+    (id: string) => {
+      if (identity.current !== owner) return;
+      settled.current.set(
+        id,
+        new Set([...known, ...home, ...search].filter((row) => row.id === id)),
+      );
+      setKnown((rows) => rows.filter((row) => row.id !== id));
+    },
+    [known, home, search, owner],
+  );
+  return { failures: identity.current === owner ? known : [], forget, resolveRetry };
 }

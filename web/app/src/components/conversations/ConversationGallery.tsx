@@ -16,6 +16,7 @@ interface ConversationGalleryProps {
   onRecapClick: (recap: DailySummary) => void;
   onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
   onConversationUpdate?: (conversation: Conversation) => void;
+  onRetryResolved?: (id: string) => void;
   isSelectionMode?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
@@ -37,6 +38,7 @@ export function ConversationGallery({
   onRecapClick,
   onStarToggle,
   onConversationUpdate,
+  onRetryResolved,
   isSelectionMode = false,
   selectedIds,
   onSelect,
@@ -120,6 +122,7 @@ export function ConversationGallery({
                   onClick={() => onConversationClick(item.conversation)}
                   onStarToggle={onStarToggle}
                   onConversationUpdate={onConversationUpdate}
+                  onRetryResolved={onRetryResolved}
                   isSelectionMode={isSelectionMode}
                   isChecked={selectedIds?.has(item.id) ?? false}
                   onSelect={onSelect}

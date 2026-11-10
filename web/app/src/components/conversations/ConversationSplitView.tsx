@@ -5,7 +5,7 @@ import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarDays, CheckSquare, Search as SearchIcon, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { conversationsForSurface } from '@/lib/conversationHome';
+import { conversationsForSurface, isFailedConversation } from '@/lib/conversationHome';
 import { useConversations } from '@/hooks/useConversations';
 import { useActivityFailures } from '@/hooks/useActivityFailures';
 import { useAttentionItems } from '@/hooks/useAttentionItems';
@@ -315,13 +315,13 @@ export function ConversationSplitView() {
     };
   }, [user?.uid]);
 
-  const { failures: knownFailures, forget: forgetFailures } = useActivityFailures(
-    conversations,
-    searchResults,
-    user?.uid,
-  );
+  const {
+    failures: knownFailures,
+    forget: forgetFailures,
+    resolveRetry,
+  } = useActivityFailures(conversations, searchResults, user?.uid);
 
-  const attention = useAttentionItems(failurePlacement, user?.uid);
+  const attention = useAttentionItems(failurePlacement, user?.uid, resolveRetry);
 
   // The Starred list is fetched starred-only, but search results (and the previous
   // tab's page while that fetch is in flight) are not, so keep filtering here.
@@ -443,6 +443,7 @@ export function ConversationSplitView() {
   // detail only if it still belongs to this conversation, then reload the feed.
   const handleRetryUpdate = useCallback(
     (updated: Conversation) => {
+      if (!isFailedConversation(updated)) resolveRetry(updated.id);
       replaceConversation(updated);
       replaceSearchConversation(updated);
       const activeSelection = selectionRef.current;
@@ -459,6 +460,7 @@ export function ConversationSplitView() {
       performSearch,
       replaceConversation,
       replaceSearchConversation,
+      resolveRetry,
     ],
   );
 
@@ -987,6 +989,7 @@ export function ConversationSplitView() {
                 onRecapClick={handleRecapClick}
                 onStarToggle={handleStarToggle}
                 onConversationUpdate={handleRetryUpdate}
+                onRetryResolved={failurePlacement ? resolveRetry : undefined}
                 isSelectionMode={isSelectionMode}
                 selectedIds={selectedIds}
                 onSelect={toggleSelection}

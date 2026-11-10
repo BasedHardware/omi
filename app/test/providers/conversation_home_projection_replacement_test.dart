@@ -122,6 +122,24 @@ void main() {
           isEmpty);
     });
   }
+  test('off-page search retry updates shared processing state without a loaded row', () {
+    final provider = ConversationProvider(isSignedIn: () => false)..searchedConversations = [row(step: 'failed')];
+    addTearDown(provider.dispose);
+    // Search has moved to a different page by the time retry returns.
+    provider.searchedConversations.clear();
+    provider.applyConversationReprocessResult(row(status: ConversationStatus.processing));
+    expect(provider.processingConversations.single.homeStep, isNull);
+    expect(
+        failedActivityConversations(
+          pending: [],
+          conversations: [
+            ...provider.searchedConversations,
+            ...provider.processingConversations,
+            ...provider.conversations
+          ],
+        ),
+        isEmpty);
+  });
   test('fresh completed reprocess clears a failed projection on an already completed row', () {
     final provider = ConversationProvider(isSignedIn: () => false)
       ..conversations = [row(step: 'failed', status: ConversationStatus.completed)];

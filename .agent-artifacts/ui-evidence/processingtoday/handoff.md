@@ -79,3 +79,9 @@ loaded range, unstamped old empty captures, capped earliest-due ordering,
 unmeasured live latency and physical/signed-session behavior. PCM CPU-duration
 guard remains untouched; its pre-existing main failure is documented in the
 prepared PR body and prereview-dispositions.md.
+
+
+Latest follow-up: Luna 6206927c's web off-page remembered-failure retry is fixed;
+see prereview-dispositions.md for implementation and cross-client validation.
+The PNGs are unchanged. PR #25024 remains on hold for David's render verdict;
+never merge from this handoff. Full-hook push and head are recorded in the PR body.

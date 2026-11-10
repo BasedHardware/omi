@@ -4,12 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAttentionItems, retryAttentionItem } from '@/lib/api';
 import {
   canRetryAttention,
+  isRetryNotRetryable,
   dedupeAttention,
   notesFailureKind,
   type AttentionItem,
 } from '@/lib/attentionItems';
 
-export function useAttentionItems(enabled: boolean, owner?: string) {
+export function useAttentionItems(
+  enabled: boolean,
+  owner?: string,
+  onResolved?: (id: string) => void,
+) {
   const scope = `${enabled}:${owner ?? ''}`;
   const active = useRef(scope);
   const epoch = useRef(0);
@@ -103,6 +108,8 @@ export function useAttentionItems(enabled: boolean, owner?: string) {
         if (result.state === 'failed') keys.current.delete(item.id);
         if (!['in_progress', 'succeeded'].includes(result.state))
           throw new Error('Retry not accepted');
+        keys.current.delete(item.id);
+        onResolved?.(item.conversation_id);
         accepted.current.set(item.id, {
           conversation: item.conversation_id,
           operation: result.operation_id,
@@ -111,7 +118,11 @@ export function useAttentionItems(enabled: boolean, owner?: string) {
           ...previous,
           items: previous.items.filter((row) => row.id !== item.id),
         }));
-      } catch {
+      } catch (error) {
+        if (isCurrent() && isRetryNotRetryable(error)) {
+          keys.current.delete(item.id);
+          onResolved?.(item.conversation_id);
+        }
         if (isCurrent())
           setState((previous) => ({
             ...previous,
@@ -124,7 +135,7 @@ export function useAttentionItems(enabled: boolean, owner?: string) {
         }
       }
     },
-    [enabled, scope],
+    [enabled, scope, onResolved],
   );
   const items =
     enabled && state.scope === scope

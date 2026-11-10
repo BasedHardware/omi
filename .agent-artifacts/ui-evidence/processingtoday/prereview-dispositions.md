@@ -126,3 +126,37 @@ Desktop test-quality checks pass. Full preflight and the one normal full-hook
 push are reported in the PR body. UI code, fixtures and approved PNGs are unchanged.
 Fresh fetch confirmed GitHub reports MERGEABLE, so this follow-up does not merge
 main, as requested. No force push, hook bypass or PR merge is authorized.
+
+
+## Luna FIX-FIRST at 6206927c — web off-page retry reconciliation
+
+**Fixed.** Conversation retries now acknowledge the account-scoped remembered-failure
+cache directly when the authoritative response is non-failed, including processing
+without `home_step`, or an explicit `409 {"state":"not_retryable"}`. This works when
+the conversation came from an earlier search and is absent from both current lists.
+Old loaded object snapshots cannot immediately restore the cleared tile; a fresh
+failure can be discovered again. Failed results, generic conflicts and transport
+errors keep the failed tile and error. Kill-switch rollback keeps the old Home path.
+
+The notes-only ledger calls the same reconciliation on accepted in-progress/succeeded
+retries and explicit terminal conflicts. A terminal conflict clears its old projected
+duplicate while the ledger item retains its error, as required by the attention
+contract. Ambiguous errors keep their retry key; terminal acknowledgments clear it.
+The HTTP error type preserves only the structured state needed to distinguish the
+explicit terminal conflict from other 409 responses.
+
+Mobile and macOS do not have the same successful-retry bug: mobile applies the result
+to shared provider state even without a current list match; macOS Activity explicitly
+remembers the authoritative replacement outside the repository's loaded query. Their
+notes stores suppress accepted retries by conversation ID independent of loaded pages.
+Added off-page regressions on both; no mobile/native production change was needed.
+Existing notes acceptance, failure, deduplication and idempotency tests remain passing.
+
+Validation: web type checking, six Bun smoke tests and 1,071 Vitest tests; 69 focused
+Flutter tests; 70 native tests passed (72 executed, two opt-in PNG tests skipped).
+New web coverage includes off-page processing/completed responses, explicit terminal
+409, generic conflicts, failed/transport retries, notes-only acknowledgments and HTTP
+state decoding. Full preflight and the single full-hook push are recorded in the PR
+body. No layout, fixture or PNG changed; existing commit-pinned renders remain valid.
+GitHub reported MERGEABLE after the fresh fetch, so main was not merged for this fix.
+The PR remains unmerged and on hold for David's render verdict.

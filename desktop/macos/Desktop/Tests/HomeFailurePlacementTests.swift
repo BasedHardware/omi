@@ -80,6 +80,22 @@ final class HomeFailurePlacementTests: XCTestCase {
     XCTAssertTrue(store.activity([]).isEmpty)
   }
 
+  func testOffPageSearchFailureLeavesActivityWhenRetryIsProcessingOrCompleted() async {
+    let store = HomeFailurePlacementStore(load: { true }, owner: { "fixture" })
+    await store.refresh()
+    for status: ConversationStatus in [.processing, .completed] {
+      store.remember([conversation("off-page", step: "failed")], for: "fixture")
+      XCTAssertEqual(store.activity([]).map(\.id), ["off-page"])
+      // Activity's retry explicitly remembers the authoritative result, even
+      // when replaceConversation has no matching row in the current query.
+      store.remember([conversation("off-page", status: status)], for: "fixture")
+      XCTAssertTrue(store.activity([]).isEmpty)
+    }
+    store.remember([conversation("off-page", step: "failed")], for: "fixture")
+    // A transport failure never supplies an authoritative replacement.
+    XCTAssertEqual(store.activity([]).map(\.id), ["off-page"])
+  }
+
   func testOldSuccessfulReadCannotEnableNewAccount() async {
     var owner = "first"
     var completion: CheckedContinuation<Bool, Never>?

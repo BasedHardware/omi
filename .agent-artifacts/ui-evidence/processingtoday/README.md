@@ -167,3 +167,19 @@ Addition-only non-test delta: +954/-81 (1,035 changed lines), excluding upstream
 merges, tests/e2e and UI evidence/render harness; includes source, config, docs
 and localization/generated files (+205 localization lines). The immutable
 measurement and reproduction method are in notes-addition-line-delta.json.
+
+
+### Off-page retry follow-up (Luna 6206927c)
+
+The web cache correction changes retry reconciliation, with no layout or fixture change.
+The existing PNG bytes and their published commit pins are retained. The new regression
+cases exercise search-only remembered failures retried outside both loaded lists,
+processing/completed and terminal-conflict acknowledgments, failed retry retention,
+and notes-only ledger reconciliation. Cross-client regressions confirm shared-provider
+replacement on mobile and explicit remembered-result reconciliation on macOS.
+
+Validation: `cd web/app && bun run check` (type checking, 6 Bun smoke tests, 1,071
+Vitest tests); Flutter notes/pending/provider tests (69 passed); native
+`AttentionLedgerRetryTests|HomeFailurePlacementTests|ConversationRepositoryTests`
+(70 passed, two opt-in PNG skips). The full hook and CI status are recorded in the
+PR body. No production endpoint, signed app session, merge or deploy was used.

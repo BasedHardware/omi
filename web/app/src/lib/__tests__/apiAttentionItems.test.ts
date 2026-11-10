@@ -31,5 +31,19 @@ it('409 not_retryable rejects with its HTTP status', async () => {
   fetchMock.mockResolvedValueOnce(
     new Response('{"state":"not_retryable"}', { status: 409 }),
   );
-  await expect(retryAttentionItem('notes', 'key')).rejects.toMatchObject({ status: 409 });
+  await expect(retryAttentionItem('notes', 'key')).rejects.toMatchObject({
+    status: 409,
+    state: 'not_retryable',
+  });
 });
+
+it.each(['{"detail":{"state":"not_retryable"}}', 'proxy unavailable'])(
+  'retains terminal state only when the error body provides it: %s',
+  async (body) => {
+    fetchMock.mockResolvedValueOnce(new Response(body, { status: 409 }));
+    await expect(retryAttentionItem('notes', 'key')).rejects.toMatchObject({
+      status: 409,
+      state: body.startsWith('{') ? 'not_retryable' : undefined,
+    });
+  },
+);

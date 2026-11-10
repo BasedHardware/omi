@@ -151,6 +151,10 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  harness.searchResults = [];
+  harness.recaps = [];
+  harness.replaceConversation.mockClear();
+  harness.replaceSearchConversation.mockClear();
   harness.conversations = [conversation('team-sync', '2026-08-11T12:00:00Z')];
   harness.refresh.mockReset().mockResolvedValue(undefined);
   harness.toggleStarred.mockReset();
@@ -386,4 +390,140 @@ describe('notes ledger inside Activity', () => {
     expect(JSON.stringify(saved)).toBe(before);
     expect(screen.queryByText('kept-outputs')).not.toBeInTheDocument();
   });
+});
+
+describe('off-page remembered Activity retry', () => {
+  async function offPageFailure() {
+    const failed = {
+      ...conversation('old-search', '2026-11-08T08:00:00Z'),
+      home_step: 'failed',
+      status: 'processing',
+    } as Conversation;
+    harness.searchResults = [failed];
+    harness.conversations = [];
+    harness.getHomeFailurePlacement.mockResolvedValue(true);
+    const view = render(<ConversationSplitView />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Activity' })).toBeInTheDocument(),
+    );
+    harness.searchResults = [];
+    view.rerender(<ConversationSplitView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    return { failed, view };
+  }
+
+  it.each(['processing', 'completed'] as const)(
+    'removes a remembered search failure after %s retry',
+    async (status) => {
+      const { failed } = await offPageFailure();
+      harness.reprocessConversation.mockResolvedValue({
+        ...failed,
+        home_step: undefined,
+        status,
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument(),
+      );
+      expect(screen.getByText('No failed conversations')).toBeInTheDocument();
+      expect(harness.replaceConversation).toHaveBeenCalled();
+    },
+  );
+
+  it('removes a remembered search failure after an explicit terminal conflict', async () => {
+    await offPageFailure();
+    harness.reprocessConversation.mockRejectedValue(
+      Object.assign(new Error('not retryable'), { status: 409, state: 'not_retryable' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument(),
+    );
+    expect(harness.replaceConversation).not.toHaveBeenCalled();
+  });
+
+  it.each(['transport', 'generic-conflict', 'failed-result'])(
+    'keeps a remembered search failure on %s',
+    async (failure) => {
+      const { failed } = await offPageFailure();
+      if (failure === 'failed-result')
+        harness.reprocessConversation.mockResolvedValue(failed);
+      else
+        harness.reprocessConversation.mockRejectedValue(
+          Object.assign(
+            new Error('offline'),
+            failure === 'generic-conflict' ? { status: 409 } : {},
+          ),
+        );
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(harness.reprocessConversation).toHaveBeenCalledOnce());
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled(),
+      );
+      expect(screen.queryByText('No failed conversations')).not.toBeInTheDocument();
+      expect(screen.getByText('Retry failed. Please try again.')).toBeInTheDocument();
+    },
+  );
+});
+
+describe('notes-only retries reconcile remembered failures', () => {
+  it.each(['in_progress', 'not_retryable', 'transport'])(
+    'handles an off-page notes retry with %s',
+    async (state) => {
+      const failed = {
+        ...conversation('old-notes-search', '2026-11-08T08:00:00Z'),
+        home_step: 'failed',
+        status: 'processing',
+      } as Conversation;
+      const notes = {
+        id: 'notes-offpage',
+        kind: 'conversation_notes_failed_with_outputs',
+        conversation_id: failed.id,
+        retryable: true,
+        retry: { state: 'none', operation_id: null },
+      };
+      harness.conversations = [];
+      harness.searchResults = [failed];
+      harness.getHomeFailurePlacement.mockResolvedValue(true);
+      harness.getAttentionItems.mockResolvedValue({ items: [notes] });
+      if (state === 'not_retryable')
+        harness.retryAttentionItem.mockRejectedValueOnce(
+          Object.assign(new Error('terminal'), { status: 409, state }),
+        );
+      else if (state === 'transport')
+        harness.retryAttentionItem.mockRejectedValueOnce(new Error('offline'));
+      const view = render(<ConversationSplitView />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Activity' })).toBeInTheDocument(),
+      );
+      harness.searchResults = [];
+      view.rerender(<ConversationSplitView />);
+      fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Re-run notes' })).toBeInTheDocument(),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Re-run notes' }));
+      await waitFor(() => expect(harness.retryAttentionItem).toHaveBeenCalledOnce());
+      if (state !== 'in_progress') {
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: 'Re-run notes' })).toBeEnabled(),
+        );
+      }
+      // The next ledger read no longer contains the item. Its old search-only
+      // projection must not become a second Retry tile after acknowledgement.
+      harness.getAttentionItems.mockResolvedValue({ items: [] });
+      fireEvent(window, new Event('focus'));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('button', { name: 'Re-run notes' }),
+        ).not.toBeInTheDocument(),
+      );
+      if (state === 'transport')
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+      else
+        expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+      expect(harness.reprocessConversation).not.toHaveBeenCalled();
+    },
+  );
 });

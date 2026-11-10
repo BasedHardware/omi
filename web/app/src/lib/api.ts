@@ -72,7 +72,11 @@ const API_BASE_URL = '/api/proxy';
 
 /** Retain the status for safe endpoint-specific recovery messages. */
 export class ApiHttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly state?: string,
+  ) {
     super(message);
     this.name = 'ApiHttpError';
   }
@@ -136,9 +140,18 @@ async function fetchWithAuthResponse<T>(
       if (response.status === 401) {
         throw new ApiHttpError(401, 'Unauthorized - please sign in again');
       }
+      let state: string | undefined;
+      try {
+        const body = JSON.parse(errorText);
+        const value = body?.state ?? body?.detail?.state;
+        if (typeof value === 'string') state = value;
+      } catch {
+        /* Non-JSON errors retain their HTTP status. */
+      }
       throw new ApiHttpError(
         response.status,
         `API error: ${response.status} ${response.statusText}`,
+        state,
       );
     }
 

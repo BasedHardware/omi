@@ -4,11 +4,12 @@ import { useEffect, useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Check, CheckSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isRetryNotRetryable } from '@/lib/attentionItems';
 import { reprocessConversation } from '@/lib/api';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import { conversationDisplayTitle } from '@/lib/conversationTitle';
-import { isConversationProcessing } from '@/lib/conversationHome';
+import { isConversationProcessing, isFailedConversation } from '@/lib/conversationHome';
 import type { Conversation } from '@/types/conversation';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
@@ -19,6 +20,7 @@ interface ConversationTileProps {
   // Rejects when the server did not save the change, so the tile can take it back
   onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
   onConversationUpdate?: (conversation: Conversation) => void;
+  onRetryResolved?: (id: string) => void;
   isSelected?: boolean;
   // Selection mode props for merge feature
   isSelectionMode?: boolean;
@@ -35,6 +37,7 @@ export const ConversationTile = memo(function ConversationTile({
   onClick,
   onStarToggle,
   onConversationUpdate,
+  onRetryResolved,
   isSelected = false,
   isSelectionMode = false,
   isChecked = false,
@@ -98,9 +101,11 @@ export const ConversationTile = memo(function ConversationTile({
     setRetryFailed(false);
     try {
       const updated = await reprocessConversation(conversation.id);
+      setRetryFailed(isFailedConversation(updated));
       onConversationUpdate?.(updated);
-    } catch {
-      setRetryFailed(true);
+    } catch (error) {
+      if (isRetryNotRetryable(error) && onRetryResolved) onRetryResolved(conversation.id);
+      else setRetryFailed(true);
     } finally {
       retryPending.current = false;
       setIsRetrying(false);

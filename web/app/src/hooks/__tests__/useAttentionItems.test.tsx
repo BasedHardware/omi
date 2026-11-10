@@ -62,6 +62,33 @@ describe('server notes attention', () => {
       expect(result.current.items).toEqual([unknown]);
     },
   );
+  it.each(['in_progress', 'succeeded', 'not_retryable', 'transport', 'failed'])(
+    'reconciles remembered notes failure only for an authoritative %s result',
+    async (state) => {
+      const resolved = vi.fn();
+      if (state === 'not_retryable')
+        vi.mocked(retryAttentionItem).mockRejectedValueOnce(
+          Object.assign(new Error('terminal'), { status: 409, state }),
+        );
+      else if (state === 'transport')
+        vi.mocked(retryAttentionItem).mockRejectedValueOnce(new Error('offline'));
+      else
+        vi.mocked(retryAttentionItem).mockResolvedValueOnce({
+          operation_id: 'op',
+          state,
+        });
+      const { result } = renderHook(() => useAttentionItems(true, 'owner', resolved));
+      await waitFor(() => expect(result.current.items).toHaveLength(2));
+      await act(async () => result.current.retry(notes));
+      if (['in_progress', 'succeeded', 'not_retryable'].includes(state)) {
+        expect(resolved).toHaveBeenCalledExactlyOnceWith(notes.conversation_id);
+      } else expect(resolved).not.toHaveBeenCalled();
+      if (['not_retryable', 'transport', 'failed'].includes(state)) {
+        expect(result.current.items).toContainEqual(notes);
+        expect(result.current.errors.has(notes.id)).toBe(true);
+      }
+    },
+  );
   it('does not treat a failed operation response as success', async () => {
     vi.mocked(retryAttentionItem).mockResolvedValueOnce({
       operation_id: 'op',

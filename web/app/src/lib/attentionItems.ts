@@ -35,3 +35,14 @@ export function dedupeAttention(items: AttentionItem[]): AttentionItem[] {
   }
   return [...rows.values()];
 }
+
+/** Only the endpoint's explicit terminal conflict acknowledges a stale retry. */
+export function isRetryNotRetryable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'status' in error &&
+    error.status === 409 &&
+    'state' in error &&
+    error.state === 'not_retryable'
+  );
+}

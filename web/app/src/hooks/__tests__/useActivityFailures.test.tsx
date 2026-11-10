@@ -32,6 +32,23 @@ describe('Activity reachability across Home filters', () => {
     rerender({ home: [], search: [{ ...failed, id: 'search-only' }] });
     expect(result.current.failures).toEqual([]);
   });
+  it('resolves an off-page retry without resurrecting its old search snapshot', async () => {
+    const hits = [failed];
+    const { result, rerender } = renderHook(
+      ({ home, search }) => useActivityFailures(home, search, 'owner'),
+      { initialProps: { home: empty, search: hits } },
+    );
+    await waitFor(() => expect(result.current.failures).toEqual(hits));
+    rerender({ home: empty, search: empty });
+    act(() => result.current.resolveRetry(failed.id));
+    expect(result.current.failures).toEqual([]);
+    rerender({ home: [], search: hits });
+    expect(result.current.failures).toEqual([]);
+    // A later authoritative failure is still reachable; retry is not deletion.
+    const nextAttempt = { ...failed };
+    rerender({ home: [nextAttempt], search: empty });
+    await waitFor(() => expect(result.current.failures).toEqual([nextAttempt]));
+  });
   it('clears at an account switch without remembering the previous account arrays again', async () => {
     const old = [failed];
     const { result, rerender } = renderHook(
