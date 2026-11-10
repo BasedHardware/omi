@@ -7,6 +7,10 @@ def _asc(field):
     return FirestoreIndexField(field, order='ASCENDING')
 
 
+def _desc(field):
+    return FirestoreIndexField(field, order='DESCENDING')
+
+
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     # Shared by result-ready draining and oldest-first record-pending repair.
     # Moved from sync_pipeline_indexes; retain its existing registry identity.
@@ -33,6 +37,14 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         'conversations',
         'COLLECTION_GROUP',
         (_asc('record_lane_owner'), _asc('status'), _asc('finished_at'), _asc('__name__')),
+    ),
+    # Newest-first operator discovery for the reversible no-speech terminal.
+    # Equality on owner/status, then the capture clock descending.
+    FirestoreIndexRequirement(
+        'record_no_speech_newest',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('record_lane_owner'), _asc('status'), _desc('created_at'), _desc('__name__')),
     ),
     *(
         FirestoreIndexRequirement(

@@ -30,6 +30,7 @@ from database import conversation_finalization_jobs as jobs_db
 from utils.conversations import merge_conversations_job
 
 from database import conversations as conversations_db
+from database import no_speech_terminal as no_speech_terminal_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database import sync_cap_recovery
@@ -1338,6 +1339,51 @@ def restore_stuck_backfill_noise(
 ) -> None:
     """Restore only the unchanged metadata generation closed by this run."""
     stuck_backfill_db.restore_noise(
+        uid,
+        conversation_id,
+        expected_closed_revision=expected_closed_revision,
+        run_id=run_id,
+        firestore_client=firestore_client,
+    )
+
+
+def close_no_speech_capture(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_revision: str,
+    run_id: str,
+    speech_seconds: float,
+    audio_seconds: float,
+    firestore_client: Any = None,
+) -> str:
+    """Lifecycle owner for the reversible no-speech terminal.
+
+    The caller has already proven strict-VAD speech below ten seconds on the
+    retained audio. Audio and content are untouched; the marker records the
+    prior lifecycle fields for the operator undo.
+    """
+    return no_speech_terminal_db.close_no_speech(
+        uid,
+        conversation_id,
+        expected_revision=expected_revision,
+        run_id=run_id,
+        speech_seconds=speech_seconds,
+        audio_seconds=audio_seconds,
+        firestore_client=firestore_client,
+    )
+
+
+def restore_no_speech_capture(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_closed_revision: str,
+    run_id: str,
+    firestore_client: Any = None,
+) -> None:
+    """Restore only the unchanged generation this run closed."""
+    no_speech_terminal_db.restore_no_speech(
         uid,
         conversation_id,
         expected_closed_revision=expected_closed_revision,

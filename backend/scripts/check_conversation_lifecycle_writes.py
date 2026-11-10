@@ -27,6 +27,9 @@ RAW_STORAGE_ALLOWLIST = {
     # Snapshot-fenced close/restore storage; callable only via the lifecycle
     # methods guarded below, like the oversized terminal primitive above.
     'backend/database/stuck_backfill.py',
+    # Reversible no-speech terminal: hidden completed shape with a prior-value
+    # marker and an operator undo. No deletion, no content rewrite.
+    'backend/database/no_speech_terminal.py',
 }
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
@@ -70,7 +73,10 @@ def _is_hidden_noise_close(relative_path: str, payload: ast.Dict) -> bool:
     Its restore is revision-fenced and returns the saved in-progress state.
     Require all atomic hide markers; a bare completed write still fails.
     """
-    if relative_path != 'backend/database/stuck_backfill.py':
+    if relative_path not in {
+        'backend/database/stuck_backfill.py',
+        'backend/database/no_speech_terminal.py',
+    }:
         return False
     fields = {
         key.value if isinstance(key, ast.Constant) else key.id if isinstance(key, ast.Name) else None: value
