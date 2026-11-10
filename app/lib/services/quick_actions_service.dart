@@ -17,6 +17,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
 const _kAddTask = 'add_task';
@@ -211,7 +212,8 @@ class QuickActionsService {
       } else {
         await captureProvider.resumeCapture();
       }
-    } catch (_) {
+    } catch (e) {
+      Logger.debug('QuickActions: ${mute ? 'mute' : 'unmute'} shortcut failed: $e');
       if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
     }
   }
