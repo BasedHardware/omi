@@ -3,6 +3,7 @@ import OmiTheme
 import SwiftUI
 
 /// The same Activity rows are used by the product and headless render evidence.
+/// Owns failure navigation and retry feedback without introducing another chat.
 struct FailedConversationsActivitySection: View {
   let conversations: [ServerConversation]
   let onOpen: (ServerConversation) -> Void
