@@ -138,7 +138,7 @@ class _CompactRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 66,
+                width: MediaQuery.textScalerOf(context).scale(66),
                 child: Text(OmiDateFormat.of(context).time(member.startedAt ?? member.createdAt),
                     style: OmiType.footnote.copyWith(height: 1.7, color: OmiColors.textTertiary)),
               ),

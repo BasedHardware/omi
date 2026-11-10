@@ -82,6 +82,7 @@ backend/.venv/bin/python app/test/widgets/episode_redesign/build_review_boards.p
 Ten focused widget tests passed. Captures are 393×852 logical points at 3×,
 except the short Home fixture and the 320-point, 1.3× text-scale light fixture.
 The board builder only labels and arranges resized copies of the PNGs; it does
-not retouch their content. SF Pro fixture fonts and the macOS emoji font are loaded
-only for evidence generation. Without the output define the tests use the regular
-test environment and write no images. There is no device or authenticated E2E claim.
+not retouch their content. Tests load SF Pro fixtures even without the output define
+so the larger-type check can detect real font wrapping. The macOS emoji font is
+loaded when available. Without the output define the tests write no images.
+There is no device or authenticated E2E claim.

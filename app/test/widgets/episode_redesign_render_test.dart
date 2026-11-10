@@ -95,7 +95,7 @@ Future<void> _pump(WidgetTester tester, Episode episode,
     ],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: _output.isEmpty ? baseTheme : theme,
+      theme: theme,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: RepaintBoundary(
@@ -124,7 +124,7 @@ void main() {
     Env.init(HomeFixtureEnv());
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
-    if (_output.isNotEmpty) await _fonts();
+    await _fonts();
   });
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
@@ -184,16 +184,20 @@ void main() {
         before: true,
         home: Scaffold(
           appBar: AppBar(title: const Text('Home')),
-          body: ConversationListItem(
-            conversation: ServerConversation(
-                id: 'episode:${episode.id}',
-                createdAt: episode.startedAt,
-                startedAt: episode.startedAt,
-                finishedAt: episode.lastActivityAt,
-                structured: Structured(episode.title, '', emoji: '💬')),
-            date: episode.startedAt,
-            conversationIdx: -1,
-            homeEpisode: episode,
+          body: Column(
+            children: [
+              ConversationListItem(
+                conversation: ServerConversation(
+                    id: 'episode:${episode.id}',
+                    createdAt: episode.startedAt,
+                    startedAt: episode.startedAt,
+                    finishedAt: episode.lastActivityAt,
+                    structured: Structured(episode.title, '', emoji: '💬')),
+                date: episode.startedAt,
+                conversationIdx: -1,
+                homeEpisode: episode,
+              )
+            ],
           ),
         ));
     expect(find.textContaining('conversations'), findsNothing);
@@ -213,6 +217,15 @@ void main() {
     await _pump(tester, fixture('many-noisy'), before: false, brightness: Brightness.light);
     await _capture(tester, 'narrow-light-after-top');
     await _bottom(tester);
+    final timestamp =
+        find.descendant(of: find.byKey(const ValueKey('compact_supplies')), matching: find.byType(Text)).first;
+    final paragraph = tester.renderObject<RenderParagraph>(timestamp);
+    final text = tester.widget<Text>(timestamp).data!;
+    final lines = paragraph
+        .getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: text.length))
+        .map((box) => box.top)
+        .toSet();
+    expect(lines, hasLength(1), reason: 'The complete time stays on one line at larger text sizes.');
     await _capture(tester, 'narrow-light-after-rows');
     await tester.pumpWidget(const SizedBox.shrink());
     debugDefaultTargetPlatformOverride = null;

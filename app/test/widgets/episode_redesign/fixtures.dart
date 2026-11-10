@@ -27,8 +27,8 @@ Episode fixture(String state) {
       recording('supplies', 'Supplies and room layout', 'Reuse the trays and put the worktables by the windows.', 85),
     if (!few && !noisy)
       recording('invite', 'An invitation for the neighborhood',
-          'Keep the invitation simple and welcoming to beginners.', 205),
-    if (long) recording('rain', 'Making a plan for rain', 'Move indoors if the courtyard is wet on Saturday.', 280),
+          'Keep the invitation simple and welcoming to beginners.', long ? 165 : 205),
+    if (long) recording('rain', 'Making a plan for rain', 'Move indoors if the courtyard is wet on Saturday.', 205),
     for (var i = 0; i < (noisy ? 8 : (few ? 0 : 2)); i++)
       recording('noise-$i', i.isEven ? 'Recording · 10:${20 + i}' : 'Thank you.', '', 30 + i * 12, noise: true),
   ]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -65,8 +65,8 @@ Episode fixture(String state) {
       EpisodeMoment(
         id: 'welcome',
         conversationId: 'invite',
-        startedAt: fixtureDay.add(const Duration(minutes: 205)),
-        endedAt: fixtureDay.add(const Duration(minutes: 227)),
+        startedAt: fixtureDay.add(const Duration(minutes: 165)),
+        endedAt: fixtureDay.add(const Duration(minutes: 187)),
         heading: 'Make the invitation feel welcoming',
         points: const [
           EpisodePoint('Say explicitly that no gardening experience or equipment is needed.',
@@ -77,8 +77,8 @@ Episode fixture(String state) {
       EpisodeMoment(
         id: 'weather',
         conversationId: 'rain',
-        startedAt: fixtureDay.add(const Duration(minutes: 280)),
-        endedAt: fixtureDay.add(const Duration(minutes: 302)),
+        startedAt: fixtureDay.add(const Duration(minutes: 205)),
+        endedAt: fixtureDay.add(const Duration(minutes: 227)),
         heading: 'An indoor plan if it rains',
         points: const [
           EpisodePoint('Use the community room if the courtyard is wet.',
@@ -93,7 +93,7 @@ Episode fixture(String state) {
     live: false,
     title: few ? 'A plan for the garden workshop' : 'Bringing the garden workshop together',
     startedAt: fixtureDay,
-    lastActivityAt: fixtureDay.add(Duration(minutes: few ? 22 : (long ? 302 : 227))),
+    lastActivityAt: fixtureDay.add(Duration(minutes: few ? 22 : 227)),
     lede: few
         ? 'The first workshop will focus on herbs and salad greens, with a small group and plenty of time to practice.'
         : 'The garden workshop is taking shape: a small, hands-on session for beginners, using supplies already in the community room.',
