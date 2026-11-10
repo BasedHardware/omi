@@ -91,11 +91,43 @@ def test_unstamped_empty_capture_cannot_stay_processing_forever(age_hours, expec
     assert home_step.classify(data) == expected
 
 
-def test_empty_blocked_minimum_is_noise():
+@pytest.mark.parametrize('provenance', [None, 'server_minimum', 'llm', 'generated'])
+def test_empty_blocked_stand_in_is_noise_whatever_title_provenance(provenance):
     from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
 
-    reason = sorted(EMPTY_BLOCKED_REASONS)[0]
-    assert home_step.classify(minimum('Recording · 9:38 AM', summary_blocked_reason=reason)) == 'noise'
+    for reason in sorted(EMPTY_BLOCKED_REASONS):
+        data = row(
+            structured={'title': 'Recording · 9:38 AM', 'overview': '', 'sections': []},
+            summary_blocked_reason=reason,
+        )
+        if provenance is not None:
+            data['structured']['title_provenance'] = provenance
+        assert home_step.classify(data) == 'noise'
+
+
+@pytest.mark.parametrize(
+    'structured',
+    [
+        {'title': 'Recording · 9:38 AM', 'overview': 'Actual notes.', 'sections': []},
+        {
+            'title': 'Recording · 9:38 AM',
+            'overview': ' ',
+            'sections': [{'heading': 'Notes', 'body_markdown': 'Actual notes.'}],
+        },
+    ],
+)
+def test_empty_block_with_summary_output_is_not_noise(structured):
+    assert home_step.classify(row(structured=structured, summary_blocked_reason='empty_output_exhausted')) == 'ready'
+
+
+@pytest.mark.parametrize('provenance,expected', [(None, 'ready'), ('server_minimum', 'noise')])
+def test_empty_output_noise_kill_switch_restores_legacy_classification(monkeypatch, provenance, expected):
+    monkeypatch.setenv('HOME_EMPTY_OUTPUT_NOISE', 'false')
+    data = row(
+        structured={'title': 'Recording · 9:38 AM', 'overview': '', 'title_provenance': provenance},
+        summary_blocked_reason='empty_output_exhausted',
+    )
+    assert home_step.classify(data) == expected
 
 
 @pytest.mark.parametrize('hours,expected', [(1, 'transcribing'), (-1, 'failed')])

@@ -28,13 +28,14 @@ from prometheus_client import Counter
 
 from config.episodes import (
     DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS,
+    home_empty_output_noise_enabled,
     home_processing_max_age_seconds,
     home_step_projection_enabled,
 )
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed
-from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
 TRANSCRIBING = 'transcribing'
@@ -110,7 +111,12 @@ def classify(row: Mapping[str, Any]) -> str | None:
     ):
         return FAILED
     provisional = structured.get('title_provenance') == 'server_minimum'
-    if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
+    empty_output = (
+        home_empty_output_noise_enabled()
+        and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS
+        and not present(structured)
+    )
+    if is_completed_below_floor(row) or empty_output:
         return NOISE
     if provisional:
         if summary_owed(row):
