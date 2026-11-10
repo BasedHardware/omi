@@ -93,6 +93,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     DateTime? now}) {
   if (!enabled && !groupAwaitingTranscript) return [for (final c in conversations) HomeRow(c)];
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
+  final listeningOwnedIds = {...liveConversationIds};
   final hidden = {...liveConversationIds};
   final rows = <HomeRow>[];
   final singleIds = <String>{};
@@ -117,7 +118,10 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
         episode.live && (episode.id == liveEpisodeId || episode.conversationIds.any(liveConversationIds.contains));
     // Only an actual Listening row replaces these members. A stale live
     // snapshot with no capture must keep its completed recordings visible.
-    if (listeningOwns) hidden.addAll(episode.conversationIds);
+    if (listeningOwns) {
+      listeningOwnedIds.addAll({...episode.conversationIds, ...retainedIds});
+      hidden.addAll(episode.conversationIds);
+    }
     // A closing episode may still be live in the last server snapshot. The
     // streaming capture owns its row until it stops; then processing owns it.
     if (listeningOwns) {
@@ -214,7 +218,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     for (final c in conversations)
       if (!hidden.contains(c.id) && !failures.containsKey(c.id) && !deletedIds.contains(c.id)) HomeRow(c),
     for (final c in failures.values)
-      if (!c.deleted && !c.discarded && !deletedIds.contains(c.id)) HomeRow(c)
+      // Failures escape closed episode grouping, but Listening still owns its members.
+      if (!listeningOwnedIds.contains(c.id) && !c.deleted && !c.discarded && !deletedIds.contains(c.id)) HomeRow(c)
   ]);
   rows.sort((a, b) => b.startedAt.compareTo(a.startedAt));
   if (!groupAwaitingTranscript) return rows;

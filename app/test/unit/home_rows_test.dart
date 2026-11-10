@@ -338,6 +338,29 @@ void main() {
       expect(rows.single.isProcessing, isFalse);
     });
 
+    test('Listening owns projected failures until capture stops, including metadata-only members', () {
+      final failed = provisional('expired', 0, step: 'failed');
+      final e = episode(live: true, members: [failed], moments: []).copyWith(conversationIds: ['current', failed.id]);
+      for (final byEpisodeId in [false, true]) {
+        for (final conversations in [
+          <ServerConversation>[],
+          [failed]
+        ]) {
+          final rows = buildHomeRows(conversations, [e],
+              enabled: true,
+              liveEpisodeId: byEpisodeId ? e.id : null,
+              liveConversationIds: byEpisodeId ? {} : {'current'},
+              processingConversations: [failed],
+              groupAwaitingTranscript: true);
+          expect(rows, isEmpty, reason: 'Listening owns the failed member too');
+          final stopped = home(conversations, episodes: [e]);
+          expect(stopped.single.conversation.id, failed.id);
+          expect(stopped.single.episode, isNull);
+          expect(stopped.single.isProcessing, isFalse);
+        }
+      }
+    });
+
     test('runs never cross a day boundary', () {
       final today = provisional('today', 0);
       final yesterday = provisional('yesterday', -24 * 60);
@@ -361,6 +384,7 @@ void main() {
       final retry = ServerConversation(
           id: 'r', createdAt: start, startedAt: start, structured: Structured('Yeah.', ''), summaryRetryable: true);
       expect(homeStepOf(retry), HomeStep.failed);
+      expect(home([retry]), isEmpty);
       expect(homeStepOf(waiting('l', 0, locked: true)), isNull);
     });
   });
