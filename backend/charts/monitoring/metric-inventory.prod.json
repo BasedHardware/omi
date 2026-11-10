@@ -2307,6 +2307,7 @@
     "listen_finalization_byok_session_abandoned_last_24h",
     "listen_finalization_byok_session_abandoned_total",
     "listen_finalization_oldest_dead_letter_age_seconds",
+    "listen_quiet_check_empty_exit_total",
     "omi_audio_custody_failures_total",
     "omi_audio_custody_last_risk_timestamp_seconds",
     "omi_audio_custody_would_drop_total",
