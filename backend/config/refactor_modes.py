@@ -129,6 +129,15 @@ def batch_live_orphan_repair_enabled() -> bool:
     return default_off('BATCH_LIVE_ORPHAN_REPAIR_ENABLED')
 
 
+def no_speech_terminal_enabled() -> bool:
+    """Default-on operator kill switch for the reversible no-speech terminal.
+
+    Only the digest-approved operator tool reads this. No scheduled or automatic
+    apply exists; false blocks new closes while undo always remains available.
+    """
+    return default_on('NO_SPEECH_TERMINAL_ENABLED')
+
+
 def record_seal_repair_age_order() -> bool:
     """Prefer oldest pending records; off restores the name-ordered repair scan."""
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
