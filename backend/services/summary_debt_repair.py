@@ -13,7 +13,6 @@ from typing import Any, Callable, cast
 
 from google.cloud import firestore
 from config.summary_guarantee import (
-    enabled,
     repair_enabled,
     REPAIR_INTERVAL_SECONDS,
     REPAIR_SCAN_LIMIT,
@@ -32,7 +31,7 @@ CURSOR = 'maintenance/summary_debt_repair_v1'
 
 def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
     """Reuse the same obligation; no new finalization generation is admitted."""
-    if account_deletion_blocks_user_work(uid) or not enabled(uid):
+    if account_deletion_blocks_user_work(uid):
         return False
     admitted = False
     blocked_receipt: Row | None = None
@@ -139,7 +138,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         if delivery.refusal(row):
             continue
         parts = snapshot.reference.path.split('/')
-        if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations' or not enabled(parts[1]):
+        if (len(parts) != 4) or (parts[0] != 'users') or (parts[2] != 'conversations'):
             continue
         if account_deletion_blocks_user_work(parts[1]):
             continue

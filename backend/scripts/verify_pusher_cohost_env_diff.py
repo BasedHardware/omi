@@ -246,9 +246,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Same listen-only admission path for learned auto-language mobile/web captures.
             "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
             "SERVER_BATCH_ONLY_WEB_PERCENT",
-            # Only listen opens visibility-gated Modulate previews; pusher
-            # retains raw custody/finalization and never evaluates this cohort.
-            "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",

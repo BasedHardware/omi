@@ -21,8 +21,6 @@ def summary_database_dependency():
 
 @pytest.fixture
 def enabled(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
 
 
@@ -40,16 +38,14 @@ def debt():
     return row
 
 
-def test_dark_defaults_and_no_shape_change_when_merge_is_disabled(monkeypatch):
+def test_first_summary_provenance_covers_known_owners_when_merge_is_disabled(monkeypatch):
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
-    monkeypatch.delenv('FIRST_SUMMARY_DEADLINE_ENABLED', raising=False)
-    row = minimum()
-    before = deepcopy(row)
-    delivery.prepare(row, 'u', now=100)
-    assert row == before
-    assert not flags.enabled('u') and not flags.repair_enabled()
-    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]), uid='u')
-    assert 'title_provenance' not in result.model_dump()
+    row = SimpleNamespace(transcript_segments=[])
+    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid=None).model_dump()
+    assert 'title_provenance' not in build_deterministic_minimum_structured(row).model_dump()
+    assert build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()['title_provenance'] == (
+        'server_minimum'
+    )
 
 
 def test_server_title_provenance_is_not_a_model_or_manual_title(enabled):
@@ -98,8 +94,6 @@ def test_current_finalizer_finishes_completed_minimum_but_background_repair_cann
         {'finalization_job_id': None},
     ):
         assert not delivery.finalization_pending({**row, **changes}, 'u', 'current-job')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
-    assert not delivery.finalization_pending(row, 'u', 'current-job')
 
 
 @pytest.mark.parametrize('finish,expected', [(50, 1900), (1800, 200), (2100, None), (None, None)])
@@ -201,6 +195,13 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
         assert delivery.repair_fenced({**row, 'finalization_job_id': 'new-generation'})
     finally:
         delivery.REPAIR_CONTEXT.reset(token)
+
+
+def test_invalid_deadlines_remain_bounded(enabled, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')
+    assert flags.deadline_seconds() == 120
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '999')
+    assert flags.deadline_seconds() == 120
 
 
 def test_local_only_minimum_is_explicitly_blocked_not_retried_as_empty(enabled):

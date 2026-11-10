@@ -15,8 +15,6 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def debt_store(store, monkeypatch):
     client, uid, tasks = store
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
     user = client.collection('users').document(uid)
     user.set({'data_protection_level': 'standard'})

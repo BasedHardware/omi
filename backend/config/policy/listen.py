@@ -288,7 +288,8 @@ def hintable_allocation(uid):
     policy = current_listen_policy.get()
     if policy is not None:
         return policy.hintable_allocated
-    return bool(uid) and cohort_bucket(uid, 'stt-hintable', bits=64) < _hintable_percent(os.environ)
+    env = os.environ
+    return bool(uid) and cohort_bucket(uid, 'stt-hintable', bits=64) < _hintable_percent(env)
 
 
 def _hintable_percent(env):

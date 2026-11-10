@@ -271,16 +271,13 @@ def effective_percents(snapshot: RampSnapshot) -> dict[str, float]:
     defaults = rollout_env_percents()
     batch = percent('batch-pipeline', defaults['batch-pipeline'])
     try:
-        summary_default = float(os.getenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
-    except ValueError:
-        summary_default = math.nan
-    try:
         owner_default = directory_routing.new_owner_percent_env()
     except ValueError:
         owner_default = math.nan
     return {
         'batch-pipeline': batch,
-        'first-summary': percent('first-summary', summary_default),
+        # First-summary deadlines graduated to every owner on 2026-11-09.
+        'first-summary': 100.0,
         'batch-live-stt-retire': min(percent('batch-live-stt-retire', defaults['batch-live-stt-retire']), batch),
         'legacy-sync': percent('legacy-sync', 0.0),
         'batch-vendor-routing': min(

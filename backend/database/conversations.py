@@ -396,7 +396,7 @@ def _prepare_conversation_for_write(
         _reveal_match_scores_for_read(data, uid)
         if isinstance(segments, list):
             updates = match_scores.from_segments(segments)
-            if updates and match_scores.enabled():
+            if updates:
                 data[match_scores.FIELD] = match_scores.merge(data.get(match_scores.FIELD), updates)
     except Exception:
         # Optional metadata must never block content when decoding/merging fails.
@@ -4012,7 +4012,7 @@ def update_conversation_segments(
             # this fence must not depend on the lineage rollout allowlist.
             update_payload['sync_content_revision'] = (current.get('sync_content_revision') or 0) + 1
         summary_delivery.rearm_on_revision_change(current, update_payload)
-        if score_updates and match_scores.enabled():
+        if score_updates:
             try:
                 score_current = dict(current)
                 _reveal_match_scores_for_read(score_current, uid)

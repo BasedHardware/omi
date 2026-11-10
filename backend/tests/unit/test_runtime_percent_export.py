@@ -33,7 +33,6 @@ def runtime(monkeypatch):
         'BATCH_PIPELINE_PERCENT': '13',
         'BATCH_LIVE_STT_RETIRE_PERCENT': '7',
         'BATCH_VENDOR_ROUTING_PERCENT': '5',
-        'FIRST_SUMMARY_DEADLINE_PERCENT': '11',
         'DIRECTORY_ROUTING_NEW_OWNER_PERCENT': '9',
     }.items():
         monkeypatch.setenv(key, value)
@@ -98,7 +97,8 @@ def test_all_flags_export_the_effective_runtime_values(runtime, remote):
     assert exported['batch-pipeline'] == batch.batch_percent == (37 if remote else 13)
     assert exported['batch-live-stt-retire'] == batch.retire_percent == (31 if remote else 7)
     assert exported['batch-vendor-routing'] == batch_pipeline_vendor_routing.vendor_routing_percent(batch.batch_percent)
-    assert exported['first-summary'] == rp.runtime_percent('first-summary', env_default=11)
+    # First-summary deadlines graduated to every owner; the export reports the permanent value.
+    assert exported['first-summary'] == 100.0
     assert exported['legacy-sync'] == rp.runtime_percent('legacy-sync', env_default=0)
     assert exported['new-owner-cell1'] == rp.policy.runtime_percent(
         'new-owner-cell1', env_default=directory_routing.new_owner_percent_env()

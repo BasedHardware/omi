@@ -141,19 +141,15 @@ def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, mon
 
     for service in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
         env = prod_hosts[service]
-        assert env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'] == 'true'
-        assert env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'] == '100'
+        assert 'FIRST_SUMMARY_DEADLINE_ENABLED' not in env
+        assert 'FIRST_SUMMARY_DEADLINE_PERCENT' not in env
         assert 'FIRST_SUMMARY_UID_ALLOWLIST' not in env
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'])
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'])
         monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
-        assert summary_guarantee.enabled('any-user')
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
-        assert summary_guarantee.enabled('canary-owner')
-        assert summary_guarantee.enabled('any-user')
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
-        assert not summary_guarantee.enabled('canary-owner')
-        assert not summary_guarantee.enabled('any-user')
+        assert summary_guarantee.first_summary_pending({'uid': 'any-user'})
+        assert summary_guarantee.first_summary_pending({'uid': 'canary-owner'})
+        assert summary_guarantee.first_summary_pending({'uid': 'any-user'})
+        assert summary_guarantee.first_summary_pending({'uid': 'canary-owner'})
+        assert summary_guarantee.first_summary_pending({'uid': 'any-user'})
 
 
 def test_quarantine_recovery_uses_private_membership_only_on_prod_integration(

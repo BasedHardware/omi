@@ -28,7 +28,6 @@ def _enabled(monkeypatch):
     # Legacy rollback path; recorded-time ownership has its own suite.
     monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV, raising=False)
