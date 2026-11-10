@@ -278,5 +278,6 @@ void main() {
         structured: Structured('', ''));
     expect(buildHomeRows([failed], [], enabled: false, activityOnlyFailures: true), isEmpty);
     expect(buildHomeRows([failed], [], enabled: false), hasLength(1));
+    expect(failedActivityConversations(pending: [], conversations: [failed]).single.id, 'f');
   });
 }

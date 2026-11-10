@@ -54,3 +54,5 @@ Batched follow-up verification: 296 focused Flutter tests; 146 backend tests; 26
 Relay 9e09f1 adds render pairs 011/012 (failed Home before/after) and 013/014 (Activity retry before/after). Switch off uses #25013's previous Home failure row. Tests cover a successful retry, double-tap fencing, retry errors remaining actionable, ledger deduplication and a pending failed step outside loaded Home history. Mobile UI only; web Home has no conversation rows and macOS does not share Flutter Home code. No new query, stored job state or flag.
 
 Latest relay 9e09f1 verification: 146 focused backend tests and 34 unit/widget tests in each of America/New_York, Pacific/Kiritimati and Pacific/Pago_Pago pass. Analyzer ratchet and generated Dart wire check pass. 312 expanded Flutter tests pass. Final repository-gate results are recorded in the PR body.
+
+Activity also includes failures loaded only by Home search. Locked failed rows use a generic Processing Failed label; their private title stays redacted and existing server retry/entitlement checks remain authoritative. These paths have dedicated widget/unit coverage.

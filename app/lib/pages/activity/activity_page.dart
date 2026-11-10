@@ -257,7 +257,11 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final failures = _pendingWork.homeProcessingToday
         ? failedActivityConversations(
             pending: _pendingWork.pendingForActivity,
-            conversations: [...?provider?.processingConversations, ...?provider?.conversations],
+            conversations: [
+              ...?provider?.searchedConversations,
+              ...?provider?.processingConversations,
+              ...?provider?.conversations
+            ],
             episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
             attentionIds: {
               for (final item in _pendingWork.attention)

@@ -457,16 +457,8 @@ void main() {
           isSignedIn: () => true,
           conversationListFetcher: () async => (items: [failed], ok: true),
           dailySummariesChecker: () async => false)
-        ..conversations = [failed];
-      final store = _store(after, [
-        PendingWorkItem(
-            id: 'conv:failed',
-            kind: 'conversation',
-            state: 'summarizing',
-            conversationIds: ['failed'],
-            startedAt: at,
-            homeStep: 'failed')
-      ]);
+        ..searchedConversations = [failed];
+      final store = _store(after, []);
       final monitor = CaptureWedgeMonitor(
           featureGate: () async => false,
           track: (_, __) {},
@@ -558,6 +550,35 @@ void main() {
     expect(opened, isNull);
     await tester.tap(find.text('Unfinished notes'));
     expect(opened, 'retry-error');
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+  evidenceTest('locked failed Activity rows keep the title redacted', (tester) async {
+    final failed = ServerConversation(
+        id: 'locked',
+        createdAt: clock.now(),
+        isLocked: true,
+        status: ConversationStatus.failed,
+        structured: Structured('Private notes', ''));
+    final store = _store(true, []);
+    await store.refresh();
+    final monitor = CaptureWedgeMonitor(
+        featureGate: () async => false,
+        track: (_, __) {},
+        bleRetry: (_) async {},
+        appBuild: () => 'fixture',
+        platform: () => 'ios');
+    addTearDown(store.dispose);
+    addTearDown(monitor.dispose);
+    await tester.pumpWidget(MaterialApp(
+        theme: _theme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+            body: NeedsAttentionSection(store: store, captureMonitor: monitor, failedConversations: [failed]))));
+    expect(find.text('Private notes'), findsNothing);
+    expect(find.text('Processing Failed'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
   });

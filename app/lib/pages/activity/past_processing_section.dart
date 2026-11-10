@@ -92,8 +92,7 @@ List<ServerConversation> failedActivityConversations({
     for (final c in conversations) c.id: c,
   };
   return byId.values
-      .where((c) =>
-          !attentionIds.contains(c.id) && !c.deleted && !c.discarded && !c.isLocked && isFailedHomeConversation(c))
+      .where((c) => !attentionIds.contains(c.id) && !c.deleted && !c.discarded && isFailedHomeConversation(c))
       .toList()
     ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
 }

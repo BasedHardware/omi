@@ -292,13 +292,10 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     final c = widget.conversation;
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);
+    final hasTitle = !c.isLocked && c.structured.title.trim().isNotEmpty;
     return _AttentionRow(
-      title: c.structured.title.trim().isEmpty ? context.l10n.processingFailed : c.structured.title,
-      subtitle: [
-        if (c.structured.title.trim().isNotEmpty) context.l10n.processingFailed,
-        dates.dayHeader(at),
-        dates.time(at)
-      ].join(' · '),
+      title: hasTitle ? c.structured.title : context.l10n.processingFailed,
+      subtitle: [if (hasTitle) context.l10n.processingFailed, dates.dayHeader(at), dates.time(at)].join(' · '),
       busy: _busy,
       onRetry: _retry,
       onTap: () => widget.openConversation(context, c.id),
