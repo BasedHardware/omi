@@ -2,9 +2,8 @@
 
 Code and dev defaults keep both gates false. Production config enables the
 first-summary deadline for 100% of owners on all six producing/processing
-hosts. Debt repair on the scheduled backend-sync owner is held off in
-production (`SUMMARY_DEBT_REPAIR_ENABLED=false`, deferred by David 2026-10-20
-until the Nemotron migration completes). These
+hosts. Production source enables debt repair on the scheduled backend-integration
+owner (David 2026-11-09, relay 3e764e); the legacy backend-sync sweep stays off. These
 settings take effect only when the corresponding artifacts are deployed.
 `first_pending_at` is recorded in each outbox obligation even before rollout.
 No account content enters scheduling metadata or metrics.
@@ -96,12 +95,18 @@ consume the expiry band's budget. Urgent overload can consume all capacity.
 `SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT` is a startup setting clamped to 1..60
 (default 10; invalid uses 10). At 30 ticks/hour, the configured ceiling is
 `limit * 30`: 300 attempts/hour by default, 1,800 at the upper bound. The default
-is unchanged; raising a deployed value is a separate lead2 spend decision.
+is unchanged. Lead2 ruling `8b9c8f` (2026-11-10) sets only production
+backend-integration to 8: 240 attempts/hour, 5,760/day. The capacity record
+`data/run-2026-11-08-retro-fixnow/out-sd-capacity.md` uses a $0.0054/repair
+mean, giving $31.10/day at full admission. This is a planning estimate using
+a mean, not a hard spend bound. Production cap rollback: 10 in both the prod
+runtime overlay and ops values, regenerate the runtime manifest, then deploy
+through the authorized lane. No live deployment is performed by this change.
 `SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` is clamped to 1..10 (default 3; invalid
 uses 3). One owner share covers both phases in a tick. Failed/blocked attempts
 also consume the share, preventing one owner from spending the global attempt
-budget. These limits are configuration, not rollout flags; no deployment values
-are changed. Unset either setting to restore its default on process restart.
+budget. These limits are configuration, not rollout flags. Unset either setting
+to restore its code default on process restart.
 Fairness applies to the fetched sample; a heavy owner filling a whole 100-row
 page can still delay discovery beyond the page.
 
@@ -179,10 +184,11 @@ through the existing index lane; this code change does not apply indexes.
 The checked-in production policy is ship-on. Keep the six hosts aligned:
 backend-listen, pusher, backend, backend-sync, backend-sync-backfill and
 backend-integration use `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
-`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The scheduled backend-sync owner keeps
-`SUMMARY_DEBT_REPAIR_ENABLED=false` until the deferral above is lifted; turning
-it on is a prod overlay change, not a hand edit, so the next deploy keeps it.
-The bounded repair cost above is unchanged. No new index, scheduler, provider or capacity is required.
+`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The scheduled backend-integration owner
+has `SUMMARY_DEBT_REPAIR_ENABLED=true` and admission limit 8 in production
+source; backend-sync stays disabled. Keep the prod overlay and ops values
+aligned and regenerate the runtime manifest. The new DESC index must be READY
+before deploying this repair order; the scheduler and provider are unchanged.
 
 The master flag also routes summary enrichment on both HTTP adapters through
 the existing `postprocess_executor` rather than the STT `sync_executor`.
