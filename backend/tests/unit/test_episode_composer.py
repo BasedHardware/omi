@@ -1690,3 +1690,23 @@ def test_unexpected_compose_exception_still_releases_scheduler_ownership(store, 
     monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
     assert composer.schedule(UID, 'ep1', collaborators=_c()) is False
     assert not composer._inflight and not composer._rerun and not composer._foreground
+
+
+def test_first_open_while_waiting_does_not_strand_a_later_member_final(store, monkeypatch):
+    _late(store)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **k: store.episode)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    store.rows['c2']['status'] = 'processing'
+    assert composer.defer_late_compose(UID, store.episode, _c())
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c())
+    assert not store.episode.get('composed_fingerprint')
+    assert composer._opened_deferral(store.episode)
+    assert composer.needs_compose(store.episode), 'an opened deferral must bypass the seven-day read hold'
+    store.rows['c2']['status'] = 'completed'
+    composer.schedule_for_conversation(UID, 'c2', collaborators=_c(), row=store.rows['c2'])
+    assert store.episode.get('compose_pending_since'), 'member-final is scheduled after the client poll ends'
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c())
+    assert store.episode['composed_member_ids'] == ['c1', 'c2']
+    assert store.episode['compose_deferred_at'] is None
+    assert store.episode['compose_opened_deferred_at'] is None
