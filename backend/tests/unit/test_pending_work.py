@@ -421,6 +421,7 @@ class _PagingQuery:
         self._database = database
         self._path = path
         self._after = None
+        self.after = None
         self._limit = None
         self._filters = []
 
@@ -430,6 +431,7 @@ class _PagingQuery:
 
     def start_after(self, cursor):
         self._after = cursor.id
+        self.after = cursor.id
         return self
 
     def limit(self, count):
@@ -459,7 +461,9 @@ def test_attention_pages_past_scan_limit_without_skipping(database, monkeypatch)
     expected = []
     for index in range(620):
         cid = f'c{index:04d}'
-        resolved = index % 6 == 0
+        # Resolve the last document of the first page so the cursor must advance on
+        # the last *scanned* snapshot, not the last *returned* item.
+        resolved = index % 6 == 0 or index == store.SCAN_LIMIT - 1
         database.rows[('users', UID, 'conversations', cid)] = dict(
             ROW, structured={'title': 't', 'overview': 'done' if resolved else ''}
         )
@@ -474,15 +478,23 @@ def test_attention_pages_past_scan_limit_without_skipping(database, monkeypatch)
         }
         if not resolved:
             expected.append(item_id)
-    monkeypatch.setattr(
-        store, 'items_ref', lambda uid: _PagingQuery(database, ('users', UID, 'processing_attention_items'))
-    )
+    queries = []
+
+    def _items_ref(uid):
+        query = _PagingQuery(database, ('users', UID, 'processing_attention_items'))
+        queries.append(query)
+        return query
+
+    monkeypatch.setattr(store, 'items_ref', _items_ref)
     monkeypatch.setattr(store, 'now_utc', lambda: NOW)
     monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
     ids = [item['id'] for item in store.list_items(UID)]
     assert len(expected) > store.SCAN_LIMIT
     assert ids == expected
     assert len(ids) == len(set(ids))
+    # The second page must resume after the last scanned document, even though that
+    # document was filtered out and never returned.
+    assert [query.after for query in queries] == [None, f'item-{store.SCAN_LIMIT - 1:04d}']
 
 
 def test_pending_sync_excludes_terminal_missing_and_foreign(monkeypatch):
