@@ -1,6 +1,6 @@
 {
   "about": "CI flag budget for the transcription pipeline env surface plus explicitly registered helper-backed kill switches (ADR 0006, backend/docs/adr/0006-pipeline-flag-budget.md). tests/unit/test_flag_budget.py fails when a read name is missing here, a registry entry drifts, or budget drifts.",
-  "as_of": "2026-10-29",
+  "as_of": "2026-11-10",
   "scope": [
     "utils/batch_pipeline/**/*.py",
     "diarizer/batch_pipeline*.py",
@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 263,
+  "count": 264,
   "names": {
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
@@ -44,6 +44,7 @@
     "BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_SWEEP_AGE_GATE": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
+    "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED": {"owner": "refactor-lead", "review_by": "2026-12-10", "registry": "config/feature-flags.yaml"},
     "PROJECTION_DRAIN_CLAIM_AWARE": {"owner": "two-lane lead", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "PROJECTION_DRAIN_LIVE_TARGET_BACKOFF": {"replaces": "SYNC_BACKFILL_INFLIGHT_LIMIT", "owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "PROJECTION_DRAIN_PRIVACY_BACKOFF": {"owner": "omi-pipeline / privblock", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
