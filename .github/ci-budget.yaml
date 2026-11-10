@@ -68,13 +68,13 @@
       "display_name": "Backend emulator proofs",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day-plus-provisional-replay-path-forecast",
-      "expected_runs_per_day": 20,
+      "expected_runs_per_day": 21,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage.",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage. L1 custody/nojob and lifecycle path coverage provisionally adds one PR run/day (20 to 21 total, with the existing one nightly call unchanged), or 4 Linux runner-minutes/day within existing caps. The existing lifecycle-services install step supports these proofs; retain the 4-minute p50 target and standard runner pending terminal CI measurements.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3386,7 +3386,7 @@
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added.",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added. L1 adds the custody-append/nojob emulator tests and lifecycle simulation/property paths to PR and main-push filters, with the existing lifecycle-services install step supplying redis-server, ffmpeg and libopus0; the job forecast explicitly includes one additional daily PR run.",
       "triggers": {
         "pull_request": {
           "paths": [
