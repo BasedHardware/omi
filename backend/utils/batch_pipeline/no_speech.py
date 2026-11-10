@@ -34,6 +34,7 @@ from utils.batch_pipeline.record_orphan_repair import (
 from utils.batch_pipeline.record_seal_nojob import conversation_path
 from utils.batch_pipeline.record_seal_repair import plan_digest
 from utils.batch_pipeline.source_audio import read_reference
+from utils.batch_pipeline.no_speech_coverage import CoverageIncomplete, capture_bounds, covered_pcm, source_start
 from utils.conversations import lifecycle
 from utils.batch_pipeline.no_speech_undo import undo_no_speech as undo_no_speech
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -43,7 +44,7 @@ SPEECH_LIMIT_SECONDS = 10.0
 MAX_RAW_OBJECTS = 4096
 MAX_AUDIO_SECONDS = 7200
 
-ACTIONABLE = frozenset({'no_speech', 'no_retained_audio'})
+ACTIONABLE = frozenset({'no_speech'})
 
 
 def discover(client, *, limit=128, after=None, now=None):
@@ -103,7 +104,6 @@ def _raw_refs(storage_client, uid, cid):
         if index >= MAX_RAW_OBJECTS:
             raise ValueError('raw object budget exceeded')
         metadata = blob.metadata or {}
-        start = metadata.get('capture_start')
         refs.append(
             {
                 'path': blob.name,
@@ -111,25 +111,25 @@ def _raw_refs(storage_client, uid, cid):
                 'generation': str(blob.generation),
                 'metadata': metadata,
                 'sample_rate': int(metadata.get('record_sample_rate', 16000)),
-                'capture_start': float(start) if isinstance(start, (int, float)) else None,
             }
         )
-    refs.sort(key=lambda ref: (ref['capture_start'] is None, ref['capture_start'] or 0.0, ref['path']))
+    refs.sort(key=lambda ref: ref['path'])
     return refs
 
 
-def _measure(storage_client, uid, cid, refs):
+def _measure(storage_client, uid, cid, refs, row):
     key = encryption.derive_key(uid)
-    pcm = bytearray()
+    capture_bounds(row, MAX_AUDIO_SECONDS)
+    sources, decoded_bytes = [], 0
     for ref in refs:
         chunk = read_reference(storage_client, ref, uid, cid, {private_cloud_sync_bucket}, key, source_metadata=True)
         if not chunk or len(chunk) % 2:
             raise ValueError('invalid retained PCM')
-        pcm.extend(chunk)
-        if len(pcm) > MAX_AUDIO_SECONDS * 32000:
+        decoded_bytes += len(chunk)
+        if decoded_bytes > MAX_AUDIO_SECONDS * 32000:
             raise ValueError('retained audio budget exceeded')
-    if not pcm:
-        raise ValueError('empty retained audio')
+        sources.append((source_start(ref, chunk), chunk))
+    pcm = covered_pcm(row, sources, MAX_AUDIO_SECONDS)
     spans = offline_pcm_speech_segments(bytes(pcm))
     speech = math.fsum(span['duration'] for span in spans)
     if not math.isfinite(speech) or speech < 0:
@@ -154,17 +154,19 @@ def _classify(*, speech_seconds, raw_objects, legacy_objects):
         return 'no_speech' if speech_seconds < SPEECH_LIMIT_SECONDS else 'has_speech'
     if legacy_objects:
         return 'retained_audio_unmeasured'
-    return 'no_retained_audio'
+    return 'coverage_incomplete'
 
 
-def _measure_row(storage_client, uid, cid):
+def _measure_row(storage_client, uid, cid, row):
     """Return (disposition, speech_seconds, audio_seconds, raw_objects, legacy_objects)."""
     refs = _raw_refs(storage_client, uid, cid)
     if refs:
         try:
-            speech, audio = _measure(storage_client, uid, cid, refs)
+            speech, audio = _measure(storage_client, uid, cid, refs, row)
         except BatchPrivacyBlocked:
             raise
+        except CoverageIncomplete:
+            return 'coverage_incomplete', None, None, len(refs), 0
         except Exception:
             return 'decode_failed', None, None, len(refs), 0
         return (
@@ -176,7 +178,7 @@ def _measure_row(storage_client, uid, cid):
         )
     legacy = _legacy_chunks(storage_client, uid, cid)
     return (
-        'no_retained_audio' if not legacy else 'retained_audio_unmeasured',
+        'coverage_incomplete' if not legacy else 'retained_audio_unmeasured',
         None,
         None,
         0,
@@ -203,7 +205,7 @@ def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=
             elif _job_exists(store, uid, cid):
                 entry['disposition'] = 'already_registered'
             else:
-                disposition, speech, audio, raw_objects, legacy_objects = _measure_row(storage_client, uid, cid)
+                disposition, speech, audio, raw_objects, legacy_objects = _measure_row(storage_client, uid, cid, row)
                 entry.update(
                     disposition=disposition,
                     raw_objects=raw_objects,
@@ -251,7 +253,9 @@ def _reprove(store, storage_client, entry, now):
         raise NoSpeechRefused('state_changed')
     if candidate_refusal(row, now) or row.get(terminal_db.MARKER) or _job_exists(store, uid, cid):
         raise NoSpeechRefused('state_changed')
-    disposition, speech, audio, _, _ = _measure_row(storage_client, uid, cid)
+    disposition, speech, audio, _, _ = _measure_row(storage_client, uid, cid, row)
+    if disposition == 'coverage_incomplete':
+        raise NoSpeechRefused('coverage_incomplete')
     if disposition != entry['disposition']:
         raise NoSpeechRefused('state_changed')
     if disposition == 'no_speech' and (speech is None or abs(speech - entry['speech_seconds']) > 1e-6):

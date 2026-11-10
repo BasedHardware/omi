@@ -12,13 +12,38 @@ execution by itself.
 page of stale `status=in_progress`, `record_lane_owner=batch_live_v1` captures,
 decodes their retained raw-live audio in memory, runs the repository's strict
 local VAD, and plans a reversible `no_speech` terminal for rows with under ten
-seconds of speech (or provably no retained audio). It never deletes a row or an
+seconds of speech after complete capture coverage is proven. It never deletes a row or an
 audio object.
 
 The close stamps `status=completed`, `discarded=true`,
 `terminal_no_derived_effects=true` and a `no_speech_terminal` marker that saves
 the prior lifecycle fields. The operator undo restores those fields exactly and
 removes the marker.
+
+## Capture coverage proof
+
+Planning and apply reproof each list the raw objects afresh, pin their data
+generations, and decode through the existing authenticated source reader. The
+capture interval is the row's timezone-aware `started_at` and `finished_at`.
+Each object's refreshed `capture_start` (or canonical filename start),
+`capture_end`, explicit zero `gap_count`, and decoded mono 16 kHz PCM sample
+count must agree. Missing/unknown timing, internal gaps, conflicting overlaps,
+or objects extending outside the capture beyond tolerance refuse the proof.
+
+The retained-audio sample-range `union` helper proves coverage from actual
+sample counts, never padded unit durations. The fixed allowance is **20 ms
+(320 frames) missing in total**, including both boundaries and all interior
+gaps. Only those rounding-sized holes receive zero padding. Overlapping samples
+must be byte-identical and are included once, including contained objects.
+VAD sees the resulting capture timeline, so overlaps cannot inflate speech or
+audio duration. The existing two-hour decoded-input budget still bounds all
+objects, including duplicates.
+
+`coverage_incomplete` leaves the row untouched for operator review. Empty raw
+and legacy listings also receive that refusal: absence cannot establish complete
+coverage. Historical `no_retained_audio` plans are no longer actionable. Obtain
+a fresh plan only after coverage is established; never weaken proof to drain a
+refusal. No operator execution is authorized by this change.
 
 ## Plan, review, approve one page
 
@@ -54,7 +79,7 @@ NO_SPEECH_TERMINAL_ENABLED=true python backend/scripts/mark_no_speech_orphans.py
 ```
 
 The apply reauthorizes privacy, re-reads the exact row revision, re-measures the
-retained audio and rechecks job absence before one fenced lifecycle close. A
+retained audio with a fresh coverage proof and rechecks job absence before one fenced lifecycle close. A
 changed row, measurement, consent or privacy generation refuses the write; get
 a fresh plan and approval. Pace pages manually; do not run parallel applies.
 
@@ -85,12 +110,15 @@ all content and audio. This runbook authorizes no production recovery.
 
 ## Dispositions and exits
 
-- `no_speech` / `no_retained_audio`: actionable. Exit:
+- `no_speech`: actionable. Exit:
   **operator undo restores original fields**.
 - `has_speech`: left for the normal batch pipeline. Exit: **normal batch
   pipeline**.
 - `retained_audio_unmeasured`: legacy chunks exist but no raw-live objects; the
   tool does not claim silence it did not measure. Exit: **operator review**.
+- `coverage_incomplete`: missing timing/audio, gaps or conflicting overlaps;
+  left untouched for **operator review**. Historical `no_retained_audio` is also
+  non-actionable and exits by **operator review**.
 - `decode_failed`: retained audio could not be decoded. Left untouched. Exit:
   **operator review**.
 - `privacy_blocked` / `privacy_skipped`: owner or capture privacy refused. Left untouched. Exit:

@@ -9,7 +9,8 @@ captures. Owner/capture privacy, age, finalization jobs, upload state and exact
 row revision gate eligibility. Raw-live objects are bounded and decoded in
 memory through source_audio.read_reference; local strict VAD must prove speech
 below ten seconds. Legacy-only audio is unmeasured and left untouched. Empty
-archive listing alone never proves silence: raw-live listing is checked first.
+archive listing never proves silence: complete raw-live coverage of the row
+started_at/finished_at interval is required. Empty listings refuse coverage.
 
 A content-derived run identity makes a page's digest reproducible across dry-run
 and apply. Apply rechecks privacy generation, row proof, job absence and VAD
@@ -39,3 +40,10 @@ current revision as the fence. Known receipt revisions retain their original
 fence. Undo no longer needs an encryption secret or storage client. Refusal
 exits are row-local, including upload_pending and privacy_skipped. Each apply
 uses a new private ledger; partial pages are undone separately before replan.
+
+Coverage follow-up: planning and apply both prove coverage on fresh raw listings
+using refreshed capture_start/capture_end, explicit zero gap_count and decoded
+16 kHz sample counts. Missing coverage is limited to a cumulative 20 ms (320
+frames), including boundaries. Byte-identical overlaps are deduplicated before
+VAD; conflicting overlaps or unknown timing return coverage_incomplete with an
+operator-review exit. Historical no_retained_audio plans no longer close rows.

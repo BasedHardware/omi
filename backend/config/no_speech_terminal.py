@@ -3,10 +3,11 @@
 OPERATION = 'batch-live-no-speech-v1'
 EXITS = {
     'no_speech': 'operator_undo_restores_original_fields',
-    'no_retained_audio': 'operator_undo_restores_original_fields',
+    'no_retained_audio': 'operator_review',
     'has_speech': 'normal_batch_pipeline',
     'retained_audio_unmeasured': 'operator_review',
     'decode_failed': 'operator_review',
+    'coverage_incomplete': 'operator_review',
     'privacy_blocked': 'operator_rerun_after_consent',
     'privacy_skipped': 'operator_rerun_after_consent',
     'upload_pending': 'operator_review',

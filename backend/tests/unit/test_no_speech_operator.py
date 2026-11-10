@@ -29,29 +29,29 @@ def test_classification_threshold(speech, expected):
 
 
 def test_classification_without_retained_audio():
-    assert no_speech._classify(speech_seconds=0.0, raw_objects=0, legacy_objects=0) == 'no_retained_audio'
+    assert no_speech._classify(speech_seconds=0.0, raw_objects=0, legacy_objects=0) == 'coverage_incomplete'
     assert no_speech._classify(speech_seconds=0.0, raw_objects=0, legacy_objects=2) == 'retained_audio_unmeasured'
 
 
 def test_measure_row_decode_failure_is_untouched(monkeypatch):
     monkeypatch.setattr(no_speech, '_raw_refs', lambda *a, **k: [{'path': 'raw-live/x'}])
     monkeypatch.setattr(no_speech, '_measure', Mock(side_effect=ValueError('decode')))
-    assert no_speech._measure_row(object(), UID, CID) == ('decode_failed', None, None, 1, 0)
+    assert no_speech._measure_row(object(), UID, CID, original_row()) == ('decode_failed', None, None, 1, 0)
 
 
 def test_measure_row_privacy_blocked_propagates(monkeypatch):
     monkeypatch.setattr(no_speech, '_raw_refs', lambda *a, **k: [{'path': 'raw-live/x'}])
     monkeypatch.setattr(no_speech, '_measure', Mock(side_effect=BatchPrivacyBlocked('blocked')))
     with pytest.raises(BatchPrivacyBlocked):
-        no_speech._measure_row(object(), UID, CID)
+        no_speech._measure_row(object(), UID, CID, original_row())
 
 
 def test_measure_row_no_audio_and_legacy(monkeypatch):
     monkeypatch.setattr(no_speech, '_raw_refs', lambda *a, **k: [])
     monkeypatch.setattr(no_speech, '_legacy_chunks', lambda *a, **k: [])
-    assert no_speech._measure_row(object(), UID, CID) == ('no_retained_audio', None, None, 0, 0)
+    assert no_speech._measure_row(object(), UID, CID, original_row()) == ('coverage_incomplete', None, None, 0, 0)
     monkeypatch.setattr(no_speech, '_legacy_chunks', lambda *a, **k: [{'path': 'chunks/x'}])
-    assert no_speech._measure_row(object(), UID, CID) == ('retained_audio_unmeasured', None, None, 0, 1)
+    assert no_speech._measure_row(object(), UID, CID, original_row()) == ('retained_audio_unmeasured', None, None, 0, 1)
 
 
 class FakeStore:
@@ -535,3 +535,107 @@ def test_apply_refuses_privacy_generation_changed_after_reproof(monkeypatch):
     assert client.revisions[storage_tests.PATH] == original_revision
     assert all(not txn.has_written for txn in client.transactions)
     assert client.deletes == []
+
+
+def coverage_operator(monkeypatch, specs):
+    """Actual listing, coverage, VAD wiring, plan/reproof and lifecycle storage."""
+    client = operator_client(monkeypatch)
+    start = storage_tests.NOW - storage_tests.timedelta(days=1)
+    client.rows[storage_tests.PATH].update(started_at=start, finished_at=start + storage_tests.timedelta(seconds=8))
+    blobs, pcm_by_path = [], {}
+
+    def replace_sources(specs):
+        blobs.clear()
+        pcm_by_path.clear()
+        for index, (offset, duration, value) in enumerate(specs):
+            path = f'raw-live/{UID}/{CID}/{index}.flac'
+            metadata = {
+                'capture_start': str(start.timestamp() + offset),
+                'capture_end': str(start.timestamp() + offset + duration),
+                'gap_count': '0',
+            }
+            blobs.append(SimpleNamespace(name=path, generation=1, metadata=metadata))
+            pcm_by_path[path] = value * round(duration * 16000)
+
+    replace_sources(specs)
+    storage = Mock()
+    storage.bucket.return_value.list_blobs.side_effect = lambda **kwargs: list(reversed(blobs))
+    monkeypatch.setattr(no_speech, 'read_reference', lambda client, ref, *a, **kw: pcm_by_path[ref['path']])
+    monkeypatch.setattr(no_speech, 'privacy_read', lambda *a, **kw: 7)
+    monkeypatch.setattr(no_speech, '_job_exists', lambda *a: False)
+    # Every decoded sample is treated as speech; duplicate frames would cross
+    # the ten-second threshold if overlaps were concatenated instead of trimmed.
+    vad = Mock(side_effect=lambda pcm: [{'duration': len(pcm) / 32000}])
+    monkeypatch.setattr(no_speech, 'offline_pcm_speech_segments', vad)
+    monkeypatch.setenv('NO_SPEECH_TERMINAL_ENABLED', 'true')
+    store = FakeStore(original_row())
+    store.client = client
+    return client, store, storage, replace_sources, vad
+
+
+def test_gap_page_is_coverage_incomplete_and_never_closes(monkeypatch):
+    client, store, storage, _, vad = coverage_operator(monkeypatch, [(0, 3, b'\x01\0'), (4, 4, b'\x01\0')])
+    before = dict(client.rows[storage_tests.PATH])
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], storage)
+    assert planned['entries'][0]['disposition'] == 'coverage_incomplete'
+    report = no_speech.summary(planned)
+    assert report['dispositions'] == {'coverage_incomplete': 1}
+    assert report['exits'] == {'coverage_incomplete': 'operator_review'}
+    assert report['actionable'] == 0
+    ledger = Mock()
+    assert no_speech.apply_no_speech(store, planned, planned['plan_sha256'], storage, ledger=ledger) == {
+        'coverage_incomplete': 1
+    }
+    vad.assert_not_called()
+    ledger.prepare.assert_not_called()
+    assert client.rows[storage_tests.PATH] == before
+    assert client.transactions == []
+
+
+@pytest.mark.parametrize('specs', [[(0, 4, b'\x01\0'), (4, 4, b'\x01\0')], [(0, 6, b'\x01\0'), (2, 6, b'\x01\0')]])
+def test_full_coverage_classifies_and_counts_overlaps_once(monkeypatch, specs):
+    _, store, storage, _, vad = coverage_operator(monkeypatch, specs)
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], storage)
+    entry = planned['entries'][0]
+    assert entry['disposition'] == 'no_speech'
+    assert entry['speech_seconds'] == entry['audio_seconds'] == 8
+    assert len(vad.call_args.args[0]) == 8 * 32000
+
+
+@pytest.mark.parametrize(
+    'added,expected',
+    [
+        ((2, 4, b'\x02\0'), 'coverage_incomplete'),
+        ((8, 1, b'\x01\0'), 'coverage_incomplete'),
+        ((2, 4, b'\x01\0'), 'closed'),
+    ],
+)
+def test_added_object_must_pass_fresh_coverage_reproof(monkeypatch, added, expected):
+    client, store, storage, replace, vad = coverage_operator(monkeypatch, [(0, 8, b'\x01\0')])
+    before = dict(client.rows[storage_tests.PATH])
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], storage)
+    assert planned['entries'][0]['disposition'] == 'no_speech'
+    replace([(0, 8, b'\x01\0'), added])
+    ledger = Mock()
+    assert no_speech.apply_no_speech(store, planned, planned['plan_sha256'], storage, ledger=ledger) == {expected: 1}
+    assert storage.bucket.return_value.list_blobs.call_count == 2
+    if expected == 'coverage_incomplete':
+        ledger.prepare.assert_not_called()
+        assert client.rows[storage_tests.PATH] == before
+        assert client.transactions == []
+    else:
+        assert client.rows[storage_tests.PATH]['discarded'] is True
+        assert len(vad.call_args.args[0]) == 8 * 32000
+
+
+def test_missing_chunk_at_apply_is_coverage_incomplete(monkeypatch):
+    client, store, storage, replace, _ = coverage_operator(monkeypatch, [(0, 4, b'\x01\0'), (4, 4, b'\x01\0')])
+    before = dict(client.rows[storage_tests.PATH])
+    planned = no_speech.plan_no_speech(store, [ROW_PATH], storage)
+    replace([(0, 4, b'\x01\0')])
+    ledger = Mock()
+    assert no_speech.apply_no_speech(store, planned, planned['plan_sha256'], storage, ledger=ledger) == {
+        'coverage_incomplete': 1
+    }
+    ledger.prepare.assert_not_called()
+    assert client.rows[storage_tests.PATH] == before
