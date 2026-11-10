@@ -569,3 +569,9 @@ tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_disting
 tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[provider_error-None]
 tests/unit/test_sync_cross_job_assignment.py::test_seventy_minutes_of_identical_narration_is_one_recording
 tests/unit/test_monitoring_telemetry_contract.py::test_held_dead_letter_producer_families_reach_the_volume_alert_through_each_cloud_run_bridge[path0]
+# 50 real producer threads against a stubbed slow GCS, with tracemalloc and RSS sampling; the
+# call phase includes thread scheduling and the 1ms admission poll, so its CPU is not stable.
+# Measured on CI main: 0.70s (run 42762710320), 0.77s (42796611714), 0.85s (42780954447) and
+# 1.01s (42786950639, the run that tripped the 1.00s fail limit and failed shard 5). Hermetic,
+# assertions unchanged; the exemption covers the guard only, the test still runs and asserts.
+tests/unit/test_pusher_storage_pcm_saturation.py::test_50_sockets_plateau_refuse_without_ack_then_retry_once
