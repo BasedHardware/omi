@@ -305,11 +305,13 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             }
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
-            for job in jobs:
-                if (
-                    Scheduler.redrive_in_transaction(tx, job, time.time(), checked=RecoveryFence(store).checked)
-                    == 'spent'
-                ):
+            for index, job in enumerate(jobs):
+                outcome = Scheduler.redrive_in_transaction(tx, job, time.time(), checked=RecoveryFence(store).checked)
+                if outcome:
+                    # The recovery fence requeues a checked copy. Read our staged
+                    # write so this response reflects the same transaction's state.
+                    jobs[index] = tx.get('jobs', job['segment_id'])
+                if outcome == 'spent':
                     spent_redrives.append(job['segment_id'])
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must

@@ -322,12 +322,44 @@ def test_client_poll_redrive_keeps_the_nightly_accounting(monkeypatch, counter, 
         held_redrives=1,
         attempt=5,
     )
-    durable_status(store, 'synthetic-owner', 'bp_first')
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'queued'
+    assert status['poll_after_ms'] == 3000
+    assert 'reason_code' not in status
+    assert status['failed_segments'] == 0
     job = store.rows['jobs', 'segment']
     assert job['state'] == 'ready'
     assert job['held_redrives'] == 2
     # Telemetry rollback cannot change custody.
     assert job['attempt'] == (0 if budget == 'true' else 5)
+
+
+@pytest.mark.parametrize('refusal', ['active_token', 'provider_route'])
+def test_client_poll_refused_redrive_keeps_the_held_status(monkeypatch, refusal):
+    from tests.unit.test_batch_pipeline_intake import proposal, submit
+    from utils.batch_pipeline.intake import durable_status
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_test_intake'
+    submit(store, *proposal())
+    Scheduler(store).pull(100)
+    held_dead(store.rows['jobs', 'segment'])
+    if refusal == 'active_token':
+        store.rows['jobs', 'segment']['token'] = 'active-recovery'
+    else:
+        store.rows['jobs', 'segment']['stt_route'] = {'stt_route': 'provider'}
+    before = deepcopy(store.rows)
+
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+
+    assert status['status'] == 'processing'
+    assert status['reason_code'] == 'batch_unit_held'
+    assert status['poll_after_ms'] == 300000
+    assert status['failed_segments'] == 1
+    assert store.rows == before
 
 
 def operator_redrive_app(store, monkeypatch):

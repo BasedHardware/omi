@@ -11,6 +11,11 @@ is shared independently of recovery orchestration to preserve worker-image
 source closure. Input-expiring operator requeues and staging-input repairs
 consume no held grant and reset no attempt budget.
 
+Client status polling refreshes its job snapshot from the transaction's staged
+write after a successful re-drive. A newly ready unit returns queued with a
+three-second poll hint; refused re-drives retain their held status and poll
+hint. Regression tests cover both outcomes.
+
 Durable held accounting continues when telemetry is silenced. The first
 committed re-drive after three grants writes a durable spent marker and emits
 one post-commit event when telemetry is enabled. Later cycles, refused rows,
