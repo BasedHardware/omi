@@ -63,6 +63,7 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
+    'EPISODE_LATE_COMPOSE',
 }
 
 SCOPE = (
@@ -271,6 +272,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
+        elif name == 'EPISODE_LATE_COMPOSE':
+            assert entry['owner'] == 'refactor-lead'
+            assert entry['review_by'] == '2026-12-10'
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')

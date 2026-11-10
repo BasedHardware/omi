@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 263,
+  "count": 264,
   "names": {
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},
@@ -185,6 +185,7 @@
     "HOME_HIDE_BELOW_FLOOR_ROWS": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_MOMENT_OUTPUT_VALIDATOR": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
+    "EPISODE_LATE_COMPOSE": {"owner": "refactor-lead", "review_by": "2026-12-10", "registry": "config/feature-flags.yaml"},
     "FIRESTORE_EMULATOR_HOST": {"seeded": "2026-10-25"},
     "HOSTED_LID_API_URL": {"owner": "planscost", "review_by": "2026-11-30"},
     "HOSTED_PARAKEET_API_URL": {"seeded": "2026-10-25"},

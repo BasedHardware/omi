@@ -52,6 +52,16 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_LATE_COMPOSE_ENV = 'EPISODE_LATE_COMPOSE'
+EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV = 'EPISODE_LATE_COMPOSE_AFTER_HOURS'
+EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV = 'EPISODE_LATE_COMPOSE_GRACE_HOURS'
+# A recording repaired or synced more than this long after capture is "late": it
+# composes when its page is first opened, not at finalize.
+DEFAULT_LATE_COMPOSE_AFTER_HOURS = 48.0
+# The read-side safety net still composes a deferred episode after this long, so a
+# client that never opens the page cannot leave notes unwritten for long. A repair
+# wave's arrivals are hours apart, so a day still collapses a wave into one compose.
+DEFAULT_LATE_COMPOSE_GRACE_HOURS = 24.0
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -159,6 +169,36 @@ def episode_composer_enabled() -> bool:
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_late_compose_enabled() -> bool:
+    """Default-on: a late episode composes on its first open instead of at finalize.
+
+    Off restores today's behavior: every closed episode composes as soon as its
+    members finish, however old the capture is.
+    """
+    return modes_default_on(EPISODE_LATE_COMPOSE_ENV)
+
+
+def _positive_hours(name: str, default: float) -> float:
+    """A positive hour count; invalid, non-finite or nonpositive values use the default."""
+    try:
+        hours = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    if hours != hours or hours in (float('inf'), float('-inf')) or hours <= 0:
+        return default
+    return hours
+
+
+def episode_late_compose_after_hours() -> float:
+    """48h by default: capture age at finalize above which a compose waits for the first open."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, DEFAULT_LATE_COMPOSE_AFTER_HOURS)
+
+
+def episode_late_compose_grace_hours() -> float:
+    """24h by default: how long a deferred episode may wait before a read composes it anyway."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV, DEFAULT_LATE_COMPOSE_GRACE_HOURS)
 
 
 def client_channel_admitted(raw: str | None) -> bool:

@@ -118,6 +118,9 @@ def _reply(**over):
 def store(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
+    # These fixtures use a fixed 2026-10-30 capture, which is "late" by wall clock.
+    # Late-compose tests opt back in explicitly; the rest keep today's finalize compose.
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_ENV, 'off')
     monkeypatch.setattr(composer, '_deferred', {})
     monkeypatch.setattr(composer, '_foreground', set())
     monkeypatch.setattr(composer, '_recent', {})
@@ -1229,3 +1232,108 @@ def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, c
     store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
     assert len(calls) == 2
+
+
+# --------------------------------------------------------------------------- late composes
+#
+# A recording repaired or synced more than 48h after capture composes on its first
+# open, not at finalize. The `store` fixture turns the switch off; these tests opt in.
+
+
+def _late(store, *, days=3):
+    store.episode['started_at'] = datetime.now(timezone.utc) - timedelta(days=days)
+    return store.episode
+
+
+def test_a_late_episode_defers_its_compose_at_finalize(store, monkeypatch):
+    queued = []
+    monkeypatch.delenv(config.EPISODE_LATE_COMPOSE_ENV, raising=False)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    reasons = []
+    monkeypatch.setattr(composer.metrics, 'record_compose_trigger_skipped', reasons.append)
+    episode = _late(store)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is False
+    assert queued == []
+    assert store.episode['compose_deferred_at'] is not None
+    # The row reads as the first member's own summary title until the composer replaces it.
+    assert store.episode['title'] == 'T'
+    assert reasons == ['late_deferred']
+
+
+def test_a_normal_episode_still_composes_at_finalize(store, monkeypatch):
+    queued = []
+    monkeypatch.delenv(config.EPISODE_LATE_COMPOSE_ENV, raising=False)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    store.episode['started_at'] = datetime.now(timezone.utc) - timedelta(hours=2)
+    assert composer.schedule_after_close(UID, 'ep1', episode=store.episode, collaborators=_c()) is True
+    assert queued == ['ep1']
+    assert 'compose_deferred_at' not in store.episode
+
+
+def test_the_late_compose_switch_off_restores_finalize_compose(store, monkeypatch):
+    queued = []
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_ENV, 'off')
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    episode = _late(store)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is True
+    assert queued == ['ep1']
+    assert 'compose_deferred_at' not in store.episode
+
+
+def test_opening_a_deferred_episode_composes_it_exactly_once(store, monkeypatch):
+    calls = []
+    monkeypatch.delenv(config.EPISODE_LATE_COMPOSE_ENV, raising=False)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    episode = _late(store)
+    episode['compose_deferred_at'] = datetime.now(timezone.utc)
+    assert composer.schedule_opened(UID, episode, collaborators=_c(calls=calls)) is True
+    assert len(calls) == 1
+    assert store.episode['composed_fingerprint']
+    # The deferral is one-shot: a later arrival defers again on its own.
+    assert store.episode['compose_deferred_at'] is None
+    # A second open inside the read throttle window does not pay again.
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c(calls=calls)) is False
+    assert len(calls) == 1
+
+
+def test_the_read_safety_net_waits_for_the_grace_window(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_LATE_COMPOSE_ENV, raising=False)
+    now = datetime.now(timezone.utc)
+    deferred = {
+        'id': 'late',
+        'status': 'closed',
+        'started_at': now - timedelta(days=3),
+        'closed_at': now - timedelta(days=3),
+        'compose_deferred_at': now - timedelta(hours=1),
+    }
+    assert composer.needs_compose(deferred) is False
+    assert composer.needs_compose(deferred, opened=True) is True
+    past_grace = {**deferred, 'compose_deferred_at': now - timedelta(days=2)}
+    assert composer.needs_compose(past_grace) is True
+    # The grace window is configurable; a shorter one composes sooner.
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV, '2')
+    assert composer.needs_compose({**deferred, 'compose_deferred_at': now - timedelta(hours=3)}) is True
+
+
+def test_a_composed_late_episode_keeps_its_title_when_a_member_arrives(store, monkeypatch):
+    monkeypatch.delenv(config.EPISODE_LATE_COMPOSE_ENV, raising=False)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: True)
+    episode = _late(store)
+    episode.update({'composed_fingerprint': 'x', 'title': 'Composed title'})
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is False
+    assert store.episode['title'] == 'Composed title'
+    assert store.episode['compose_deferred_at'] is not None
+
+
+def test_the_late_threshold_is_configurable(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_LATE_COMPOSE_ENV, raising=False)
+    now = datetime.now(timezone.utc)
+    episode = {'id': 'e', 'status': 'closed', 'started_at': now - timedelta(hours=30)}
+    assert composer.is_late(episode) is False
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, '24')
+    assert composer.is_late(episode) is True
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, 'nonsense')
+    assert composer.is_late(episode) is False
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, '0')
+    assert composer.is_late(episode) is False
