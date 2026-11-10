@@ -25,7 +25,7 @@ def _digest(body: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _cursor(after: dict | None) -> dict | None:
+def _cursor(after: object) -> dict | None:
     if after is None:
         return None
     if not isinstance(after, dict) or set(after) != {'deferred_since', 'path'}:
