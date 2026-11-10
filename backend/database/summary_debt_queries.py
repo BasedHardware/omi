@@ -3,7 +3,7 @@
 from typing import Any, Literal
 from google.cloud import firestore
 from database._client import get_firestore_client
-from config.summary_guarantee import REPAIR_NEAR_EXPIRY_SECONDS
+from config.summary_guarantee import REPAIR_NEAR_EXPIRY_SECONDS, REPAIR_QUERY_PAGE_LIMIT
 from utils.enrichment.age_gate import max_age_seconds, timestamp
 
 Phase = Literal['near_expiry', 'newest']
@@ -49,4 +49,4 @@ def due_conversations(
                 }
             )
         # Legacy, expired, wrong-phase and age-gate mode changes rewind safely.
-    return list(query.limit(max(1, min(100, limit))).stream())
+    return list(query.limit(max(1, min(REPAIR_QUERY_PAGE_LIMIT, limit))).stream())

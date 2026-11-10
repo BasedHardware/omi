@@ -16,6 +16,8 @@ from config.summary_guarantee import (
     repair_enabled,
     REPAIR_INTERVAL_SECONDS,
     REPAIR_SCAN_LIMIT,
+    REPAIR_QUERY_PAGE_LIMIT,
+    REPAIR_SCAN_TIME_BUDGET_SECONDS,
     REPAIR_ADMISSION_LIMIT,
     REPAIR_PER_OWNER_TICK_LIMIT,
 )
@@ -28,6 +30,7 @@ from utils.sync import reprocess
 from utils.enrichment.age_gate import max_age_seconds
 
 Row = dict[str, Any]
+_scan_clock = time.monotonic
 CURSOR = 'maintenance/summary_debt_repair_v1'
 
 
@@ -106,6 +109,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     counts = {'scanned': 0, 'admitted': 0, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0}
     if not repair_enabled():
         return counts
+    scan_deadline = _scan_clock() + REPAIR_SCAN_TIME_BUDGET_SECONDS
     current = time.time() if now is None else now
     client = client if client is not None else get_firestore_client()
     cursor_ref = client.document(CURSOR)
@@ -140,56 +144,85 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     overdue = 0
     oldest = 0.0
     for phase in ('near_expiry', 'newest'):
-        if attempts >= REPAIR_ADMISSION_LIMIT or counts['scanned'] >= REPAIR_SCAN_LIMIT:
+        if (
+            attempts >= REPAIR_ADMISSION_LIMIT
+            or counts['scanned'] >= REPAIR_SCAN_LIMIT
+            or _scan_clock() >= scan_deadline
+        ):
             break
-        limit = REPAIR_SCAN_LIMIT - counts['scanned']
-        page = due_conversations(
-            now=current, phase=phase, limit=limit, after=progress.get(phase), firestore_client=client
-        )
-        counts['scanned'] += len(page)
+        walk = progress.get(phase)
         last = None
         deferred = False
-        for snapshot in page:
-            # Sample the entire fetched page. Once a candidate is deferred,
-            # retain the preceding key so it is eligible again next tick.
-            previous = last
-            if not deferred:
-                last = snapshot
-            row: Row = snapshot.to_dict() or {}
-            if delivery.refusal(row):
-                continue
-            parts = snapshot.reference.path.split('/')
-            if (len(parts) != 4) or (parts[0] != 'users') or (parts[2] != 'conversations'):
-                continue
-            if account_deletion_blocks_user_work(parts[1]):
-                continue
-            from utils.enrichment.age_gate import expired
-
-            if expired({'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current):
-                counts['expired_seen'] += 1
-                continue
-            overdue += 1
-            oldest = max(oldest, current - row['summary_due_at'])
-            if attempts >= REPAIR_ADMISSION_LIMIT or owner_attempts.get(parts[1], 0) >= REPAIR_PER_OWNER_TICK_LIMIT:
-                if not deferred:
-                    last = previous
+        exhausted = False
+        while (
+            attempts < REPAIR_ADMISSION_LIMIT
+            and counts['scanned'] < REPAIR_SCAN_LIMIT
+            and _scan_clock() < scan_deadline
+        ):
+            limit = min(REPAIR_QUERY_PAGE_LIMIT, REPAIR_SCAN_LIMIT - counts['scanned'])
+            page = due_conversations(now=current, phase=phase, limit=limit, after=walk, firestore_client=client)
+            # Count every returned document, including a fetched tail left for
+            # next tick. No later RPC starts once attempts/time are exhausted.
+            counts['scanned'] += len(page)
+            exhausted = len(page) < limit
+            for snapshot in page:
+                if attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
                     deferred = True
-                continue
-            attempts += 1
-            owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
-            try:
-                admitted = int(redrive(client, parts[1], parts[3], now=current))
-                counts['admitted'] += admitted
-                if phase == 'near_expiry':
-                    counts['near_expiry_admitted'] += admitted
-            except Exception:
-                # Existing sweep owns retry. Do not print document contents/errors.
-                counts['errors'] += 1
-        # Wrap only exhausted pages with no deferrals. Fairness/global caps
-        # rewind before the first skipped candidate, while this tick can still
-        # admit other owners later in the bounded page. A heavy owner beyond a
-        # full page can still require several ticks of bounded discovery.
-        if last is not None and (len(page) == limit or deferred):
+                    break
+                previous = last
+                if not deferred:
+                    last = snapshot
+                row: Row = snapshot.to_dict() or {}
+                if delivery.refusal(row):
+                    continue
+                parts = snapshot.reference.path.split('/')
+                if (len(parts) != 4) or (parts[0] != 'users') or (parts[2] != 'conversations'):
+                    continue
+                if account_deletion_blocks_user_work(parts[1]):
+                    continue
+                from utils.enrichment.age_gate import expired
+
+                if expired(
+                    {'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current
+                ):
+                    counts['expired_seen'] += 1
+                    continue
+                overdue += 1
+                oldest = max(oldest, current - row['summary_due_at'])
+                if owner_attempts.get(parts[1], 0) >= REPAIR_PER_OWNER_TICK_LIMIT:
+                    if not deferred:
+                        last = previous
+                        deferred = True
+                    continue
+                if _scan_clock() >= scan_deadline:
+                    if not deferred:
+                        last = previous
+                    deferred = True
+                    break
+                attempts += 1
+                owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
+                try:
+                    admitted = int(redrive(client, parts[1], parts[3], now=current))
+                    counts['admitted'] += admitted
+                    if phase == 'near_expiry':
+                        counts['near_expiry_admitted'] += admitted
+                except Exception:
+                    # Existing sweep owns retry. Do not print document contents/errors.
+                    counts['errors'] += 1
+            if exhausted or attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
+                break
+            # Walk past this chunk in-memory even if owner fairness deferred a
+            # row. Durable progress remains before the first deferral below.
+            tail = page[-1]
+            row = tail.to_dict() or {}
+            walk = {
+                'phase': phase,
+                'window': max_age_seconds(),
+                'path': tail.reference.path,
+                'due': row.get('summary_due_at'),
+                'pending': row.get('summary_first_pending_at'),
+            }
+        if last is not None and (deferred or not exhausted):
             row = last.to_dict() or {}
             progress[phase] = {
                 'phase': phase,
@@ -198,7 +231,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 'due': row.get('summary_due_at'),
                 'pending': row.get('summary_first_pending_at'),
             }
-        elif not deferred:
+        elif exhausted and not deferred:
             progress[phase] = None
         # First-row deferral preserves the input cursor (or None on a rewind).
     delivery.DEBT.set(overdue)

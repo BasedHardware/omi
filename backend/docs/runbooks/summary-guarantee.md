@@ -72,11 +72,11 @@ rows. Enabling the new flag alone is not a historical backlog drain.
 
 Only the existing scheduled two-minute sequencer sweep scans indexed overdue `summary_due_at` rows,
 including completed kept minimums. A global Firestore cursor/lease permits one
-scan per 120 seconds, at most 100 fetched documents and **10 admission attempts
+scan per 120 seconds, a configurable fetched-document budget (default 100) and **8 admission attempts
 by default** per winning tick shared across two phases. First scan pending times in
 `[now - max_age_seconds(), now - max_age_seconds() + REPAIR_NEAR_EXPIRY_SECONDS]`
 oldest-first; then scan the rest of the window newest-first. The named margin is
-five intervals (600 seconds), allowing up to 50 admission attempts before expiry
+five intervals (600 seconds), allowing up to 40 admission attempts before expiry
 at the default cap and configured cadence. This is headroom, not a guarantee
 under overload or blocked admissions. With the age gate disabled there is only the newest phase.
 Both order by due time then document name to break pending-time ties.
@@ -93,10 +93,10 @@ consume capacity first; only remaining reads and attempts go to newest-first. A 
 consume the expiry band's budget. Urgent overload can consume all capacity.
 
 `SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT` is a startup setting clamped to 1..60
-(default 10; invalid uses 10). At 30 ticks/hour, the configured ceiling is
-`limit * 30`: 300 attempts/hour by default, 1,800 at the upper bound. The default
-is unchanged. Lead2 ruling `8b9c8f` (2026-11-10) sets only production
-backend-integration to 8: 240 attempts/hour, 5,760/day. The capacity record
+(default 8; invalid uses 8). At 30 ticks/hour, the configured ceiling is
+`limit * 30`: 240 attempts/hour by default, 1,800 at the upper bound. Lead2 ruling `d233ac` (2026-11-10) sets the code
+default to 8. Earlier ruling `8b9c8f` keeps the explicit production
+backend-integration override at 8: 240 attempts/hour, 5,760/day. The capacity record
 `data/run-2026-11-08-retro-fixnow/out-sd-capacity.md` uses a $0.0054/repair
 mean, giving $31.10/day at full admission. This is a planning estimate using
 a mean, not a hard spend bound. Production cap rollback: 10 in both the prod
@@ -107,8 +107,30 @@ uses 3). One owner share covers both phases in a tick. Failed/blocked attempts
 also consume the share, preventing one owner from spending the global attempt
 budget. These limits are configuration, not rollout flags. Unset either setting
 to restore its code default on process restart.
-Fairness applies to the fetched sample; a heavy owner filling a whole 100-row
-page can still delay discovery beyond the page.
+Fairness applies to the fetched sample; a heavy owner filling a whole configured scan
+budget can still delay discovery beyond the page.
+
+`SUMMARY_DEBT_REPAIR_SCAN_LIMIT` is startup config, default 100, clamped to
+1..5,000 (invalid values restore 100). No environment override is added here.
+Owner ruling `215fdc` raises the allowed maximum; it does not raise the default.
+Both phases share this tick budget. Queries return at most 500 documents per
+chunk. Stop fetching at the admission-attempt cap, document budget, or a
+90-second scan-work budget checked between rows/chunks. An in-flight RPC can
+finish later; this is a soft deadline with headroom before the 120-second lease.
+The cursor retains any fetched but unattempted tail and the first owner deferral;
+a separate in-memory cursor advances through chunks to discover other owners.
+
+At 720 ticks/day, each 100 returned documents/tick means 72,000 document
+reads/day at full scan utilization. The 2,800-row target means 2,800 document
+reads/tick and 2,016,000/day; the maximum 5,000 means 3,600,000/day. These are
+row-read arithmetic, excluding query retries, empty-query minimums, index-entry
+charges, cursor transactions and admission/fence/outbox reads. The supplied
+`a7dc6f` measurement (~84k rows, mostly refusals) implies an ideal pass of
+~28 hours at 100/tick and exactly one hour at 2,800/tick; **under** one hour
+requires more than 2,800/tick, before admission/time stops or cursor rewinds.
+A debt-only index/filter that skips refusals is the structural fix and is out
+of scope. Neither measured production pass time nor read-billing savings are
+claimed by this source-only change.
 
 Existing eligibility excludes deleted, discarded and local-only rows. There is
 no reliable denormalized Home-today or active-user rank on the debt row. That

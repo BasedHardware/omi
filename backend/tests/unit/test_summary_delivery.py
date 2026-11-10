@@ -286,7 +286,7 @@ def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase
         assert not client.shapes
         return
     shape = client.shapes[0]
-    assert shape.limit == 100
+    assert shape.limit == 500
     filters = {(f.field, f.operator, f.value) for f in shape.filters}
     assert ('summary_due_at', '<=', now) in filters
     assert shape.orders == (

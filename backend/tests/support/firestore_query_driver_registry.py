@@ -3921,7 +3921,10 @@ for _method in ('claim', 'sweep'):
 _add(
     DriverEntry(
         'database.summary_debt_queries.due_conversations',
-        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'limit': (500, 'per-query ceiling; shared tick budget is enforced by caller'),
+        },
         domains={
             'phase': ['near_expiry', 'newest'],
             'after': [

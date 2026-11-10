@@ -553,22 +553,22 @@ def test_near_expiry_is_not_starved_by_large_newer_pile_and_retains_unattempted_
         )
         client.document(repair.CURSOR).set(cursor)
         first = repair.tick(now=now, client=client)
-        assert first['near_expiry_admitted'] == first['admitted'] == 10
-        assert delivery.NEAR_EXPIRY_ADMITTED._value.get() == 10
+        assert first['near_expiry_admitted'] == first['admitted'] == 8
+        assert delivery.NEAR_EXPIRY_ADMITTED._value.get() == 8
         assert first['scanned'] == 12  # No newest query after urgent exhausts admissions.
-        assert admitted == [s.id for s in urgent[:10]]
+        assert admitted == [s.id for s in urgent[:8]]
         progress = client.document(repair.CURSOR).get().to_dict()
         assert progress['version'] == 2 and progress['path'] is None
-        assert progress['phases']['near_expiry']['path'] == urgent[9].path
+        assert progress['phases']['near_expiry']['path'] == urgent[7].path
         if not legacy:
             assert progress['phases']['newest'] == cursor['phases']['newest']
         second = repair.tick(now=now + repair.REPAIR_INTERVAL_SECONDS, client=client)
-        assert second['near_expiry_admitted'] == 2 and second['admitted'] == 10
-        assert delivery.NEAR_EXPIRY_ADMITTED._value.get() == 2
+        assert second['near_expiry_admitted'] == 4 and second['admitted'] == 8
+        assert delivery.NEAR_EXPIRY_ADMITTED._value.get() == 4
         assert second['scanned'] <= repair.REPAIR_SCAN_LIMIT
         assert admitted[:12] == [s.id for s in urgent]
         if legacy:
-            assert admitted[12:] == [s.id for s in newer[:8]]
+            assert admitted[12:] == [s.id for s in newer[:4]]
     finally:
         batch = client.batch()
         for added in urgent + newer:
@@ -699,3 +699,127 @@ def test_owner_fairness_is_shared_across_phases_and_skipped_rows_return_next_tic
     finally:
         for added in urgent + newest + other_urgent + other_newest:
             added.delete()
+
+
+@pytest.mark.parametrize('mode', ['refusals', 'owner_fairness'])
+def test_scan_budget_walks_refusals_in_bounded_chunks(debt_store, monkeypatch, mode):
+    client, uid, tasks, ref, row = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 1200)
+    ref.update({'summary_due_at': None})
+    other = client.collection('users').document(uid + '-chunk-other').collection('conversations')
+    refs = [
+        (other if mode == 'owner_fairness' and i == 600 else ref.parent).document(f'chunk-{i:04}') for i in range(1201)
+    ]
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    calls = []
+    query = repair.due_conversations
+
+    def tracked(**kwargs):
+        calls.append((kwargs['phase'], kwargs['limit']))
+        return query(**kwargs)
+
+    admitted = []
+    monkeypatch.setattr(repair, 'due_conversations', tracked)
+    monkeypatch.setattr(repair, 'redrive', lambda _, owner, cid, **kwargs: admitted.append(cid) or True)
+    try:
+        for start in range(0, len(refs), 500):
+            batch = client.batch()
+            for i in range(start, min(start + 500, len(refs))):
+                batch.set(
+                    refs[i],
+                    {
+                        **row,
+                        'summary_first_pending_at': now - i - 1,
+                        'summary_due_at': now - 1,
+                        'summary_output_present': (i != 1000 if mode == 'refusals' else i > 600),
+                    },
+                )
+            batch.commit()
+        counts = repair.tick(now=now, client=client)
+        assert counts['scanned'] == 1200
+        assert counts['admitted'] == (1 if mode == 'refusals' else 4)
+        assert admitted == ([refs[1000].id] if mode == 'refusals' else [s.id for s in refs[:3]] + [refs[600].id])
+        assert [limit for phase, limit in calls if phase == 'newest'] == [500, 500, 200]
+        assert all(limit <= 500 for _, limit in calls)
+        progress = client.document(repair.CURSOR).get().to_dict()['phases']['newest']
+        retained = 1199 if mode == 'refusals' else 2
+        assert progress['path'] == refs[retained].path
+        assert (
+            query(now=now, phase='newest', after=progress, limit=1, firestore_client=client)[0].reference
+            == refs[retained + 1]
+        )
+    finally:
+        for start in range(0, len(refs), 500):
+            batch = client.batch()
+            for added in refs[start : start + 500]:
+                batch.delete(added)
+            batch.commit()
+
+
+@pytest.mark.parametrize('stop', ['admission', 'time', 'fence_time'])
+def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, monkeypatch, stop):
+    client, uid, tasks, ref, row = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 1200)
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 10)
+    clock = [0.0]
+    monkeypatch.setattr(repair, '_scan_clock', lambda: clock[0])
+
+    def deletion_gate(_):
+        if stop == 'fence_time':
+            clock[0] = repair.REPAIR_SCAN_TIME_BUDGET_SECONDS
+        return False
+
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', deletion_gate)
+    ref.update({'summary_due_at': None})
+    refs = [ref.parent.document(f'stop-{i:04}') for i in range(501)]
+    calls, admitted = [], []
+    query = repair.due_conversations
+
+    def tracked(**kwargs):
+        calls.append((kwargs['phase'], kwargs['limit']))
+        return query(**kwargs)
+
+    def redrive(_, owner, cid, **kwargs):
+        admitted.append(cid)
+        if stop == 'time':
+            clock[0] = repair.REPAIR_SCAN_TIME_BUDGET_SECONDS
+        return True
+
+    monkeypatch.setattr(repair, 'due_conversations', tracked)
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        for start in range(0, len(refs), 500):
+            batch = client.batch()
+            for i in range(start, min(start + 500, len(refs))):
+                batch.set(
+                    refs[i],
+                    {
+                        **row,
+                        'summary_first_pending_at': now - i - 1,
+                        'summary_due_at': now - 1,
+                        'summary_output_present': i >= 9,
+                    },
+                )
+            batch.commit()
+        counts = repair.tick(now=now, client=client)
+        expected = {'admission': 8, 'time': 1, 'fence_time': 0}[stop]
+        assert counts['scanned'] == 500 and counts['admitted'] == expected
+        assert admitted == [s.id for s in refs[:expected]]
+        assert [limit for phase, limit in calls if phase == 'newest'] == [500]
+        progress = client.document(repair.CURSOR).get().to_dict()['phases'].get('newest')
+        if expected:
+            assert progress['path'] == refs[expected - 1].path
+        else:
+            assert progress is None
+        assert (
+            query(now=now, phase='newest', after=progress, limit=1, firestore_client=client)[0].reference
+            == refs[expected]
+        )
+    finally:
+        for start in range(0, len(refs), 500):
+            batch = client.batch()
+            for added in refs[start : start + 500]:
+                batch.delete(added)
+            batch.commit()

@@ -34,12 +34,15 @@ def _repair_limit(value: str, *, default: int, maximum: int) -> int:
 
 # One global leased scan per interval, irrespective of replica count.
 REPAIR_INTERVAL_SECONDS = 120
-REPAIR_SCAN_LIMIT = 100
-REPAIR_ADMISSION_LIMIT = _repair_limit(os.getenv('SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT', '10'), default=10, maximum=60)
+REPAIR_SCAN_LIMIT = _repair_limit(os.getenv('SUMMARY_DEBT_REPAIR_SCAN_LIMIT', '100'), default=100, maximum=5000)
+REPAIR_QUERY_PAGE_LIMIT = 500
+# Stop starting scan work before the 120-second lease ends; in-flight RPCs may finish later.
+REPAIR_SCAN_TIME_BUDGET_SECONDS = 90
+REPAIR_ADMISSION_LIMIT = _repair_limit(os.getenv('SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT', '8'), default=8, maximum=60)
 REPAIR_PER_OWNER_TICK_LIMIT = _repair_limit(
     os.getenv('SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT', '3'), default=3, maximum=10
 )
-# Five ticks (10 minutes): up to 50 attempts at the default admission limit
+# Five ticks (10 minutes): up to 40 attempts at the default admission limit
 # before expiry at the configured cadence. This is headroom, not a throughput
 # guarantee when urgent arrivals exceed capacity or admissions are blocked.
 REPAIR_NEAR_EXPIRY_SECONDS = 5 * REPAIR_INTERVAL_SECONDS
