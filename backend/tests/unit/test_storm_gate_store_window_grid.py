@@ -912,7 +912,7 @@ def test_grid_sibling_arm3_batch_provider_stt_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_provider_stt', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_provider_stt') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_provider_stt_jitter_100(monkeypatch):
@@ -920,7 +920,7 @@ def test_grid_sibling_arm3_batch_provider_stt_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_provider_stt', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_provider_stt') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_merge_commit_jitter_000(monkeypatch):
@@ -928,7 +928,7 @@ def test_grid_sibling_arm3_batch_merge_commit_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_merge_commit', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_merge_commit_jitter_100(monkeypatch):
@@ -936,7 +936,7 @@ def test_grid_sibling_arm3_batch_merge_commit_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_merge_commit', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_recover_jitter_000(monkeypatch):
@@ -944,7 +944,7 @@ def test_grid_sibling_arm3_batch_recover_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_recover') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_recover_jitter_100(monkeypatch):
@@ -952,7 +952,7 @@ def test_grid_sibling_arm3_batch_recover_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_recover') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_fail_jitter_000(monkeypatch):
@@ -960,7 +960,7 @@ def test_grid_sibling_arm3_batch_fail_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_fail') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_fail_jitter_100(monkeypatch):
@@ -968,7 +968,7 @@ def test_grid_sibling_arm3_batch_fail_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_fail') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_complete_jitter_000(monkeypatch):
@@ -976,7 +976,7 @@ def test_grid_sibling_arm3_batch_complete_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_complete') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_complete_jitter_100(monkeypatch):
@@ -984,7 +984,7 @@ def test_grid_sibling_arm3_batch_complete_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_complete') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_defer_jitter_000(monkeypatch):
@@ -992,7 +992,7 @@ def test_grid_sibling_arm3_batch_defer_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_defer') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_defer_jitter_100(monkeypatch):
@@ -1000,7 +1000,7 @@ def test_grid_sibling_arm3_batch_defer_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_defer') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_heartbeat_jitter_000(monkeypatch):
@@ -1008,7 +1008,7 @@ def test_grid_sibling_arm3_batch_heartbeat_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_heartbeat') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_heartbeat_jitter_100(monkeypatch):
@@ -1016,7 +1016,7 @@ def test_grid_sibling_arm3_batch_heartbeat_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_heartbeat') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_admit_jitter_000(monkeypatch):
@@ -1024,7 +1024,7 @@ def test_grid_sibling_arm3_batch_admit_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_admit') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_admit_jitter_100(monkeypatch):
@@ -1032,7 +1032,7 @@ def test_grid_sibling_arm3_batch_admit_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_admit') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_enqueue_jitter_000(monkeypatch):
@@ -1040,7 +1040,7 @@ def test_grid_sibling_arm3_batch_enqueue_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_enqueue') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_enqueue_jitter_100(monkeypatch):
@@ -1048,7 +1048,7 @@ def test_grid_sibling_arm3_batch_enqueue_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_enqueue') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_intake_status_jitter_000(monkeypatch):
@@ -1056,7 +1056,7 @@ def test_grid_sibling_arm3_batch_intake_status_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_intake_status', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_intake_status') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_intake_status_jitter_100(monkeypatch):
@@ -1064,7 +1064,7 @@ def test_grid_sibling_arm3_batch_intake_status_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_intake_status', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_intake_status') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_seal_register_jitter_000(monkeypatch):
@@ -1072,7 +1072,7 @@ def test_grid_sibling_arm3_batch_seal_register_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_seal_register', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_seal_register') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_seal_register_jitter_100(monkeypatch):
@@ -1080,7 +1080,7 @@ def test_grid_sibling_arm3_batch_seal_register_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_seal_register', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_seal_register') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_release_jitter_000(monkeypatch):
@@ -1088,7 +1088,7 @@ def test_grid_sibling_arm3_batch_release_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_release') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_release_jitter_100(monkeypatch):
@@ -1096,7 +1096,7 @@ def test_grid_sibling_arm3_batch_release_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_release') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_redrive_jitter_000(monkeypatch):
@@ -1104,7 +1104,7 @@ def test_grid_sibling_arm3_batch_redrive_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_redrive') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_redrive_jitter_100(monkeypatch):
@@ -1112,7 +1112,7 @@ def test_grid_sibling_arm3_batch_redrive_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', aborts=3, arm_at=3)
     assert store.run(body, operation='batch_redrive') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_pull_shard_scheduler_00_jitter_000(monkeypatch):
@@ -1122,7 +1122,7 @@ def test_grid_sibling_arm3_batch_pull_shard_scheduler_00_jitter_000(monkeypatch)
         monkeypatch, clock, label='batch_pull shard=scheduler_00', aborts=3, arm_at=3
     )
     assert store.run(body, operation='batch_pull shard=scheduler_00') == 'committed'
-    assert clock.sleeps == [0.1, 0.2, 0.525]  # only rung 3 is gated
+    assert clock.sleeps == [0.1, 0.2, 0.9]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm3_batch_pull_shard_scheduler_00_jitter_100(monkeypatch):
@@ -1132,7 +1132,7 @@ def test_grid_sibling_arm3_batch_pull_shard_scheduler_00_jitter_100(monkeypatch)
         monkeypatch, clock, label='batch_pull shard=scheduler_00', aborts=3, arm_at=3
     )
     assert store.run(body, operation='batch_pull shard=scheduler_00') == 'committed'
-    assert clock.sleeps == [0.2, 0.4, 1.05]  # only rung 3 is gated
+    assert clock.sleeps == [0.2, 0.4, 1.8]  # rung 3 rides the max of the sibling window and its own wave wait
 
 
 def test_grid_sibling_arm4_lands_batch_provider_stt_jitter_000(monkeypatch):
@@ -1140,8 +1140,9 @@ def test_grid_sibling_arm4_lands_batch_provider_stt_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_provider_stt', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_provider_stt') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_provider_stt_jitter_100(monkeypatch):
@@ -1149,8 +1150,9 @@ def test_grid_sibling_arm4_lands_batch_provider_stt_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_provider_stt', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_provider_stt') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_merge_commit_jitter_000(monkeypatch):
@@ -1158,8 +1160,9 @@ def test_grid_sibling_arm4_lands_batch_merge_commit_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_merge_commit', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_merge_commit_jitter_100(monkeypatch):
@@ -1167,8 +1170,9 @@ def test_grid_sibling_arm4_lands_batch_merge_commit_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_merge_commit', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_recover_jitter_000(monkeypatch):
@@ -1176,8 +1180,9 @@ def test_grid_sibling_arm4_lands_batch_recover_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_recover') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_recover_jitter_100(monkeypatch):
@@ -1185,8 +1190,9 @@ def test_grid_sibling_arm4_lands_batch_recover_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_recover') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_fail_jitter_000(monkeypatch):
@@ -1194,8 +1200,9 @@ def test_grid_sibling_arm4_lands_batch_fail_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_fail') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_fail_jitter_100(monkeypatch):
@@ -1203,8 +1210,9 @@ def test_grid_sibling_arm4_lands_batch_fail_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_fail') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_complete_jitter_000(monkeypatch):
@@ -1212,8 +1220,9 @@ def test_grid_sibling_arm4_lands_batch_complete_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_complete') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_complete_jitter_100(monkeypatch):
@@ -1221,8 +1230,9 @@ def test_grid_sibling_arm4_lands_batch_complete_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_complete') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_defer_jitter_000(monkeypatch):
@@ -1230,8 +1240,9 @@ def test_grid_sibling_arm4_lands_batch_defer_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_defer') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_defer_jitter_100(monkeypatch):
@@ -1239,8 +1250,9 @@ def test_grid_sibling_arm4_lands_batch_defer_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_defer') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_heartbeat_jitter_000(monkeypatch):
@@ -1248,8 +1260,9 @@ def test_grid_sibling_arm4_lands_batch_heartbeat_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_heartbeat') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_heartbeat_jitter_100(monkeypatch):
@@ -1257,8 +1270,9 @@ def test_grid_sibling_arm4_lands_batch_heartbeat_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_heartbeat') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_admit_jitter_000(monkeypatch):
@@ -1266,8 +1280,9 @@ def test_grid_sibling_arm4_lands_batch_admit_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_admit') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_admit_jitter_100(monkeypatch):
@@ -1275,8 +1290,9 @@ def test_grid_sibling_arm4_lands_batch_admit_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_admit') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_enqueue_jitter_000(monkeypatch):
@@ -1284,8 +1300,9 @@ def test_grid_sibling_arm4_lands_batch_enqueue_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_enqueue') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_enqueue_jitter_100(monkeypatch):
@@ -1293,8 +1310,9 @@ def test_grid_sibling_arm4_lands_batch_enqueue_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_enqueue') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_intake_status_jitter_000(monkeypatch):
@@ -1302,8 +1320,9 @@ def test_grid_sibling_arm4_lands_batch_intake_status_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_intake_status', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_intake_status') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_intake_status_jitter_100(monkeypatch):
@@ -1311,8 +1330,9 @@ def test_grid_sibling_arm4_lands_batch_intake_status_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_intake_status', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_intake_status') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_seal_register_jitter_000(monkeypatch):
@@ -1320,8 +1340,9 @@ def test_grid_sibling_arm4_lands_batch_seal_register_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_seal_register', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_seal_register') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_seal_register_jitter_100(monkeypatch):
@@ -1329,8 +1350,9 @@ def test_grid_sibling_arm4_lands_batch_seal_register_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_seal_register', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_seal_register') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_release_jitter_000(monkeypatch):
@@ -1338,8 +1360,9 @@ def test_grid_sibling_arm4_lands_batch_release_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_release') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_release_jitter_100(monkeypatch):
@@ -1347,8 +1370,9 @@ def test_grid_sibling_arm4_lands_batch_release_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_release') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_redrive_jitter_000(monkeypatch):
@@ -1356,8 +1380,9 @@ def test_grid_sibling_arm4_lands_batch_redrive_jitter_000(monkeypatch):
     clock = _Clock(jitter=0.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_redrive') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_redrive_jitter_100(monkeypatch):
@@ -1365,8 +1390,9 @@ def test_grid_sibling_arm4_lands_batch_redrive_jitter_100(monkeypatch):
     clock = _Clock(jitter=1.0)
     store, _damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', aborts=3, arm_at=4)
     assert store.run(body, operation='batch_redrive') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_sibling_arm4_lands_batch_pull_shard_scheduler_00_jitter_000(monkeypatch):
@@ -1376,8 +1402,9 @@ def test_grid_sibling_arm4_lands_batch_pull_shard_scheduler_00_jitter_000(monkey
         monkeypatch, clock, label='batch_pull shard=scheduler_00', aborts=3, arm_at=4
     )
     assert store.run(body, operation='batch_pull shard=scheduler_00') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.1, 0.2, 0.4]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.1, 0.2, 0.9]
 
 
 def test_grid_sibling_arm4_lands_batch_pull_shard_scheduler_00_jitter_100(monkeypatch):
@@ -1387,8 +1414,9 @@ def test_grid_sibling_arm4_lands_batch_pull_shard_scheduler_00_jitter_100(monkey
         monkeypatch, clock, label='batch_pull shard=scheduler_00', aborts=3, arm_at=4
     )
     assert store.run(body, operation='batch_pull shard=scheduler_00') == 'committed'
-    # arm at attempt 4: rungs 1-3 bare, the chain lands on the ungated committing attempt
-    assert clock.sleeps == [0.2, 0.4, 0.8]
+    # arm at attempt 4: rungs 1-2 bare, rung 3 rides its wave wait, the
+    # chain lands on the ungated committing attempt
+    assert clock.sleeps == [0.2, 0.4, 1.8]
 
 
 def test_grid_neighbor_isolation_batch_provider_stt_jitter_000(monkeypatch):
@@ -2567,7 +2595,7 @@ def test_grid_exhaust_walk_batch_provider_stt_jitter_000(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_provider_stt')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2579,7 +2607,7 @@ def test_grid_exhaust_walk_batch_provider_stt_jitter_100(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_provider_stt')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2591,7 +2619,7 @@ def test_grid_exhaust_walk_batch_merge_commit_jitter_000(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_merge_commit')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2603,7 +2631,7 @@ def test_grid_exhaust_walk_batch_merge_commit_jitter_100(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_merge_commit')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2613,7 +2641,7 @@ def test_grid_exhaust_walk_batch_recover_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_recover')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2623,7 +2651,7 @@ def test_grid_exhaust_walk_batch_recover_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_recover')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2633,7 +2661,7 @@ def test_grid_exhaust_walk_batch_fail_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_fail')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2643,7 +2671,7 @@ def test_grid_exhaust_walk_batch_fail_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_fail')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2653,7 +2681,7 @@ def test_grid_exhaust_walk_batch_complete_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_complete')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2663,7 +2691,7 @@ def test_grid_exhaust_walk_batch_complete_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_complete')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2673,7 +2701,7 @@ def test_grid_exhaust_walk_batch_defer_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_defer')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2683,7 +2711,7 @@ def test_grid_exhaust_walk_batch_defer_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_defer')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2693,7 +2721,7 @@ def test_grid_exhaust_walk_batch_heartbeat_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_heartbeat')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2703,7 +2731,7 @@ def test_grid_exhaust_walk_batch_heartbeat_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_heartbeat')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2713,7 +2741,7 @@ def test_grid_exhaust_walk_batch_admit_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_admit')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2723,7 +2751,7 @@ def test_grid_exhaust_walk_batch_admit_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_admit')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2733,7 +2761,7 @@ def test_grid_exhaust_walk_batch_enqueue_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_enqueue')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2743,7 +2771,7 @@ def test_grid_exhaust_walk_batch_enqueue_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_enqueue')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2755,7 +2783,7 @@ def test_grid_exhaust_walk_batch_intake_status_jitter_000(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_intake_status')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2767,7 +2795,7 @@ def test_grid_exhaust_walk_batch_intake_status_jitter_100(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_intake_status')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2779,7 +2807,7 @@ def test_grid_exhaust_walk_batch_seal_register_jitter_000(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_seal_register')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2791,7 +2819,7 @@ def test_grid_exhaust_walk_batch_seal_register_jitter_100(monkeypatch):
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_seal_register')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2801,7 +2829,7 @@ def test_grid_exhaust_walk_batch_release_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_release')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2811,7 +2839,7 @@ def test_grid_exhaust_walk_batch_release_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_release')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2821,7 +2849,7 @@ def test_grid_exhaust_walk_batch_redrive_jitter_000(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_redrive')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2831,7 +2859,7 @@ def test_grid_exhaust_walk_batch_redrive_jitter_100(monkeypatch):
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', exhausting=True, arm_at=2)
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_redrive')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -2843,7 +2871,7 @@ def test_grid_exhaust_walk_batch_pull_shard_scheduler_00_jitter_000(monkeypatch)
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_pull shard=scheduler_00')
-    assert clock.sleeps == [0.1, 0.325, 0.4, 0.8]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.1, 0.325, 0.9, 1.8]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.25)  # the exhaustion re-arms the label
 
 
@@ -2855,7 +2883,7 @@ def test_grid_exhaust_walk_batch_pull_shard_scheduler_00_jitter_100(monkeypatch)
     )
     with pytest.raises(FirestoreContentionExhausted) as caught:
         store.run(body, operation='batch_pull shard=scheduler_00')
-    assert clock.sleeps == [0.2, 0.65, 0.8, 1.6]  # gated rung 2, then the window is spent and rungs 3-4 stay bare
+    assert clock.sleeps == [0.2, 0.65, 1.8, 3.6]  # gated rung 2, then rungs 3-4 ride their wave waits
     assert caught.value.retry_after == pytest.approx(0.5)  # the exhaustion re-arms the label
 
 
@@ -3400,285 +3428,285 @@ def test_grid_arm_on_last_attempt_kept_batch_pull_shard_scheduler_00_jitter_100(
 
 
 def test_grid_double_arm_batch_provider_stt_jitter_000(monkeypatch):
-    """batch_provider_stt (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_provider_stt (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_provider_stt', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_provider_stt') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_provider_stt')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_provider_stt_jitter_100(monkeypatch):
-    """batch_provider_stt (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_provider_stt (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_provider_stt', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_provider_stt') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_provider_stt')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_merge_commit_jitter_000(monkeypatch):
-    """batch_merge_commit (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_merge_commit (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_merge_commit', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_merge_commit')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_merge_commit_jitter_100(monkeypatch):
-    """batch_merge_commit (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_merge_commit (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_merge_commit', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_merge_commit')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_recover_jitter_000(monkeypatch):
-    """batch_recover (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_recover (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_recover') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_recover')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_recover_jitter_100(monkeypatch):
-    """batch_recover (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_recover (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_recover', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_recover') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_recover')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_fail_jitter_000(monkeypatch):
-    """batch_fail (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_fail (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_fail') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_fail')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_fail_jitter_100(monkeypatch):
-    """batch_fail (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_fail (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_fail', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_fail') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_fail')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_complete_jitter_000(monkeypatch):
-    """batch_complete (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_complete (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_complete') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_complete')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_complete_jitter_100(monkeypatch):
-    """batch_complete (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_complete (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_complete', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_complete') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_complete')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_defer_jitter_000(monkeypatch):
-    """batch_defer (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_defer (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_defer') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_defer')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_defer_jitter_100(monkeypatch):
-    """batch_defer (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_defer (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_defer', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_defer') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_defer')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_heartbeat_jitter_000(monkeypatch):
-    """batch_heartbeat (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_heartbeat (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_heartbeat') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_heartbeat')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_heartbeat_jitter_100(monkeypatch):
-    """batch_heartbeat (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_heartbeat (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_heartbeat', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_heartbeat') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_heartbeat')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_admit_jitter_000(monkeypatch):
-    """batch_admit (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_admit (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_admit') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_admit')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_admit_jitter_100(monkeypatch):
-    """batch_admit (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_admit (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_admit', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_admit') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_admit')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_enqueue_jitter_000(monkeypatch):
-    """batch_enqueue (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_enqueue (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_enqueue') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_enqueue')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_enqueue_jitter_100(monkeypatch):
-    """batch_enqueue (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_enqueue (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_enqueue', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_enqueue') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_enqueue')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_intake_status_jitter_000(monkeypatch):
-    """batch_intake_status (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_intake_status (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_intake_status', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_intake_status') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_intake_status')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_intake_status_jitter_100(monkeypatch):
-    """batch_intake_status (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_intake_status (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_intake_status', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_intake_status') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_intake_status')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_seal_register_jitter_000(monkeypatch):
-    """batch_seal_register (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_seal_register (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_seal_register', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_seal_register') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_seal_register')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_seal_register_jitter_100(monkeypatch):
-    """batch_seal_register (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_seal_register (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_seal_register', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_seal_register') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_seal_register')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_release_jitter_000(monkeypatch):
-    """batch_release (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_release (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_release') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_release')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_release_jitter_100(monkeypatch):
-    """batch_release (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_release (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_release', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_release') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_release')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_redrive_jitter_000(monkeypatch):
-    """batch_redrive (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_redrive (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_redrive') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_redrive')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_redrive_jitter_100(monkeypatch):
-    """batch_redrive (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_redrive (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(monkeypatch, clock, label='batch_redrive', aborts=3, arm_at=(2, 3))
     assert store.run(body, operation='batch_redrive') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_redrive')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_pull_shard_scheduler_00_jitter_000(monkeypatch):
-    """batch_pull shard=scheduler_00 (jitter 0.0): two mid-flight arms stack (0.125s then 0.25s) and clear on success."""
+    """batch_pull shard=scheduler_00 (jitter 0.0): two mid-flight arms stack (0.125s then 0.5s) and clear on success."""
     clock = _Clock(jitter=0.0)
     store, damper, _client, body = _make_store(
         monkeypatch, clock, label='batch_pull shard=scheduler_00', aborts=3, arm_at=(2, 3)
     )
     assert store.run(body, operation='batch_pull shard=scheduler_00') == 'committed'
-    assert clock.sleeps == [0.1, 0.325, 0.65]  # rung 2 waits 0.125, rung 3 waits 0.25
+    assert clock.sleeps == [0.1, 0.325, 0.9]  # rung 2 waits the sibling window 0.125, rung 3 rides its 0.5 wave wait
     residual, generation = damper.peek('batch_pull shard=scheduler_00')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 
 
 def test_grid_double_arm_batch_pull_shard_scheduler_00_jitter_100(monkeypatch):
-    """batch_pull shard=scheduler_00 (jitter 1.0): two mid-flight arms stack (0.25s then 0.5s) and clear on success."""
+    """batch_pull shard=scheduler_00 (jitter 1.0): two mid-flight arms stack (0.25s then 1.0s) and clear on success."""
     clock = _Clock(jitter=1.0)
     store, damper, _client, body = _make_store(
         monkeypatch, clock, label='batch_pull shard=scheduler_00', aborts=3, arm_at=(2, 3)
     )
     assert store.run(body, operation='batch_pull shard=scheduler_00') == 'committed'
-    assert clock.sleeps == [0.2, 0.65, 1.3]  # rung 2 waits 0.25, rung 3 waits 0.5
+    assert clock.sleeps == [0.2, 0.65, 1.8]  # rung 2 waits the sibling window 0.25, rung 3 rides its 1.0 wave wait
     residual, generation = damper.peek('batch_pull shard=scheduler_00')
     assert residual == 0.0 and generation == 0  # success cleared both arms
 

@@ -579,7 +579,9 @@ def test_next_entry_of_same_label_waits_the_residual(monkeypatch, fast_chain):
     store = build_store(monkeypatch, damper=damper)
     exhaust_run(store, 'batch_merge_commit')
     exhaust_run(store, 'batch_merge_commit')
-    assert clock.sleeps == [pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS)]
+    # The first storm's exhaustion arm draws jitter 0.0 (its chain's wave
+    # rungs consumed the earlier draws), so the next entry waits 0.125.
+    assert clock.sleeps == [pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS / 2)]
 
 
 def test_next_entry_of_sibling_label_runs_without_waiting(monkeypatch, fast_chain):
@@ -757,7 +759,9 @@ def test_ambient_store_operation_label_is_damped(monkeypatch, fast_chain):
     with store_operation('batch_merge_commit'):
         exhaust_run(store, None)
         exhaust_run(store, None)
-    assert clock.sleeps == [pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS)]
+    # exhaustion arm draws jitter 0.0 after the chain's wave rungs consumed
+    # the earlier draws: the next ambient entry waits 0.125.
+    assert clock.sleeps == [pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS / 2)]
 
 
 def test_exhaustion_message_names_the_operation(monkeypatch, fast_chain):
@@ -775,8 +779,12 @@ def test_wait_is_logged_as_batch_store_backoff_info(monkeypatch, fast_chain, cap
         exhaust_run(store, 'batch_merge_commit')
     waits = [r for r in caplog.records if 'event=batch_store_backoff' in r.getMessage()]
     assert waits, 'a damped re-entry must log event=batch_store_backoff'
+    # the re-entry's consult line comes first, then its chain's wave rungs
+    assert 'scope=mid_ladder' not in waits[0].getMessage()
+    assert 'operation=batch_merge_commit' in waits[0].getMessage()
+    assert 'waited_ms=125' in waits[0].getMessage()
     assert 'operation=batch_merge_commit' in waits[-1].getMessage()
-    assert 'waited_ms=250' in waits[-1].getMessage()
+    assert 'scope=mid_ladder' in waits[-1].getMessage()
 
 
 def test_wait_log_carries_an_integer_waited_ms(monkeypatch, fast_chain, caplog):
@@ -786,14 +794,18 @@ def test_wait_log_carries_an_integer_waited_ms(monkeypatch, fast_chain, caplog):
     with caplog.at_level(logging.INFO, logger='database.batch_pipeline_store'):
         exhaust_run(store, 'batch_merge_commit')
     waits = [r for r in caplog.records if 'event=batch_store_backoff' in r.getMessage()]
-    assert f"waited_ms={round(clock.sleeps[0] * 1000)}" in waits[-1].getMessage()
+    # clock.sleeps[0] is the damped re-entry's consult sleep; its consult
+    # line is the first backoff log and carries the same waited integer.
+    assert f"waited_ms={round(clock.sleeps[0] * 1000)}" in waits[0].getMessage()
 
 
 def test_no_wait_log_when_nothing_is_armed(monkeypatch, fast_chain, caplog):
     damper, _clock = make_damper()
-    store = build_store(monkeypatch, damper=damper)
+    store = build_store(monkeypatch, damper=damper, client=healthy_client())
     with caplog.at_level(logging.INFO, logger='database.batch_pipeline_store'):
-        exhaust_run(store, 'batch_merge_commit')
+        assert store.run(lambda tx: True, operation='batch_merge_commit') is True
+    # a chain that never aborts inside a quiet label logs no backoff line at
+    # all: the wave wait only exists after a measured collision
     assert [r for r in caplog.records if 'event=batch_store_backoff' in r.getMessage()] == []
 
 
@@ -892,7 +904,9 @@ def test_sdk_commit_exhaustion_storm_arms_the_damper(monkeypatch, fast_chain):
     with pytest.raises(FirestoreContentionExhausted):
         store.run(lambda tx: (_ for _ in ()).throw(wrapped), operation='batch_merge_commit')
     exhaust_run(store, 'batch_merge_commit')
-    assert clock.sleeps == [pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS)]
+    # the first storm's exhaustion arm draws jitter 0.0 (the chain's wave
+    # rungs consumed the 1.0 draw), so the next entry waits 0.125
+    assert clock.sleeps == [pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS / 2)]
     assert damper._failures['batch_merge_commit'] == 2
 
 
@@ -910,7 +924,9 @@ def test_expired_chain_ceiling_arms_after_exhaustion(monkeypatch, fast_chain):
         with pytest.raises(FirestoreContentionExhausted):
             store.run(expired, operation='batch_merge_commit')
     exhaust_run(store, 'batch_merge_commit')
-    # each consulted re-entry of the storm waits its armed residual first
+    # each consulted re-entry of the storm waits its armed residual first;
+    # the expired chain's ladder only walks rungs 1-2, so the wave wait never
+    # engages and the arms consume the jitter sequence unchanged
     assert clock.sleeps == [
         pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS),
         pytest.approx(storage.FirestoreStore.STORM_DAMPER_BASE_SECONDS),

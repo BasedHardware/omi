@@ -566,7 +566,9 @@ def test_store_run_succeeds_through_a_gated_chain(monkeypatch):
     clock = Clock()
     store, _damper, body = make_mid_chain_store(monkeypatch, clock, aborts=1)
     assert store.run(body, operation='batch_merge_commit') == 'committed'
-    assert clock.sleeps == [pytest.approx(0.2)]  # one bare retry rung, no window anywhere
+    # one bare retry rung: the wave wait engages from the third rung, so a
+    # single-collision chain keeps its sub-second recovery unchanged
+    assert clock.sleeps == [pytest.approx(0.2)]
 
 
 def test_store_exhaustion_still_stamps_retry_after(monkeypatch, dev_store):
@@ -630,6 +632,8 @@ def test_scope_mid_ladder_log_names_label_attempt_and_wait(monkeypatch, caplog):
         assert store.run(body, operation='batch_merge_commit') == 'committed'
 
     lines = [record.getMessage() for record in caplog.records if 'scope=mid_ladder' in record.getMessage()]
+    # rung 1 stays bare (wave wait engages from the third rung); rung 2
+    # waits out the sibling window armed mid-flight
     assert len(lines) == 1
     assert 'operation=batch_merge_commit' in lines[0]
     assert 'attempt=2' in lines[0]

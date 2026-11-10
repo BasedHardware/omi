@@ -241,6 +241,13 @@ class _ContentionStormDamper:
     exhaustion this damper arms a bounded, jittered residual window for that
     operation label; the next entry of the same label waits it out before
     opening another chain, while every other label keeps running untouched.
+    Separately, the mid-ladder gate spaces a chain's deep rungs out of a
+    wave the chain itself measured, by the same capped ladder shape and
+    only once the chain's own aborts show a sustained wave (from the third
+    rung), without recording anything on the shared label window: the
+    first chain into a fresh storm stops exhausting inside it, and the
+    exhaustion-stamped window callers schedule against stays
+    exhaustion-driven.
 
     One store instance is one process's view of one namespace, and the
     scheduler shards, the pump, intake and maintenance all share it — arming
@@ -323,6 +330,24 @@ class _ContentionStormDamper:
             self._failures.pop(label, None)
             self._generations.pop(label, None)
 
+    def wave_rung_wait(self, failed_attempt: int) -> float:
+        """The per-rung wait one in-chain abort spaces the next rung by.
+
+        The same base/ladder/cap/jitter shape ``arm`` uses for a
+        post-exhaustion window, indexed by the failed attempt instead of the
+        label's exhaustion count, and deliberately never recorded on the
+        shared state: a chain that measured a collision spaces its OWN
+        remaining rungs out of the wave it is inside, while the label's
+        shared window — and the exhaustion-stamped ``retry_after`` callers
+        schedule against — stays exhaustion-driven.
+        """
+        maximum = min(
+            FirestoreStore.STORM_DAMPER_CAP_SECONDS,
+            FirestoreStore.STORM_DAMPER_BASE_SECONDS
+            * (2 ** min(failed_attempt - 1, FirestoreStore.STORM_DAMPER_LADDER_STEPS)),
+        )
+        return maximum * (0.5 + 0.5 * self._random_value())
+
     def tracked_labels(self) -> int:
         with self._lock:
             return len(self._generations)
@@ -341,6 +366,11 @@ class FirestoreStore:
     # bounds how many distinct ones a process can mint; stop damping new
     # labels beyond this (fail-open) instead of growing state forever.
     STORM_DAMPER_MAX_TRACKED_LABELS = 64
+    # The mid-ladder wave wait engages from this failed attempt onward: two
+    # measured collisions on one chain are sustained-wave evidence. The early
+    # rungs keep their sub-second transient-collision recovery, and the
+    # default chain's first two rungs stay byte-identical to the bare ladder.
+    WAVE_ENGAGEMENT_ATTEMPT = 3
 
     def __init__(
         self, namespace: str, *, firestore_client: Any = None, storm_damper: '_ContentionStormDamper | None' = None
@@ -395,11 +425,18 @@ class FirestoreStore:
         has already measured. Each retry rung therefore re-reads the label's
         residual through a non-sleeping damper peek and adds it to the rung's
         equal-jitter wait (logged at INFO as
-        ``event=batch_store_backoff scope=mid_ladder``). The first attempt is
-        never gated — a chain that reached the transaction always gets one
-        try — and with the damper dormant the schedule is byte-for-byte the
-        bare ladder. A success clears the ladder only if no arm happened
-        since the latest consult or mid-ladder peek (generation guard).
+        ``event=batch_store_backoff scope=mid_ladder``). From the third rung
+        — two measured collisions, sustained-wave evidence — the chain's
+        rung also spaces itself by the same capped ladder the damper arms
+        after an exhaustion, indexed by the failed attempt and never
+        recorded on the shared state, so the first chain into a fresh storm
+        lands its deep rungs after the wave instead of exhausting inside
+        it. The first attempt is never gated — a chain that reached the
+        transaction always gets one try — the early rungs keep their
+        sub-second transient-collision recovery, and with the damper
+        dormant the schedule is byte-for-byte the bare ladder. A success
+        clears the ladder only if no arm happened since the latest consult
+        or mid-ladder peek (generation guard).
 
         Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-window
         """
@@ -421,15 +458,32 @@ class FirestoreStore:
                 return 0.0
             residual, gate_generation = damper.peek(label)
             latest_generation = gate_generation
-            if residual <= 0.0:
+            # This chain's own aborts are storm evidence. The gate never used
+            # to wait for anything unless a sibling had already exhausted:
+            # the FIRST chain into a fresh storm had no window to wait out
+            # and spent its whole budget colliding inside the wave it was
+            # itself measuring. From the third rung — two measured
+            # collisions, sustained-wave evidence — the rung also spaces
+            # itself by the same capped ladder the damper arms after an
+            # exhaustion, indexed by the failed attempt and never recorded
+            # on the shared state, so exhaustion stamping stays
+            # exhaustion-driven. The early rungs keep their sub-second
+            # transient-collision recovery; a sibling's armed window still
+            # wins whenever it is longer.
+            #
+            # Failure-Class: FC-storm-window-arms-only-after-exhaustion
+            wait = residual
+            if failed_attempt >= FirestoreStore.WAVE_ENGAGEMENT_ATTEMPT:
+                wait = max(residual, damper.wave_rung_wait(failed_attempt))
+            if wait <= 0.0:
                 return 0.0
             logger.info(
                 'event=batch_store_backoff scope=mid_ladder operation=%s attempt=%d waited_ms=%d',
                 label,
                 failed_attempt,
-                round(residual * 1000),
+                round(wait * 1000),
             )
-            return residual
+            return wait
 
         client = self.client
 

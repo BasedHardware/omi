@@ -30,12 +30,24 @@ Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-
   `deadline + one in-flight attempt`. Without a deadline the gate can add at
   most the gate's own bound (the damper cap, 4.0 s) per remaining rung.
 - `FirestoreStore.run` passes the gate when the storm damper is active. The
-  gate reads the label's residual through a new non-sleeping damper
+  gate reads the label's residual through a non-sleeping damper
   `peek` — the retry helper owns every pre-attempt sleep, so the damper must
   not double-sleep a wait the chain's budget has not accounted for — and
   waits out any window a sibling armed for this label between two attempts,
   logged at INFO as `event=batch_store_backoff scope=mid_ladder` with the
   operation label, the failed attempt, and the waited milliseconds.
+- From the third rung — two measured collisions on one chain, sustained
+  wave evidence — the rung also spaces itself by a per-rung wave wait on
+  the same capped ladder the damper arms after an exhaustion, indexed by
+  the failed attempt, jittered by the damper's own generator, and never
+  recorded on the shared state. Waiting until the whole budget burned to
+  measure a wave left the first chain into a fresh storm no window to
+  wait out: all five rungs collided inside the wave the chain itself was
+  measuring, and only the exhaustion that ended the chain armed anything.
+  The first two rungs keep their sub-second transient-collision recovery,
+  so routine single-collision chains are byte-identical to the bare
+  ladder, and exhaustion stamping and the `retry_after` laddering stay
+  exhaustion-driven.
 - The retry warning and deadline-exhausted lines carry the gate wait
   explicitly: `outcome=retry delay_ms=<jitter> gate_ms=<gate>` and
   `outcome=deadline_exhausted remaining_ms=... delay_ms=... gate_ms=...`.
@@ -68,3 +80,5 @@ Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-
 - A raising gate fails open rather than aborting the retry chain it spaces;
   the store's own gate cannot raise (a locked dict read), and the helper
   defends against any future gate that can.
+
+Failure-Class: FC-storm-window-arms-only-after-exhaustion

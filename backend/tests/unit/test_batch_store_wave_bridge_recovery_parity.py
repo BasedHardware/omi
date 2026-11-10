@@ -421,9 +421,13 @@ def test_damped_entry_logs_the_store_backoff_line(monkeypatch, caplog):
         with pytest.raises(FirestoreContentionExhausted):
             store.run(lambda tx: True, operation='batch_fail')
     backoff = [message for message in caplog.messages if 'event=batch_store_backoff' in message]
-    assert len(backoff) == 1
-    assert 'operation=batch_fail' in backoff[0]
-    assert 'waited_ms=' in backoff[0]
+    assert backoff, 'a damped entry must log event=batch_store_backoff'
+    # the damped entry's consult line is the one non-mid-ladder line; its
+    # chain's own wave rungs log the scope=mid_ladder lines after it
+    entry_lines = [message for message in backoff if 'scope=mid_ladder' not in message]
+    assert len(entry_lines) == 1
+    assert 'operation=batch_fail' in entry_lines[0]
+    assert 'waited_ms=' in entry_lines[0]
 
 
 def test_retry_gap_warning_lines_carry_the_label_and_delay(monkeypatch, caplog):
