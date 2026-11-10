@@ -18814,7 +18814,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p0(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
@@ -18827,7 +18827,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p05(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.13125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.13125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.13125)
@@ -18840,7 +18840,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p1(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.1375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1375)
@@ -18853,7 +18853,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p15(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.14375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.14375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.14375)
@@ -18866,7 +18866,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p2(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.15)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15)
@@ -18879,7 +18879,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p25(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.15625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15625)
@@ -18892,7 +18892,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p3(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.1625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1625)
@@ -18905,7 +18905,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p35(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.16875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.16875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.16875)
@@ -18918,7 +18918,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p4(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.175)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.175)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.175)
@@ -18931,7 +18931,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p45(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.18125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.18125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.18125)
@@ -18944,7 +18944,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p5(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.1875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1875)
@@ -18957,7 +18957,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p55(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.19375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.19375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.19375)
@@ -18970,7 +18970,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p6(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.2)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2)
@@ -18983,7 +18983,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p65(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.20625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.20625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.20625)
@@ -18996,7 +18996,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p7(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.2125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2125)
@@ -19009,7 +19009,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p75(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.21875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.21875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.21875)
@@ -19022,7 +19022,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p8(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.225)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.225)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.225)
@@ -19035,7 +19035,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p85(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.23125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.23125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.23125)
@@ -19048,7 +19048,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p9(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.2375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2375)
@@ -19061,7 +19061,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j0p95(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.24375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.24375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.24375)
@@ -19074,7 +19074,7 @@ def test_store_exhaustion_broadcast_batch_merge_commit_j1p0(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.25)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.25)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.25)
@@ -19087,7 +19087,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p0(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
@@ -19100,7 +19100,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p05(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.13125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.13125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.13125)
@@ -19113,7 +19113,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p1(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.1375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1375)
@@ -19126,7 +19126,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p15(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.14375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.14375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.14375)
@@ -19139,7 +19139,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p2(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.15)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15)
@@ -19152,7 +19152,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p25(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.15625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15625)
@@ -19165,7 +19165,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p3(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.1625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1625)
@@ -19178,7 +19178,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p35(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.16875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.16875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.16875)
@@ -19191,7 +19191,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p4(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.175)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.175)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.175)
@@ -19204,7 +19204,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p45(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.18125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.18125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.18125)
@@ -19217,7 +19217,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p5(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.1875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1875)
@@ -19230,7 +19230,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p55(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.19375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.19375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.19375)
@@ -19243,7 +19243,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p6(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.2)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2)
@@ -19256,7 +19256,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p65(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.20625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.20625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.20625)
@@ -19269,7 +19269,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p7(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.2125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2125)
@@ -19282,7 +19282,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p75(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.21875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.21875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.21875)
@@ -19295,7 +19295,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p8(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.225)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.225)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.225)
@@ -19308,7 +19308,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p85(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.23125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.23125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.23125)
@@ -19321,7 +19321,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p9(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.2375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2375)
@@ -19334,7 +19334,7 @@ def test_store_exhaustion_broadcast_batch_defer_j0p95(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.24375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.24375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.24375)
@@ -19347,7 +19347,7 @@ def test_store_exhaustion_broadcast_batch_defer_j1p0(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_defer')
     assert error.retry_after == pytest.approx(0.25)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_defer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.25)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.25)
@@ -19360,7 +19360,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p0(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
@@ -19373,7 +19373,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p05(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.13125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.13125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.13125)
@@ -19386,7 +19386,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p1(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.1375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1375)
@@ -19399,7 +19399,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p15(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.14375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.14375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.14375)
@@ -19412,7 +19412,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p2(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.15)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15)
@@ -19425,7 +19425,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p25(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.15625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15625)
@@ -19438,7 +19438,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p3(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.1625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1625)
@@ -19451,7 +19451,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p35(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.16875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.16875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.16875)
@@ -19464,7 +19464,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p4(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.175)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.175)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.175)
@@ -19477,7 +19477,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p45(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.18125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.18125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.18125)
@@ -19490,7 +19490,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p5(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.1875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1875)
@@ -19503,7 +19503,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p55(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.19375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.19375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.19375)
@@ -19516,7 +19516,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p6(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.2)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2)
@@ -19529,7 +19529,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p65(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.20625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.20625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.20625)
@@ -19542,7 +19542,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p7(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.2125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2125)
@@ -19555,7 +19555,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p75(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.21875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.21875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.21875)
@@ -19568,7 +19568,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p8(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.225)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.225)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.225)
@@ -19581,7 +19581,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p85(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.23125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.23125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.23125)
@@ -19594,7 +19594,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p9(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.2375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2375)
@@ -19607,7 +19607,7 @@ def test_store_exhaustion_broadcast_batch_offer_j0p95(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.24375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.24375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.24375)
@@ -19620,7 +19620,7 @@ def test_store_exhaustion_broadcast_batch_offer_j1p0(monkeypatch):
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_offer')
     assert error.retry_after == pytest.approx(0.25)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_offer')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.25)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.25)
@@ -19633,7 +19633,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p0(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
@@ -19646,7 +19646,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p05(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.13125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.13125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.13125)
@@ -19659,7 +19659,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p1(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.1375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1375)
@@ -19672,7 +19672,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p15(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.14375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.14375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.14375)
@@ -19685,7 +19685,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p2(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.15)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15)
@@ -19698,7 +19698,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p25(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.15625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15625)
@@ -19711,7 +19711,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p3(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.1625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1625)
@@ -19724,7 +19724,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p35(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.16875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.16875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.16875)
@@ -19737,7 +19737,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p4(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.175)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.175)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.175)
@@ -19750,7 +19750,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p45(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.18125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.18125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.18125)
@@ -19763,7 +19763,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p5(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.1875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1875)
@@ -19776,7 +19776,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p55(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.19375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.19375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.19375)
@@ -19789,7 +19789,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p6(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.2)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2)
@@ -19802,7 +19802,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p65(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.20625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.20625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.20625)
@@ -19815,7 +19815,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p7(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.2125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2125)
@@ -19828,7 +19828,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p75(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.21875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.21875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.21875)
@@ -19841,7 +19841,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p8(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.225)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.225)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.225)
@@ -19854,7 +19854,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p85(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.23125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.23125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.23125)
@@ -19867,7 +19867,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p9(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.2375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2375)
@@ -19880,7 +19880,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j0p95(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.24375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.24375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.24375)
@@ -19893,7 +19893,7 @@ def test_store_exhaustion_broadcast_batch_pull_shard_scheduler_07_j1p0(monkeypat
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_pull shard=scheduler_07')
     assert error.retry_after == pytest.approx(0.25)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_pull_shard_scheduler_07')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.25)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.25)
@@ -19906,7 +19906,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p0(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
@@ -19919,7 +19919,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p05(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.13125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.13125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.13125)
@@ -19932,7 +19932,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p1(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.1375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1375)
@@ -19945,7 +19945,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p15(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.14375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.14375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.14375)
@@ -19958,7 +19958,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p2(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.15)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15)
@@ -19971,7 +19971,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p25(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.15625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.15625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.15625)
@@ -19984,7 +19984,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p3(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.1625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1625)
@@ -19997,7 +19997,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p35(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.16875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.16875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.16875)
@@ -20010,7 +20010,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p4(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.175)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.175)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.175)
@@ -20023,7 +20023,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p45(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.18125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.18125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.18125)
@@ -20036,7 +20036,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p5(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.1875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.1875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.1875)
@@ -20049,7 +20049,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p55(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.19375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.19375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.19375)
@@ -20062,7 +20062,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p6(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.2)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2)
@@ -20075,7 +20075,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p65(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.20625)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.20625)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.20625)
@@ -20088,7 +20088,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p7(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.2125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2125)
@@ -20101,7 +20101,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p75(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.21875)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.21875)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.21875)
@@ -20114,7 +20114,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p8(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.225)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.225)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.225)
@@ -20127,7 +20127,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p85(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.23125)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.23125)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.23125)
@@ -20140,7 +20140,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p9(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.2375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.2375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.2375)
@@ -20153,7 +20153,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j0p95(monkeyp
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.24375)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.24375)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.24375)
@@ -20166,7 +20166,7 @@ def test_store_exhaustion_broadcast_batch_claim_shard_scheduler_31_j1p0(monkeypa
     store = default_store(monkeypatch, client=client)
     error = exhaust_run(store, 'batch_claim shard=scheduler_31')
     assert error.retry_after == pytest.approx(0.25)
-    assert client.set_calls[0][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
+    assert client.set_calls[-1][:2] == ('batch_pipeline_dev_storm_dampers', 'batch_claim_shard_scheduler_31')
     payload = client.set_calls[0][2]
     assert payload['window_seconds'] == pytest.approx(0.25)
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.25)
@@ -20423,7 +20423,8 @@ def test_store_broadcast_skip_mirror0p5_advance0p0(monkeypatch):
     wall.advance(0.0)
     store = default_store(monkeypatch, client=client)
     exhaust_run(store, 'batch_merge_commit')  # arms only 0.125
-    assert len(client.set_calls) == 1  # the arm broadcast skips
+    assert len(client.set_calls) == 2  # setup label doc + the arm's spill broadcast; the label broadcast skipped
+    assert window.publish_skips == 1
 
 
 def test_store_broadcast_skip_mirror0p5_advance0p5(monkeypatch):
@@ -20434,7 +20435,9 @@ def test_store_broadcast_skip_mirror0p5_advance0p5(monkeypatch):
     wall.advance(0.5)
     store = default_store(monkeypatch, client=client)
     exhaust_run(store, 'batch_merge_commit')  # arms only 0.125
-    assert len(client.set_calls) == 2  # the arm broadcast writes
+    assert (
+        len(client.set_calls) == 3
+    )  # setup + spill broadcast + the label broadcast (the expired mirror no longer covers)
 
 
 def test_store_broadcast_skip_mirror0p5_advance2p0(monkeypatch):
@@ -20445,7 +20448,9 @@ def test_store_broadcast_skip_mirror0p5_advance2p0(monkeypatch):
     wall.advance(2.0)
     store = default_store(monkeypatch, client=client)
     exhaust_run(store, 'batch_merge_commit')  # arms only 0.125
-    assert len(client.set_calls) == 2  # the arm broadcast writes
+    assert (
+        len(client.set_calls) == 3
+    )  # setup + spill broadcast + the label broadcast (the expired mirror no longer covers)
 
 
 def test_store_broadcast_skip_mirror4p0_advance0p0(monkeypatch):
@@ -20456,7 +20461,8 @@ def test_store_broadcast_skip_mirror4p0_advance0p0(monkeypatch):
     wall.advance(0.0)
     store = default_store(monkeypatch, client=client)
     exhaust_run(store, 'batch_merge_commit')  # arms only 0.125
-    assert len(client.set_calls) == 1  # the arm broadcast skips
+    assert len(client.set_calls) == 2  # setup label doc + the arm's spill broadcast; the label broadcast skipped
+    assert window.publish_skips == 1
 
 
 def test_store_broadcast_skip_mirror4p0_advance0p5(monkeypatch):
@@ -20467,7 +20473,8 @@ def test_store_broadcast_skip_mirror4p0_advance0p5(monkeypatch):
     wall.advance(0.5)
     store = default_store(monkeypatch, client=client)
     exhaust_run(store, 'batch_merge_commit')  # arms only 0.125
-    assert len(client.set_calls) == 1  # the arm broadcast skips
+    assert len(client.set_calls) == 2  # setup label doc + the arm's spill broadcast; the label broadcast skipped
+    assert window.publish_skips == 1
 
 
 def test_store_broadcast_skip_mirror4p0_advance2p0(monkeypatch):
@@ -20478,7 +20485,8 @@ def test_store_broadcast_skip_mirror4p0_advance2p0(monkeypatch):
     wall.advance(2.0)
     store = default_store(monkeypatch, client=client)
     exhaust_run(store, 'batch_merge_commit')  # arms only 0.125
-    assert len(client.set_calls) == 1  # the arm broadcast skips
+    assert len(client.set_calls) == 2  # setup label doc + the arm's spill broadcast; the label broadcast skipped
+    assert window.publish_skips == 1
 
 
 # --------------------------------------------------------------------------

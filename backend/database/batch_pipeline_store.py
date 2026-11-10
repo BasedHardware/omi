@@ -45,6 +45,21 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
+def _finite_seconds(value: object) -> float:
+    """A bounded, non-negative, finite seconds value; anything else is ``0.0``.
+
+    The spill lanes are advisory: a hostile answer (bool, non-number,
+    non-finite, zero, negative) must collapse to "no spill", never break the
+    entry it was meant to space.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    seconds = float(value)
+    if not math.isfinite(seconds) or seconds <= 0.0:
+        return 0.0
+    return seconds
+
+
 def document_ref(client: Any, namespace: str, table: str, key: str):
     """The single document address for a batch table key.
 
@@ -318,6 +333,21 @@ class _ContentionStormDamper:
                     round(fleet_residual * 1000),
                 )
         wait = max(residual, fleet_residual)
+        if wait <= 0.0 and self._fleet is not None:
+            # Sibling-label spill: no window of our own and none for this
+            # label from any pod, but the namespace has already measured a
+            # storm on ANOTHER label (a sibling scheduler shard reading the
+            # same hot rows). Adopt it on entry, capped by the fleet window's
+            # share cap so a foreign label's deep window can never park this
+            # lane for the full damper cap. Advisory and fail-open: a hostile
+            # answer collapses to no spill and leaves the entry untouched.
+            spill_residual = _finite_seconds(getattr(self._fleet, 'peek_spill', lambda _client: 0.0)(client))
+            spill_cap = _finite_seconds(getattr(self._fleet, 'SPILL_SHARE_CAP_SECONDS', 0.0))
+            if spill_cap > 0.0 and spill_residual > 0.0:
+                spill_residual = min(spill_residual, spill_cap)
+                logger.info('event=batch_store_backoff scope=spill waited_ms=%d', round(spill_residual * 1000))
+                self._sleeper(spill_residual)
+                return spill_residual, generation
         if wait <= 0.0:
             return 0.0, generation
         self._sleeper(wait)
@@ -365,6 +395,17 @@ class _ContentionStormDamper:
             self._generations[label] = self._generations.get(label, 0) + 1
             applied = until - self._monotonic()
         if self._fleet is not None:
+            # The namespace spill is broadcast FIRST so the arm's last write
+            # stays the label's own window document: every grid and operator
+            # surface that reads the exhaustion lane's write trail sees the
+            # label document last, exactly as before the spill lane existed.
+            # The spill carries this measurement to SIBLING LABELS: the
+            # sharded scheduler labels contend on the same backing rows, and
+            # a label with no window of its own adopts the spill on entry
+            # (share-capped) instead of re-deriving the storm. Monotone and
+            # best-effort like the per-label broadcast; a shallower arm never
+            # lowers a deeper sibling measurement.
+            self._fleet.publish_spill(label, applied, client=client)
             self._fleet.publish(label, applied, client=client)
         return applied
 
@@ -456,6 +497,21 @@ class _FleetStormWindow:
     # the way an unbounded read would. Well above a healthy call, far below
     # the damper cap.
     CALL_TIMEOUT_SECONDS = 1.0
+    # The namespace spill: one document per namespace carrying the deepest
+    # window ANY label of the namespace has measured. The scheduler's pull and
+    # claim labels are sharded (`batch_pull shard=scheduler_NN`) and those
+    # shards contend on the same backing rows, but a storm measured on one
+    # shard's label arms only that label's window — every sibling shard label
+    # entered the hot rows cold and re-derived the five-attempt exhaustion the
+    # fleet had already measured. The spill lane carries that measurement
+    # across labels: `arm` raises the spill (never lowering a deeper one), and
+    # a label whose own and fleet residuals are both zero adopts the spill on
+    # entry, capped by SPILL_SHARE_CAP_SECONDS so a foreign label's deep
+    # window can never park an unrelated lane for the full damper cap.
+    SPILL_DOC_ID = 'namespace_storm_spill'
+    SPILL_CACHE_TTL_SECONDS = 1.0
+    SPILL_CALL_TIMEOUT_SECONDS = 1.0
+    SPILL_SHARE_CAP_SECONDS = 1.0
 
     def __init__(self, namespace: str, *, wall_now: Callable[[], float] = time.time):
         self.namespace = namespace
@@ -463,6 +519,9 @@ class _FleetStormWindow:
         self._lock = threading.Lock()
         self._until_wall: dict[str, float] = {}
         self._fetched_at: dict[str, float] = {}
+        self._spill_until_wall = 0.0
+        self._spill_fetched_at: float | None = None
+        self._spill_label: str | None = None
         self.reads = 0
         self.absent_reads = 0
         self.malformed_reads = 0
@@ -472,6 +531,14 @@ class _FleetStormWindow:
         self.publish_floor_skips = 0
         self.publish_failures = 0
         self.unfit_labels = 0
+        self.spill_reads = 0
+        self.spill_absent_reads = 0
+        self.spill_malformed_reads = 0
+        self.spill_failed_reads = 0
+        self.spill_publishes = 0
+        self.spill_publish_skips = 0
+        self.spill_publish_failures = 0
+        self.spill_unfit_labels = 0
 
     def peek(self, label: str, client: Any = None) -> float:
         """The sibling pods' residual for ``label``; ``0.0`` without a client.
@@ -605,6 +672,110 @@ class _FleetStormWindow:
     def cached_labels(self) -> int:
         with self._lock:
             return len(self._until_wall)
+
+    def peek_spill(self, client: Any = None) -> float:
+        """The namespace's deepest live storm residual across labels; ``0.0`` without a client.
+
+        Mirrored like the per-label window: at most one spill read per process
+        per ``SPILL_CACHE_TTL_SECONDS``, and a spill publish warms the mirror
+        so the arm that raised it never re-reads it. Never raises.
+        """
+        if client is None:
+            return 0.0
+        now = self._wall_now()
+        with self._lock:
+            fresh = self._spill_fetched_at is not None and now - self._spill_fetched_at < self.SPILL_CACHE_TTL_SECONDS
+            until_wall = self._spill_until_wall
+        if fresh:
+            return max(0.0, until_wall - now)
+        until_wall, _label = self._fetch_spill(client, now)
+        self._remember_spill(_label, until_wall, now)
+        return max(0.0, until_wall - now)
+
+    def _fetch_spill(self, client: Any, now: float) -> tuple[float, str | None]:
+        with self._lock:
+            self.spill_reads += 1
+        try:
+            snapshot = (
+                client.collection(f'{self.namespace}_storm_dampers')
+                .document(self.SPILL_DOC_ID)
+                .get(timeout=self.SPILL_CALL_TIMEOUT_SECONDS)
+            )
+            data = snapshot.to_dict() if snapshot.exists else None
+        except Exception:
+            # A read fault is "no spill", cached like one for the TTL: a blip
+            # must degrade to per-label damping, never to retries on the
+            # entry path.
+            with self._lock:
+                self.spill_failed_reads += 1
+            return 0.0, None
+        if data is None:
+            with self._lock:
+                self.spill_absent_reads += 1
+            return 0.0, None
+        until = data.get('armed_until') if isinstance(data, dict) else None
+        label = data.get('label') if isinstance(data, dict) else None
+        if isinstance(label, str) and fleet_storm_window_doc_id(label) is None:
+            label = None
+        if isinstance(until, bool) or not isinstance(until, (int, float)) or not math.isfinite(float(until)):
+            with self._lock:
+                self.spill_malformed_reads += 1
+            return 0.0, None
+        return float(until), label
+
+    def _remember_spill(self, label: str | None, until_wall: float, now: float) -> None:
+        with self._lock:
+            self._spill_until_wall = until_wall
+            self._spill_fetched_at = now
+            self._spill_label = label
+
+    def publish_spill(self, label: str, window_seconds: float, *, client: Any = None) -> None:
+        """Raise the namespace spill to cover this label's window; best-effort, never raises.
+
+        Monotone like the per-label publish floor: a live spill from ANY label
+        that already reaches as deep as this window stands, and this arm
+        writes nothing — during a lockstep burst across sibling labels the
+        spill is written once per ladder rung the storm actually grows, not
+        once per sibling arm. The stored ``label`` names whichever label last
+        raised the spill; a shallower label's arm must never lower it. Every
+        fault collapses to "no spill": the write is one bounded merge set with
+        no SDK retry, a write fault leaves the mirror untouched, and an unfit
+        label is counted and skipped on both lanes.
+        """
+        if client is None:
+            return
+        doc_id = fleet_storm_window_doc_id(label)
+        if doc_id is None:
+            with self._lock:
+                self.spill_unfit_labels += 1
+            return
+        if not math.isfinite(float(window_seconds)) or window_seconds <= 0.0:
+            return
+        now = self._wall_now()
+        until_wall = now + float(window_seconds)
+        with self._lock:
+            fresh = self._spill_fetched_at is not None and now - self._spill_fetched_at < self.SPILL_CACHE_TTL_SECONDS
+            live_until = self._spill_until_wall
+        if not fresh:
+            live_until, live_label = self._fetch_spill(client, now)
+            self._remember_spill(live_label, live_until, now)
+        if live_until >= until_wall:
+            with self._lock:
+                self.spill_publish_skips += 1
+            return
+        try:
+            client.collection(f'{self.namespace}_storm_dampers').document(self.SPILL_DOC_ID).set(
+                {'armed_until': until_wall, 'label': doc_id, 'window_seconds': float(window_seconds)},
+                merge=True,
+                timeout=self.SPILL_CALL_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            with self._lock:
+                self.spill_publish_failures += 1
+            return
+        with self._lock:
+            self.spill_publishes += 1
+        self._remember_spill(doc_id, until_wall, now)
 
 
 # One damper per namespace per process, shared by every ``FirestoreStore``

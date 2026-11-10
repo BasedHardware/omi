@@ -12315,222 +12315,222 @@ def test_g4_ns_isolation_batch_pipeline_test_unit_to_batch_pipeline_dev_k4_j1p0(
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_complete_j0p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.125)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_complete_j0p25(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.25)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.15625)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_complete_j0p5(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.5)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.1875)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_complete_j1p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=1.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.25)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_intake_status_j0p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.125)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_intake_status_j0p25(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.25)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.15625)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_intake_status_j0p5(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.5)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.1875)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_merge_commit_runs_batch_intake_status_j1p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=1.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_merge_commit', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.25)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_complete_j0p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.125)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_complete_j0p25(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.25)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.15625)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_complete_j0p5(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.5)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.1875)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_complete_j1p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=1.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.25)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_intake_status_j0p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.125)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_intake_status_j0p25(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.25)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.15625)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_intake_status_j0p5(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.5)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.1875)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_provider_stt_runs_batch_intake_status_j1p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=1.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_provider_stt', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_intake_status')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.25)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_intake_status' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_intake_status_runs_batch_complete_j0p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_intake_status', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.125)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_intake_status_runs_batch_complete_j0p25(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.25)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_intake_status', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.15625)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_intake_status_runs_batch_complete_j0p5(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=0.5)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_intake_status', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.1875)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 
 def test_g5_label_isolation_batch_intake_status_runs_batch_complete_j1p0(mp):
-    """A window armed for one label never damps a different label."""
+    """A sibling label adopts an exhausted label's storm only through the share-capped spill."""
     damper, clock = shared_damper(NS, jitter=1.0)
     A = default_store(mp, ns=NS, client=exhausting_client())
     exhaust_run(A, 'batch_intake_status', times=1)
     B = default_store(mp, ns=NS, client=healthy_client())
     B.run(lambda tx: 'ok', operation='batch_complete')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.25)]  # the share-capped spill of the exhausted sibling label
     assert 'batch_complete' not in damper._armed_until
 
 

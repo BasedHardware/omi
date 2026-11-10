@@ -533,13 +533,19 @@ def test_composed_shard_label_is_damped_across_instances(monkeypatch, fast_chain
     assert clock.sleeps == [arm_delay_seconds(1, 0.0)]
 
 
-def test_shard_labels_damp_independently_of_each_other(monkeypatch, fast_chain):
+def test_shard_labels_adopt_the_share_capped_spill_of_a_sibling_shard(monkeypatch, fast_chain):
+    """A storm measured on one shard label spaces a sibling shard's entry by the spill.
+
+    Supersedes the former full isolation pin: sibling shards contend on the
+    same backing rows, so the namespace spill shares the measured residual
+    (share-capped) with a label that has no window of its own.
+    """
     damper, clock = shared_damper('batch_pipeline_dev', jitter=0.0)
     store_a = default_store(monkeypatch, client=exhausting_client())
     exhaust_run(store_a, 'batch_pull shard=scheduler_03')
     store_b = default_store(monkeypatch, client=healthy_client())
     store_b.run(lambda tx: 'ok', operation='batch_pull shard=scheduler_04')
-    assert clock.sleeps == []
+    assert clock.sleeps == [pytest.approx(0.125)]
     assert 'batch_pull shard=scheduler_04' not in damper._armed_until
 
 

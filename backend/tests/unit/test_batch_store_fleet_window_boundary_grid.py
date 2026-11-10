@@ -2316,7 +2316,8 @@ def test_prod_namespace_end_to_end_j0p0(monkeypatch):
     stormy = StormDocsClient(abort_times=10**6)
     error = exhaust_run(default_store(monkeypatch, namespace='batch_pipeline_prod', client=stormy), 'batch_offer')
     assert error.retry_after == pytest.approx(0.125)
-    assert stormy.set_calls[0][:2] == ('batch_pipeline_prod_storm_dampers', 'batch_offer')
+    # the arm's last write stays the label document; the spill broadcast rides first
+    assert stormy.set_calls[-1][:2] == ('batch_pipeline_prod_storm_dampers', 'batch_offer')
     cold = StormDocsClient()
     cold.docs = dict(stormy.docs)
     store = default_store(monkeypatch, namespace='batch_pipeline_prod', client=cold)
@@ -2330,7 +2331,8 @@ def test_prod_namespace_end_to_end_j0p5(monkeypatch):
     stormy = StormDocsClient(abort_times=10**6)
     error = exhaust_run(default_store(monkeypatch, namespace='batch_pipeline_prod', client=stormy), 'batch_offer')
     assert error.retry_after == pytest.approx(0.1875)
-    assert stormy.set_calls[0][:2] == ('batch_pipeline_prod_storm_dampers', 'batch_offer')
+    # the arm's last write stays the label document; the spill broadcast rides first
+    assert stormy.set_calls[-1][:2] == ('batch_pipeline_prod_storm_dampers', 'batch_offer')
     cold = StormDocsClient()
     cold.docs = dict(stormy.docs)
     store = default_store(monkeypatch, namespace='batch_pipeline_prod', client=cold)

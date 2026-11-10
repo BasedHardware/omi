@@ -177,7 +177,9 @@ def test_real_intake_batch_counts(monkeypatch, reads):
         # The first batch_admit entry adopts the fleet storm window (+1 bounded
         # read, database/docs/batch-store-fleet-storm-window.md); the second
         # entry's adopt is answered by the process mirror, not the document.
-        assert len(reads) == (67 if on else 125)
+        # The off branch also adopts the namespace storm spill once per TTL
+        # (+1 bounded read, database/docs/batch-store-namespace-storm-spill.md).
+        assert len(reads) == (67 if on else 126)
         results.append(db.rows)
     assert results[0] == results[1]
 

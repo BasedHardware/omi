@@ -549,7 +549,8 @@ def test_arm_broadcasts_the_applied_window():
     applied = damper.arm('batch_merge', client=client)
     assert applied == pytest.approx(0.125)
     assert window.publishes == 1
-    name, doc_id, payload = client.set_calls[0]
+    # The spill broadcast rides first; the arm's last write stays the label's own window.
+    name, doc_id, payload = client.set_calls[-1]
     assert (name, doc_id) == ('batch_pipeline_dev_storm_dampers', 'batch_merge')
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
 
@@ -574,10 +575,12 @@ def test_arm_beyond_the_label_cap_stays_silent():
 def test_arm_broadcast_fault_does_not_change_the_applied_window():
     damper, window, clock, wall = adopt_clocks('batch_pipeline_dev', jitter=0.0)
     client = StormDocsClient()
-    client.fail_sets = 1
+    client.fail_sets = 2  # the spill broadcast fails first, then the label broadcast
     applied = damper.arm('batch_merge', client=client)
     assert applied == pytest.approx(0.125)
     assert window.publish_failures == 1
+    assert window.spill_publish_failures == 1
+    assert window.spill_publishes == 0
 
 
 def test_injected_damper_carries_no_fleet_window():
@@ -632,7 +635,7 @@ def test_first_pod_publishes_and_stamps_retry_after(monkeypatch):
     error = exhaust_run(store, 'batch_merge_commit')
     assert error.retry_after == pytest.approx(0.125)
     assert window.publishes == 1
-    name, doc_id, payload = client.set_calls[0]
+    name, doc_id, payload = client.set_calls[-1]
     assert (name, doc_id) == ('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')
     assert payload['armed_until'] == pytest.approx(1_000_000.0 + 0.125)
 
@@ -672,7 +675,14 @@ def test_cold_sibling_pod_adopts_the_published_window_from_the_document(monkeypa
     assert healthy.get_calls == [('batch_pipeline_dev_storm_dampers', 'batch_merge_commit')]
 
 
-def test_sibling_of_a_different_label_is_not_damped(monkeypatch):
+def test_sibling_of_a_different_label_adopts_the_share_capped_spill(monkeypatch):
+    """A storm measured on one label damps a sibling label through the spill lane.
+
+    Supersedes the former per-label isolation pin: the sharded scheduler
+    labels contend on the same backing rows, so the first measured exhaustion
+    raises the namespace spill and a sibling label with no window of its own
+    adopts it on entry, capped by the fleet window's share cap.
+    """
     silence_chain_sleep(monkeypatch)
     damper, window, clock, wall = adopt_clocks('batch_pipeline_dev', jitter=0.0, now=10.0)
     stormy = StormDocsClient(abort_times=10**6)
@@ -680,7 +690,8 @@ def test_sibling_of_a_different_label_is_not_damped(monkeypatch):
     healthy = StormDocsClient()
     sibling_store = default_store(monkeypatch, client=healthy)
     sibling_store.run(lambda tx: 'ok', operation='batch_recover_items')
-    assert clock.sleeps == []  # adoption is per label, never fleet-wide
+    assert clock.sleeps == [pytest.approx(0.125)]  # the spill, share-capped below the cap
+    assert 'batch_recover_items' not in damper._armed_until  # the sibling label itself never arms
 
 
 def test_adopt_read_fault_degrades_to_the_process_schedule(monkeypatch):
@@ -695,7 +706,9 @@ def test_adopt_read_fault_degrades_to_the_process_schedule(monkeypatch):
     sibling_store = default_store(monkeypatch, client=healthy)
     sibling_store.run(lambda tx: 'ok', operation='batch_merge_commit')
     assert window.failed_reads == 1
-    assert clock.sleeps == []  # process-local behavior, entry still served
+    # The label adopt read faulted open, and the spill mirror — warmed by this
+    # process's own arm — still spaces the entry by the share-capped residual.
+    assert clock.sleeps == [pytest.approx(0.125)]
 
 
 def test_contention_retry_off_stays_fully_dormant(monkeypatch):
