@@ -14,7 +14,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_block_chrome.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart' show conversationRowTitle;
+import 'package:omi/pages/conversations/conversation_row_text.dart' show conversationRowTitle;
 import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/memories/widgets/memory_edit_sheet.dart';
 import 'package:omi/providers/memories_provider.dart';

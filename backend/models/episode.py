@@ -65,6 +65,9 @@ class EpisodeMember(BaseModel):
     started_at: datetime
     finished_at: Optional[datetime] = None
     status: str = 'completed'
+    overview: str = ''
+    home_step: Optional[str] = None
+    title_provenance: Optional[str] = None
 
 
 class Episode(BaseModel):

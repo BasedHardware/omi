@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-05 -->
+<!-- feature-flag-registry as-of: 2026-11-10 -->
 
 # Feature-flag authority registry
 
@@ -120,7 +120,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-05.
+None as of 2026-11-10.
 
 ## Flags
 
@@ -626,6 +626,7 @@ and an explicit empty literal renders as `''`.
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | auditfix |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
+| `mobile-episode-detail-redesign-disabled` | Restore the prior episode detail layout; false or absent keeps expanded composed notes, compact member rows, noise fold and follow-up task buttons on | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | refactor-lead |
 | `mobile-local-preview-disabled` | Stop the iOS and Android clients declaring local_preview=enabled on /v4/listen; false or absent keeps the on-device live preview request on for batch-lane sessions | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `mobile-wal-delta-index-off` | True makes the iOS and Android clients save the WAL recording index through the pre-delta full-snapshot writer; false or absent keeps the delta index worker on | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |

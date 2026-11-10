@@ -226,7 +226,8 @@ class Episode {
               createdAt: m.startedAt.toLocal(),
               startedAt: m.startedAt.toLocal(),
               finishedAt: m.finishedAt?.toLocal(),
-              structured: Structured(m.title, '', emoji: m.emoji),
+              structured: Structured(m.title, m.overview, emoji: m.emoji, titleProvenance: m.titleProvenance),
+              homeStep: m.homeStep,
               status: ConversationStatus.values
                   .firstWhere((s) => s.name == m.status, orElse: () => ConversationStatus.completed),
             )

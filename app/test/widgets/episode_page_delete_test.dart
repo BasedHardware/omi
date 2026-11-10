@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -60,8 +61,11 @@ void main() {
             home: Builder(
                 builder: (context) => Scaffold(
                         body: TextButton(
-                      onPressed: () =>
-                          Navigator.of(context).push(omiPageRoute(builder: (_) => EpisodePage(episode: episode))),
+                      onPressed: () => Navigator.of(context).push(omiPageRoute(
+                          builder: (_) => EpisodePage(
+                              episode: episode,
+                              readFlag: (_) async => false,
+                              loadDetail: (_) async => ApiSuccess(episode)))),
                       child: const Text('Open episode'),
                     ))),
           )));

@@ -4,182 +4,196 @@
     {
       "file": "001-mobile-ios-typical-day-before-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: typical day before top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: typical day before top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-typical-day-before-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: typical day before rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: typical day before rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "003-mobile-ios-typical-day-after-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: typical day after top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: typical day after top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "004-mobile-ios-typical-day-after-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: typical day after rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: typical day after rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "005-mobile-ios-many-noisy-before-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: many noisy before top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: many noisy before top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "006-mobile-ios-many-noisy-before-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: many noisy before rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: many noisy before rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "007-mobile-ios-many-noisy-after-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: many noisy after top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: many noisy after top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "008-mobile-ios-many-noisy-after-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: many noisy after rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: many noisy after rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "009-mobile-ios-many-noisy-after-expanded.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: many noisy after expanded. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: many noisy after expanded. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "010-mobile-ios-few-members-before-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: few members before top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: few members before top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "011-mobile-ios-few-members-before-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: few members before rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: few members before rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "012-mobile-ios-few-members-after-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: few members after top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: few members after top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "013-mobile-ios-few-members-after-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: few members after rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: few members after rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "014-mobile-ios-long-summary-before-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary before top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: long summary before top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "015-mobile-ios-long-summary-before-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary before rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: long summary before rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "016-mobile-ios-long-summary-after-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary after top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: long summary after top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "017-mobile-ios-long-summary-after-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary after rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: long summary after rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "018-mobile-ios-long-summary-after-expanded.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary after expanded. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: long summary after expanded. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "019-mobile-ios-long-summary-after-ending.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary after ending. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: long summary after ending. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "020-mobile-ios-home-episode-no-count.png",
+      "file": "020-mobile-ios-follow-up-plus-ready.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: home episode no count. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: follow up plus ready. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "021-mobile-ios-narrow-light-after-top.png",
+      "file": "021-mobile-ios-follow-up-plus-saved.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: narrow light after top. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: follow up plus saved. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "022-mobile-ios-narrow-light-after-rows.png",
+      "file": "022-mobile-ios-home-episode-no-count.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: narrow light after rows. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: home episode no count. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "023-mobile-ios-typical-day-comparison.png",
+      "file": "023-mobile-ios-narrow-light-after-top.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: typical day comparison. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: narrow light after top. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "024-mobile-ios-many-noisy-comparison.png",
+      "file": "024-mobile-ios-narrow-light-after-rows.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: many noisy comparison. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: narrow light after rows. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "025-mobile-ios-few-members-comparison.png",
+      "file": "025-mobile-ios-typical-day-comparison.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: few members comparison. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: typical day comparison. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "026-mobile-ios-long-summary-comparison.png",
+      "file": "026-mobile-ios-many-noisy-comparison.png",
       "platform": "mobile-ios",
-      "description": "Episode redesign review: long summary comparison. Synthetic data only. Current production widget before; test-only proposal after. Widget-test rendering, not device E2E.",
+      "description": "Episode redesign review: many noisy comparison. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "027-mobile-ios-few-members-comparison.png",
+      "platform": "mobile-ios",
+      "description": "Episode redesign review: few members comparison. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "028-mobile-ios-long-summary-comparison.png",
+      "platform": "mobile-ios",
+      "description": "Episode redesign review: long summary comparison. Synthetic data only. Real episode page with kill switch enabled before and disabled after. Widget-test rendering, not device E2E.",
       "captured_by": "agent",
       "source": "visual-audit"
     }

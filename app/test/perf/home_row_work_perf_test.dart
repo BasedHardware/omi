@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversations/conversation_row_text.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';

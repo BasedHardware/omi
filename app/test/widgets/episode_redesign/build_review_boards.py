@@ -18,14 +18,14 @@ def main():
     small = ImageFont.truetype(str(FONT), 19)
     width, height, gap = 589, 1278, 24
     states = ['typical-day', 'many-noisy', 'few-members', 'long-summary']
-    for ordinal, state in enumerate(states, 23):
+    for ordinal, state in enumerate(states, 25):
         board = Image.new('RGB', (width * 2 + gap * 3, height * 2 + 200), '#ececf1')
         draw = ImageDraw.Draw(board)
-        draw.text((gap, 14), f'{state.replace("-", " ").title()} · Synthetic fixture · Render review only',
+        draw.text((gap, 14), f'{state.replace("-", " ").title()} · Synthetic fixture · Production widget',
                   fill='#161618', font=font)
         for col, phase in enumerate(['before', 'after']):
             x = gap + col * (width + gap)
-            draw.text((x, 52), 'Before / current page' if col == 0 else 'After / proposal',
+            draw.text((x, 52), 'Before / current page' if col == 0 else 'After / redesign on',
                       fill='#161618', font=font)
             for row, position in enumerate(['top', 'rows']):
                 y = 110 + row * (height + 64)
@@ -46,7 +46,7 @@ def main():
             'file': path.name,
             'platform': 'mobile-ios',
             'description': f'Episode redesign review: {slug.replace("-", " ")}. '
-                           'Synthetic data only. Current production widget before; test-only proposal after. '
+                           'Synthetic data only. Real episode page with kill switch enabled before and disabled after. '
                            'Widget-test rendering, not device E2E.',
             'captured_by': 'agent',
             'source': 'visual-audit',

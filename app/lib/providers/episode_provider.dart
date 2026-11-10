@@ -24,15 +24,30 @@ class EpisodeProvider extends ChangeNotifier {
     EpisodeLiveFetcher? fetchLive,
     Future<ApiResult<EpisodePageRead>> Function(DateTime, DateTime, {String? cursor})? fetchPage,
     EpisodeLookupFetcher? lookup,
+    Future<ApiResult<Episode>> Function(String)? fetchDetail,
     EpisodeWrapUpCall? wrapUp,
     EpisodeDismissCall? dismiss,
     DateTime Function()? clock,
   })  : _fetchLive = fetchLive ?? api.getLiveEpisode,
         _fetchPage = fetchPage ?? api.getEpisodes,
         _lookup = lookup ?? api.getEpisodeForConversation,
+        _fetchDetail = fetchDetail ?? api.getEpisode,
         _wrapUp = wrapUp ?? api.wrapUpEpisode,
         _dismiss = dismiss ?? api.dismissEpisodeItem,
         _clock = clock ?? DateTime.now;
+
+  final Future<ApiResult<Episode>> Function(String) _fetchDetail;
+
+  /// Full retained membership for the detail route, fenced to the opening account.
+  Future<ApiResult<Episode>> detailFor(String episodeId) async {
+    _ensureOwner();
+    final uid = _ownerUid;
+    final result = await _fetchDetail(episodeId);
+    if (_disposed || uid != SharedPreferencesUtil().uid) {
+      return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    }
+    return result;
+  }
 
   final Future<ApiResult<EpisodePageRead>> Function(DateTime, DateTime, {String? cursor}) _fetchPage;
   List<Episode> _homeEpisodes = const [];

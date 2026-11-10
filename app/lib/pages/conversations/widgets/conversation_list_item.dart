@@ -11,6 +11,8 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
+import 'package:omi/pages/conversations/conversation_row_text.dart';
+import 'package:omi/pages/conversations/widgets/compact_conversation_content.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -26,56 +28,11 @@ import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
-import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/capture_sources.dart';
-import 'package:omi/widgets/extensions/string.dart';
-
-/// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
-/// rows the server left untitled), a recording date/time when neither exists, and
-/// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
-String conversationRowTitle(BuildContext context, ServerConversation conversation) {
-  final l10n = context.l10n;
-  // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
-  if (conversation.discarded && !conversation.isFoldedNoise) {
-    final seconds = conversation.getDurationInSeconds();
-    if (seconds <= 0) return l10n.discardedConversation;
-    return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
-  }
-  return conversationDisplayTitle(
-    conversation,
-    l10n,
-    surface: ConversationUntitledRenderedSurface.list,
-    dates: OmiDateFormat.of(context),
-    title: conversation.structured.title.decodeString,
-  );
-}
-
-/// A plain-text preview of what was said: the transcript words without timestamps or speaker
-/// prefixes, newest last, trimmed to [maxChars] at a word boundary.
-String conversationSnippet(ServerConversation conversation, {int maxChars = 160}) {
-  // Only collect the visible prefix plus one character to decide whether it
-  // needs an ellipsis. Hydrated/retained conversations can have hours of text;
-  // joining all of it for each scrolling row makes a short preview O(history).
-  final prefix = StringBuffer();
-  for (final segment in conversation.transcriptSegments) {
-    final words = segment.text.trim();
-    if (words.isEmpty) continue;
-    if (prefix.isNotEmpty) prefix.write(' ');
-    final remaining = maxChars + 1 - prefix.length;
-    if (remaining > 0) prefix.write(words.length > remaining ? words.substring(0, remaining) : words);
-    if (prefix.length > maxChars) break;
-  }
-  final text = prefix.toString();
-  if (text.length <= maxChars) return text;
-  final cut = text.substring(0, maxChars);
-  final space = cut.lastIndexOf(' ');
-  return '${space > maxChars ~/ 2 ? cut.substring(0, space) : cut}…';
-}
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -98,6 +55,10 @@ class ConversationListItem extends StatefulWidget {
   /// Parent supplies outer spacing, while normal lock and row interactions remain intact.
   final bool embedded;
 
+  /// Episode detail presentation; all existing row interactions remain authoritative.
+  final bool compact;
+  final String? compactOverview;
+
   /// Seconds of audio offline sync is still adding to this conversation (episodes on). The row
   /// says so with a small spinner instead of a separate "catching up" row.
   final int? fillingSeconds;
@@ -119,6 +80,8 @@ class ConversationListItem extends StatefulWidget {
     this.allowSelection = true,
     this.inLockedRun = false,
     this.embedded = false,
+    this.compact = false,
+    this.compactOverview,
     this.fillingSeconds,
     this.homeEpisode,
     this.openEpisodeFromSearch = true,
@@ -137,6 +100,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   int _visualSignature(ServerConversation conversation) => Object.hashAll([
         conversation.structured.title,
+        conversation.structured.overview,
+        widget.compactOverview,
         conversation.structured.emoji,
         conversation.structured.category,
         conversation.status,
@@ -477,13 +442,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 ? OmiColors.surface3
                                 : (isSelectionMode && !isEligible)
                                     ? OmiColors.surface2
-                                    : OmiColors.surface1,
-                            borderRadius: OmiRadius.xlAll,
+                                    : _compact
+                                        ? Colors.transparent
+                                        : OmiColors.surface1,
+                            borderRadius: _compact ? null : OmiRadius.xlAll,
                             border: isSelected
                                 ? Border.all(color: OmiColors.accent, width: 2)
                                 : (isSelectionMode && !isEligible)
                                     ? Border.all(color: OmiColors.border, width: 1)
-                                    : null,
+                                    : _compact
+                                        ? Border(bottom: BorderSide(color: OmiColors.border, width: 0.5))
+                                        : null,
                           ),
                           child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
                         ),
@@ -513,10 +482,20 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
 
+  bool get _compact =>
+      widget.compact &&
+      widget.conversation.status == ConversationStatus.completed &&
+      !widget.conversation.showsSummaryRetry &&
+      !widget.conversation.processingDeferred;
+
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-      child: _buildMobileLayout(context),
+      padding: _compact
+          ? const EdgeInsets.symmetric(vertical: OmiSpacing.sm)
+          : const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+      child: _compact
+          ? CompactConversationContent(conversation: widget.conversation, overview: widget.compactOverview)
+          : _buildMobileLayout(context),
     );
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;

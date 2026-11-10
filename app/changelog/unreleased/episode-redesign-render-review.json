@@ -1,4 +1,1 @@
-{
-  "kind": "none",
-  "reason": "Synthetic widget renders and a test-only episode page design proposal for review. Shipping app behavior is unchanged."
-}
+{"change":"Episode pages show full notes, compact conversation previews and a short-clip toggle. Add any follow-up to Tasks with one tap."}

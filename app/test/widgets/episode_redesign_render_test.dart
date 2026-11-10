@@ -26,7 +26,9 @@ import 'package:omi/ui/ui.dart';
 import '../helpers/home_fixture_env.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 import 'episode_redesign/fixtures.dart';
-import 'episode_redesign/proposal.dart';
+import '../helpers/episode_tasks_fixture.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/providers/action_items_provider.dart';
 
 const _output = String.fromEnvironment('EPISODE_REDESIGN_RENDER_OUTPUT');
 final _boundary = GlobalKey();
@@ -68,12 +70,19 @@ Future<void> _capture(WidgetTester tester, String slug) async {
 }
 
 Future<void> _pump(WidgetTester tester, Episode episode,
-    {required bool before, Brightness brightness = Brightness.dark, Widget? home}) async {
-  final history = ConversationProvider(isSignedIn: () => false)..conversations = [...episode.members];
+    {required bool before,
+    Brightness brightness = Brightness.dark,
+    Widget? home,
+    Episode? detail,
+    List<ServerConversation>? cached,
+    Future<ApiResult<Episode>> Function(String)? loadDetail}) async {
+  final history = ConversationProvider(isSignedIn: () => false)..conversations = [...cached ?? episode.members];
   final episodes = EpisodeProvider()
     ..debugSetLive(null)
     ..debugSetHomeEpisodes([episode]);
   final connectivity = ConnectivityProvider();
+  final tasks = episodeTasks();
+  addTearDown(tasks.dispose);
   addTearDown(history.dispose);
   addTearDown(episodes.dispose);
   addTearDown(connectivity.dispose);
@@ -89,6 +98,7 @@ Future<void> _pump(WidgetTester tester, Episode episode,
   );
   await tester.pumpWidget(MultiProvider(
     providers: [
+      ChangeNotifierProvider<ActionItemsProvider>.value(value: tasks),
       ChangeNotifierProvider<ConversationProvider>.value(value: history),
       ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
       ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
@@ -100,7 +110,11 @@ Future<void> _pump(WidgetTester tester, Episode episode,
       supportedLocales: AppLocalizations.supportedLocales,
       home: RepaintBoundary(
         key: _boundary,
-        child: home ?? (before ? EpisodePage(episode: episode) : EpisodeRedesignProposal(episode: episode)),
+        child: home ??
+            EpisodePage(
+                episode: episode,
+                readFlag: (_) async => before,
+                loadDetail: loadDetail ?? (_) async => ApiSuccess(detail ?? episode)),
       ),
     ),
   ));
@@ -151,7 +165,7 @@ void main() {
             expect(find.byKey(ValueKey('compact_${member.id}')), findsNothing);
           }
           if (state == 'many-noisy') {
-            expect(find.text('Show 8 More Recordings'), findsOneWidget);
+            expect(find.text('8 short clips hidden'), findsOneWidget);
             await tester.tap(find.byKey(const Key('noise_toggle')));
             await tester.pumpAndSettle();
             await _bottom(tester);
@@ -159,9 +173,8 @@ void main() {
             expect(find.byKey(const ValueKey('compact_noise-7')), findsOneWidget);
           }
           if (state == 'long-summary') {
-            await tester.ensureVisible(find.byKey(const Key('full_summary_toggle')));
-            await tester.tap(find.byKey(const Key('full_summary_toggle')));
-            await tester.pumpAndSettle();
+            expect(find.byKey(const Key('full_summary_toggle')), findsNothing);
+            expect(find.text('Summary'), findsNothing);
             await tester.ensureVisible(find.text('Make the invitation feel welcoming'));
             await _capture(tester, 'long-summary-after-expanded');
             await _bottom(tester);
@@ -174,6 +187,80 @@ void main() {
       });
     }
   }
+
+  testWidgets('follow-up plus creates a linked task and becomes a check', (tester) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, fixture('few-members'), before: false);
+    final add = find.byKey(const ValueKey('episode_follow_up_add_Check the seed trays before Saturday.'));
+    await tester.ensureVisible(add);
+    await _capture(tester, 'follow-up-plus-ready');
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Added to Tasks'), findsOneWidget);
+    await _capture(tester, 'follow-up-plus-saved');
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('full detail restores omitted noise; payload metadata survives an older Home cache', (tester) async {
+    final detail = fixture('many-noisy');
+    final home = detail.copyWith(members: detail.members.where((m) => m.homeStep != 'noise').toList());
+    final cached = [
+      for (final m in detail.members)
+        ServerConversation(id: m.id, createdAt: m.createdAt, structured: Structured(m.structured.title, ''))
+    ];
+    await _pump(tester, home, before: false, detail: detail, cached: cached);
+    await _bottom(tester);
+    expect(find.text('8 short clips hidden'), findsOneWidget);
+    expect(find.text('A smaller group, more time for hands-on practice.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact_noise-7')), findsNothing);
+    await tester.tap(find.byKey(const Key('noise_toggle')));
+    await tester.pumpAndSettle();
+    await _bottom(tester);
+    expect(find.byKey(const ValueKey('compact_noise-7')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('full detail keeps every composed moment omitted from the Home projection', (tester) async {
+    final detail = fixture('long-summary');
+    final home = Episode(
+        id: detail.id,
+        live: false,
+        startedAt: detail.startedAt,
+        lastActivityAt: detail.lastActivityAt,
+        title: detail.title,
+        lede: detail.lede,
+        moments: detail.moments.take(2).toList(),
+        members: detail.members,
+        conversationIds: detail.conversationIds);
+    await _pump(tester, home, before: false, detail: detail);
+    expect(find.text('Make the invitation feel welcoming'), findsOneWidget);
+    expect(find.text('An indoor plan if it rains'), findsOneWidget);
+    expect(find.byKey(const Key('full_summary_toggle')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('old server retains opening snapshot; kill switch skips new detail request', (tester) async {
+    var calls = 0;
+    Future<ApiResult<Episode>> unavailable(String id) async {
+      calls++;
+      return const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
+    }
+
+    await _pump(tester, fixture('few-members'), before: false, loadDetail: unavailable);
+    expect(find.byKey(const Key('episode_summary')), findsOneWidget);
+    expect(calls, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pump(tester, fixture('few-members'), before: true, loadDetail: unavailable);
+    expect(find.byKey(const Key('episode_summary')), findsNothing);
+    expect(calls, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
 
   testWidgets('Home episode row has no member count', (tester) async {
     tester.view.physicalSize = const Size(393, 220);
@@ -208,7 +295,7 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('proposal fits light mode at narrow width and larger type', (tester) async {
+  testWidgets('episode detail fits light mode at narrow width and larger type', (tester) async {
     tester.view.physicalSize = const Size(320, 852);
     tester.view.devicePixelRatio = 1;
     tester.platformDispatcher.textScaleFactorTestValue = 1.3;

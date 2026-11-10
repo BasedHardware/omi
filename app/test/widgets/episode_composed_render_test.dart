@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api_result.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -218,7 +219,7 @@ ServerConversation _rowFor(Episode episode) => ServerConversation(
 Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness, {Widget? home}) async {
   OmiColors.active = OmiColors.forBrightness(brightness);
   final history = ConversationProvider(isSignedIn: () => true)..conversations = [...episode.members];
-  final episodes = EpisodeProvider()
+  final episodes = EpisodeProvider(fetchDetail: (_) async => ApiSuccess(episode))
     ..debugSetLive(null)
     ..debugSetHomeEpisodes([episode]);
   final connectivity = ConnectivityProvider();
@@ -238,7 +239,8 @@ Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness, 
         theme: buildOmiTheme(brightness: brightness),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: home ?? EpisodePage(episode: episode),
+        home: home ??
+            EpisodePage(episode: episode, readFlag: (_) async => false, loadDetail: (_) async => ApiSuccess(episode)),
       ),
     ),
   ));

@@ -16546,8 +16546,24 @@
             ],
             "title": "Finished At"
           },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
+          },
           "id": {
             "title": "Id",
+            "type": "string"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
             "type": "string"
           },
           "started_at": {
@@ -16564,6 +16580,17 @@
             "default": "",
             "title": "Title",
             "type": "string"
+          },
+          "title_provenance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Provenance"
           }
         },
         "required": [
