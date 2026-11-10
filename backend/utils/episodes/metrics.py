@@ -7,6 +7,8 @@
 - wrap-up latency: end of the closing conversation's speech to its finished
   notes (``omi_episode_wrapup_latency_seconds``)
 - boundary decisions, including Jev answers (``omi_episode_boundary_total``)
+- Variant F candidate privacy refusals (``omi_episode_f_gate_total``) and fallback
+  call sites (``omi_episode_f_fallback_total``)
 - client gating: moments skipped because no capable client was seen
   (``omi_episode_moments_skipped_no_client_total``), and live conversations by
   whether the user's client was seen (``omi_episode_live_sessions_total``)
@@ -110,6 +112,38 @@ BOUNDARY_OUTCOMES = frozenset(
     }
 )
 
+F_GATE_REASONS = frozenset(
+    {
+        'held',
+        'client_processing',
+        'deferred',
+        'local_pending',
+        'local_only',
+        'row_consent',
+        'user_consent',
+        'locked_discarded',
+        'owner',
+        'status',
+        'hidden',
+        'other',
+    }
+)
+
+F_FALLBACK_SITES = frozenset(
+    {
+        'pending_conflict',
+        'pending_error',
+        'synced_failed',
+        'recheck_failed',
+        'previous_failed',
+        'gate_failed',
+        'unknown_previous',
+        'recheck_failed_settle',
+        'unknown_jev',
+        'other',
+    }
+)
+
 EPISODE_MOMENT_UPDATES_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_updates_total',
@@ -175,6 +209,18 @@ EPISODE_BOUNDARY_TOTAL = reuse_or_create(
     'omi_episode_boundary_total',
     'Moment boundary decisions against the open episode.',
     ['outcome'],
+)
+EPISODE_F_GATE_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_f_gate_total',
+    'Variant F candidate privacy gate refusals by first failing condition. Never labeled by uid.',
+    ['reason'],
+)
+EPISODE_F_FALLBACK_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_f_fallback_total',
+    'Variant F fallbacks by bounded call site. Existing fallback reasons are unchanged.',
+    ['site'],
 )
 EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = reuse_or_create(
     Counter,
@@ -270,6 +316,10 @@ def _prime() -> None:
             EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=_label(outcome, PROVISIONAL_OUTCOMES))
         for outcome in BOUNDARY_OUTCOMES:
             EPISODE_BOUNDARY_TOTAL.labels(outcome=_label(outcome, BOUNDARY_OUTCOMES))
+        for reason in F_GATE_REASONS:
+            EPISODE_F_GATE_TOTAL.labels(reason=_label(reason, F_GATE_REASONS))
+        for site in F_FALLBACK_SITES:
+            EPISODE_F_FALLBACK_TOTAL.labels(site=_label(site, F_FALLBACK_SITES))
         for outcome in MOMENT_OUTCOMES:
             EPISODE_MOMENT_LATENCY_SECONDS.labels(outcome=_label(outcome, MOMENT_OUTCOMES))
         for reason in CLOSE_REASON_LABELS:
@@ -364,6 +414,20 @@ def record_wrapup_latency(reason: str, seconds: float) -> None:
 def record_boundary(outcome: str) -> None:
     try:
         EPISODE_BOUNDARY_TOTAL.labels(outcome=_label(outcome, BOUNDARY_OUTCOMES)).inc()
+    except Exception:
+        pass
+
+
+def record_f_gate(reason: str) -> None:
+    try:
+        EPISODE_F_GATE_TOTAL.labels(reason=_label(reason, F_GATE_REASONS)).inc()
+    except Exception:
+        pass
+
+
+def record_f_fallback(site: str) -> None:
+    try:
+        EPISODE_F_FALLBACK_TOTAL.labels(site=_label(site, F_FALLBACK_SITES)).inc()
     except Exception:
         pass
 
