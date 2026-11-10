@@ -16,7 +16,7 @@ construction, model routing): those must not re-buy anything.
 
 from __future__ import annotations
 
-NOTES_PROMPT_VERSION = 'notes-1'
+NOTES_PROMPT_VERSION = 'notes-2'
 L1_PROMPT_VERSION = 'l1-1'
 
 PROMPT_VERSIONS: dict[str, str] = {

@@ -265,7 +265,7 @@ def _live(spent: list[float], now: float) -> list[float]:
 def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
     """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
     members changed since its compose (a direct discard or delete) gets one, at most a few per read.
-    Returns how many were queued."""
+    A deferred late episode is left alone until its grace window ends. Returns how many were queued."""
     from utils.episodes import composer
 
     queued = 0
@@ -287,6 +287,19 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
             'event=episode_compose_schedule outcome=error source=read exception_type=%s', type(error).__name__
         )
     return queued
+
+
+def schedule_opened_compose(uid: str, episode: dict[str, Any] | None) -> bool:
+    """The episode page was opened: a deferred late episode composes now, at most once per window."""
+    from utils.episodes import composer
+
+    try:
+        return composer.schedule_opened(uid, episode)
+    except Exception as error:
+        logger.warning(
+            'event=episode_compose_schedule outcome=error source=open exception_type=%s', type(error).__name__
+        )
+        return False
 
 
 def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:

@@ -129,7 +129,7 @@ def _episode(**over):
 def store(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODE_SINGLE_MEMBER_COMPOSE_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
     monkeypatch.setattr(composer, '_deferred', {})
     monkeypatch.setattr(composer, '_foreground', set())
     monkeypatch.setattr(composer, '_recent', {})
@@ -193,7 +193,7 @@ def test_the_shortcut_is_idempotent_and_never_recomposes(store):
 
 
 def test_kill_switch_restores_the_paid_composer(store, monkeypatch):
-    monkeypatch.setenv(config.EPISODE_SINGLE_MEMBER_COMPOSE_ENV, 'false')
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'false')
     calls = []
 
     def invoke(uid, messages):

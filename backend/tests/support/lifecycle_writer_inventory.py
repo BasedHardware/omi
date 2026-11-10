@@ -3081,6 +3081,7 @@ FIELD_SITES = {
             'composed_fingerprint',
             'fingerprint(members)',
             (
+                'compose_deferred_at',
                 'composed_fingerprint',
                 'composed_member_ids',
                 'composed_notes',
@@ -3093,6 +3094,7 @@ FIELD_SITES = {
             'composed_fingerprint',
             'print_',
             (
+                'compose_deferred_at',
                 'compose_failures',
                 'composed_at',
                 'composed_fingerprint',
@@ -3103,10 +3105,30 @@ FIELD_SITES = {
                 'usage',
             ),
         ),
+        (
+            '_write_single_member.finish',
+            'composed_fingerprint',
+            'print_',
+            (
+                'compose_deferred_at',
+                'compose_failures',
+                'composed_at',
+                'composed_fingerprint',
+                'composed_member_ids',
+                'composed_notes',
+                'composer_version',
+                'summary_needs_regeneration',
+            ),
+        ),
     ],
     'utils/episodes/home_read.py': [
         ('project_episode', 'status', "'completed'", ('status',)),
-        ('project_episode', 'status', 'status', ('emoji', 'finished_at', 'id', 'started_at', 'status', 'title')),
+        (
+            'project_episode',
+            'status',
+            'status',
+            ('emoji', 'finished_at', 'gist', 'id', 'started_at', 'status', 'title'),
+        ),
     ],
     'utils/episodes/service.py': [
         ('_close', 'status', "'dropped'", ('status',)),

@@ -21,7 +21,7 @@ failure backoff are unchanged.
 
 - Per excerpt call: at most 4,000 characters and 15 minutes of one recording.
 - Per compose: at most 4 excerpt calls and 12,000 excerpt characters.
-- Per compose: at most 5 model turns; the last turn is sent without tools, so
+- Per compose: at most 5 model turns for notes/excerpt reasoning; the last turn is sent without tools, so
   the model must answer inside the cap.
 - A request for a wider range is clamped, not rejected. An unknown recording,
   an out-of-span clock, or an exhausted budget returns a short error string and
@@ -30,25 +30,13 @@ failure backoff are unchanged.
 ## Flag and ramp
 
 `EPISODE_COMPOSER_NOTES_FIRST` defaults off. Off, blank, `false`, `0`, `no` or an
-unknown value restores today's full-transcript prompt. `EPISODE_COMPOSER_NOTES_FIRST_PERCENT`
-(default `0`) is the salted uid cohort; `100` admits every owner. The flag is
-the kill switch and the percent is the ramp lever.
+unknown value restores today's full-transcript prompt. This is the independent L9
+switch. It stays OFF until David records a side-by-side verdict. The read-only
+operator comparison does not require turning on serving traffic.
 
-Ramp plan (also in the feature-flag registry):
-
-1. 0% — default off, today's behavior.
-2. David-only uid digest — run the read-only side-by-side on David's own
-   episodes and review the text diff before any cohort.
-3. 5% — watch `omi_episode_compose_total{outcome=error|conflict}`,
-   composed-per-close, `omi_episode_compose_input_tokens_total{mode}` and
-   `omi_episode_compose_tool_calls{mode}`.
-4. 25% — same clean metric, plus a spot check of composed pages.
-5. 100% — final cohort.
-
-The clean metric is: error and conflict outcomes do not regress against the
-full-transcript cohort, composed-per-close does not fall, input tokens per
-compose fall, and the tool-call rate stays inside the per-compose cap.
-refactor-lead expands each step; the review date is 2026-12-10.
+After that verdict, refactor-lead may enable L9 through normal gates, with David's
+approval. Watch error/conflict outcomes, composed-per-close, input tokens per
+compose, and excerpt-tool bounds. Review by 2026-12-10; absent a verdict, remain OFF.
 
 ## Measurement
 
@@ -71,6 +59,6 @@ account for this review; do not run it on any other account.
 
 ## Rollback
 
-Set `EPISODE_COMPOSER_NOTES_FIRST=off` (or the percent to `0`). The next paid
+Set `EPISODE_COMPOSER_NOTES_FIRST=off`. The next paid
 compose uses the full-transcript prompt. No data migration, no composer-version
 bump and no recompose wave.

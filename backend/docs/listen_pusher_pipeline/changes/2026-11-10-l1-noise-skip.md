@@ -16,7 +16,7 @@ imported external text is not measured by words.
 Nothing is written and no L1 hash is stamped on a skip, so a later reprocess
 with more speech extracts normally. The skip is counted as
 `omi_memory_l1_skipped_total{reason}`. Kill switch:
-`MEMORY_L1_NOISE_SKIP_ENABLED` (default on; an explicit false word restores one
+`EPISODE_COMPOSER_THRIFT` (default on; an explicit false word restores one
 call per processed conversation).
 
 The same PR replaces the notes/L1 reuse key's 35-file source digest with an

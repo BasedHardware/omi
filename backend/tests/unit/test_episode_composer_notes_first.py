@@ -123,7 +123,6 @@ def store(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV, raising=False)
     monkeypatch.setattr(composer, '_deferred', {})
     monkeypatch.setattr(composer, '_foreground', set())
     monkeypatch.setattr(composer, '_recent', {})
@@ -151,9 +150,8 @@ def _c(invoke=None, calls=None):
     )
 
 
-def _enable(monkeypatch, percent='100'):
+def _enable(monkeypatch):
     monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'on')
-    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV, percent)
 
 
 def test_off_by_default_keeps_the_full_transcript(store):
@@ -255,8 +253,9 @@ def test_excerpt_rejects_an_unknown_recording_and_exhausted_budget():
     ].startswith('error:')
 
 
-def test_cohort_percent_zero_keeps_the_full_path(store, monkeypatch):
-    _enable(monkeypatch, percent='0')
+def test_l9_off_keeps_full_path_with_l8_on(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'on')
+    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'off')
     calls = []
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     assert 'Transcript:\n[14:56:00]' in calls[0][0][1][1]
@@ -264,7 +263,6 @@ def test_cohort_percent_zero_keeps_the_full_path(store, monkeypatch):
 
 def test_unknown_flag_value_stays_off(store, monkeypatch):
     monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'maybe')
-    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV, '100')
     assert config.composer_notes_first_enabled(UID) is False
 
 
@@ -305,3 +303,38 @@ def test_compose_tokens_are_recorded_by_mode():
     assert metrics.EPISODE_COMPOSE_TOOL_CALLS.labels(mode='notes_first')._sum.get() == calls + 2
     assert metrics.EPISODE_COMPOSE_INPUT_TOKENS_TOTAL._labelnames == ('mode',)
     assert metrics.EPISODE_COMPOSE_TOOL_CALLS._labelnames == ('mode',)
+
+
+def test_l9_can_run_with_l8_killed(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    _enable(monkeypatch)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'Transcript: not included' in calls[0][0][1][1]
+
+
+def test_l8_repairs_a_notes_first_reply_without_resending_notes(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 1:
+            return SimpleNamespace(content='bad json', usage_metadata={'input_tokens': 10, 'output_tokens': 1})
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert calls[1][1][1] == 'bad json'
+    assert store.episode['usage']['composer_input_tokens'] == 8010
+
+
+def test_excerpt_respects_even_a_tiny_remaining_budget():
+    row = _row('c1', T0, 180)
+    text, spent = composer._excerpt(
+        [row],
+        'David',
+        ZoneInfo('Asia/Bangkok'),
+        {'recording': 1, 'start': '14:56:00', 'end': '14:57:00'},
+        remaining_chars=3,
+    )
+    assert spent == len(text) <= 3

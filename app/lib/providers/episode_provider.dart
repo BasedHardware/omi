@@ -11,6 +11,7 @@ import 'package:omi/providers/conversation_provider.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
 typedef EpisodeLookupFetcher = Future<ApiResult<EpisodeRead>> Function(String conversationId);
+typedef EpisodeDetailFetcher = Future<ApiResult<Episode>> Function(String episodeId);
 typedef EpisodeWrapUpCall = Future<ApiResult<Episode>> Function(String episodeId, {String? conversationId});
 typedef EpisodeDismissCall = Future<ApiResult<Episode>> Function(String episodeId, String itemId);
 
@@ -24,12 +25,14 @@ class EpisodeProvider extends ChangeNotifier {
     EpisodeLiveFetcher? fetchLive,
     Future<ApiResult<EpisodePageRead>> Function(DateTime, DateTime, {String? cursor})? fetchPage,
     EpisodeLookupFetcher? lookup,
+    EpisodeDetailFetcher? detail,
     EpisodeWrapUpCall? wrapUp,
     EpisodeDismissCall? dismiss,
     DateTime Function()? clock,
   })  : _fetchLive = fetchLive ?? api.getLiveEpisode,
         _fetchPage = fetchPage ?? api.getEpisodes,
         _lookup = lookup ?? api.getEpisodeForConversation,
+        _detail = detail ?? api.getEpisode,
         _wrapUp = wrapUp ?? api.wrapUpEpisode,
         _dismiss = dismiss ?? api.dismissEpisodeItem,
         _clock = clock ?? DateTime.now;
@@ -266,6 +269,9 @@ class EpisodeProvider extends ChangeNotifier {
 
   final EpisodeLiveFetcher _fetchLive;
   final EpisodeLookupFetcher _lookup;
+  final EpisodeDetailFetcher _detail;
+  final Map<String, Episode> _openedEpisodes = {};
+  Episode? openedEpisode(String id) => _ownerUid == SharedPreferencesUtil().uid ? _openedEpisodes[id] : null;
   final EpisodeWrapUpCall _wrapUp;
   final EpisodeDismissCall _dismiss;
   final DateTime Function() _clock;
@@ -338,6 +344,7 @@ class EpisodeProvider extends ChangeNotifier {
     _homeTo = null;
     _homeGeneration++;
     _byConversation.clear();
+    _openedEpisodes.clear();
     _cachedAt.clear();
     _lookups.clear();
     _ended.clear();
@@ -559,6 +566,47 @@ class EpisodeProvider extends ChangeNotifier {
 
   Episode? cachedEpisodeFor(String conversationId) =>
       _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
+
+  /// How long the page waits for a late episode's deferred compose: the server starts it
+  /// on this read and it takes about ten seconds.
+  static const openComposePolls = 8;
+  static const openComposePollInterval = Duration(seconds: 5);
+
+  /// The episode page was opened. The server composes a late episode on this read, so
+  /// fetch it once and, while it is still uncomposed, poll a bounded number of times so
+  /// the composed copy lands on the page without a manual refresh.
+  Future<Episode?> openEpisode(String episodeId) async {
+    _ensureOwner();
+    final uid = _ownerUid;
+    if (episodeId.isEmpty) return null;
+    final first = await _detail(episodeId);
+    if (_disposed || uid != SharedPreferencesUtil().uid) return null;
+    if (first is! ApiSuccess<Episode>) return null;
+    var episode = first.data;
+    _mergeOpened(episode);
+    for (var attempt = 0; attempt < openComposePolls && !episode.live && !episode.composed; attempt++) {
+      await Future<void>.delayed(openComposePollInterval);
+      if (_disposed || uid != SharedPreferencesUtil().uid) return null;
+      final next = await _detail(episodeId);
+      if (_disposed || uid != SharedPreferencesUtil().uid) return null;
+      if (next is! ApiSuccess<Episode>) return episode;
+      episode = next.data;
+      _mergeOpened(episode);
+    }
+    return episode;
+  }
+
+  void _mergeOpened(Episode episode) {
+    _openedEpisodes.remove(episode.id);
+    _openedEpisodes[episode.id] = episode;
+    if (_openedEpisodes.length > 16) _openedEpisodes.remove(_openedEpisodes.keys.first);
+    for (final id in episode.conversationIds) {
+      _byConversation[id] = episode;
+      _cachedAt[id] = _clock();
+    }
+    _homeEpisodes = [for (final e in _homeEpisodes) e.id == episode.id ? episode : e];
+    notifyListeners();
+  }
 
   /// Starts polling while at least one live surface is on screen.
   void watch() {

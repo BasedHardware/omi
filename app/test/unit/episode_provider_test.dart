@@ -881,4 +881,118 @@ void main() {
     ];
     expect(_episode(items: items).visibleItems.map((i) => i.id), ['a', 'b']);
   });
+
+  test('opening an uncomposed episode reads it once and folds the composed copy in', () {
+    fakeAsync((async) {
+      final waiting = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+      );
+      final done = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+        moments: [
+          EpisodeMoment(
+              id: 'm', conversationId: 'a', startedAt: _t0, endedAt: _t0, points: const [EpisodePoint('Point')])
+        ],
+      );
+      final reads = <String>[];
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting])),
+        detail: (id) async {
+          reads.add(id);
+          return ApiSuccess(reads.length == 1 ? waiting : done);
+        },
+      )..debugSetLive(null);
+      unawaited(provider.refreshHome(_t0, _t0));
+      async.flushMicrotasks();
+      expect(provider.homeEpisodes.single.composed, isFalse);
+
+      Episode? opened;
+      unawaited(provider.openEpisode('ep1').then((episode) => opened = episode));
+      async.flushMicrotasks();
+      expect(reads, ['ep1'], reason: 'the page open is the server compose trigger');
+      async.elapse(EpisodeProvider.openComposePollInterval);
+      async.flushMicrotasks();
+      expect(reads, ['ep1', 'ep1']);
+      expect(opened?.composed, isTrue);
+      expect(provider.homeEpisodes.single.composed, isTrue, reason: 'the composed copy reaches the page');
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('opening a composed episode does not poll', () {
+    fakeAsync((async) {
+      final done = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+        moments: [
+          EpisodeMoment(
+              id: 'm', conversationId: 'a', startedAt: _t0, endedAt: _t0, points: const [EpisodePoint('Point')])
+        ],
+      );
+      var reads = 0;
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [done])),
+        detail: (id) async {
+          reads++;
+          return ApiSuccess(done);
+        },
+      )..debugSetLive(null);
+      unawaited(provider.refreshHome(_t0, _t0));
+      async.flushMicrotasks();
+      unawaited(provider.openEpisode('ep1'));
+      async.flushMicrotasks();
+      async.elapse(EpisodeProvider.openComposePollInterval * 3);
+      expect(reads, 1);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+  test('a lede-only detail compose is settled and cached outside Home', () async {
+    final done = Episode(
+        id: 'detail',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        title: 'Short notes',
+        lede: 'A brief planning conversation',
+        conversationIds: const ['c1']);
+    var reads = 0;
+    final provider = EpisodeProvider(detail: (_) async {
+      reads++;
+      return ApiSuccess(done);
+    })
+      ..debugSetLive(null);
+    addTearDown(provider.dispose);
+    final result = await provider.openEpisode('detail');
+    expect(result?.composed, isTrue);
+    expect(reads, 1);
+    expect(provider.openedEpisode('detail'), same(done));
+    expect(provider.cachedEpisodeFor('c1'), same(done));
+  });
+
+  test('a detail response after disposal never publishes', () async {
+    final response = Completer<ApiResult<Episode>>();
+    final provider = EpisodeProvider(detail: (_) => response.future)..debugSetLive(null);
+    final reading = provider.openEpisode('detail');
+    provider.dispose();
+    response.complete(ApiSuccess(_episode(id: 'detail', live: false)));
+    expect(await reading, isNull);
+  });
 }

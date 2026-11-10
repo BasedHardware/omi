@@ -119,7 +119,11 @@ def store(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
     # This file pins the paid composer path; the one-conversation shortcut has its own file.
-    monkeypatch.setenv(config.EPISODE_SINGLE_MEMBER_COMPOSE_ENV, 'false')
+    monkeypatch.setattr(composer, 'episode_single_member_compose_enabled', lambda: False)
+
+    # These fixtures use a fixed 2026-10-30 capture, which is "late" by wall clock.
+    # Late-compose tests opt back in explicitly; the rest keep today's finalize compose.
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: False)
     monkeypatch.setattr(composer, '_deferred', {})
     monkeypatch.setattr(composer, '_foreground', set())
     monkeypatch.setattr(composer, '_recent', {})
@@ -391,8 +395,9 @@ def test_membership_change_during_the_call_keeps_the_paid_result_pending(store):
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
     # The paid result is kept and the episode is pending, so a settled compose refreshes it.
-    assert store.episode['title'] == 'Omi app bugs and labeling tool'
-    assert store.episode['compose_pending_since'] and store.episode['compose_lease'] is None
+    assert store.episode['title'] == 'old'
+    assert not any('bullets' in write for write in store.writes)
+    assert store.episode['compose_lease'] is None
     assert composer.needs_compose(store.episode) is True
 
 
@@ -505,7 +510,7 @@ def test_a_second_replica_does_not_pay_for_the_same_evidence(store):
     assert calls == [1] and store.episode['compose_lease'] is None
 
 
-def test_discard_during_the_call_keeps_the_paid_result_pending(store):
+def test_discard_during_the_call_cannot_reintroduce_hidden_content(store):
     def invoke(uid, messages):
         store.rows['c2']['discarded'] = True
         return _reply()
@@ -1330,7 +1335,7 @@ def test_repair_call_is_counted_with_its_own_trigger(store):
 
 
 def test_kill_switch_off_skips_the_repair_retry(store, monkeypatch):
-    monkeypatch.setenv(config.EPISODE_COMPOSE_KEEP_PAID_ENV, 'off')
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
     calls = []
 
     def invoke(uid, messages):
@@ -1342,7 +1347,7 @@ def test_kill_switch_off_skips_the_repair_retry(store, monkeypatch):
 
 
 def test_kill_switch_off_discards_a_superseded_result(store, monkeypatch):
-    monkeypatch.setenv(config.EPISODE_COMPOSE_KEEP_PAID_ENV, 'off')
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
 
     def invoke(uid, messages):
         store.rows['c2']['transcript_segments'].append({'start': 700, 'end': 705, 'text': 'Late.', 'is_user': True})
@@ -1354,7 +1359,7 @@ def test_kill_switch_off_discards_a_superseded_result(store, monkeypatch):
 
 
 def test_kill_switch_off_keeps_the_four_failure_cap(store, monkeypatch):
-    monkeypatch.setenv(config.EPISODE_COMPOSE_KEEP_PAID_ENV, 'off')
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
     calls = []
 
     def boom(uid, messages):
@@ -1398,3 +1403,126 @@ def test_settle_timer_labels_its_compose(store, monkeypatch):
     composer._deferred[(UID, 'ep1')] = (0, _c())
     composer._schedule_due()
     assert seen == ['settle']
+
+
+# --------------------------------------------------------------------------- late composes
+#
+# A recording repaired or synced more than 48h after capture composes on its first
+# open, not at finalize. The `store` fixture turns the switch off; these tests opt in.
+
+
+def _late(store, *, days=3):
+    store.episode['started_at'] = datetime.now(timezone.utc) - timedelta(days=days)
+    return store.episode
+
+
+def test_a_late_episode_defers_its_compose_at_finalize(store, monkeypatch):
+    queued = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    reasons = []
+    monkeypatch.setattr(composer.metrics, 'record_compose_trigger_skipped', reasons.append)
+    episode = _late(store)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is False
+    assert queued == []
+    assert store.episode['compose_deferred_at'] is not None
+    # The row reads as the first member's own summary title until the composer replaces it.
+    assert store.episode['title'] == 'T'
+    assert reasons == ['late_deferred']
+
+
+def test_a_normal_episode_still_composes_at_finalize(store, monkeypatch):
+    queued = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    store.episode['started_at'] = datetime.now(timezone.utc) - timedelta(hours=2)
+    assert composer.schedule_after_close(UID, 'ep1', episode=store.episode, collaborators=_c()) is True
+    assert queued == ['ep1']
+    assert 'compose_deferred_at' not in store.episode
+
+
+def test_the_late_compose_switch_off_restores_finalize_compose(store, monkeypatch):
+    queued = []
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    episode = _late(store)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is True
+    assert queued == ['ep1']
+    assert 'compose_deferred_at' not in store.episode
+
+
+def test_opening_a_deferred_episode_composes_it_exactly_once(store, monkeypatch):
+    calls = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    episode = _late(store)
+    episode['compose_deferred_at'] = datetime.now(timezone.utc)
+    assert composer.schedule_opened(UID, episode, collaborators=_c(calls=calls)) is True
+    assert len(calls) == 1
+    assert store.episode['composed_fingerprint']
+    # The deferral is one-shot: a later arrival defers again on its own.
+    assert store.episode['compose_deferred_at'] is None
+    # A second open inside the read throttle window does not pay again.
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c(calls=calls)) is False
+    assert len(calls) == 1
+
+
+def test_the_read_safety_net_waits_for_the_grace_window(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    now = datetime.now(timezone.utc)
+    deferred = {
+        'id': 'late',
+        'status': 'closed',
+        'started_at': now - timedelta(days=3),
+        'closed_at': now - timedelta(days=3),
+        'compose_deferred_at': now - timedelta(hours=1),
+    }
+    assert composer.needs_compose(deferred) is False
+    assert composer.needs_compose(deferred, opened=True) is True
+    past_grace = {**deferred, 'compose_deferred_at': now - timedelta(days=8)}
+    assert composer.needs_compose(past_grace) is True
+
+
+def test_a_composed_late_episode_refreshes_normally_when_a_member_arrives(store, monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: True)
+    episode = _late(store)
+    episode.update({'composed_fingerprint': 'x', 'title': 'Composed title'})
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is True
+    assert store.episode['title'] == 'Composed title'
+    assert not store.episode.get('compose_deferred_at')
+
+
+def test_the_late_threshold_is_configurable(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    now = datetime.now(timezone.utc)
+    episode = {'id': 'e', 'status': 'closed', 'started_at': now - timedelta(hours=30)}
+    assert composer.is_late(episode) is False
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, '24')
+    assert composer.is_late(episode) is True
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, 'nonsense')
+    assert composer.is_late(episode) is False
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, '0')
+    assert composer.is_late(episode) is False
+
+
+def test_paid_result_never_reintroduces_a_member_hidden_during_the_call(store):
+    def invoke(uid, messages):
+        store.rows['c2']['deleted'] = True
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert not any('bullets' in write for write in store.writes)
+
+
+def test_l8_off_drains_a_persisted_late_deferral(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    episode = {'id': 'late', 'status': 'closed', 'compose_deferred_at': datetime.now(timezone.utc)}
+    assert composer.needs_compose(episode) is True

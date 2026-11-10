@@ -84,6 +84,7 @@ class EpisodePage extends StatelessWidget {
             .where(
                 (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id)
             .firstOrNull ??
+        episodes?.openedEpisode(opened.id) ??
         opened;
     final known = {for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c};
     final members = [for (final member in episode.members) known[member.id] ?? member]
@@ -97,7 +98,7 @@ class EpisodePage extends StatelessWidget {
     final items =
         episode.visibleItems.where((i) => i.conversationId == null || memberIds.contains(i.conversationId)).toList();
     final moments = episode.moments.where((m) => memberIds.contains(m.conversationId)).toList();
-    final composed = moments.any((m) => m.points.isNotEmpty);
+    final composed = episode.composed;
     final primary = members.firstOrNull;
     final title = episode.title.trim().isNotEmpty
         ? episode.title
@@ -148,40 +149,78 @@ class EpisodePage extends StatelessWidget {
           ),
         ),
       ]),
-      body: processing
-          ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
-          : ListView(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              children: [
-                ...heading,
-                const SizedBox(height: OmiSpacing.lg),
-                if (composed) ...[
-                  // A composed episode reads like a conversation's summary: a lede, then a section per moment.
-                  if (episode.lede.trim().isNotEmpty)
-                    Text(episode.lede, key: const Key('episode_lede'), style: OmiType.callout.copyWith(height: 1.45)),
-                  EpisodeSections(moments: moments, onOpenMoment: (moment) => _openMoment(context, moment, members)),
-                  if (episode.followUps.isNotEmpty) ...[
-                    EpisodeSectionTitle(context.l10n.episodeFollowUps),
-                    EpisodeBullets(episode.followUps),
-                  ],
-                ] else
-                  EpisodeBullets(episode.bullets),
-                if (items.isNotEmpty) ...[
-                  EpisodeSectionTitle(context.l10n.tasks, count: items.length),
-                  EpisodeContentCard(
-                      children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())]),
-                ],
-                if (!composed && moments.isNotEmpty) ...[
-                  EpisodeSectionTitle(context.l10n.episodeMoments),
-                  EpisodeContentCard(
-                      children: [for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)]),
-                ],
-                EpisodeSectionTitle(context.l10n.conversations),
-                ...memberRows,
-              ],
-            ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: processing
+                ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
+                : ListView(
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    children: [
+                      ...heading,
+                      const SizedBox(height: OmiSpacing.lg),
+                      if (composed) ...[
+                        // A composed episode reads like a conversation's summary: a lede, then a section per moment.
+                        if (episode.lede.trim().isNotEmpty)
+                          Text(episode.lede,
+                              key: const Key('episode_lede'), style: OmiType.callout.copyWith(height: 1.45)),
+                        EpisodeSections(
+                            moments: moments, onOpenMoment: (moment) => _openMoment(context, moment, members)),
+                        if (episode.followUps.isNotEmpty) ...[
+                          EpisodeSectionTitle(context.l10n.episodeFollowUps),
+                          EpisodeBullets(episode.followUps),
+                        ],
+                      ] else
+                        EpisodeBullets(episode.bullets),
+                      if (items.isNotEmpty) ...[
+                        EpisodeSectionTitle(context.l10n.tasks, count: items.length),
+                        EpisodeContentCard(
+                            children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())]),
+                      ],
+                      if (!composed && moments.isNotEmpty) ...[
+                        EpisodeSectionTitle(context.l10n.episodeMoments),
+                        EpisodeContentCard(
+                            children: [for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)]),
+                      ],
+                      EpisodeSectionTitle(context.l10n.conversations),
+                      ...memberRows,
+                    ],
+                  ),
+          ),
+          // A late episode composes on this open; the server starts it on the read below.
+          _OpenCompose(key: ValueKey('open-${episode.id}'), episode: episode),
+        ],
+      ),
     );
   }
+}
+
+/// The page's first frame asks the server for the episode once. A late episode's compose
+/// starts on that read, and the provider folds the composed copy back into the page.
+class _OpenCompose extends StatefulWidget {
+  const _OpenCompose({super.key, required this.episode});
+  final Episode episode;
+
+  @override
+  State<_OpenCompose> createState() => _OpenComposeState();
+}
+
+class _OpenComposeState extends State<_OpenCompose> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final episodes = context.read<EpisodeProvider?>();
+      final episode = widget.episode;
+      if (episodes == null || episode.id.isEmpty || episode.live || episode.composed) return;
+      unawaited(episodes.openEpisode(episode.id));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 /// While the notes are being written: the card says so, tasks already read as tasks, and the

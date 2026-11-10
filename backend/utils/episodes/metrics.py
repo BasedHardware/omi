@@ -293,7 +293,7 @@ EPISODE_COMPOSE_TOOL_CALLS = reuse_or_create(
     ['mode'],
     buckets=(0, 1, 2, 3, 4, 5),
 )
-COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
+COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged', 'late_deferred'})
 EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_trigger_skipped_total',
@@ -502,10 +502,11 @@ def record_compose_trigger_skipped(reason: str) -> None:
 
 def record_compose(outcome: str, seconds: float, trigger: str = 'close') -> None:
     try:
-        outcome_label = _label(outcome, COMPOSE_OUTCOMES)
         trigger_label = _label(trigger, COMPOSE_TRIGGERS)
-        EPISODE_COMPOSE_TOTAL.labels(outcome=outcome_label, trigger=trigger_label).inc()
-        EPISODE_COMPOSE_SECONDS.labels(outcome=outcome_label, trigger=trigger_label).observe(max(0.0, seconds))
+        EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger_label).inc()
+        EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger_label).observe(
+            max(0.0, seconds)
+        )
     except Exception:
         pass
 

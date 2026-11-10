@@ -1,6 +1,6 @@
 # Episode composer: keep paid composes
 
-Default-on `EPISODE_COMPOSE_KEEP_PAID` stops throwing away composer calls that
+Default-on `EPISODE_COMPOSER_THRIFT` stops throwing away composer calls that
 were already paid for. It is the first item of the 2026-11-10 LLM-efficiency
 report (`data/run-2026-11-08-pipeline-refactor/fable-llm-efficiency-2026-11-10.md`,
 section 4). The [environment contract](../../listen_pusher_pipeline.mdx#closed-episode-compose-cost-control)
@@ -36,7 +36,7 @@ visible. Labels are bounded; no uid is ever a label.
 
 ## Rollback
 
-Set `EPISODE_COMPOSE_KEEP_PAID` to `false`, `0`, `off` or `no`. That restores
+Set `EPISODE_COMPOSER_THRIFT` to `false`, `0`, `off` or `no`. That restores
 the previous behavior: no repair retry, a sectionless reply is always a failed
 compose, a superseded result is discarded, and the four-failure cap
 (`COMPOSER_MAX_FAILURES`) applies. The trigger labels stay; they are additive

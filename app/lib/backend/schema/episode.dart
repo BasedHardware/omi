@@ -166,7 +166,7 @@ class Episode {
   final DateTime? timerStartedAt;
 
   /// Composed by the closed-episode composer: the page reads as sections rather than notes.
-  bool get composed => moments.any((m) => m.points.isNotEmpty);
+  bool get composed => moments.any((m) => m.points.isNotEmpty) || (!live && lede.trim().isNotEmpty);
 
   /// Closed but its summary hasn't landed yet: the notes are drafts, so Home keeps showing processing.
   /// Past [summaryWait] the summary is treated as failed, and Home shows the plain conversations.

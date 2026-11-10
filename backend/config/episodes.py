@@ -51,14 +51,21 @@ HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
 DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS = 21600
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
+EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
-EPISODE_COMPOSE_KEEP_PAID_ENV = 'EPISODE_COMPOSE_KEEP_PAID'
 
-EPISODE_SINGLE_MEMBER_COMPOSE_ENV = 'EPISODE_SINGLE_MEMBER_COMPOSE'
 
 EPISODE_COMPOSER_NOTES_FIRST_ENV = 'EPISODE_COMPOSER_NOTES_FIRST'
-EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV = 'EPISODE_COMPOSER_NOTES_FIRST_PERCENT'
+
+EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV = 'EPISODE_LATE_COMPOSE_AFTER_HOURS'
+EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV = 'EPISODE_LATE_COMPOSE_GRACE_HOURS'
+# A recording repaired or synced more than this long after capture is "late": it
+# composes when its page is first opened, not at finalize.
+DEFAULT_LATE_COMPOSE_AFTER_HOURS = 48.0
+# The read-side safety net still composes a deferred episode after this long, so a
+# client that never opens the page cannot leave notes unwritten forever.
+DEFAULT_LATE_COMPOSE_GRACE_HOURS = 168.0
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -177,7 +184,7 @@ def episode_compose_keep_paid_enabled() -> bool:
     evidence. Off restores the previous discard-and-retry behavior and the
     four-failure cap.
     """
-    return modes_default_on(EPISODE_COMPOSE_KEEP_PAID_ENV)
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
 
 
 def episode_single_member_compose_enabled() -> bool:
@@ -186,16 +193,14 @@ def episode_single_member_compose_enabled() -> bool:
     Off restores the paid composer for single-member episodes. The shortcut never
     calls a model, so it has no lease, backoff or settle window.
     """
-    return modes_default_on(EPISODE_SINGLE_MEMBER_COMPOSE_ENV)
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
 
 
 # Notes-first compose (Fable LLM-efficiency #3, David 2026-11-10). Off by default:
 # today's compose sends every member's full transcript. On, the composer reads each
 # member's notes (title, overview, sections, action items, timestamps) and may call
 # ``get_transcript_excerpt`` for a bounded raw excerpt when it needs exact detail.
-# The cohort is a salted uid bucket; 100 admits every owner. The same env is the
-# kill switch: off/false/0/no (or an unknown value) restores the full-transcript path.
-COMPOSER_NOTES_FIRST_SALT = 'episode-composer-notes-first-v1'
+# The same env is the independent L9 approval/kill switch: off/false/0/no (or an unknown value) restores the full-transcript path.
 # Bounds for the on-demand excerpt tool. One call returns at most 4,000 characters
 # from at most 15 minutes of one recording; one compose may make at most 4 calls and
 # read at most 12,000 excerpt characters in total. The model gets at most 5 turns
@@ -208,14 +213,42 @@ COMPOSER_NOTES_FIRST_MAX_TURNS = 5
 
 
 def composer_notes_first_enabled(uid: str | None = None) -> bool:
-    """Default off (today's full-transcript compose); on admits the salted uid cohort."""
+    """Default off (today's full-transcript compose); on requires the recorded side-by-side approval."""
     if not modes_default_off(EPISODE_COMPOSER_NOTES_FIRST_ENV):
         return False
     if not uid:
         return False
-    return uid_bucket(uid, COMPOSER_NOTES_FIRST_SALT) < percentage(
-        EPISODE_COMPOSER_NOTES_FIRST_PERCENT_ENV, default=0.0
-    )
+    return True
+
+
+def episode_late_compose_enabled() -> bool:
+    """Default-on: a late episode composes on its first open instead of at finalize.
+
+    Off restores today's behavior: every closed episode composes as soon as its
+    members finish, however old the capture is.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def _positive_hours(name: str, default: float) -> float:
+    """A positive hour count; invalid, non-finite or nonpositive values use the default."""
+    try:
+        hours = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    if hours != hours or hours in (float('inf'), float('-inf')) or hours <= 0:
+        return default
+    return hours
+
+
+def episode_late_compose_after_hours() -> float:
+    """48h by default: capture age at finalize above which a compose waits for the first open."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, DEFAULT_LATE_COMPOSE_AFTER_HOURS)
+
+
+def episode_late_compose_grace_hours() -> float:
+    """7 days by default: how long a deferred episode may wait before a read composes it anyway."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV, DEFAULT_LATE_COMPOSE_GRACE_HOURS)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -375,7 +408,7 @@ COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
 COMPOSER_MAX_FAILURES = 4
-# With EPISODE_COMPOSE_KEEP_PAID on, one attempt plus one repair retry is the whole budget:
+# With EPISODE_COMPOSER_THRIFT on, one attempt plus one repair retry is the whole budget:
 # a third paid failure on the same evidence cannot produce a different result.
 COMPOSER_MAX_PAID_FAILURES = 2
 # A short episode (at most this much recorded member time) may ship a title and lede with

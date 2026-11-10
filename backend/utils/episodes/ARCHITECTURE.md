@@ -314,12 +314,11 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   notes as the final notes. Telemetry: `omi_episode_compose_total{outcome,trigger}`,
   `omi_episode_compose_seconds` and `omi_episode_compose_calls_total{trigger,outcome}`;
   usage adds `composer_*` counters.
-- `EPISODE_COMPOSE_KEEP_PAID` (on unless set off) keeps paid composes: one repair
+- `EPISODE_COMPOSER_THRIFT` (on unless set off) keeps paid composes: one repair
   retry over the bad output alone, a title-and-lede compose for short episodes,
   superseded results stored and marked pending, and a two-paid-failure cap. Off
   restores discard-and-retry and the four-failure cap.
-- Notes-first mode (`EPISODE_COMPOSER_NOTES_FIRST`, default off; cohort
-  `EPISODE_COMPOSER_NOTES_FIRST_PERCENT`): the prompt reads each member's notes
+- Notes-first mode (`EPISODE_COMPOSER_NOTES_FIRST`, default off until David approves the side-by-side): the prompt reads each member's notes
   (title, overview, sections, action items, clock times) and may call
   `get_transcript_excerpt` for a bounded raw excerpt. A member with no notes
   still gets its transcript. Bounds: 4,000 characters and 15 minutes per call,

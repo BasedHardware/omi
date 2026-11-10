@@ -12,12 +12,16 @@ their transcripts remains the composed-state stamp. A narrower speech/name/membe
 and a bounded background quiet window avoid paying for label-only updates. Kill switch: ``EPISODE_COMPOSER`` (on unless set off). Never
 raises to callers.
 
-``EPISODE_COMPOSE_KEEP_PAID`` (on unless set off) keeps paid composes: a parse failure gets
+``EPISODE_COMPOSER_THRIFT`` (on unless set off) keeps paid composes: a parse failure gets
 one repair retry over the bad output alone, a short episode may ship a title and lede with no
 chapters, a superseded result is stored and the episode marked pending, and paid failures stop
 at two per evidence. Off restores the previous discard-and-retry behavior and the four-failure
 cap. Every run and every paid call carries a bounded trigger label (close, read, member_final,
 settle, repair).
+repaired or synced more than ``EPISODE_LATE_COMPOSE_AFTER_HOURS`` (48h) after capture is
+deferred: it keeps the first member's title and composes when its page is first opened
+(``schedule_opened``), with a read-side grace exit. Kill switches: ``EPISODE_COMPOSER`` and
+``EPISODE_COMPOSER_THRIFT`` (both on unless set off). Never raises to callers.
 """
 
 from __future__ import annotations
@@ -70,6 +74,9 @@ from config.episodes import (
     composer_notes_first_enabled,
     episode_composer_enabled,
     episode_single_member_compose_enabled,
+    episode_late_compose_after_hours,
+    episode_late_compose_enabled,
+    episode_late_compose_grace_hours,
 )
 from database import conversations as conversations_db
 from database import episodes as episodes_db
@@ -491,7 +498,7 @@ def _excerpt(
     if len(text) > limit:
         marker = '\n[... excerpt truncated ...]'
         head = text[: max(0, limit - len(marker))]
-        text = (head.rsplit('\n', 1)[0] or head) + marker
+        text = ((head.rsplit('\n', 1)[0] or head) + marker)[:limit]
     return text, len(text)
 
 
@@ -503,6 +510,8 @@ def _compose_notes_first(
     tz: ZoneInfo,
     language: str,
     invoke: Callable[..., Any],
+    parse_reply: Optional[Callable[[Any], dict[str, Any]]] = None,
+    trigger: str = 'close',
 ) -> tuple[dict[str, Any], Any, int, int, int]:
     """Notes-first compose with the bounded excerpt tool.
 
@@ -521,6 +530,7 @@ def _compose_notes_first(
         calls = [] if last else _tool_calls(reply)
         if not calls:
             break
+        metrics.record_compose_call(trigger, 'ok')
         # A provider that omits a call id still needs one to pair the tool result.
         calls = [
             (call_id or f'call_{turn}_{index}', name, arguments)
@@ -550,7 +560,8 @@ def _compose_notes_first(
                 used_chars += spent
                 tool_calls += 1
             messages.append(ToolMessage(content=result, tool_call_id=call_id))
-    return parse(_content(reply)), reply, input_tokens, output_tokens, tool_calls
+    data = parse_reply(reply) if parse_reply is not None else parse(_content(reply))
+    return data, reply, input_tokens, output_tokens, tool_calls
 
 
 def parse(content: str) -> dict[str, Any]:
@@ -1048,6 +1059,124 @@ def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> boo
     return bool(failed_at and datetime.now(timezone.utc) - failed_at < backoff)
 
 
+# --------------------------------------------------------------------------- late composes
+#
+# A recording repaired or synced more than ``EPISODE_LATE_COMPOSE_AFTER_HOURS`` (48h)
+# after capture is "late". Repair waves deliver members hours apart, so composing at
+# finalize pays once per arrival for an episode nobody is looking at. A late episode
+# instead keeps the first member's title and composes when its page is first opened
+# (``schedule_opened``). Two exits keep it from waiting forever: the read-side safety
+# net composes it after ``EPISODE_LATE_COMPOSE_GRACE_HOURS`` (7 days), and
+# ``EPISODE_COMPOSER_THRIFT`` off restores composing at finalize.
+
+
+def is_late(episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> bool:
+    """Whether the capture is older than the late threshold at this moment."""
+    started = _utc(episode.get('started_at'))
+    if started is None:
+        return False
+    at = now or datetime.now(timezone.utc)
+    return (at - started).total_seconds() > episode_late_compose_after_hours() * 3600
+
+
+def is_deferred(episode: Optional[Mapping[str, Any]]) -> bool:
+    """Whether this episode is waiting for its first open instead of composing at finalize."""
+    return bool(episode and episode.get('compose_deferred_at'))
+
+
+def _deferred_within_grace(episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> bool:
+    """A deferred episode the read-side safety net must leave alone until the grace window ends."""
+    at = _utc(episode.get('compose_deferred_at'))
+    if at is None:
+        return False
+    current = now or datetime.now(timezone.utc)
+    return (current - at).total_seconds() < episode_late_compose_grace_hours() * 3600
+
+
+def _first_member_title(uid: str, episode: Mapping[str, Any], c: Any) -> str:
+    """The first retained, visible member's own summary title: the row's title until composed."""
+    for cid in _retained_ids(episode):
+        row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
+        if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
+            continue
+        title = str((row.get('structured') or {}).get('title') or '').strip()
+        if title:
+            return title
+    return ''
+
+
+def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
+    """Defer a late episode's compose to its first open. Returns whether it is deferred.
+
+    A failed stamp falls through to today's behavior (compose at finalize), so a write
+    fault never strands an episode's notes.
+    """
+    if not episode_late_compose_enabled() or not episode_composer_enabled():
+        return False
+    if not is_late(episode) or episode.get('composed_fingerprint'):
+        return False
+    if is_deferred(episode):
+        return True
+    title = _first_member_title(uid, episode, c)
+    now = datetime.now(timezone.utc)
+    # A composed episode keeps its composed title; only an uncomposed row falls back.
+    fallback = title if title and not episode.get('composed_fingerprint') else ''
+
+    def stamp(current: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            'compose_deferred_at': now,
+            # The row reads as the first member's summary until the composer replaces it.
+            **({'title': fallback} if fallback else {}),
+        }
+
+    if (
+        _write(
+            uid,
+            str(episode['id']),
+            c,
+            stamp,
+            guard=lambda current: 'unchanged' if current.get('composed_fingerprint') else None,
+        )
+        != 'written'
+    ):
+        return False
+    metrics.record_compose_trigger_skipped('late_deferred')
+    return True
+
+
+def schedule_after_close(
+    uid: str,
+    episode_id: str,
+    *,
+    episode: Optional[Mapping[str, Any]] = None,
+    collaborators: Any = None,
+    trigger: str = 'close',
+) -> bool:
+    """Close/finalize scheduling: a late episode waits for its first open instead."""
+    if not episode_id:
+        return False
+    if episode_late_compose_enabled() and episode_composer_enabled():
+        c = collaborators or SimpleNamespace(firestore_client=None)
+        try:
+            row = episode or episodes_db.get_episode(
+                uid, str(episode_id), firestore_client=getattr(c, 'firestore_client', None)
+            )
+            if row and not policy.is_live(row) and defer_late_compose(uid, row, c):
+                return False
+        except Exception as error:
+            logger.warning('event=episode_compose_defer outcome=error exception_type=%s', type(error).__name__)
+    return schedule(uid, episode_id, collaborators=collaborators, trigger=trigger)
+
+
+def schedule_opened(uid: str, episode: Optional[Mapping[str, Any]], *, collaborators: Any = None) -> bool:
+    """The episode page was opened: a deferred late episode composes now, at most once per window."""
+    if not episode or policy.is_live(episode):
+        return False
+    if not needs_compose(episode, opened=True):
+        return False
+    return schedule(uid, str(episode['id']), collaborators=collaborators, throttle=True, trigger='read')
+
+
 def _write_single_member(
     uid: str,
     episode_id: str,
@@ -1071,6 +1200,7 @@ def _write_single_member(
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
             'compose_failures': 0,
+            'compose_deferred_at': None,
         }
 
     written = _write(uid, episode_id, c, finish)
@@ -1119,6 +1249,7 @@ def _compose(
             'composed_notes': notes_hash(cleared),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
+            'compose_deferred_at': None,
         }
         _write(uid, episode_id, c, stamp)
         return 'empty'
@@ -1201,16 +1332,31 @@ def _compose(
     notes_first = composer_notes_first_enabled(uid)
     mode = 'notes_first' if notes_first else 'full'
     keep_paid = episode_compose_keep_paid_enabled()
-    input_tokens = output_tokens = tool_calls = paid_failures = 0
+    call_started = datetime.now(timezone.utc)
+    input_tokens = output_tokens = tool_calls = paid_failures = paid_calls = 0
     repaired = False
 
     def call(trigger_label: str, payload: list[Any], **kwargs: Any) -> Any:
-        nonlocal input_tokens, output_tokens
+        nonlocal input_tokens, output_tokens, paid_calls
+        paid_calls += 1
         reply_ = invoke(uid, payload, **kwargs)
         call_input, call_output = _usage(reply_)
         input_tokens += call_input
         output_tokens += call_output
         return reply_
+
+    def parse_or_repair(reply_: Any) -> dict[str, Any]:
+        nonlocal repaired, paid_failures
+        content = _content(reply_)
+        try:
+            return parse(content)
+        except ComposeFailed as error:
+            if not keep_paid or str(error) != 'parse_error':
+                raise
+            paid_failures = 1
+            metrics.record_compose_call(trigger, 'parse_error')
+            repaired = True
+            return parse(_content(call('repair', build_repair_messages(content))))
 
     try:
         if notes_first:
@@ -1221,20 +1367,12 @@ def _compose(
                 tz=tz,
                 language=language,
                 invoke=lambda uid_, payload, **kwargs: call(trigger, payload, **kwargs),
+                parse_reply=parse_or_repair,
+                trigger=trigger,
             )
         else:
             reply = call(trigger, build_messages(named, owner=owner, tz=tz, language=language))
-            content = _content(reply)
-            try:
-                data = parse(content)
-            except ComposeFailed as error:
-                if not keep_paid or str(error) != 'parse_error':
-                    raise
-                paid_failures = 1
-                metrics.record_compose_call(trigger, 'parse_error')
-                repaired = True
-                reply = call('repair', build_repair_messages(content))
-                data = parse(_content(reply))
+            data = parse_or_repair(reply)
         metrics.record_compose_tokens(mode, input_tokens, tool_calls)
         times = {str(row['id']): speech_times(row) for row in members}
         spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
@@ -1260,7 +1398,8 @@ def _compose(
         uid, episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode, c
     )
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
-    if superseded and not keep_paid:
+    removed_member = bool(set(member_ids) - {str(row['id']) for row in fresh})
+    if superseded and (not keep_paid or removed_member):
         _write(uid, episode_id, c, lambda current: _release(current, print_))
         return 'superseded'
 
@@ -1268,7 +1407,7 @@ def _compose(
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
         usage = dict(current.get('usage') or {})
-        usage['composer_calls'] = int(usage.get('composer_calls') or 0) + 1
+        usage['composer_calls'] = int(usage.get('composer_calls') or 0) + paid_calls
         usage['composer_input_tokens'] = int(usage.get('composer_input_tokens') or 0) + input_tokens
         usage['composer_output_tokens'] = int(usage.get('composer_output_tokens') or 0) + output_tokens
         usage['composer_tool_calls'] = int(usage.get('composer_tool_calls') or 0) + tool_calls
@@ -1283,6 +1422,8 @@ def _compose(
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
             'compose_failures': 0,
+            # The deferral is one-shot: a later arrival defers again on its own.
+            'compose_deferred_at': None,
             **_release(current, print_),
         }
         membership_changed = sorted(_retained_ids(current)) != sorted(_retained_ids(episode))
@@ -1297,6 +1438,8 @@ def _compose(
         return payload
 
     def finish_guard(current: Mapping[str, Any]) -> Optional[str]:
+        if set(member_ids) - set(_retained_ids(current)):
+            return 'superseded'
         if superseded:
             # Never clobber a compose that landed after this call started.
             composed_at = _utc(current.get('composed_at'))
@@ -1403,15 +1546,25 @@ def settle_delay(episode: Mapping[str, Any], *, now: Optional[datetime] = None) 
 
 
 @phase_shadow.compare('episode_composer')
-def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: Optional[Sequence[str]] = None) -> bool:
+def needs_compose(
+    episode: Optional[Mapping[str, Any]],
+    *,
+    visible_member_ids: Optional[Sequence[str]] = None,
+    opened: bool = False,
+) -> bool:
     """Cheap read-side check; the fingerprint decides for real inside ``compose``.
 
     ``visible_member_ids``, when the caller already read the members, catches a member
     discarded or deleted directly on its conversation after the compose. A visible change
     (members, notes drift, a regeneration request) always qualifies; the failure backoff
     only holds back retries of an episode that was never composed.
+
+    ``opened`` is the episode page's own read: it composes a deferred late episode now.
+    Every other read leaves a deferred episode alone until its grace window ends.
     """
     if not episode or policy.is_live(episode) or not episode_composer_enabled():
+        return False
+    if episode_late_compose_enabled() and not opened and _deferred_within_grace(episode):
         return False
     # A restart loses the local queue. Rollback must still drain persisted pending evidence.
     if episode.get('compose_pending_since'):
@@ -1586,6 +1739,8 @@ def schedule_for_conversation(
         client = getattr(c, 'firestore_client', None)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
+            if defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None)):
+                return
             if episode_compose_settle_enabled():
                 c = c or SimpleNamespace(firestore_client=None, people_names=None)
                 member = (

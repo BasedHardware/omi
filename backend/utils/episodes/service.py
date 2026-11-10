@@ -450,7 +450,7 @@ def _close(
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
         f_join.record_closed_size(closed)
-        composer.schedule(uid, str(episode['id']), collaborators=c, trigger='close')  # Members still processing.
+        composer.schedule_after_close(uid, str(episode['id']), episode=closed, collaborators=c, trigger='close')
     return closed
 
 
