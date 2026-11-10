@@ -800,6 +800,8 @@ def test_home_pending_projection_uses_steps_and_drops_completed_items(monkeypatc
             'structured': {'title': 'Ready', 'overview': 'Notes'},
         },
         'deleted': {'status': 'processing', 'deleted': True, 'structured': {}},
+        'terminal': {'status': 'processing', 'finalization_status': 'completed', 'structured': {}},
+        'dead': {'status': 'processing', 'finalization_status': 'dead_letter', 'structured': {}},
     }
     for row in rows.values():
         row.update(started_at=now - timedelta(hours=1), finished_at=now, created_at=now)

@@ -350,7 +350,15 @@ def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool]
                     continue
                 seen.add(snapshot.id)
                 row = snapshot.to_dict() or {}
-                excluded = bool(row.get('deleted') or row.get('is_deleted') or row.get('discarded'))
+                excluded = bool(
+                    row.get('deleted')
+                    or row.get('is_deleted')
+                    or row.get('discarded')
+                    or row.get('finalization_status') == 'dead_letter'
+                    or (
+                        row.get('status') in {'processing', 'merging'} and row.get('finalization_status') == 'completed'
+                    )
+                )
                 step = home_step.classify(row) if today_only and not excluded else None
                 # Home's age bound is presentation, not job completion. Preserve
                 # the existing pending-work consumers until the job is terminal.
